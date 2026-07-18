@@ -1,0 +1,900 @@
+"use server";
+
+import { randomInt } from "crypto";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { requirePagePermission } from "@/lib/authorization";
+import { requireCompanyId, withCompany } from "@/lib/company-scope";
+import { sendPaymentNotification } from "@/lib/payment-email-notifications";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+
+function clean(value: FormDataEntryValue | null) {
+  const text = String(value ?? "").trim();
+  return text.length ? text : null;
+}
+
+function required(value: FormDataEntryValue | null, field: string) {
+  const text = clean(value);
+  if (!text) throw new Error(`${field} is required`);
+  return text;
+}
+
+function safeFileName(name: string) {
+  return name.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function paymentRequestsRedirect(params?: Record<string, string>): never {
+  const query = params ? `?${new URLSearchParams(params).toString()}` : "";
+  redirect(`/payments/requests${query}`);
+}
+
+function expenseRequestsRedirect(params?: Record<string, string>): never {
+  const query = params ? `?${new URLSearchParams(params).toString()}` : "";
+  redirect(`/payments/expense-request${query}`);
+}
+
+function paymentEmailNotice(message: string, reason?: string) {
+  return reason ? `${message} Email not sent: ${reason}` : message;
+}
+
+function paymentRequestErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "Unable to save payment request.";
+  const lower = message.toLowerCase();
+  if (
+    lower.includes("schema cache") ||
+    lower.includes("bank_account_no") ||
+    lower.includes("account_holder_name") ||
+    lower.includes("contact_no") ||
+    lower.includes("ifsc")
+  ) {
+    return "Payment request database columns are missing. Run scripts/payment_requests_v1.sql in Supabase SQL Editor, then refresh.";
+  }
+  return message;
+}
+
+function missingNotNullColumn(message: string) {
+  return message.match(/null value in column "([^"]+)"/i)?.[1] ?? null;
+}
+
+function isCategoryCheckError(message: string) {
+  return message.toLowerCase().includes("payment_requests_category_check");
+}
+
+function schemaMissingColumn(message: string) {
+  const match = message.match(/(?:column|schema cache).*['"]([a-zA-Z0-9_]+)['"]/i);
+  return match?.[1] ?? null;
+}
+
+type ApproverTarget = {
+  userId: string | null;
+  roleId: string | null;
+};
+
+type PaymentQuestionForAction = {
+  id: string;
+  answer_type: string;
+  dropdown_options?: string | null;
+  is_required: boolean;
+  field_stage?: string | null;
+  sort_order?: number | null;
+};
+
+function questionStage(question: PaymentQuestionForAction) {
+  return question.field_stage === "payment" ? "payment" : "expense";
+}
+
+function questionsForStage<T extends PaymentQuestionForAction>(questions: T[] | null | undefined, stage: "expense" | "payment") {
+  return (questions ?? [])
+    .filter((question) => Number(question.sort_order ?? 0) > 0)
+    .filter((question) => questionStage(question) === stage);
+}
+
+function randomPaymentRequestNo() {
+  const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  return Array.from({ length: 10 }, () => alphabet[randomInt(alphabet.length)]).join("");
+}
+
+async function nextPaymentRequestNo(companyId: string) {
+  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const requestNo = randomPaymentRequestNo();
+    const { data, error } = await supabaseAdmin
+      .from("payment_requests")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("request_no", requestNo)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return requestNo;
+  }
+
+  throw new Error("Unable to generate a unique payment request ID.");
+}
+
+async function firstApproverTarget({
+  companyId,
+  finalApprovalRoleIds,
+  locationManagerEmail,
+  requesterRoleId,
+  requesterUserId
+}: {
+  companyId: string;
+  finalApprovalRoleIds: string[];
+  locationManagerEmail: string | null;
+  requesterRoleId: string | null;
+  requesterUserId: string;
+}): Promise<ApproverTarget> {
+  if (!supabaseAdmin) return { userId: null, roleId: null };
+
+  if (requesterRoleId && finalApprovalRoleIds.includes(requesterRoleId)) {
+    const { data: requester } = await supabaseAdmin
+      .from("profiles")
+      .select("reports_to_user_id")
+      .eq("id", requesterUserId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (requester?.reports_to_user_id) {
+      const { data: manager } = await supabaseAdmin
+        .from("profiles")
+        .select("id, role_id")
+        .eq("id", requester.reports_to_user_id)
+        .eq("company_id", companyId)
+        .eq("is_active", true)
+        .maybeSingle();
+      return { userId: manager?.id ?? null, roleId: manager?.role_id ?? null };
+    }
+  }
+
+  if (locationManagerEmail) {
+    const { data: manager } = await supabaseAdmin
+      .from("profiles")
+      .select("id, role_id, reports_to_user_id")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .ilike("email", locationManagerEmail)
+      .maybeSingle();
+    if (manager?.id && manager.id !== requesterUserId) return { userId: manager.id, roleId: manager.role_id ?? null };
+    if (manager?.reports_to_user_id) {
+      const { data: reportingManager } = await supabaseAdmin
+        .from("profiles")
+        .select("id, role_id")
+        .eq("id", manager.reports_to_user_id)
+        .eq("company_id", companyId)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (reportingManager?.id) return { userId: reportingManager.id, roleId: reportingManager.role_id ?? null };
+    }
+  }
+
+  const { data: finalUser } = await supabaseAdmin
+    .from("profiles")
+    .select("id, role_id")
+    .eq("company_id", companyId)
+    .in("role_id", finalApprovalRoleIds)
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle();
+  return { userId: finalUser?.id ?? null, roleId: finalUser?.role_id ?? finalApprovalRoleIds[0] ?? null };
+}
+
+export async function createExpenseRequest(formData: FormData) {
+  const authorization = await requirePagePermission("expense_requests", "add");
+  const companyId = requireCompanyId(authorization);
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
+    const admin = supabaseAdmin;
+
+    const locationId = required(formData.get("location_id"), "Location");
+    const paymentHeadId = required(formData.get("payment_head_id"), "Payment Head");
+    const amountText = required(formData.get("amount"), "Estimated Amount");
+    const remarks = clean(formData.get("remarks"));
+
+    const [locationResult, headResult] = await Promise.all([
+      admin.from("stations").select("id, station_code, station_email, station_manager_email").eq("id", locationId).eq("company_id", companyId).single(),
+      admin
+        .from("payment_heads")
+        .select("id, code, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, payment_head_questions (id, answer_type, dropdown_options, is_required, field_stage, sort_order)")
+        .eq("id", paymentHeadId)
+        .eq("company_id", companyId)
+        .single()
+    ]);
+    if (locationResult.error) throw new Error("Location not found for this company.");
+    if (headResult.error) throw new Error("Payment head not found for this company.");
+    if (!authorization.hasAllLocationAccess) {
+      const userEmail = authorization.email?.trim().toLowerCase() ?? "";
+      const locationEmail = locationResult.data.station_email?.trim().toLowerCase();
+      const managerEmail = locationResult.data.station_manager_email?.trim().toLowerCase();
+      const hasScopedAccess = authorization.locationScopeIds.includes(locationResult.data.id);
+      const hasEmailAccess = Boolean(userEmail && (locationEmail === userEmail || managerEmail === userEmail));
+      if (!hasScopedAccess && !hasEmailAccess) {
+        throw new Error("You can request expense only for your assigned locations.");
+      }
+    }
+
+    const finalApprovalRoleIds = (headResult.data.final_approval_role_ids?.length ? headResult.data.final_approval_role_ids : headResult.data.final_approval_role_id ? [headResult.data.final_approval_role_id] : []) as string[];
+    const paymentProcessRoleIds = (headResult.data.payment_process_role_ids ?? []) as string[];
+    if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
+    if (!paymentProcessRoleIds.length) throw new Error("Payment process role is not configured for this payment head.");
+
+    const expenseQuestions = questionsForStage(headResult.data.payment_head_questions, "expense");
+    const fileQuestions = expenseQuestions.filter((question) => question.answer_type === "file");
+    for (const question of fileQuestions) {
+      const file = formData.get(`files[${question.id}]`);
+      if (question.is_required && !(file instanceof File && file.size > 0)) {
+        throw new Error("Required file upload is missing.");
+      }
+    }
+
+    const requestNo = await nextPaymentRequestNo(companyId);
+    const workDate = new Date().toISOString().slice(0, 10);
+    const approver = await firstApproverTarget({
+      companyId,
+      finalApprovalRoleIds,
+      locationManagerEmail: locationResult.data.station_manager_email,
+      requesterRoleId: authorization.roleId,
+      requesterUserId: authorization.userId
+    });
+
+    const { data: request, error: requestError } = await admin
+      .from("payment_requests")
+      .insert(withCompany({
+        request_no: requestNo,
+        location_id: locationResult.data.id,
+        location_code: locationResult.data.station_code,
+        station_code: locationResult.data.station_code,
+        payment_head_id: paymentHeadId,
+        category: "expense",
+        work_date: workDate,
+        requested_for_name: locationResult.data.station_code,
+        amount: null,
+        amount_requested: Number(amountText),
+        bank_account_no: null,
+        ifsc: null,
+        account_holder_name: null,
+        beneficiary_account_no: null,
+        beneficiary_account_number: null,
+        beneficiary_ifsc: null,
+        beneficiary_account_holder: null,
+        contact_no: null,
+        email: null,
+        remarks,
+        status: "pending",
+        approval_status: "PENDING",
+        current_step_order: 1,
+        current_approver_user_id: approver.userId,
+        current_approver_role_id: approver.roleId,
+        final_approval_role_id: finalApprovalRoleIds[0],
+        final_approval_role_ids: finalApprovalRoleIds,
+        payment_process_role_ids: paymentProcessRoleIds,
+        requested_by: authorization.userId
+      }, companyId))
+      .select("id")
+      .single();
+    if (requestError) throw new Error(requestError.message);
+
+    const questionIds = formData.getAll("question_ids").map((value) => String(value));
+    if (questionIds.length) {
+      const questionById = new Map(expenseQuestions.map((question) => [question.id, question]));
+      const answers = await Promise.all(questionIds.map(async (questionId) => {
+        const question = questionById.get(questionId);
+        if (question?.answer_type === "file") {
+          const file = formData.get(`files[${questionId}]`);
+          if (file instanceof File && file.size > 0) {
+            const path = `${companyId}/${request.id}/${questionId}/${Date.now()}-${safeFileName(file.name)}`;
+            const { error: uploadError } = await admin.storage.from("payment-request-documents").upload(path, file, { upsert: false });
+            if (uploadError) throw new Error(uploadError.message);
+            return withCompany({
+              payment_request_id: request.id,
+              question_id: questionId,
+              answer_value: file.name,
+              file_path: path,
+              file_name: file.name,
+              file_size: file.size
+            }, companyId);
+          }
+          return withCompany({
+            payment_request_id: request.id,
+            question_id: questionId,
+            answer_value: null,
+            file_path: null,
+            file_name: null,
+            file_size: null
+          }, companyId);
+        }
+
+        return withCompany({
+          payment_request_id: request.id,
+          question_id: questionId,
+          answer_value: clean(formData.get(`answers[${questionId}]`)),
+          file_path: null,
+          file_name: null,
+          file_size: null
+        }, companyId);
+      }));
+      const { error: answersError } = await admin.from("payment_request_answers").insert(answers);
+      if (answersError) throw new Error(answersError.message);
+    }
+
+    revalidatePath("/payments/expense-request");
+    revalidatePath("/payments/requests");
+    revalidatePath("/payments/approvals");
+    revalidatePath("/payments/report");
+    const emailResult = await sendPaymentNotification({
+      actorUserId: authorization.userId,
+      companyId,
+      eventType: "payment_request",
+      remarks,
+      requestId: request.id
+    });
+    if (!emailResult.sent) {
+      expenseRequestsRedirect({
+        expenseNotice: paymentEmailNotice("Expense request submitted for approval.", emailResult.reason)
+      });
+    }
+  } catch (error) {
+    expenseRequestsRedirect({
+      expenseError: paymentRequestErrorMessage(error)
+    });
+  }
+
+  expenseRequestsRedirect({ expenseNotice: "Expense request submitted for approval." });
+}
+
+export async function createPaymentRequest(formData: FormData) {
+  const authorization = await requirePagePermission("payment_requests", "add");
+  const companyId = requireCompanyId(authorization);
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
+    const admin = supabaseAdmin;
+
+    const locationId = required(formData.get("location_id"), "Location");
+    const paymentHeadId = required(formData.get("payment_head_id"), "Payment Head");
+    const amountText = required(formData.get("amount"), "Amount");
+    const paymentModeValue = clean(formData.get("payment_mode"));
+    const paymentMode = paymentModeValue === "online_payment" ? "online_payment" : "account_transfer";
+    const isOnlinePayment = paymentMode === "online_payment";
+    const bankAccountNo = isOnlinePayment ? null : required(formData.get("bank_account_no"), "Bank Account No");
+    const ifsc = isOnlinePayment ? null : required(formData.get("ifsc"), "IFSC");
+    const accountHolderName = isOnlinePayment ? null : required(formData.get("account_holder_name"), "Acc Holder Name");
+    const paymentPortal = isOnlinePayment ? required(formData.get("payment_portal"), "Payment Portal") : null;
+    const paymentReference = isOnlinePayment ? clean(formData.get("payment_reference")) : null;
+    const contactNo = clean(formData.get("contact_no"));
+    const email = clean(formData.get("email"));
+    const remarks = clean(formData.get("remarks"));
+
+    const [locationResult, headResult] = await Promise.all([
+      admin.from("stations").select("id, station_code, station_email, station_manager_email").eq("id", locationId).eq("company_id", companyId).single(),
+      admin
+        .from("payment_heads")
+        .select("id, code, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, requires_supporting_document, request_expense_approval, expense_approval_threshold, payment_head_questions (id, answer_type, dropdown_options, is_required, field_stage, sort_order)")
+        .eq("id", paymentHeadId)
+        .eq("company_id", companyId)
+        .single()
+    ]);
+    if (locationResult.error) throw new Error("Location not found for this company.");
+    if (headResult.error) throw new Error("Payment head not found for this company.");
+    const requestedAmount = Number(amountText);
+    const expenseApprovalThreshold = headResult.data.expense_approval_threshold == null ? null : Number(headResult.data.expense_approval_threshold);
+    if (headResult.data.request_expense_approval && (expenseApprovalThreshold == null || requestedAmount > expenseApprovalThreshold)) {
+      throw new Error("Required Expense Approval");
+    }
+    if (!authorization.hasAllLocationAccess) {
+      const userEmail = authorization.email?.trim().toLowerCase() ?? "";
+      const locationEmail = locationResult.data.station_email?.trim().toLowerCase();
+      const managerEmail = locationResult.data.station_manager_email?.trim().toLowerCase();
+      const hasScopedAccess = authorization.locationScopeIds.includes(locationResult.data.id);
+      const hasEmailAccess = Boolean(userEmail && (locationEmail === userEmail || managerEmail === userEmail));
+      if (!hasScopedAccess && !hasEmailAccess) {
+        throw new Error("You can request payment only for your assigned locations.");
+      }
+    }
+    const finalApprovalRoleIds = (headResult.data.final_approval_role_ids?.length ? headResult.data.final_approval_role_ids : headResult.data.final_approval_role_id ? [headResult.data.final_approval_role_id] : []) as string[];
+    const paymentProcessRoleIds = (headResult.data.payment_process_role_ids ?? []) as string[];
+    if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
+    if (!paymentProcessRoleIds.length) throw new Error("Payment process role is not configured for this payment head.");
+
+    const requestNo = await nextPaymentRequestNo(companyId);
+    const workDate = new Date().toISOString().slice(0, 10);
+    const legacyAccountValue = bankAccountNo ?? paymentReference ?? paymentPortal ?? locationResult.data.station_code;
+    const legacyIfscValue = ifsc ?? "ONLINE";
+    const legacyHolderValue = accountHolderName ?? paymentPortal ?? "Online Payment";
+    const approver = await firstApproverTarget({
+      companyId,
+      finalApprovalRoleIds,
+      locationManagerEmail: locationResult.data.station_manager_email,
+      requesterRoleId: authorization.roleId,
+      requesterUserId: authorization.userId
+    });
+    const paymentQuestions = questionsForStage(headResult.data.payment_head_questions, "payment");
+    const fileQuestions = paymentQuestions.filter((question) => question.answer_type === "file");
+    for (const question of fileQuestions) {
+      const file = formData.get(`files[${question.id}]`);
+      if (question.is_required && !(file instanceof File && file.size > 0)) {
+        throw new Error("Required file upload is missing.");
+      }
+    }
+
+    const requestPayload = withCompany({
+      request_no: requestNo,
+      location_id: locationResult.data.id,
+      location_code: locationResult.data.station_code,
+      station_code: locationResult.data.station_code,
+      payment_head_id: paymentHeadId,
+      work_date: workDate,
+      requested_for_name: locationResult.data.station_code,
+      amount: requestedAmount,
+      amount_requested: requestedAmount,
+      payment_mode: paymentMode,
+      payment_portal: paymentPortal,
+      payment_reference: paymentReference,
+      bank_account_no: legacyAccountValue,
+      ifsc: legacyIfscValue,
+      account_holder_name: legacyHolderValue,
+      beneficiary_account_no: legacyAccountValue,
+      beneficiary_account_number: legacyAccountValue,
+      beneficiary_ifsc: legacyIfscValue,
+      beneficiary_account_holder: legacyHolderValue,
+      contact_no: contactNo,
+      email,
+      remarks,
+      status: "pending",
+      approval_status: "PENDING",
+      current_step_order: 1,
+      current_approver_user_id: approver.userId,
+      current_approver_role_id: approver.roleId,
+      final_approval_role_id: finalApprovalRoleIds[0],
+      final_approval_role_ids: finalApprovalRoleIds,
+      payment_process_role_ids: paymentProcessRoleIds,
+      requested_by: authorization.userId
+    }, companyId) as Record<string, unknown>;
+
+    const legacyColumnValues: Record<string, unknown> = {
+      category: "expense",
+      station_code: locationResult.data.station_code,
+      work_date: workDate,
+      requested_for_name: locationResult.data.station_code,
+      amount_requested: requestedAmount,
+      payment_mode: paymentMode,
+      payment_portal: paymentPortal,
+      payment_reference: paymentReference,
+      bank_account_no: legacyAccountValue,
+      ifsc: legacyIfscValue,
+      account_holder_name: legacyHolderValue,
+      beneficiary_account_no: legacyAccountValue,
+      beneficiary_account_number: legacyAccountValue,
+      beneficiary_ifsc: legacyIfscValue,
+      beneficiary_account_holder: legacyHolderValue
+    };
+    const legacyCategoryFallbacks = ["expense", "other", "advance", "reimbursement", "fuel", "location_expense"];
+
+    const legacyValueForMissingColumn = (column: string): unknown => {
+      const name = column.toLowerCase();
+      if (name.includes("amount")) return Number(amountText);
+      if (name.includes("payment_mode")) return paymentMode;
+      if (name.includes("payment_portal") || name.includes("portal")) return paymentPortal ?? "";
+      if (name.includes("payment_reference")) return paymentReference ?? "";
+      if (name.includes("ifsc")) return legacyIfscValue;
+      if (name.includes("account_holder") || name.includes("beneficiary_name") || name.includes("holder")) return legacyHolderValue;
+      if (name.includes("account")) return legacyAccountValue;
+      if (name.includes("work_date") || name.endsWith("_date") || name.includes("date")) return workDate;
+      if (name.includes("station") || name.includes("location")) return locationResult.data.station_code;
+      if (name.includes("requested_for") || name.includes("beneficiary")) return locationResult.data.station_code;
+      if (name.includes("category")) return "expense";
+      if (name.includes("head")) return headResult.data.code;
+      if (name.includes("status")) return name.includes("approval") ? "PENDING" : "pending";
+      if (name.includes("email")) return email ?? authorization.email ?? "not-provided@example.com";
+      if (name.includes("contact") || name.includes("mobile") || name.includes("phone")) return contactNo ?? "0";
+      if (name.includes("remarks") || name.includes("description") || name.includes("purpose")) return remarks ?? headResult.data.code;
+      if (name === "requested_by" || name.includes("user_id")) return authorization.userId;
+      if (name.includes("role_id")) return approver.roleId ?? finalApprovalRoleIds[0];
+      if (name.endsWith("_id")) {
+        if (name.includes("company")) return companyId;
+        if (name.includes("payment_head")) return paymentHeadId;
+        if (name.includes("location") || name.includes("station")) return locationResult.data.id;
+        return authorization.userId;
+      }
+      return locationResult.data.station_code;
+    };
+
+    let request: { id: string } | null = null;
+    const filledLegacyColumns = new Set<string>();
+    let categoryFallbackIndex = 0;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const { data, error } = await admin
+        .from("payment_requests")
+        .insert(requestPayload)
+        .select("id")
+        .single();
+      if (!error) {
+        request = data;
+        break;
+      }
+      if (isCategoryCheckError(error.message) && categoryFallbackIndex < legacyCategoryFallbacks.length - 1) {
+        categoryFallbackIndex += 1;
+        requestPayload.category = legacyCategoryFallbacks[categoryFallbackIndex];
+        continue;
+      }
+      if (isCategoryCheckError(error.message) && "category" in requestPayload) {
+        delete requestPayload.category;
+        continue;
+      }
+      const missingSchemaColumn = schemaMissingColumn(error.message);
+      if (missingSchemaColumn && missingSchemaColumn in requestPayload) {
+        delete requestPayload[missingSchemaColumn];
+        continue;
+      }
+      const missingColumn = missingNotNullColumn(error.message);
+      if (!missingColumn || filledLegacyColumns.has(missingColumn)) {
+        throw new Error(error.message);
+      }
+      filledLegacyColumns.add(missingColumn);
+      requestPayload[missingColumn] = legacyColumnValues[missingColumn] ?? legacyValueForMissingColumn(missingColumn);
+    }
+    if (!request) throw new Error("Unable to save payment request after filling legacy required fields.");
+
+    const questionIds = formData.getAll("question_ids").map((value) => String(value));
+    if (questionIds.length) {
+      const questionById = new Map(paymentQuestions.map((question) => [question.id, question]));
+      const answers = await Promise.all(questionIds.map(async (questionId) => {
+        const question = questionById.get(questionId);
+        if (question?.answer_type === "file") {
+          const file = formData.get(`files[${questionId}]`);
+          if (file instanceof File && file.size > 0) {
+            const path = `${companyId}/${request.id}/${questionId}/${Date.now()}-${safeFileName(file.name)}`;
+            const { error: uploadError } = await admin.storage.from("payment-request-documents").upload(path, file, { upsert: false });
+            if (uploadError) throw new Error(uploadError.message);
+            return withCompany({
+              payment_request_id: request.id,
+              question_id: questionId,
+              answer_value: file.name,
+              file_path: path,
+              file_name: file.name,
+              file_size: file.size
+            }, companyId);
+          }
+          return withCompany({
+            payment_request_id: request.id,
+            question_id: questionId,
+            answer_value: null,
+            file_path: null,
+            file_name: null,
+            file_size: null
+          }, companyId);
+        }
+
+        return withCompany({
+          payment_request_id: request.id,
+          question_id: questionId,
+          answer_value: clean(formData.get(`answers[${questionId}]`)),
+          file_path: null,
+          file_name: null,
+          file_size: null
+        }, companyId);
+      }));
+      const { error: answersError } = await admin.from("payment_request_answers").insert(answers);
+      if (answersError) throw new Error(answersError.message);
+    }
+
+    revalidatePath("/payments/requests");
+    revalidatePath("/payments/approvals");
+    revalidatePath("/payments/report");
+    const emailResult = await sendPaymentNotification({
+      actorUserId: authorization.userId,
+      companyId,
+      eventType: "payment_request",
+      remarks,
+      requestId: request.id
+    });
+    if (!emailResult.sent) {
+      paymentRequestsRedirect({
+        paymentNotice: paymentEmailNotice("Payment request submitted successfully.", emailResult.reason)
+      });
+    }
+  } catch (error) {
+    paymentRequestsRedirect({
+      paymentError: paymentRequestErrorMessage(error)
+    });
+  }
+
+  paymentRequestsRedirect({ paymentNotice: "Payment request submitted successfully." });
+}
+
+export async function submitPaymentBankDetails(formData: FormData) {
+  const authorization = await requirePagePermission("payment_requests", "add");
+  const companyId = requireCompanyId(authorization);
+  const returnToExpense = clean(formData.get("return_to")) === "expense";
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
+    const admin = supabaseAdmin;
+    const requestId = required(formData.get("request_id"), "Payment request");
+    const amountText = required(formData.get("amount"), "Actual Amount");
+    const bankAccountNo = required(formData.get("bank_account_no"), "Bank Account No");
+    const ifsc = required(formData.get("ifsc"), "IFSC");
+    const accountHolderName = required(formData.get("account_holder_name"), "Acc Holder Name");
+    const contactNo = clean(formData.get("contact_no"));
+    const email = clean(formData.get("email"));
+    const remarks = clean(formData.get("remarks"));
+
+    const { data: request, error: requestError } = await admin
+      .from("payment_requests")
+      .select("id, payment_head_id, requested_by, status, approval_status, current_approver_user_id, current_approver_role_id")
+      .eq("id", requestId)
+      .eq("company_id", companyId)
+      .single();
+    if (requestError || !request) throw new Error("Payment request not found.");
+    if (request.requested_by !== authorization.userId) throw new Error("Only the initiator can submit bank details.");
+
+    const status = String(request.status ?? "").toUpperCase();
+    const approvalStatus = String(request.approval_status ?? "").toUpperCase();
+    const isRejectedOrReturned = ["REJECTED", "RETURNED", "CANCELLED"].includes(status) || ["REJECTED", "RETURNED", "CANCELLED"].includes(approvalStatus);
+    const isAlreadyProcessing = ["PROCESSING", "PROCESSED"].includes(status) || ["PROCESSING", "PROCESSED"].includes(approvalStatus);
+    const isApproved = status === "APPROVED" ||
+      approvalStatus === "APPROVED" ||
+      status === "OWNER_APPROVED" ||
+      approvalStatus === "OWNER_APPROVED" ||
+      (approvalStatus.endsWith("_APPROVED") && !request.current_approver_user_id && !request.current_approver_role_id);
+    if (!isApproved || isRejectedOrReturned || isAlreadyProcessing) {
+      throw new Error("Bank details can be submitted only after final approval.");
+    }
+
+    const { data: headData, error: headError } = await admin
+      .from("payment_heads")
+      .select("id, payment_head_questions (id, answer_type, is_required, field_stage, sort_order)")
+      .eq("id", request.payment_head_id)
+      .eq("company_id", companyId)
+      .single();
+    if (headError || !headData) throw new Error("Payment head not found for this company.");
+
+    const paymentQuestions = questionsForStage(headData.payment_head_questions, "payment");
+    const questionIds = formData.getAll("question_ids").map((value) => String(value));
+    const questionById = new Map(paymentQuestions.map((question) => [question.id, question]));
+    const questionAnswers = await Promise.all(questionIds.map(async (questionId) => {
+      const question = questionById.get(questionId);
+      if (!question) return null;
+      if (question.answer_type === "file") {
+        const file = formData.get(`files[${questionId}]`);
+        if (file instanceof File && file.size > 0) {
+          const path = `${companyId}/${request.id}/${questionId}/${Date.now()}-${safeFileName(file.name)}`;
+          const { error: uploadError } = await admin.storage.from("payment-request-documents").upload(path, file, { upsert: false });
+          if (uploadError) throw new Error(uploadError.message);
+          return withCompany({
+            payment_request_id: request.id,
+            question_id: questionId,
+            answer_value: file.name,
+            file_path: path,
+            file_name: file.name,
+            file_size: file.size
+          }, companyId);
+        }
+        if (question.is_required) throw new Error("Required file upload is missing.");
+        return withCompany({
+          payment_request_id: request.id,
+          question_id: questionId,
+          answer_value: null,
+          file_path: null,
+          file_name: null,
+          file_size: null
+        }, companyId);
+      }
+
+      const answerValue = clean(formData.get(`answers[${questionId}]`));
+      if (question.is_required && !answerValue) throw new Error("Required payment detail is missing.");
+      return withCompany({
+        payment_request_id: request.id,
+        question_id: questionId,
+        answer_value: answerValue,
+        file_path: null,
+        file_name: null,
+        file_size: null
+      }, companyId);
+    }));
+    const answersToSave = questionAnswers.filter((answer): answer is Exclude<(typeof questionAnswers)[number], null> => Boolean(answer));
+    if (answersToSave.length) {
+      const { error: deleteAnswersError } = await admin
+        .from("payment_request_answers")
+        .delete()
+        .eq("company_id", companyId)
+        .eq("payment_request_id", request.id)
+        .in("question_id", answersToSave.map((answer) => String(answer.question_id)));
+      if (deleteAnswersError) throw new Error(deleteAnswersError.message);
+      const { error: answersError } = await admin.from("payment_request_answers").insert(answersToSave);
+      if (answersError) throw new Error(answersError.message);
+    }
+
+    const { error: updateError } = await admin
+      .from("payment_requests")
+      .update({
+        amount: Number(amountText),
+        bank_account_no: bankAccountNo,
+        ifsc,
+        account_holder_name: accountHolderName,
+        beneficiary_account_no: bankAccountNo,
+        beneficiary_account_number: bankAccountNo,
+        beneficiary_ifsc: ifsc,
+        beneficiary_account_holder: accountHolderName,
+        contact_no: contactNo,
+        email,
+        remarks,
+        status: "approved",
+        approval_status: "APPROVED",
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", request.id)
+      .eq("company_id", companyId);
+    if (updateError) throw new Error(updateError.message);
+
+    revalidatePath("/payments/requests");
+    revalidatePath("/payments/expense-request");
+    revalidatePath("/payments/process");
+    revalidatePath("/payments/report");
+  } catch (error) {
+    if (returnToExpense) {
+      expenseRequestsRedirect({
+        expenseError: paymentRequestErrorMessage(error)
+      });
+    }
+    paymentRequestsRedirect({
+      paymentError: paymentRequestErrorMessage(error)
+    });
+  }
+
+  if (returnToExpense) {
+    expenseRequestsRedirect({ expenseNotice: "Bank details submitted for payment processing." });
+  }
+  paymentRequestsRedirect({ paymentNotice: "Bank details submitted for payment processing." });
+}
+
+export async function resubmitPaymentRequest(formData: FormData) {
+  const authorization = await requirePagePermission("payment_requests", "add");
+  const companyId = requireCompanyId(authorization);
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
+    const admin = supabaseAdmin;
+    const requestId = required(formData.get("request_id"), "Payment request");
+    const amountText = required(formData.get("amount"), "Amount");
+    const bankAccountNo = required(formData.get("bank_account_no"), "Bank Account No");
+    const ifsc = required(formData.get("ifsc"), "IFSC");
+    const accountHolderName = required(formData.get("account_holder_name"), "Acc Holder Name");
+    const contactNo = clean(formData.get("contact_no"));
+    const email = clean(formData.get("email"));
+    const remarks = required(formData.get("remarks"), "Remarks");
+
+    const { data: request, error: requestError } = await admin
+      .from("payment_requests")
+      .select("id, location_id, payment_head_id, requested_by, status, approval_status")
+      .eq("id", requestId)
+      .eq("company_id", companyId)
+      .single();
+    if (requestError || !request) throw new Error("Payment request not found.");
+    if (request.requested_by !== authorization.userId) throw new Error("Only the initiator can resubmit a returned request.");
+    const normalizedApprovalStatus = String(request.approval_status ?? "").toUpperCase();
+    const normalizedStatus = String(request.status ?? "").toLowerCase();
+    if (normalizedApprovalStatus !== "RETURNED" && normalizedStatus !== "returned") {
+      throw new Error("Only returned requests can be resubmitted.");
+    }
+
+    const [locationResult, headResult] = await Promise.all([
+      admin.from("stations").select("id, station_code, station_manager_email").eq("id", request.location_id).eq("company_id", companyId).single(),
+      admin
+        .from("payment_heads")
+        .select("id, code, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, payment_head_questions (id, answer_type, is_required, field_stage, sort_order)")
+        .eq("id", request.payment_head_id)
+        .eq("company_id", companyId)
+        .single()
+    ]);
+    if (locationResult.error) throw new Error("Location not found for this company.");
+    if (headResult.error) throw new Error("Payment head not found for this company.");
+
+    const finalApprovalRoleIds = (headResult.data.final_approval_role_ids?.length ? headResult.data.final_approval_role_ids : headResult.data.final_approval_role_id ? [headResult.data.final_approval_role_id] : []) as string[];
+    if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
+
+    const approver = await firstApproverTarget({
+      companyId,
+      finalApprovalRoleIds,
+      locationManagerEmail: locationResult.data.station_manager_email,
+      requesterRoleId: authorization.roleId,
+      requesterUserId: authorization.userId
+    });
+
+    const { data: existingAnswers } = await admin
+      .from("payment_request_answers")
+      .select("id, question_id, file_name")
+      .eq("company_id", companyId)
+      .eq("payment_request_id", request.id);
+    const existingAnswerByQuestionId = new Map((existingAnswers ?? []).map((answer) => [answer.question_id, answer]));
+
+    const questionIds = formData.getAll("question_ids").map((value) => String(value));
+    if (questionIds.length) {
+      const paymentQuestions = questionsForStage(headResult.data.payment_head_questions, "payment");
+      const questionById = new Map(paymentQuestions.map((question) => [question.id, question]));
+      for (const questionId of questionIds) {
+        const question = questionById.get(questionId);
+        if (!question) continue;
+        const existingAnswer = existingAnswerByQuestionId.get(questionId);
+        const answerPayload = withCompany({
+          payment_request_id: request.id,
+          question_id: questionId,
+          updated_at: new Date().toISOString()
+        }, companyId) as Record<string, unknown>;
+
+        if (question.answer_type === "file") {
+          const file = formData.get(`files[${questionId}]`);
+          if (file instanceof File && file.size > 0) {
+            const path = `${companyId}/${request.id}/${questionId}/${Date.now()}-${safeFileName(file.name)}`;
+            const { error: uploadError } = await admin.storage.from("payment-request-documents").upload(path, file, { upsert: false });
+            if (uploadError) throw new Error(uploadError.message);
+            answerPayload.answer_value = file.name;
+            answerPayload.file_path = path;
+            answerPayload.file_name = file.name;
+            answerPayload.file_size = file.size;
+          } else if (question.is_required && !existingAnswer?.file_name) {
+            throw new Error("Required file upload is missing.");
+          } else {
+            continue;
+          }
+        } else {
+          answerPayload.answer_value = clean(formData.get(`answers[${questionId}]`));
+          answerPayload.file_path = null;
+          answerPayload.file_name = null;
+          answerPayload.file_size = null;
+        }
+
+        const answerWrite = existingAnswer
+          ? await admin.from("payment_request_answers").update(answerPayload).eq("id", existingAnswer.id).eq("company_id", companyId)
+          : await admin.from("payment_request_answers").insert(answerPayload);
+        if (answerWrite.error) throw new Error(answerWrite.error.message);
+      }
+    }
+
+    const { error: updateError } = await admin
+      .from("payment_requests")
+      .update({
+        location_code: locationResult.data.station_code,
+        station_code: locationResult.data.station_code,
+        amount: Number(amountText),
+        amount_requested: Number(amountText),
+        bank_account_no: bankAccountNo,
+        ifsc,
+        account_holder_name: accountHolderName,
+        beneficiary_account_no: bankAccountNo,
+        beneficiary_account_number: bankAccountNo,
+        beneficiary_ifsc: ifsc,
+        beneficiary_account_holder: accountHolderName,
+        contact_no: contactNo,
+        email,
+        remarks,
+        status: "pending",
+        approval_status: "PENDING",
+        current_step_order: 1,
+        current_approver_user_id: approver.userId,
+        current_approver_role_id: approver.roleId,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", request.id)
+      .eq("company_id", companyId);
+    if (updateError) throw new Error(updateError.message);
+
+    revalidatePath("/payments/requests");
+    revalidatePath("/payments/approvals");
+    revalidatePath("/payments/report");
+    const emailResult = await sendPaymentNotification({
+      actorUserId: authorization.userId,
+      companyId,
+      eventType: "payment_request",
+      remarks,
+      requestId: request.id
+    });
+    if (!emailResult.sent) {
+      paymentRequestsRedirect({
+        paymentNotice: paymentEmailNotice("Payment request resubmitted successfully.", emailResult.reason)
+      });
+    }
+  } catch (error) {
+    paymentRequestsRedirect({
+      paymentError: paymentRequestErrorMessage(error)
+    });
+  }
+
+  paymentRequestsRedirect({ paymentNotice: "Payment request resubmitted successfully." });
+}

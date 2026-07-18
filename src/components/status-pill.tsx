@@ -1,0 +1,33 @@
+export function StatusPill({ status }: { status: string }) {
+  const lower = status.toLowerCase();
+  const tone = lower.includes("inactive")
+    || lower.includes("disabled")
+    || lower.includes("suspended")
+    ? "bad"
+    : lower.includes("active")
+    || lower.includes("success")
+    || lower.includes("verified")
+    || lower.includes("cleared")
+    || lower.includes("ready")
+    || lower.includes("approved")
+    || lower.includes("processed")
+    || lower === "no"
+    ? "good"
+    : lower.includes("pending")
+      || lower.includes("partial")
+      || lower.includes("draft")
+      || lower.includes("docs")
+      || lower.includes("review")
+      || lower.includes("waiting")
+      || lower.includes("returned")
+      || lower.includes("medium")
+      ? "warn"
+      : lower.includes("high")
+        || lower.includes("hold")
+        || lower.includes("missing")
+        || lower.includes("not cleared")
+        ? "bad"
+        : "";
+
+  return <span className={`status-pill ${tone}`}>{status}</span>;
+}

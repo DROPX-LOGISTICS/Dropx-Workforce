@@ -1,0 +1,352 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useFormStatus } from "react-dom";
+import { PageHead } from "@/components/page-head";
+import { StatusPill } from "@/components/status-pill";
+
+export type PaymentProcessBank = {
+  id: string;
+  display_name: string;
+  account_no: string;
+};
+
+export type PaymentProcessRequest = {
+  id: string;
+  request_no: string;
+  location_code: string;
+  amount: number | null;
+  amount_requested: number | null;
+  payment_mode: string | null;
+  status: string | null;
+  approval_status: string | null;
+  created_at: string;
+  payment_head_name: string | null;
+};
+
+function amountValue(request: PaymentProcessRequest) {
+  return Number(request.amount_requested ?? request.amount ?? 0);
+}
+
+function isAccountTransfer(request: PaymentProcessRequest) {
+  return (request.payment_mode ?? "account_transfer") !== "online_payment";
+}
+
+function statusLabel(request: PaymentProcessRequest) {
+  const approvalStatus = String(request.approval_status ?? "").toUpperCase();
+  const status = String(request.status ?? "").toUpperCase();
+  if (approvalStatus === "PROCESSED" || status === "PROCESSED") return "Processed";
+  if (approvalStatus === "PROCESSING" || status === "PROCESSING") return "Processing";
+  return "Approved";
+}
+
+function dateOnly(value: string) {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+function displayDate(value: string) {
+  return new Date(value).toLocaleDateString("en-GB");
+}
+
+type Props = {
+  banks: PaymentProcessBank[];
+  requests: PaymentProcessRequest[];
+  finalizeAction: (formData: FormData) => Promise<void>;
+  finalizeResultKey?: string;
+  processAction: (formData: FormData) => Promise<void>;
+  today: string;
+};
+
+function FinalizeSubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button className={`button ${pending ? "loading" : ""}`} disabled={pending} type="submit">
+      {pending ? <span className="button-spinner" aria-hidden="true" /> : null}
+      <span>{pending ? "Finalizing" : "Finalize requests"}</span>
+    </button>
+  );
+}
+
+function ProcessActionButton({
+  children,
+  className,
+  value
+}: {
+  children: string;
+  className: string;
+  value: string;
+}) {
+  const { pending } = useFormStatus();
+  return (
+    <button className={`button compact ${className} ${pending ? "loading" : ""}`} disabled={pending} name="process_action" type="submit" value={value}>
+      {pending ? <span className="button-spinner" aria-hidden="true" /> : null}
+      <span>{pending ? "Saving" : children}</span>
+    </button>
+  );
+}
+
+export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeResultKey, processAction, today }: Props) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [finalizeOpen, setFinalizeOpen] = useState(false);
+  const [processRequest, setProcessRequest] = useState<PaymentProcessRequest | null>(null);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [status, setStatus] = useState("approved");
+
+  useEffect(() => {
+    if (finalizeResultKey) setFinalizeOpen(false);
+  }, [finalizeResultKey]);
+
+  const filteredRequests = useMemo(() => {
+    return requests.filter((request) => {
+      const created = dateOnly(request.created_at);
+      if (fromDate && created < fromDate) return false;
+      if (toDate && created > toDate) return false;
+      const rowStatus = statusLabel(request).toLowerCase();
+      if (status !== "all" && rowStatus !== status) return false;
+      return true;
+    });
+  }, [fromDate, requests, status, toDate]);
+
+  const visibleIds = filteredRequests.map((request) => request.id);
+  const visibleSelected = visibleIds.filter((id) => selectedIds.includes(id));
+  const allVisibleSelected = visibleIds.length > 0 && visibleSelected.length === visibleIds.length;
+  const totalAmount = requests.reduce((sum, request) => sum + amountValue(request), 0);
+  const requestById = useMemo(() => new Map(requests.map((request) => [request.id, request])), [requests]);
+  const selectedBankTransferIds = selectedIds.filter((id) => {
+    const request = requestById.get(id);
+    return request ? isAccountTransfer(request) : false;
+  });
+
+  function toggleAllVisible(checked: boolean) {
+    if (!checked) {
+      setSelectedIds((current) => current.filter((id) => !visibleIds.includes(id)));
+      return;
+    }
+    setSelectedIds((current) => Array.from(new Set([...current, ...visibleIds])));
+  }
+
+  function toggleOne(id: string) {
+    setSelectedIds((current) => current.includes(id)
+      ? current.filter((item) => item !== id)
+      : [...current, id]);
+  }
+
+  return (
+    <>
+      <PageHead
+        eyebrow="Payments"
+        title="Process"
+        subtitle="Download bank upload files for final approved payment requests."
+        action={(
+          <button className="button secondary" onClick={() => setFinalizeOpen(true)} type="button">
+            Finalize
+          </button>
+        )}
+      />
+
+      <div className="stat-grid three" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+        <div className="stat-card">
+          <span>Final approved</span>
+          <strong>{requests.length}</strong>
+        </div>
+        <div className="stat-card">
+          <span>Total amount</span>
+          <strong>Rs {totalAmount.toLocaleString("en-IN")}</strong>
+        </div>
+        <div className="stat-card">
+          <span>Active banks</span>
+          <strong>{banks.length}</strong>
+        </div>
+      </div>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>Bank file download</h2>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gap: 14,
+              gridTemplateColumns: "repeat(3, minmax(180px, 220px))",
+              justifyContent: "end",
+              marginLeft: "auto",
+              width: "min(100%, 720px)"
+            }}
+          >
+            <label>From
+              <input className="field" onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} />
+            </label>
+            <label>To
+              <input className="field" onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} />
+            </label>
+            <label>Status
+              <select className="field" onChange={(event) => setStatus(event.target.value)} value={status}>
+                <option value="approved">Approved</option>
+                <option value="processing">Processing</option>
+                <option value="processed">Processed</option>
+                <option value="all">All approved</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <form action="/api/payments/process/download" className="panel-body" method="get">
+          <input name="request_ids" type="hidden" value={selectedBankTransferIds.join(",")} />
+          <div
+            className="form-grid"
+            style={{ alignItems: "end", gridTemplateColumns: "minmax(240px, 1.2fr) minmax(190px, 1fr) minmax(170px, 0.8fr) minmax(190px, auto)" }}
+          >
+            <label>Bank
+              <select className="field" name="bank_id" required>
+                <option value="">Select bank</option>
+                {banks.map((bank) => (
+                  <option key={bank.id} value={bank.id}>{bank.display_name} | {bank.account_no}</option>
+                ))}
+              </select>
+            </label>
+            <label>File type
+              <select className="field" name="file_type" defaultValue="fedone" required>
+                <option value="fedone">Federal Bank - FedOne</option>
+              </select>
+            </label>
+            <label>Value date
+              <input className="field" name="value_date" type="date" defaultValue={today} required />
+            </label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, justifySelf: "end" }}>
+              <button className="button" disabled={!banks.length || !selectedBankTransferIds.length} type="submit">
+                Download bank file
+              </button>
+            </div>
+          </div>
+        </form>
+        <div className="panel-head" style={{ borderTop: "1px solid var(--border)", marginTop: 0 }}>
+          <div>
+            <h2>Ready for processing</h2>
+            <p className="subtle">{filteredRequests.length} of {requests.length} requests shown.</p>
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>
+                  <input
+                    aria-label="Select all visible payment requests"
+                    checked={allVisibleSelected}
+                    onChange={(event) => toggleAllVisible(event.target.checked)}
+                    type="checkbox"
+                  />
+                </th>
+                <th>Request</th>
+                <th>Location</th>
+                <th>Payment Head</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRequests.length ? filteredRequests.map((request) => (
+                <tr key={request.id}>
+                  <td>
+                    <input
+                      aria-label={`Select payment request ${request.request_no}`}
+                      checked={selectedIds.includes(request.id)}
+                      onChange={() => toggleOne(request.id)}
+                      type="checkbox"
+                    />
+                  </td>
+                  <td><strong>{request.request_no}</strong></td>
+                  <td>{request.location_code}</td>
+                  <td>{request.payment_head_name ?? "-"}</td>
+                  <td>Rs {amountValue(request).toLocaleString("en-IN")}</td>
+                  <td><StatusPill status={statusLabel(request)} /></td>
+                  <td>{displayDate(request.created_at)}</td>
+                  <td>
+                    {statusLabel(request).toLowerCase() === "processed" ? "-" : (
+                      <button className="button secondary compact" onClick={() => setProcessRequest(request)} type="button">
+                        Action
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )) : (
+                <tr><td className="empty-cell" colSpan={8}>No final approved payment requests ready for processing.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {finalizeOpen ? (
+        <div className="modal-backdrop">
+          <section aria-label="Finalize payment requests" className="modal-panel">
+            <div className="panel-head">
+              <div>
+                <h2>Finalize</h2>
+                <p className="subtle">Upload the bank transaction enquiry file to mark paid or cancelled requests.</p>
+              </div>
+              <button className="modal-close" onClick={() => setFinalizeOpen(false)} type="button">x</button>
+            </div>
+            <form action={finalizeAction} className="panel-body" encType="multipart/form-data">
+              <label>Bank response file
+                <input
+                  accept=".xlsx,.xls"
+                  className="field"
+                  name="bank_response_file"
+                  required
+                  type="file"
+                />
+            </label>
+            <div className="form-actions modal-actions">
+              <button className="button secondary" onClick={() => setFinalizeOpen(false)} type="button">Cancel</button>
+              <FinalizeSubmitButton />
+            </div>
+          </form>
+          </section>
+        </div>
+      ) : null}
+
+      {processRequest ? (
+        <div className="modal-backdrop">
+          <section aria-label="Update payment processing status" className="modal-panel">
+            <div className="panel-head">
+              <div>
+                <h2>Process payment</h2>
+                <p className="subtle">{processRequest.request_no} - {processRequest.location_code}</p>
+              </div>
+              <button className="modal-close" onClick={() => setProcessRequest(null)} type="button">x</button>
+            </div>
+            <form action={processAction} className="panel-body">
+              <input name="request_id" type="hidden" value={processRequest.id} />
+              <div className="form-grid two">
+                <label>Payment Head
+                  <input className="field" readOnly value={processRequest.payment_head_name ?? "-"} />
+                </label>
+                <label>Amount
+                  <input className="field" readOnly value={`Rs ${amountValue(processRequest).toLocaleString("en-IN")}`} />
+                </label>
+                <label>Status
+                  <input className="field" readOnly value={statusLabel(processRequest)} />
+                </label>
+                <label>Remarks
+                  <input className="field" name="process_remarks" placeholder="UTR No / error remarks" />
+                </label>
+              </div>
+              <div className="form-actions modal-actions">
+                <button className="button secondary" onClick={() => setProcessRequest(null)} type="button">Cancel</button>
+                {statusLabel(processRequest).toLowerCase() !== "processing" ? (
+                  <ProcessActionButton className="secondary" value="processing">Processing</ProcessActionButton>
+                ) : null}
+                <ProcessActionButton className="payment-approve-button" value="processed">Processed</ProcessActionButton>
+                <ProcessActionButton className="payment-return-button" value="returned">Return</ProcessActionButton>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+    </>
+  );
+}

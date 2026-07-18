@@ -1,0 +1,22 @@
+{
+  "name": "DropX Connect",
+  "short_name": "DropX Connect",
+  "description": "Mobile access for DropX employees, field executives, vendors, and contractors.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#e43d22",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

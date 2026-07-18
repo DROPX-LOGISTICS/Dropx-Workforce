@@ -1,0 +1,176 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+import { NextResponse } from "next/server";
+import { getAuthorization, hasPermission } from "@/lib/authorization";
+import { requireCompanyId } from "@/lib/company-scope";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+
+const bucketName = "fleet-documents";
+const fallbackDocumentTypes = new Set(["FLEET_REGISTRATION", "FLEET_INSURANCE", "FLEET_PUC", "FLEET_FITNESS", "FLEET_TAX"]);
+
+export async function GET(request: Request) {
+  if (!supabaseAdmin) return setupError("Supabase service role key is not configured.");
+  const access = await requireDocumentPermission("access");
+  if ("error" in access) return access.error;
+  const { searchParams } = new URL(request.url);
+  const vehicleNo = normalizeText(searchParams.get("vehicle_no")).toUpperCase();
+  if (!vehicleNo) return NextResponse.json({ error: "Vehicle number is required." }, { status: 400 });
+
+  const { data, error } = await supabaseAdmin
+    .from("fleet_vehicle_documents")
+    .select("document_type,file_name,content_type,file_size,expiry_date,uploaded_at,storage_path")
+    .eq("company_id", access.companyId)
+    .eq("vehicle_no", vehicleNo)
+    .eq("is_active", true)
+    .order("uploaded_at", { ascending: false });
+
+  if (error) return mutationError(error.message);
+
+  const latestByType = new Map<string, Record<string, unknown>>();
+  for (const row of data ?? []) {
+    if (!latestByType.has(String(row.document_type))) latestByType.set(String(row.document_type), row);
+  }
+
+  const documents = Array.from(latestByType.values()).map((row) => {
+    const storagePath = String(row.storage_path ?? "");
+    const fileUrl = storagePath
+      ? `/api/fleet/documents/download?vehicle_no=${encodeURIComponent(vehicleNo)}&document_type=${encodeURIComponent(String(row.document_type))}`
+      : null;
+    return {
+      document_type: row.document_type,
+      file_name: row.file_name,
+      content_type: row.content_type,
+      file_size: row.file_size,
+      expiry_date: row.expiry_date,
+      uploaded_at: row.uploaded_at,
+      signed_url: fileUrl,
+      download_url: fileUrl ? `${fileUrl}&download=1` : null
+    };
+  });
+
+  return NextResponse.json({ documents });
+}
+
+export async function POST(request: Request) {
+  if (!supabaseAdmin) return setupError("Supabase service role key is not configured.");
+  const access = await requireDocumentPermission("edit");
+  if ("error" in access) return access.error;
+  const formData = await request.formData();
+  const vehicleNo = normalizeText(formData.get("vehicle_no")).toUpperCase();
+  const documentType = normalizeText(formData.get("document_type")).toUpperCase();
+  const expiryDate = normalizeText(formData.get("expiry_date")) || null;
+  const file = formData.get("file");
+
+  if (!vehicleNo) return NextResponse.json({ error: "Vehicle number is required." }, { status: 400 });
+  const validDocumentType = await isValidDocumentType(access.companyId, documentType);
+  if (!validDocumentType) return NextResponse.json({ error: "Valid active document type is required." }, { status: 400 });
+  if (!(file instanceof File) || !file.size) return NextResponse.json({ error: "Document file is required." }, { status: 400 });
+  const vehicleResult = await supabaseAdmin
+    .from("fleet_vehicles")
+    .select("vehicle_no")
+    .eq("company_id", access.companyId)
+    .eq("vehicle_no", vehicleNo)
+    .maybeSingle();
+  if (vehicleResult.error) return mutationError(vehicleResult.error.message);
+  if (!vehicleResult.data) return NextResponse.json({ error: "Vehicle not found for this company." }, { status: 404 });
+
+  await ensureBucket();
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const storagePath = `${vehicleNo}/${documentType}/${Date.now()}-${safeName}`;
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const { error: uploadError } = await supabaseAdmin.storage
+    .from(bucketName)
+    .upload(storagePath, bytes, {
+      contentType: file.type || "application/octet-stream",
+      upsert: false
+    });
+
+  if (uploadError) return mutationError(uploadError.message);
+
+  const now = new Date();
+  const deleteAfter = new Date(now.getTime() + 30 * 86_400_000).toISOString();
+  const { error: replaceError } = await supabaseAdmin
+    .from("fleet_vehicle_documents")
+    .update({
+      is_active: false,
+      replaced_at: now.toISOString(),
+      delete_after: deleteAfter
+    })
+    .eq("company_id", access.companyId)
+    .eq("vehicle_no", vehicleNo)
+    .eq("document_type", documentType)
+    .eq("is_active", true);
+
+  if (replaceError) return mutationError(replaceError.message);
+
+  const { data, error } = await supabaseAdmin
+    .from("fleet_vehicle_documents")
+    .insert({
+      company_id: access.companyId,
+      vehicle_no: vehicleNo,
+      document_type: documentType,
+      file_name: file.name,
+      content_type: file.type || null,
+      file_size: file.size,
+      storage_bucket: bucketName,
+      storage_path: storagePath,
+      expiry_date: expiryDate,
+      is_active: true
+    })
+    .select()
+    .single();
+
+  if (error) return mutationError(error.message);
+  return NextResponse.json({ document: data });
+}
+
+async function isValidDocumentType(companyId: string, documentType: string) {
+  if (!documentType) return false;
+  if (!supabaseAdmin) return fallbackDocumentTypes.has(documentType);
+  const { data, error } = await supabaseAdmin
+    .from("document_types")
+    .select("id")
+    .eq("company_id", companyId)
+    .in("code", Array.from(new Set([documentType, documentType.toLowerCase()])))
+    .eq("document_module", "fleet")
+    .eq("is_active", true)
+    .limit(1);
+  if (error) return fallbackDocumentTypes.has(documentType);
+  return Boolean(data?.length) || fallbackDocumentTypes.has(documentType);
+}
+
+async function requireDocumentPermission(action: "access" | "edit") {
+  const authorization = await getAuthorization();
+  if (!authorization) return { error: NextResponse.json({ error: "Login required." }, { status: 401 }) };
+  const companyId = requireCompanyId(authorization);
+  const allowed = action === "access"
+    ? hasPermission(authorization, "fleet_vehicle_view", "access") || hasPermission(authorization, "fleet_date_view", "access") || hasPermission(authorization, "fleet", "access")
+    : hasPermission(authorization, "fleet_vehicle_view", "edit") || hasPermission(authorization, "fleet_date_view", "edit") || hasPermission(authorization, "fleet", "edit");
+  return allowed ? { companyId } : { error: NextResponse.json({ error: "Fleet document permission denied." }, { status: 403 }) };
+}
+
+async function ensureBucket() {
+  if (!supabaseAdmin) return;
+  const { data } = await supabaseAdmin.storage.getBucket(bucketName);
+  if (data) return;
+  await supabaseAdmin.storage.createBucket(bucketName, {
+    public: false,
+    fileSizeLimit: 20 * 1024 * 1024
+  });
+}
+
+function normalizeText(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function setupError(error: string) {
+  return NextResponse.json({ error }, { status: 500 });
+}
+
+function mutationError(error: string) {
+  if (error.includes("fleet_vehicle_documents") || error.includes("schema cache")) {
+    return NextResponse.json({ error: `${error} Run scripts/fleet_vehicle_documents_v1.sql in Supabase SQL Editor.` }, { status: 500 });
+  }
+  return NextResponse.json({ error }, { status: 500 });
+}

@@ -55,7 +55,7 @@ function optionalNumber(value: FormDataEntryValue | null) {
   const text = clean(value);
   if (!text) return 0;
   const parsed = Number(text.replace(/,/g, ""));
-  if (!Number.isFinite(parsed) || parsed < 0) throw new Error("Shipment count must be a valid number.");
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error("Activity count must be a valid number.");
   return Number(parsed.toFixed(2));
 }
 
@@ -112,7 +112,7 @@ async function savePayload(
   const sourceAssociateName = clean(formData.get("source_associate_name"));
   const manualAssociateName = clean(formData.get("manual_associate_name"));
   if (!sourceAssociateName && !manualAssociateName) {
-    throw new Error("Associate name is required when the executive is not available in shipment import.");
+    throw new Error("Associate name is required when the executive is not available in SCC Driver Reconciliation.");
   }
   const providerEmployeeIdInput = clean(formData.get("provider_employee_id"))?.trim();
   const providerEmployeeId = !providerEmployeeIdInput || providerEmployeeIdInput === "__manual__"

@@ -53,6 +53,150 @@ function safeNumber(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeText(value) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeName(value) {
+  return normalizeText(value)
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/[^a-z0-9 ]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function compactIdentifier(value) {
+  return normalizeText(value).replace(/[^a-z0-9_-]+/gi, "").toUpperCase();
+}
+
+function stableRosterId(stationCode, name, candidateId) {
+  const explicit = compactIdentifier(candidateId);
+  if (explicit && !/^(0|NA|N\/A|NULL|-)$/.test(explicit)) return explicit;
+  const slug = normalizeName(name)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return `SCC-${compactIdentifier(stationCode) || "STATION"}-${slug || "ASSOCIATE"}`;
+}
+
+function isLikelyHeaderOrTotal(row) {
+  const text = normalizeText((row || []).join(" ")).toLowerCase();
+  if (!text) return true;
+  return /\b(total|grand total|summary|station|employee count|pending count)\b/i.test(text) ||
+    /\b(name|driver|associate|executive)\b.*\b(status|amount|cod|recon)\b/i.test(text);
+}
+
+function isNonNameCell(value) {
+  const text = normalizeText(value);
+  if (!text) return true;
+  if (/^\d+([.,]\d+)?$/.test(text.replace(/[,₹\s]/g, ""))) return true;
+  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(text)) return true;
+  if (/^\d{1,2}:\d{2}(:\d{2})?\s*(am|pm)?$/i.test(text)) return true;
+  if (/^(pending|completed|done|closed|open|yes|no|na|n\/a|status|amount|cod|cash|driver|associate)$/i.test(text)) return true;
+  return false;
+}
+
+function pickByHeader(headers, row, patterns) {
+  const normalizedHeaders = (headers || []).map((header) => normalizeText(header).toLowerCase());
+  for (const pattern of patterns) {
+    const index = normalizedHeaders.findIndex((header) => pattern.test(header));
+    if (index >= 0 && row[index] !== undefined) return row[index];
+  }
+  return "";
+}
+
+function amountFromRow(headers, row) {
+  const value = pickByHeader(headers, row, [/pending.*amount/i, /pending.*cod/i, /short/i, /liability/i, /\bcod\b/i, /amount/i]);
+  return safeNumber(value);
+}
+
+function statusFromRow(headers, row) {
+  const headerValue = pickByHeader(headers, row, [/status/i, /state/i, /recon/i, /reconciliation/i]);
+  if (normalizeText(headerValue)) return normalizeText(headerValue);
+  const text = normalizeText(row.join(" "));
+  const match = text.match(/\b(pending|completed|done|reconciled|not reconciled|unreconciled|short|closed|open)\b/i);
+  return match ? match[0] : null;
+}
+
+function nameFromRow(headers, row) {
+  const headerValue = pickByHeader(headers, row, [
+    /associate.*name/i,
+    /driver.*name/i,
+    /executive.*name/i,
+    /\bda\s*name\b/i,
+    /\bname\b/i
+  ]);
+  if (normalizeText(headerValue) && !isNonNameCell(headerValue)) return normalizeText(headerValue);
+
+  const candidates = row
+    .map(normalizeText)
+    .filter((value) => value && !isNonNameCell(value) && /[a-z]/i.test(value))
+    .filter((value) => !/pending|recon|amount|status|station|route|total|liability/i.test(value));
+  candidates.sort((first, second) => second.length - first.length);
+  return candidates[0] || "";
+}
+
+function idFromRow(headers, row, name) {
+  const headerValue = pickByHeader(headers, row, [
+    /provider.*id/i,
+    /employee.*id/i,
+    /transporter.*id/i,
+    /\bda\s*id\b/i,
+    /driver.*id/i,
+    /executive.*id/i,
+    /\bid\b/i
+  ]);
+  if (compactIdentifier(headerValue)) return compactIdentifier(headerValue);
+
+  const nameText = normalizeText(name).toLowerCase();
+  const candidate = row
+    .map(normalizeText)
+    .find((value) => {
+      const compact = compactIdentifier(value);
+      if (!compact || normalizeText(value).toLowerCase() === nameText) return false;
+      if (/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(value)) return false;
+      if (/^\d{1,2}:\d{2}/.test(value)) return false;
+      if (/^\d+([.,]\d+)?$/.test(value.replace(/[,₹\s]/g, ""))) return false;
+      return /^[A-Z0-9][A-Z0-9_-]{2,30}$/i.test(compact);
+    });
+  return compactIdentifier(candidate);
+}
+
+function extractDriverReconciliationAssociates(evidence, stationCode = "") {
+  const rowsById = new Map();
+  for (const table of evidence.tables || []) {
+    const tableRows = Array.isArray(table.rows) ? table.rows : [];
+    const headerCandidates = Array.isArray(table.headers) && table.headers.length ? table.headers : tableRows[0] || [];
+    const headers = headerCandidates.map(normalizeText);
+    for (const row of tableRows) {
+      const cells = (row || []).map(normalizeText);
+      if (cells.length < 2 || isLikelyHeaderOrTotal(cells)) continue;
+      const associateName = nameFromRow(headers, cells);
+      if (!associateName) continue;
+      const normalizedAssociateName = normalizeName(associateName);
+      if (!normalizedAssociateName || normalizedAssociateName.length < 3) continue;
+      const providerEmployeeId = stableRosterId(stationCode, associateName, idFromRow(headers, cells, associateName));
+      const pendingAmount = amountFromRow(headers, cells);
+      const reconciliationState = statusFromRow(headers, cells);
+      const routeCode = normalizeText(pickByHeader(headers, cells, [/route/i, /wave/i, /cycle/i]));
+      rowsById.set(providerEmployeeId, {
+        provider_employee_id: providerEmployeeId,
+        associate_name: associateName,
+        normalized_associate_name: normalizedAssociateName,
+        route_code: routeCode || null,
+        reconciliation_state: reconciliationState,
+        pending_amount: pendingAmount,
+        raw_row: { headers, cells }
+      });
+    }
+  }
+  return Array.from(rowsById.values()).sort((first, second) =>
+    String(first.associate_name).localeCompare(String(second.associate_name))
+  );
+}
+
 function parseAmountNear(text, labels) {
   const normalized = text.replace(/\s+/g, " ");
   for (const label of labels) {
@@ -287,10 +431,12 @@ function summarizeDriverReconciliation(evidence, stationCode, checkDate) {
       pending_count: 0,
       pending_amount: 0,
       summary: "Amazon SCC needs MFA or manual verification before Driver Reconciliation can be inspected.",
+      associates: [],
       evidence
     };
   }
 
+  const associates = extractDriverReconciliationAssociates(evidence, stationCode);
   const pendingAmount = parseAmountNear(text, [
     "pending recon amount",
     "pending reconciliation amount",
@@ -308,6 +454,7 @@ function summarizeDriverReconciliation(evidence, stationCode, checkDate) {
     status,
     pending_count: pendingRows.pending,
     pending_amount: pendingAmount,
+    associates,
     summary: status === "Pass"
       ? `Driver reconciliation is clear for ${stationCode} on ${checkDate}.`
       : status === "Fail"
@@ -315,7 +462,8 @@ function summarizeDriverReconciliation(evidence, stationCode, checkDate) {
         : `Driver reconciliation page loaded, but layout was not clear enough to confirm ${stationCode} on ${checkDate}.`,
     evidence: {
       ...evidence,
-      pending_examples: pendingRows.examples
+      pending_examples: pendingRows.examples,
+      associates
     }
   };
 }

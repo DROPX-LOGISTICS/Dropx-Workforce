@@ -56,6 +56,16 @@ type SccCredentials = {
   };
 };
 
+type DriverReconciliationAssociate = {
+  provider_employee_id?: unknown;
+  associate_name?: unknown;
+  normalized_associate_name?: unknown;
+  route_code?: unknown;
+  reconciliation_state?: unknown;
+  pending_amount?: unknown;
+  raw_row?: unknown;
+};
+
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
@@ -90,6 +100,90 @@ async function logRun(run: PortalRun, eventType: string, message: string, payloa
     message,
     payload
   });
+}
+
+function normalizeText(value: unknown) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeRosterName(value: unknown) {
+  return normalizeText(value)
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/[^a-z0-9 ]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function stableProviderId(stationCode: string, name: string, input: unknown) {
+  const explicit = normalizeText(input).replace(/[^a-z0-9_-]+/gi, "").toUpperCase();
+  if (explicit && !["0", "NA", "N/A", "NULL", "-"].includes(explicit)) return explicit;
+  const slug = normalizeRosterName(name)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return `SCC-${stationCode.replace(/[^A-Z0-9]+/gi, "").toUpperCase() || "STATION"}-${slug || "ASSOCIATE"}`;
+}
+
+function numberValue(value: unknown) {
+  const parsed = Number(String(value ?? "0").replace(/[,₹\s]/g, ""));
+  return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : 0;
+}
+
+function associatesFromWorkerResult(result: Record<string, unknown>) {
+  const direct = Array.isArray(result.associates) ? result.associates : [];
+  const evidence = result.evidence && typeof result.evidence === "object" ? result.evidence as Record<string, unknown> : {};
+  const evidenceRows = Array.isArray(evidence.associates) ? evidence.associates : [];
+  return (direct.length ? direct : evidenceRows) as DriverReconciliationAssociate[];
+}
+
+async function upsertDriverReconciliationRoster(run: PortalRun, result: Record<string, unknown>) {
+  if (!supabaseAdmin || run.check_type !== "driver_reconciliation") return { imported: 0, skipped: 0 };
+
+  const associates = associatesFromWorkerResult(result);
+  if (!associates.length) return { imported: 0, skipped: 0 };
+
+  const seen = new Set<string>();
+  const rows = associates.flatMap((associate) => {
+    const associateName = normalizeText(associate.associate_name);
+    const normalizedAssociateName = normalizeRosterName(associate.normalized_associate_name || associateName);
+    if (!associateName || !normalizedAssociateName) return [];
+    const providerEmployeeId = stableProviderId(run.station_code, associateName, associate.provider_employee_id);
+    const uniqueKey = `${run.company_id}:${run.check_date}:${run.station_code}:${providerEmployeeId}`;
+    if (seen.has(uniqueKey)) return [];
+    seen.add(uniqueKey);
+    return [{
+      company_id: run.company_id,
+      location_id: run.location_id,
+      station_code: run.station_code,
+      portal_station_code: run.portal_station_code,
+      business_date: run.check_date,
+      provider_employee_id: providerEmployeeId,
+      associate_name: associateName,
+      normalized_associate_name: normalizedAssociateName,
+      route_code: normalizeText(associate.route_code) || null,
+      reconciliation_state: normalizeText(associate.reconciliation_state) || null,
+      pending_amount: numberValue(associate.pending_amount),
+      raw_row: associate.raw_row && typeof associate.raw_row === "object" ? associate.raw_row : {},
+      source: "scc_driver_reconciliation",
+      last_seen_at: new Date().toISOString()
+    }];
+  });
+
+  if (!rows.length) return { imported: 0, skipped: associates.length };
+
+  const { error } = await supabaseAdmin
+    .from("cod_driver_reconciliation_roster")
+    .upsert(rows, { onConflict: "company_id,business_date,station_code,provider_employee_id" });
+
+  if (error) {
+    await logRun(run, "roster_error", `Could not save SCC driver roster: ${error.message}`, { error: error.message });
+    return { imported: 0, skipped: associates.length, error: error.message };
+  }
+
+  await logRun(run, "roster_upsert", `Saved ${rows.length} SCC driver reconciliation associates.`, { imported: rows.length });
+  return { imported: rows.length, skipped: associates.length - rows.length };
 }
 
 async function loadSccCredentials(companyId: string): Promise<SccCredentials | null> {
@@ -207,6 +301,10 @@ async function processRun(run: PortalRun, workerUrl: string, workerSecret: strin
     const status = ["Pass", "Fail", "Manual Review", "Error", "Skipped"].includes(String(result.status))
       ? String(result.status)
       : "Manual Review";
+    const rosterSync = await upsertDriverReconciliationRoster(run, result as Record<string, unknown>);
+    const rawResult = result && typeof result === "object"
+      ? { ...(result as Record<string, unknown>), roster_sync: rosterSync }
+      : { roster_sync: rosterSync };
 
     await markRun(run.id, {
       status,
@@ -214,12 +312,12 @@ async function processRun(run: PortalRun, workerUrl: string, workerSecret: strin
       pending_amount: Number(result.pending_amount ?? 0) || 0,
       summary: String(result.summary ?? "").trim() || "Portal worker completed the check.",
       evidence: result.evidence ?? {},
-      raw_result: result,
+      raw_result: rawResult,
       error_message: status === "Error" ? String(result.error_message ?? "Portal worker returned an error.") : null,
       last_checked_at: new Date().toISOString(),
       next_check_at: ["Fail", "Manual Review", "Error"].includes(status) ? retryAt(setting.portal_check_interval_minutes) : null
     });
-    await logRun(run, "worker_result", `Portal worker completed ${run.check_type}.`, result as Record<string, unknown>);
+    await logRun(run, "worker_result", `Portal worker completed ${run.check_type}.`, rawResult);
     return { error: 0, ok: 1 };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Portal worker failed.";

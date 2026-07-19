@@ -178,7 +178,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
           </section>
 
           <section className="summary-grid">
-            <div className="metric-card"><span>Associates</span><strong>{rows.length}</strong><small>Shipment import plus manual rows</small></div>
+            <div className="metric-card"><span>Associates</span><strong>{rows.length}</strong><small>SCC roster plus manual rows</small></div>
             <div className="metric-card"><span>Balanced</span><strong>{completed}</strong><small>Cash equals expected COD</small></div>
             <div className="metric-card"><span>Expected COD</span><strong>{formatAmount(expectedTotal)}</strong><small>Amount entered by station</small></div>
             <div className="metric-card"><span>Net Cash Difference</span><strong className={moneyClass(netDifference)}>{differenceLabel(netDifference)}</strong><small>Collected {formatAmount(collectedTotal)}</small></div>
@@ -188,7 +188,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
             <div className="panel-head">
               <div>
                 <h2>Executive reconciliation sheet</h2>
-                <p className="subtle">Associate names are pulled from Amazon Daily Shipment Count for the selected date and station. Save rows after counting cash.</p>
+                <p className="subtle">Associate names are pulled from Amazon SCC Driver Reconciliation for the selected date and station. Save rows after counting cash.</p>
               </div>
               <span className="count-badge">{rows.length} records</span>
             </div>
@@ -221,7 +221,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                           ) : (
                             <input className="field compact-field associate-field" form={`recon-${row.key}`} name="manual_associate_name" defaultValue={row.manual_associate_name ?? ""} placeholder="Associate name" required />
                           )}
-                          <br /><span className="subtle">{row.shipment_type ?? "No shipment type"}</span>
+                          <br /><span className="subtle">{row.shipment_type ?? "SCC Driver Reconciliation"}</span>
                         </td>
                         <td>{row.provider_employee_id}</td>
                         <td><input className="field compact-field amount-field" form={`recon-${row.key}`} name="expected_amount" defaultValue={String(row.expected_amount ?? 0)} inputMode="decimal" /></td>
@@ -252,7 +252,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                       </tr>
                     );
                   }) : (
-                    <tr><td className="empty-cell" colSpan={16}>No associates found from shipment import. Upload Amazon Daily Shipment Count for this date/station, or add a missing associate below.</td></tr>
+                    <tr><td className="empty-cell" colSpan={16}>No associates found from SCC Driver Reconciliation yet. Run COD Portal Checks for this station/date, or add a missing associate below.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -263,8 +263,8 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
             <section className="panel">
               <div className="panel-head">
                 <div>
-                  <h2>Associate not in shipment file</h2>
-                  <p className="subtle">Use this only when an executive collected COD but is missing from the uploaded Amazon report.</p>
+                  <h2>Associate not in SCC roster</h2>
+                  <p className="subtle">Use this only when an executive collected COD but has not appeared in Driver Reconciliation yet.</p>
                 </div>
               </div>
               <div className="panel-body">

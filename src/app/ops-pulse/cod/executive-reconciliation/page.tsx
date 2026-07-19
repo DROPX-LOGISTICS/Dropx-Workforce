@@ -13,13 +13,14 @@ import {
   executiveDisplayName,
   executiveReconciliationStatuses,
   formatAmount,
+  formatDateTime,
   isMissingCodSetup,
   loadExecutiveReconciliationRows,
   locationLabel,
   type ExecutiveReconciliationViewRow
 } from "@/lib/ops-pulse/cod";
 import { isSupabaseAdminConfigured } from "@/lib/supabase-admin";
-import { addManualExecutiveReconciliation, saveExecutiveReconciliation } from "./actions";
+import { addManualExecutiveReconciliation, refreshExecutiveReconciliationRoster, saveExecutiveReconciliation } from "./actions";
 
 type SearchParams = {
   date?: string;
@@ -75,6 +76,95 @@ function differenceLabel(value: number) {
   if (value < 0) return `Short ${formatAmount(Math.abs(value))}`;
   if (value > 0) return `Excess ${formatAmount(value)}`;
   return "0.00";
+}
+
+type PendingDetail = NonNullable<ExecutiveReconciliationViewRow["scc_pending_details"]>[number];
+
+function stringValue(value: unknown) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function objectValue(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function rawValueFromHeaders(raw: Record<string, unknown> | null | undefined, patterns: RegExp[]) {
+  const headersRaw = raw?.headers;
+  const cellsRaw = raw?.cells;
+  const headers = Array.isArray(headersRaw) ? headersRaw.map(stringValue) : [];
+  const cells = Array.isArray(cellsRaw) ? cellsRaw.map(stringValue) : [];
+  const index = headers.findIndex((header) => patterns.some((pattern) => pattern.test(header)));
+  return index >= 0 ? cells[index] ?? "" : "";
+}
+
+function detailTrackingId(detail: PendingDetail, index: number) {
+  const raw = objectValue(detail.raw_row);
+  return stringValue(detail.tracking_id ?? detail.shipment_id ?? detail.package_id ?? detail.order_id)
+    || rawValueFromHeaders(raw, [/tracking/i, /shipment/i, /package/i, /order/i, /awb/i, /tba/i])
+    || `Row ${index + 1}`;
+}
+
+function detailAmount(detail: PendingDetail): number | string | null | undefined {
+  const raw = objectValue(detail.raw_row);
+  return detail.amount ?? rawValueFromHeaders(raw, [/pending/i, /amount/i, /cash/i, /cod/i]);
+}
+
+function detailStatus(detail: PendingDetail) {
+  const raw = objectValue(detail.raw_row);
+  return stringValue(detail.status) || rawValueFromHeaders(raw, [/status/i, /state/i, /reason/i]) || "-";
+}
+
+function detailDescription(detail: PendingDetail) {
+  const direct = stringValue(detail.description);
+  if (direct) return direct;
+  const raw = objectValue(detail.raw_row);
+  const cellsRaw = raw.cells;
+  const cells = Array.isArray(cellsRaw) ? cellsRaw.map(stringValue).filter(Boolean) : [];
+  return cells.slice(0, 8).join(" | ") || "-";
+}
+
+function PendingReconDetails({ row }: { row: ExecutiveReconciliationViewRow }) {
+  const details = Array.isArray(row.scc_pending_details) ? row.scc_pending_details : [];
+  return (
+    <details className="associate-drilldown">
+      <summary>
+        <span className="associate-name-link">{executiveDisplayName(row)}</span>
+        <span className="subtle">SCC pending {formatAmount(row.scc_pending_amount)}</span>
+      </summary>
+      <div className="scc-pending-panel">
+        <div className="scc-pending-meta">
+          <strong>Pending reconciliation details</strong>
+          <span className="subtle">Last fetched: {formatDateTime(row.scc_last_detail_checked_at ?? row.source_updated_at)}</span>
+        </div>
+        {details.length ? (
+          <table className="scc-pending-table">
+            <thead>
+              <tr>
+                <th>Tracking ID</th>
+                <th>Pending</th>
+                <th>Status</th>
+                <th>Source row</th>
+              </tr>
+            </thead>
+            <tbody>
+              {details.map((detail, index) => (
+                <tr key={`${row.key}-pending-${index}`}>
+                  <td>{detailTrackingId(detail, index)}</td>
+                  <td>{formatAmount(detailAmount(detail))}</td>
+                  <td>{detailStatus(detail)}</td>
+                  <td>{detailDescription(detail)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="scc-detail-empty">
+            No tracking-level rows captured yet. Fetch the SCC roster for this station/date after the worker is updated.
+          </div>
+        )}
+      </div>
+    </details>
+  );
 }
 
 export const dynamic = "force-dynamic";
@@ -174,6 +264,14 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                   <button className="button secondary" type="submit">Show sheet</button>
                 </div>
               </form>
+              {permission.canEdit ? (
+                <form action={refreshExecutiveReconciliationRoster} className="form-actions align-right scc-refresh-form">
+                  <input type="hidden" name="return_href" value={returnHref} />
+                  <input type="hidden" name="business_date" value={result.businessDate} />
+                  <input type="hidden" name="location_id" value={defaultLocationId} />
+                  <SubmitButton className="button secondary" disabled={!defaultLocationId}>Fetch SCC roster</SubmitButton>
+                </form>
+              ) : null}
             </div>
           </section>
 
@@ -217,7 +315,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                         <td><strong>{row.station_code}</strong><br /><span className="subtle">{row.station_name ?? row.state ?? "-"}</span></td>
                         <td>
                           {row.source_associate_name ? (
-                            <strong>{executiveDisplayName(row)}</strong>
+                            <PendingReconDetails row={row} />
                           ) : (
                             <input className="field compact-field associate-field" form={`recon-${row.key}`} name="manual_associate_name" defaultValue={row.manual_associate_name ?? ""} placeholder="Associate name" required />
                           )}

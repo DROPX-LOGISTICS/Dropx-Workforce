@@ -13,6 +13,8 @@ create table if not exists public.cod_driver_reconciliation_roster (
   route_code text,
   reconciliation_state text,
   pending_amount numeric(14, 2) not null default 0,
+  pending_details jsonb not null default '[]'::jsonb,
+  last_detail_checked_at timestamptz,
   raw_row jsonb not null default '{}'::jsonb,
   source text not null default 'scc_driver_reconciliation',
   first_seen_at timestamptz not null default now(),
@@ -33,6 +35,8 @@ alter table public.cod_driver_reconciliation_roster
   add column if not exists route_code text,
   add column if not exists reconciliation_state text,
   add column if not exists pending_amount numeric(14, 2) not null default 0,
+  add column if not exists pending_details jsonb not null default '[]'::jsonb,
+  add column if not exists last_detail_checked_at timestamptz,
   add column if not exists raw_row jsonb not null default '{}'::jsonb,
   add column if not exists source text not null default 'scc_driver_reconciliation',
   add column if not exists first_seen_at timestamptz not null default now(),
@@ -46,6 +50,7 @@ set
     trim(regexp_replace(coalesce(associate_name, ''), '[^a-zA-Z0-9 ]+', ' ', 'g'))
   ),
   pending_amount = coalesce(pending_amount, 0),
+  pending_details = coalesce(pending_details, '[]'::jsonb),
   raw_row = coalesce(raw_row, '{}'::jsonb),
   source = coalesce(nullif(source, ''), 'scc_driver_reconciliation'),
   first_seen_at = coalesce(first_seen_at, now()),
@@ -55,6 +60,7 @@ set
 where
   normalized_associate_name is null
   or pending_amount is null
+  or pending_details is null
   or raw_row is null
   or source is null
   or first_seen_at is null
@@ -70,6 +76,9 @@ create index if not exists cod_driver_reconciliation_roster_station_date_idx
 
 create index if not exists cod_driver_reconciliation_roster_seen_idx
   on public.cod_driver_reconciliation_roster(company_id, last_seen_at desc);
+
+create index if not exists cod_driver_reconciliation_roster_pending_details_idx
+  on public.cod_driver_reconciliation_roster using gin (pending_details);
 
 do $$
 begin

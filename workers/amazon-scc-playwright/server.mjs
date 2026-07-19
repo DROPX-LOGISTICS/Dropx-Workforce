@@ -53,6 +53,25 @@ function safeNumber(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function formatSccDate(value) {
+  const text = String(value ?? "").trim();
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return text;
+  return `${match[2]}/${match[3]}/${match[1]}`;
+}
+
+function withStationParam(url, stationCode) {
+  const station = String(stationCode ?? "").trim().toUpperCase();
+  if (!station) return url;
+  try {
+    const nextUrl = new URL(url);
+    nextUrl.searchParams.set("stationCode", station);
+    return nextUrl.toString();
+  } catch {
+    return url;
+  }
+}
+
 function normalizeText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
@@ -108,7 +127,16 @@ function pickByHeader(headers, row, patterns) {
 }
 
 function amountFromRow(headers, row) {
-  const value = pickByHeader(headers, row, [/pending.*amount/i, /pending.*cod/i, /short/i, /liability/i, /\bcod\b/i, /amount/i]);
+  const value = pickByHeader(headers, row, [
+    /pending.*recon/i,
+    /pending.*reconciliation/i,
+    /pending.*amount/i,
+    /pending.*cod/i,
+    /short/i,
+    /liability/i,
+    /\bcod\b/i,
+    /amount/i
+  ]);
   return safeNumber(value);
 }
 
@@ -166,7 +194,11 @@ function idFromRow(headers, row, name) {
 
 function extractDriverReconciliationAssociates(evidence, stationCode = "") {
   const rowsById = new Map();
-  for (const table of evidence.tables || []) {
+  const tables = [...(evidence.tables || [])];
+  if (Array.isArray(evidence.row_groups) && evidence.row_groups.length) {
+    tables.push(...evidence.row_groups);
+  }
+  for (const table of tables) {
     const tableRows = Array.isArray(table.rows) ? table.rows : [];
     const headerCandidates = Array.isArray(table.headers) && table.headers.length ? table.headers : tableRows[0] || [];
     const headers = headerCandidates.map(normalizeText);
@@ -192,9 +224,214 @@ function extractDriverReconciliationAssociates(evidence, stationCode = "") {
       });
     }
   }
+  for (const row of evidence.text_rows || []) {
+    const cells = String(row ?? "").split(/\s{2,}|\t+/).map(normalizeText).filter(Boolean);
+    if (cells.length >= 2) {
+      const headers = ["name", "id", "provider", "type", "expected", "undebriefed mpos", "undebriefed cash", "variance", "running balance", "pending recon"];
+      const associateName = nameFromRow(headers, cells);
+      if (associateName) {
+        const normalizedAssociateName = normalizeName(associateName);
+        const providerEmployeeId = stableRosterId(stationCode, associateName, idFromRow(headers, cells, associateName));
+        if (!rowsById.has(providerEmployeeId)) {
+          rowsById.set(providerEmployeeId, {
+            provider_employee_id: providerEmployeeId,
+            associate_name: associateName,
+            normalized_associate_name: normalizedAssociateName,
+            route_code: null,
+            reconciliation_state: "SCC Driver Reconciliation",
+            pending_amount: amountFromRow(headers, cells),
+            raw_row: { headers, cells, source: "text_row" }
+          });
+        }
+      }
+    }
+  }
   return Array.from(rowsById.values()).sort((first, second) =>
     String(first.associate_name).localeCompare(String(second.associate_name))
   );
+}
+
+function escapeRegex(value) {
+  return String(value ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function amountTextVariants(value) {
+  const amount = safeNumber(value);
+  if (!amount) return [];
+  return Array.from(new Set([
+    String(amount),
+    amount.toFixed(2),
+    amount.toLocaleString("en-IN"),
+    amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    `₹ ${amount.toLocaleString("en-IN")}`,
+    `₹${amount.toLocaleString("en-IN")}`
+  ].filter(Boolean)));
+}
+
+function detailTrackingIdFromRow(headers, row) {
+  const value = pickByHeader(headers, row, [/tracking/i, /shipment/i, /package/i, /order/i, /\bawb\b/i, /\btba\b/i]);
+  if (compactIdentifier(value)) return normalizeText(value);
+  const candidate = row.map(normalizeText).find((cell) => {
+    const compact = compactIdentifier(cell);
+    if (compact.length < 7) return false;
+    if (/^\d+([.,]\d+)?$/.test(cell.replace(/[,₹\s]/g, ""))) return false;
+    if (/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(cell)) return false;
+    return /[A-Z0-9]/i.test(compact);
+  });
+  return candidate ? normalizeText(candidate) : "";
+}
+
+function detailStatusFromRow(headers, row) {
+  const value = pickByHeader(headers, row, [/status/i, /state/i, /reason/i, /remark/i]);
+  if (normalizeText(value)) return normalizeText(value);
+  const text = normalizeText(row.join(" "));
+  const match = text.match(/\b(pending|open|closed|debriefed|undebriefed|reconciled|short|excess|paid|unpaid)\b/i);
+  return match ? match[0] : "";
+}
+
+function detailAmountFromRow(headers, row) {
+  return amountFromRow(headers, row) || safeNumber(pickByHeader(headers, row, [/amount/i, /cash/i, /\bcod\b/i, /pending/i]));
+}
+
+function extractPendingReconDetailRows(evidence, associate) {
+  const details = [];
+  const tables = [...(evidence.tables || [])];
+  if (Array.isArray(evidence.row_groups)) tables.push(...evidence.row_groups);
+  for (const table of tables) {
+    const tableRows = Array.isArray(table.rows) ? table.rows : [];
+    const headerCandidates = Array.isArray(table.headers) && table.headers.length ? table.headers : tableRows[0] || [];
+    const headers = headerCandidates.map(normalizeText);
+    for (const row of tableRows) {
+      const cells = (row || []).map(normalizeText).filter(Boolean);
+      if (cells.length < 2 || isLikelyHeaderOrTotal(cells)) continue;
+      const trackingId = detailTrackingIdFromRow(headers, cells);
+      const amount = detailAmountFromRow(headers, cells);
+      const status = detailStatusFromRow(headers, cells);
+      if (!trackingId && !amount) continue;
+      details.push({
+        tracking_id: trackingId || null,
+        amount,
+        status: status || null,
+        description: cells.slice(0, 8).join(" | "),
+        raw_row: { headers, cells, source_url: evidence.url, associate: associate.associate_name }
+      });
+      if (details.length >= 100) return details;
+    }
+  }
+  if (!details.length) {
+    for (const row of evidence.text_rows || []) {
+      const cells = String(row ?? "").split(/\s{2,}|\t+/).map(normalizeText).filter(Boolean);
+      if (cells.length < 2 || isLikelyHeaderOrTotal(cells)) continue;
+      const headers = ["tracking", "amount", "status", "description"];
+      const trackingId = detailTrackingIdFromRow(headers, cells);
+      const amount = detailAmountFromRow(headers, cells);
+      if (!trackingId && !amount) continue;
+      details.push({
+        tracking_id: trackingId || null,
+        amount,
+        status: detailStatusFromRow(headers, cells) || null,
+        description: cells.slice(0, 8).join(" | "),
+        raw_row: { headers, cells, source: "text_row", source_url: evidence.url, associate: associate.associate_name }
+      });
+      if (details.length >= 100) break;
+    }
+  }
+  return details;
+}
+
+async function clickPendingReconForAssociate(page, associate) {
+  const name = normalizeText(associate.associate_name);
+  const rawCells = Array.isArray(associate.raw_row?.cells) ? associate.raw_row.cells : [];
+  const explicitId = compactIdentifier(rawCells[1] || associate.provider_employee_id);
+  const rowNeedle = explicitId && !explicitId.startsWith("SCC-") ? explicitId : name;
+  const pendingAmount = safeNumber(associate.pending_amount);
+  const amountVariants = amountTextVariants(pendingAmount);
+  const rowLocator = page.locator("tr, [role='row']").filter({
+    hasText: new RegExp(escapeRegex(rowNeedle), "i")
+  }).first();
+
+  if (!(await rowLocator.count().catch(() => 0))) return false;
+  if (!(await rowLocator.isVisible().catch(() => false))) return false;
+
+  const clickables = await rowLocator.locator("a, button, [role='button'], [onclick]").all().catch(() => []);
+  for (const clickable of clickables) {
+    const text = normalizeText(await clickable.innerText().catch(() => ""));
+    const href = normalizeText(await clickable.getAttribute("href").catch(() => ""));
+    const haystack = `${text} ${href}`;
+    const amountMatch = amountVariants.some((variant) => haystack.includes(variant));
+    if (amountMatch || /pending|recon|amount|cash|liability/i.test(haystack)) {
+      await clickable.click({ timeout: 5000 }).catch(() => null);
+      await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => null);
+      return true;
+    }
+  }
+
+  for (const variant of amountVariants) {
+    const amountLink = rowLocator.getByText(variant, { exact: false }).first();
+    if (await amountLink.count().catch(() => 0)) {
+      await amountLink.click({ timeout: 5000 }).catch(() => null);
+      await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => null);
+      return true;
+    }
+  }
+  return false;
+}
+
+async function closePendingDetail(page, beforeUrl) {
+  if (page.url() !== beforeUrl) {
+    await page.goBack({ waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
+    await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => null);
+    return;
+  }
+  await clickFirst(page, [
+    { role: "button", name: /close|back|cancel|done|ok/i },
+    "[aria-label*='close' i]",
+    ".modal button.close",
+    ".modal .close"
+  ]).catch(() => null);
+  await page.keyboard.press("Escape").catch(() => null);
+  await page.waitForTimeout(400);
+}
+
+async function collectPendingDetailsForAssociates(page, associates) {
+  const limit = Math.max(0, Number(process.env.SCC_PENDING_DETAIL_LIMIT || 25));
+  const enriched = [];
+  let checked = 0;
+  for (const associate of associates) {
+    const pendingAmount = safeNumber(associate.pending_amount);
+    if (pendingAmount <= 0 || checked >= limit) {
+      enriched.push({ ...associate, pending_details: [] });
+      continue;
+    }
+    const beforeUrl = page.url();
+    const clicked = await clickPendingReconForAssociate(page, associate);
+    if (!clicked) {
+      enriched.push({
+        ...associate,
+        pending_details: [],
+        raw_row: { ...(associate.raw_row || {}), detail_error: "Pending recon link was not found." }
+      });
+      continue;
+    }
+    await page.waitForTimeout(800);
+    const detailEvidence = await collectPageEvidence(page);
+    const pendingDetails = extractPendingReconDetailRows(detailEvidence, associate);
+    const checkedAt = new Date().toISOString();
+    enriched.push({
+      ...associate,
+      pending_details: pendingDetails,
+      last_detail_checked_at: checkedAt,
+      raw_row: {
+        ...(associate.raw_row || {}),
+        pending_details: pendingDetails,
+        detail_url: detailEvidence.url,
+        detail_checked_at: checkedAt
+      }
+    });
+    checked += 1;
+    await closePendingDetail(page, beforeUrl);
+  }
+  return enriched;
 }
 
 function parseAmountNear(text, labels) {
@@ -353,8 +590,7 @@ async function setStation(page, stationCode) {
 async function setDate(page, checkDate) {
   const date = String(checkDate ?? "").trim();
   if (!date) return { changed: false, message: "No date provided." };
-  const [year, month, day] = date.split("-");
-  const displayDate = [day, month, year].filter(Boolean).join("/");
+  const displayDate = formatSccDate(date);
 
   const selectors = [
     "input[type='date']",
@@ -368,10 +604,16 @@ async function setDate(page, checkDate) {
     for (const input of inputs) {
       if (!(await input.isVisible().catch(() => false))) continue;
       const type = await input.getAttribute("type").catch(() => "");
-      await input.fill(type === "date" ? date : displayDate).catch(() => null);
+      const value = type === "date" ? date : displayDate;
+      await input.fill(value).catch(() => null);
+      await input.evaluate((element, nextValue) => {
+        element.value = nextValue;
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      }, value).catch(() => null);
       await page.keyboard.press("Enter").catch(() => null);
       await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => null);
-      return { changed: true, message: `Date set to ${date}.` };
+      return { changed: true, message: `Date set to ${displayDate}.` };
     }
   }
 
@@ -390,20 +632,45 @@ async function applyFilters(page) {
 async function collectPageEvidence(page) {
   return page.evaluate(() => {
     const bodyText = document.body?.innerText || "";
+    const cleanCell = (value) => (value || "").replace(/\s+/g, " ").trim();
     const tables = Array.from(document.querySelectorAll("table")).map((table) => {
       const headers = Array.from(table.querySelectorAll("thead th, tr:first-child th, tr:first-child td"))
-        .map((cell) => (cell.textContent || "").replace(/\s+/g, " ").trim())
+        .map((cell) => cleanCell(cell.textContent || ""))
         .filter(Boolean);
       const rows = Array.from(table.querySelectorAll("tbody tr, tr")).slice(0, 200).map((row) =>
-        Array.from(row.querySelectorAll("th, td")).map((cell) => (cell.textContent || "").replace(/\s+/g, " ").trim())
+        Array.from(row.querySelectorAll("th, td")).map((cell) => cleanCell(cell.textContent || ""))
       ).filter((row) => row.some(Boolean));
       return { headers, rows };
     });
+    const rowGroups = Array.from(document.querySelectorAll("[role='table'], [role='grid'], .table, .grid, .driver-reconciliation, .driverReconciliation"))
+      .slice(0, 20)
+      .map((group) => {
+        const headerNodes = Array.from(group.querySelectorAll("[role='columnheader'], th"));
+        const headers = headerNodes.map((cell) => cleanCell(cell.textContent || "")).filter(Boolean);
+        const rows = Array.from(group.querySelectorAll("[role='row'], tr"))
+          .slice(0, 250)
+          .map((row) => {
+            const cells = Array.from(row.querySelectorAll("[role='cell'], [role='gridcell'], td, th"));
+            return cells.length
+              ? cells.map((cell) => cleanCell(cell.textContent || "")).filter(Boolean)
+              : cleanCell(row.textContent || "").split(/\s{2,}|\t+/).map(cleanCell).filter(Boolean);
+          })
+          .filter((row) => row.length > 1);
+        return { headers, rows };
+      })
+      .filter((group) => group.rows.length);
+    const textRows = Array.from(document.querySelectorAll("tr, [role='row']"))
+      .slice(0, 250)
+      .map((row) => cleanCell(row.textContent || ""))
+      .filter(Boolean);
     return {
       title: document.title,
       url: location.href,
       text: bodyText.replace(/\s+/g, " ").slice(0, 12000),
-      tables
+      raw_text: bodyText.slice(0, 20000),
+      tables,
+      row_groups: rowGroups,
+      text_rows: textRows
     };
   });
 }
@@ -423,7 +690,7 @@ function countPendingRows(tables) {
   return { pending, examples };
 }
 
-function summarizeDriverReconciliation(evidence, stationCode, checkDate) {
+function summarizeDriverReconciliation(evidence, stationCode, checkDate, associatesOverride = null) {
   const text = evidence.text || "";
   if (hasMfaOrHumanBlocker(text)) {
     return {
@@ -436,7 +703,7 @@ function summarizeDriverReconciliation(evidence, stationCode, checkDate) {
     };
   }
 
-  const associates = extractDriverReconciliationAssociates(evidence, stationCode);
+  const associates = Array.isArray(associatesOverride) ? associatesOverride : extractDriverReconciliationAssociates(evidence, stationCode);
   const pendingAmount = parseAmountNear(text, [
     "pending recon amount",
     "pending reconciliation amount",
@@ -560,7 +827,7 @@ async function runSccCheck(payload) {
       ? payload.urls?.bank_deposits || BANK_DEPOSITS_URL
       : payload.urls?.driver_reconciliation || DRIVER_RECON_URL;
 
-    await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+    await page.goto(withStationParam(targetUrl, stationCode), { waitUntil: "domcontentloaded", timeout: 45000 });
     await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
 
     const stationResult = await setStation(page, stationCode);
@@ -578,9 +845,14 @@ async function runSccCheck(payload) {
     await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
     const evidence = await collectPageEvidence(page);
     const debugScreenshot = await captureDebug(page, payload.run_id, checkType);
-    const summary = checkType === "prepared_deposit"
-      ? summarizePreparedDeposit(evidence, stationCode, checkDate)
-      : summarizeDriverReconciliation(evidence, stationCode, checkDate);
+    let summary;
+    if (checkType === "prepared_deposit") {
+      summary = summarizePreparedDeposit(evidence, stationCode, checkDate);
+    } else {
+      const rosterAssociates = extractDriverReconciliationAssociates(evidence, stationCode);
+      const enrichedAssociates = await collectPendingDetailsForAssociates(page, rosterAssociates);
+      summary = summarizeDriverReconciliation(evidence, stationCode, checkDate, enrichedAssociates);
+    }
 
     return {
       ...summary,

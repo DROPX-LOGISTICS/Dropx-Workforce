@@ -63,6 +63,8 @@ type DriverReconciliationAssociate = {
   route_code?: unknown;
   reconciliation_state?: unknown;
   pending_amount?: unknown;
+  pending_details?: unknown;
+  last_detail_checked_at?: unknown;
   raw_row?: unknown;
 };
 
@@ -153,6 +155,13 @@ async function upsertDriverReconciliationRoster(run: PortalRun, result: Record<s
     const uniqueKey = `${run.company_id}:${run.check_date}:${run.station_code}:${providerEmployeeId}`;
     if (seen.has(uniqueKey)) return [];
     seen.add(uniqueKey);
+    const rawRow = associate.raw_row && typeof associate.raw_row === "object" && !Array.isArray(associate.raw_row)
+      ? associate.raw_row as Record<string, unknown>
+      : {};
+    const directDetails = Array.isArray(associate.pending_details) ? associate.pending_details : [];
+    const rawDetails = Array.isArray(rawRow.pending_details) ? rawRow.pending_details : [];
+    const pendingDetails = directDetails.length ? directDetails : rawDetails;
+    const pendingAmount = numberValue(associate.pending_amount);
     return [{
       company_id: run.company_id,
       location_id: run.location_id,
@@ -164,8 +173,12 @@ async function upsertDriverReconciliationRoster(run: PortalRun, result: Record<s
       normalized_associate_name: normalizedAssociateName,
       route_code: normalizeText(associate.route_code) || null,
       reconciliation_state: normalizeText(associate.reconciliation_state) || null,
-      pending_amount: numberValue(associate.pending_amount),
-      raw_row: associate.raw_row && typeof associate.raw_row === "object" ? associate.raw_row : {},
+      pending_amount: pendingAmount,
+      pending_details: pendingDetails,
+      last_detail_checked_at: pendingDetails.length || pendingAmount > 0
+        ? (typeof associate.last_detail_checked_at === "string" ? associate.last_detail_checked_at : new Date().toISOString())
+        : null,
+      raw_row: { ...rawRow, pending_details: pendingDetails },
       source: "scc_driver_reconciliation",
       last_seen_at: new Date().toISOString()
     }];

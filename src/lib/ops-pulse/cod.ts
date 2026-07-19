@@ -177,9 +177,22 @@ export type DriverReconciliationRosterRow = {
   associate_name: string | null;
   reconciliation_state: string | null;
   pending_amount: number | string | null;
+  pending_details: DriverReconciliationPendingDetail[] | null;
+  last_detail_checked_at: string | null;
   raw_row: Record<string, unknown> | null;
   first_seen_at: string | null;
   last_seen_at: string | null;
+};
+
+export type DriverReconciliationPendingDetail = {
+  tracking_id?: string | null;
+  shipment_id?: string | null;
+  package_id?: string | null;
+  order_id?: string | null;
+  amount?: number | string | null;
+  status?: string | null;
+  description?: string | null;
+  raw_row?: Record<string, unknown> | null;
 };
 
 export type CodExecutiveReconciliationRow = {
@@ -239,6 +252,10 @@ export type ExecutiveReconciliationViewRow = {
   collected_amount: number | string | null;
   difference_amount: number | string | null;
   remarks: string | null;
+  scc_pending_amount: number | string | null;
+  scc_pending_details: DriverReconciliationPendingDetail[] | null;
+  scc_last_detail_checked_at: string | null;
+  scc_raw_row: Record<string, unknown> | null;
   source_updated_at: string | null;
   updated_at: string | null;
   source: "scc_driver_reconciliation" | "manual";
@@ -646,7 +663,7 @@ export async function loadExecutiveReconciliationRows(
 
   const rosterResult = await supabaseAdmin
     .from("cod_driver_reconciliation_roster")
-    .select("id, business_date, location_id, station_code, portal_station_code, provider_employee_id, associate_name, reconciliation_state, pending_amount, raw_row, first_seen_at, last_seen_at")
+    .select("id, business_date, location_id, station_code, portal_station_code, provider_employee_id, associate_name, reconciliation_state, pending_amount, pending_details, last_detail_checked_at, raw_row, first_seen_at, last_seen_at")
     .eq("company_id", companyId)
     .eq("business_date", businessDate)
     .in("station_code", stationScope)
@@ -705,6 +722,10 @@ export async function loadExecutiveReconciliationRows(
       collected_amount: reconciliation?.collected_amount ?? 0,
       difference_amount: reconciliation?.difference_amount ?? 0,
       remarks: reconciliation?.remarks ?? null,
+      scc_pending_amount: roster.pending_amount,
+      scc_pending_details: Array.isArray(roster.pending_details) ? roster.pending_details : [],
+      scc_last_detail_checked_at: roster.last_detail_checked_at,
+      scc_raw_row: roster.raw_row,
       source_updated_at: roster.last_seen_at,
       updated_at: reconciliation?.updated_at ?? reconciliation?.created_at ?? null,
       source: "scc_driver_reconciliation"
@@ -743,6 +764,10 @@ export async function loadExecutiveReconciliationRows(
       collected_amount: reconciliation.collected_amount,
       difference_amount: reconciliation.difference_amount,
       remarks: reconciliation.remarks,
+      scc_pending_amount: null,
+      scc_pending_details: [],
+      scc_last_detail_checked_at: null,
+      scc_raw_row: null,
       source_updated_at: null,
       updated_at: reconciliation.updated_at ?? reconciliation.created_at,
       source: "manual"

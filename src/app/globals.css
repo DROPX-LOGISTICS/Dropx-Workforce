@@ -2911,6 +2911,65 @@ h3 {
   min-width: 170px;
 }
 
+.associate-drilldown summary {
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+  list-style: none;
+}
+
+.associate-drilldown summary::-webkit-details-marker {
+  display: none;
+}
+
+.associate-name-link {
+  color: #e8491d;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.scc-pending-panel {
+  margin-top: 8px;
+  min-width: 360px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(17, 24, 39, 0.08);
+  overflow: hidden;
+}
+
+.scc-pending-meta {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  background: #fff7ed;
+  border-bottom: 1px solid #fed7aa;
+}
+
+.scc-pending-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.scc-pending-table th,
+.scc-pending-table td {
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.scc-detail-empty {
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.scc-refresh-form {
+  margin-top: 12px;
+}
+
 .amount-negative {
   color: #b42318;
 }

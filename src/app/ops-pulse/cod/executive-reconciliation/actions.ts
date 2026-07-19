@@ -196,3 +196,82 @@ export async function addManualExecutiveReconciliation(formData: FormData) {
     redirectWithFlash({ error: (error as Error).message }, safeReturnHref(formData.get("return_href")));
   }
 }
+
+export async function refreshExecutiveReconciliationRoster(formData: FormData) {
+  const authorization = await requirePagePermission("cod_executive_reconciliation", "edit");
+  const companyId = requireCompanyId(authorization);
+
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    const returnHref = safeReturnHref(formData.get("return_href"));
+    const businessDate = required(formData.get("business_date"), "Business date");
+    const locationId = clean(formData.get("location_id"));
+    if (!locationId) throw new Error("Select one station before fetching SCC roster.");
+
+    const station = await stationForInput(companyId, locationId, null);
+    assertLocationAccess(authorization, station.id);
+
+    const settingResult = await supabaseAdmin
+      .from("cod_station_settings")
+      .select("id, portal_station_code, portal_check_interval_minutes, is_active")
+      .eq("company_id", companyId)
+      .eq("location_id", station.id)
+      .maybeSingle();
+
+    if (settingResult.error) throw new Error(settingResult.error.message);
+    const setting = settingResult.data as {
+      id: string;
+      portal_station_code: string | null;
+      portal_check_interval_minutes: number | string | null;
+      is_active: boolean | null;
+    } | null;
+
+    if (!setting?.id || setting.is_active === false) {
+      throw new Error("Add this station in COD Master before SCC refresh.");
+    }
+
+    const payload = withCompany({
+      location_id: station.id,
+      cod_master_id: setting.id,
+      station_code: station.station_code,
+      portal_station_code: setting.portal_station_code ?? station.station_code,
+      check_date: businessDate,
+      check_type: "driver_reconciliation",
+      status: "Queued",
+      pending_count: 0,
+      pending_amount: 0,
+      summary: "Queued from Executive Reconciliation.",
+      evidence: {},
+      raw_result: {},
+      attempt_count: 0,
+      error_message: null,
+      next_check_at: new Date().toISOString()
+    }, companyId);
+
+    const queued = await supabaseAdmin
+      .from("ops_portal_check_runs")
+      .upsert(payload, { onConflict: "company_id,station_code,check_date,check_type" });
+
+    if (queued.error) {
+      if (queued.error.code === "42P10") {
+        const inserted = await supabaseAdmin.from("ops_portal_check_runs").insert(payload);
+        if (inserted.error) throw new Error(inserted.error.message);
+      } else {
+        throw new Error(queued.error.message);
+      }
+    }
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || process.env.VERCEL_URL;
+    const baseUrl = appUrl?.startsWith("http") ? appUrl : appUrl ? `https://${appUrl}` : "";
+    if (baseUrl) {
+      const headers = process.env.CRON_SECRET ? { Authorization: `Bearer ${process.env.CRON_SECRET}` } : undefined;
+      fetch(`${baseUrl}/api/cron/ops-pulse-portal-checks`, { headers, cache: "no-store" }).catch(() => null);
+    }
+
+    revalidatePath(pagePath);
+    redirectWithFlash({ notice: "SCC Driver Reconciliation refresh queued. Reopen this sheet in a minute to see tracking-level pending details." }, returnHref);
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    redirectWithFlash({ error: (error as Error).message }, safeReturnHref(formData.get("return_href")));
+  }
+}

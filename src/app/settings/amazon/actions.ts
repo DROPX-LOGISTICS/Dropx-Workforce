@@ -119,6 +119,8 @@ export async function saveAmazonConnector(formData: FormData) {
       is_enabled: syncEnabled && enabledTaskCodes.has(task.code),
       sync_interval_minutes: Math.min(Math.max(integerValue(formData.get(`task_interval_${task.code}`), task.interval), 5), 1440),
       next_run_at: syncEnabled && enabledTaskCodes.has(task.code) ? new Date().toISOString() : null,
+      last_status: syncEnabled && enabledTaskCodes.has(task.code) ? "Ready" : "Paused",
+      last_message: syncEnabled && enabledTaskCodes.has(task.code) ? "Ready for portal worker checks." : "Task disabled.",
       updated_by: authorization.userId
     }));
 

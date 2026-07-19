@@ -151,7 +151,7 @@ export default async function AmazonConnectorPage() {
 
                 <div className="panel-body">
                   <h3>Automation coverage</h3>
-                  <p className="subtle">These tasks are stored now and can be connected to the browser worker in the next layer.</p>
+                  <p className="subtle">Enabled tasks use these source URLs when Ops Pulse portal checks run through the browser worker.</p>
                   <div className="table-wrap">
                     <table>
                       <thead>

@@ -18,6 +18,7 @@ type FieldExecutiveRow = {
   gender: string | null;
   date_of_birth: string | null;
   aadhaar_number: string | null;
+  pan_number: string | null;
   address: string | null;
   postal_pin: string | null;
   landmark: string | null;
@@ -33,7 +34,14 @@ type FieldExecutiveRow = {
   vehicle_insurance_exp_date: string | null;
   vehicle_pollution_exp_date: string | null;
   biometric_id: string | null;
+  emergency_contact_name: string | null;
   emergency_contact_number: string | null;
+  emergency_contact_relation: string | null;
+  aadhaar_front_path: string | null;
+  aadhaar_back_path: string | null;
+  dl_front_path: string | null;
+  dl_back_path: string | null;
+  profile_photo_path: string | null;
   onboarding_status: string | null;
   stations?: { station_code: string | null; station_name: string | null } | { station_code: string | null; station_name: string | null }[] | null;
 };
@@ -64,9 +72,22 @@ function requiredDigits(value: FormDataEntryValue | null, label: string) {
   return text;
 }
 
+function requiredPan(value: FormDataEntryValue | null) {
+  const text = requiredText(value, "PAN number").toUpperCase();
+  if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(text)) {
+    throw new Error("PAN number format is invalid.");
+  }
+  return text;
+}
+
 function formatDisplayDate(value: string | null) {
   const match = String(value ?? "").match(/^(\d{4})-(\d{2})-(\d{2})/);
   return match ? `${match[3]}/${match[2]}/${match[1]}` : value ?? "-";
+}
+
+function fileExt(name: string) {
+  const ext = name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return ext ? `.${ext}` : "";
 }
 
 function normalizeDate(value: FormDataEntryValue | null) {
@@ -114,7 +135,7 @@ async function loadExecutive(executiveId: string, companyId: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const result = await supabaseAdmin
     .from("field_executives")
-    .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, address, postal_pin, landmark, state_code, father_name, blood_group, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_number, onboarding_status, stations (station_code, station_name)")
+    .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, address, postal_pin, landmark, state_code, father_name, blood_group, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, stations (station_code, station_name)")
     .eq("id", executiveId)
     .eq("company_id", companyId)
     .maybeSingle();
@@ -123,7 +144,15 @@ async function loadExecutive(executiveId: string, companyId: string) {
   return result.data as FieldExecutiveRow;
 }
 
-function serializeExecutive(row: FieldExecutiveRow) {
+async function signedProfileUrl(path: string | null) {
+  if (!supabaseAdmin || !path) return "";
+  const result = await supabaseAdmin.storage
+    .from("employee-profile-documents")
+    .createSignedUrl(path, 60 * 60);
+  return result.data?.signedUrl ?? "";
+}
+
+async function serializeExecutive(row: FieldExecutiveRow) {
   const station = firstRelation(row.stations);
   return {
     id: row.id,
@@ -141,6 +170,7 @@ function serializeExecutive(row: FieldExecutiveRow) {
       gender: row.gender ?? "",
       dateOfBirth: formatDisplayDate(row.date_of_birth) === "-" ? "" : formatDisplayDate(row.date_of_birth),
       aadhaarNumber: row.aadhaar_number ?? "",
+      panNumber: row.pan_number ?? "",
       fatherName: row.father_name ?? "",
       bloodGroup: row.blood_group ?? "",
       address: row.address ?? "",
@@ -149,7 +179,9 @@ function serializeExecutive(row: FieldExecutiveRow) {
       landmark: row.landmark ?? "",
       bankAccountNo: row.bank_account_no ?? "",
       ifsc: row.ifsc_code ?? "",
+      emergencyContactName: row.emergency_contact_name ?? "",
       emergencyContactNumber: row.emergency_contact_number ?? "",
+      emergencyContactRelation: row.emergency_contact_relation ?? "",
       drivingLicenseNo: row.driving_license_no ?? "",
       drivingLicenseExpiry: formatDisplayDate(row.driving_license_exp_date) === "-" ? "" : formatDisplayDate(row.driving_license_exp_date),
       vehicleRegistrationNo: row.vehicle_reg_no ?? "",
@@ -158,7 +190,14 @@ function serializeExecutive(row: FieldExecutiveRow) {
       pollutionExpiry: formatDisplayDate(row.vehicle_pollution_exp_date) === "-" ? "" : formatDisplayDate(row.vehicle_pollution_exp_date)
     },
     statutoryApplicability: [],
-    uploads: {},
+    uploads: {
+      aadhaarFront: Boolean(row.aadhaar_front_path),
+      aadhaarBack: Boolean(row.aadhaar_back_path),
+      dlFront: Boolean(row.dl_front_path),
+      dlBack: Boolean(row.dl_back_path),
+      photo: Boolean(row.profile_photo_path)
+    },
+    profilePhotoUrl: await signedProfileUrl(row.profile_photo_path),
     status: row.onboarding_status ?? "pending"
   };
 }
@@ -169,10 +208,24 @@ export async function GET(request: Request) {
     const executiveId = url.searchParams.get("executiveId") ?? "";
     const account = await requireExecutiveAccess(executiveId);
     const executive = await loadExecutive(account.id, account.companyId);
-    return NextResponse.json({ ok: true, profile: serializeExecutive(executive) });
+    return NextResponse.json({ ok: true, profile: await serializeExecutive(executive) });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to load profile." }, { status: 400 });
   }
+}
+
+async function uploadExecutiveFile(file: FormDataEntryValue | null, companyId: string, executiveId: string, slot: string) {
+  if (!supabaseAdmin || !(file instanceof File) || file.size === 0) return null;
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const path = `${companyId}/field-executives/${executiveId}/${slot}-${Date.now()}${fileExt(safeName)}`;
+  const uploadResult = await supabaseAdmin.storage
+    .from("employee-profile-documents")
+    .upload(path, Buffer.from(await file.arrayBuffer()), {
+      contentType: file.type || "application/octet-stream",
+      upsert: true
+    });
+  if (uploadResult.error) throw new Error(uploadResult.error.message);
+  return path;
 }
 
 export async function POST(request: Request) {
@@ -181,10 +234,18 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const executiveId = String(formData.get("executive_id") ?? "");
     const account = await requireExecutiveAccess(executiveId);
-    const updatePayload = {
+    const uploads = await Promise.all([
+      uploadExecutiveFile(formData.get("aadhaar_front"), account.companyId, account.id, "aadhaar-front"),
+      uploadExecutiveFile(formData.get("aadhaar_back"), account.companyId, account.id, "aadhaar-back"),
+      uploadExecutiveFile(formData.get("dl_front"), account.companyId, account.id, "dl-front"),
+      uploadExecutiveFile(formData.get("dl_back"), account.companyId, account.id, "dl-back"),
+      uploadExecutiveFile(formData.get("profile_photo"), account.companyId, account.id, "photo")
+    ]);
+    const updatePayload: Record<string, unknown> = {
       gender: requiredText(formData.get("gender"), "Gender"),
       date_of_birth: normalizeDate(requiredText(formData.get("date_of_birth"), "Date of birth")),
       aadhaar_number: requiredDigits(formData.get("aadhaar_number"), "Aadhaar number"),
+      pan_number: requiredPan(formData.get("pan_number")),
       father_name: requiredText(formData.get("father_name"), "Father name"),
       blood_group: requiredText(formData.get("blood_group"), "Blood group"),
       address: requiredText(formData.get("address"), "Address"),
@@ -193,7 +254,9 @@ export async function POST(request: Request) {
       landmark: requiredText(formData.get("landmark"), "Landmark"),
       bank_account_no: requiredDigits(formData.get("bank_account_no"), "Bank account no"),
       ifsc_code: requiredText(formData.get("ifsc"), "IFSC").toUpperCase(),
+      emergency_contact_name: requiredText(formData.get("emergency_contact_name"), "Emergency contact name"),
       emergency_contact_number: requiredDigits(formData.get("emergency_contact_number"), "Emergency contact number"),
+      emergency_contact_relation: requiredText(formData.get("emergency_contact_relation"), "Emergency relation"),
       driving_license_no: requiredText(formData.get("driving_license_no"), "Driving license no").toUpperCase(),
       driving_license_exp_date: normalizeDate(requiredText(formData.get("driving_license_exp_date"), "DL expiry date")),
       vehicle_reg_no: requiredText(formData.get("vehicle_reg_no"), "Vehicle reg no").toUpperCase(),
@@ -204,6 +267,12 @@ export async function POST(request: Request) {
       is_active: true,
       updated_at: new Date().toISOString()
     };
+    const [aadhaarFrontPath, aadhaarBackPath, dlFrontPath, dlBackPath, profilePhotoPath] = uploads;
+    if (aadhaarFrontPath) updatePayload.aadhaar_front_path = aadhaarFrontPath;
+    if (aadhaarBackPath) updatePayload.aadhaar_back_path = aadhaarBackPath;
+    if (dlFrontPath) updatePayload.dl_front_path = dlFrontPath;
+    if (dlBackPath) updatePayload.dl_back_path = dlBackPath;
+    if (profilePhotoPath) updatePayload.profile_photo_path = profilePhotoPath;
     const updateResult = await supabaseAdmin
       .from("field_executives")
       .update(updatePayload)
@@ -211,7 +280,7 @@ export async function POST(request: Request) {
       .eq("company_id", account.companyId);
     if (updateResult.error) throw new Error(updateResult.error.message);
     const executive = await loadExecutive(account.id, account.companyId);
-    return NextResponse.json({ ok: true, profile: serializeExecutive(executive), notice: "Profile saved successfully." });
+    return NextResponse.json({ ok: true, profile: await serializeExecutive(executive), notice: "Profile saved successfully." });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to save profile." }, { status: 400 });
   }

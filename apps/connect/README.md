@@ -2,6 +2,8 @@
 
 This folder is the standalone Vercel root for `connect.dropxlogistics.com`.
 
+Last deployment sync: 2026-07-19.
+
 It reuses the existing Connect UI and API implementation from `../../src`, but has its own `vercel.json` without dashboard cron jobs.
 
 Vercel setup:

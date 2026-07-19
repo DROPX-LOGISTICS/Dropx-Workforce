@@ -199,6 +199,14 @@ async function serializeExecutive(row: FieldExecutiveRow) {
       dlBack: Boolean(row.dl_back_path),
       photo: Boolean(row.profile_photo_path)
     },
+    uploadUrls: {
+      aadhaarFront: await signedProfileUrl(row.aadhaar_front_path),
+      aadhaarBack: await signedProfileUrl(row.aadhaar_back_path),
+      dlFront: await signedProfileUrl(row.dl_front_path),
+      dlBack: await signedProfileUrl(row.dl_back_path),
+      photo: await signedProfileUrl(row.profile_photo_path),
+      profilePhoto: await signedProfileUrl(row.profile_photo_path)
+    },
     profilePhotoUrl: await signedProfileUrl(row.profile_photo_path),
     status: row.onboarding_status ?? "pending"
   };

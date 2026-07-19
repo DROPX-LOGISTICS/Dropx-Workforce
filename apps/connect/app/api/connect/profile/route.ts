@@ -204,6 +204,13 @@ async function serializeEmployee(row: EmployeeProfileRow) {
       pan: Boolean(row.pan_upload_path),
       photo: Boolean(row.profile_photo_path)
     },
+    uploadUrls: {
+      aadhaarFront: await signedProfileUrl(row.aadhaar_front_path),
+      aadhaarBack: await signedProfileUrl(row.aadhaar_back_path),
+      pan: await signedProfileUrl(row.pan_upload_path),
+      photo: await signedProfileUrl(row.profile_photo_path),
+      profilePhoto: await signedProfileUrl(row.profile_photo_path)
+    },
     profilePhotoUrl: await signedProfileUrl(row.profile_photo_path),
     status: row.profile_completion_status ?? "pending"
   };

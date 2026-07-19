@@ -31,10 +31,12 @@ export const accessPages = [
   { code: "imports", name: "Report Imports", sort_order: 70 },
   { code: "ops_pulse", name: "Ops Pulse", sort_order: 84 },
   { code: "daily_submission", name: "Daily Submission", sort_order: 85 },
-  { code: "cod_submission", name: "COD Submission", sort_order: 86 },
-  { code: "cod_validation", name: "COD Validation", sort_order: 87 },
-  { code: "cod_reports", name: "COD Reports", sort_order: 88 },
-  { code: "cod_portal_checks", name: "COD Portal Checks", sort_order: 89 },
+  { code: "cod", name: "COD", sort_order: 86 },
+  { code: "cod_executive_reconciliation", name: "Executive Reconciliation", sort_order: 87 },
+  { code: "cod_submission", name: "COD Submission", sort_order: 88 },
+  { code: "cod_validation", name: "COD Validation", sort_order: 89 },
+  { code: "cod_reports", name: "COD Reports", sort_order: 90 },
+  { code: "cod_portal_checks", name: "COD Portal Checks", sort_order: 91 },
   { code: "cps", name: "CPS", sort_order: 73 },
   { code: "cps_overview", name: "CPS Overview", sort_order: 74 },
   { code: "cps_daily", name: "Daily CPS", sort_order: 75 },
@@ -77,7 +79,8 @@ export const accessPages = [
   { code: "attendance_reports", name: "Attendance Reports", sort_order: 131 },
   { code: "payment_settings", name: "Payment Settings", sort_order: 131 },
   { code: "app_settings", name: "Settings", sort_order: 132 },
-  { code: "ai_connector", name: "AI Connector", sort_order: 133 }
+  { code: "ai_connector", name: "AI Connector", sort_order: 133 },
+  { code: "developer_mode", name: "Developer Mode", sort_order: 134 }
 ];
 
 type PageRow = { id: string; code: string; is_active?: boolean | null };

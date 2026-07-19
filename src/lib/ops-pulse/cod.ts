@@ -3,10 +3,12 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 export const codFormTypes = ["amazon", "flipkart"] as const;
 export const codClients = ["Amazon", "Flipkart"] as const;
 export const codValidationStatuses = ["Pending", "Matched", "Short", "Excess", "Rejected"] as const;
+export const executiveReconciliationStatuses = ["Pending", "Completed", "Pending Amount", "Mismatch", "Not applicable"] as const;
 
 export type CodFormType = typeof codFormTypes[number];
 export type CodClient = typeof codClients[number];
 export type CodValidationStatus = typeof codValidationStatuses[number];
+export type ExecutiveReconciliationStatus = typeof executiveReconciliationStatuses[number];
 
 export type CodAttachment = {
   field: string;
@@ -150,6 +152,61 @@ export type OpsDailySubmissionRow = {
   ai_summary: string | null;
   created_at: string;
   stations?: CodLocationRow | CodLocationRow[] | null;
+};
+
+export type ShipmentExecutiveRow = {
+  id: string;
+  client: string | null;
+  work_date: string;
+  station_code: string;
+  provider_employee_id: string;
+  provider_employee_name: string | null;
+  shipment_type: string | null;
+  total_delivery: number | string | null;
+  total_activity: number | string | null;
+  updated_at: string | null;
+};
+
+export type CodExecutiveReconciliationRow = {
+  id: string;
+  business_date: string;
+  location_id: string | null;
+  station_code: string;
+  provider_employee_id: string;
+  source_associate_name: string | null;
+  manual_associate_name: string | null;
+  shipment_type: string | null;
+  total_delivery: number | string | null;
+  total_activity: number | string | null;
+  reconciliation_status: ExecutiveReconciliationStatus;
+  pending_amount: number | string | null;
+  remarks: string | null;
+  created_at: string;
+  updated_at: string | null;
+  stations?: CodLocationRow | CodLocationRow[] | null;
+};
+
+export type ExecutiveReconciliationViewRow = {
+  key: string;
+  reconciliation_id: string | null;
+  business_date: string;
+  location_id: string | null;
+  station_code: string;
+  station_name: string | null;
+  state: string | null;
+  provider_employee_id: string;
+  source_associate_name: string | null;
+  manual_associate_name: string | null;
+  associate_name: string | null;
+  shipment_type: string | null;
+  total_delivery: number | string | null;
+  total_activity: number | string | null;
+  reconciliation_status: ExecutiveReconciliationStatus;
+  pending_amount: number | string | null;
+  remarks: string | null;
+  source_updated_at: string | null;
+  updated_at: string | null;
+  source: "shipment_import" | "manual";
 };
 
 export const depositSlipAttachmentFields = [
@@ -443,6 +500,23 @@ export async function loadPortalCheckRuns(
   return { rows: (data ?? []) as PortalCheckRunRow[], error: null };
 }
 
+export function todayKolkata() {
+  return new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Kolkata",
+    year: "numeric"
+  }).format(new Date());
+}
+
+function executiveRowKey(stationCode: string | null | undefined, providerEmployeeId: string | null | undefined) {
+  return `${String(stationCode ?? "").trim().toUpperCase()}::${String(providerEmployeeId ?? "").trim().toUpperCase()}`;
+}
+
+export function executiveDisplayName(row: Pick<ExecutiveReconciliationViewRow, "source_associate_name" | "manual_associate_name">) {
+  return row.source_associate_name || row.manual_associate_name || "-";
+}
+
 export async function loadCodSubmissions(
   companyId: string,
   locationScopeIds: string[],
@@ -491,4 +565,129 @@ export async function loadDailySubmissions(
   const { data, error } = await query.limit(250);
   if (error) return { rows: [] as OpsDailySubmissionRow[], error: error.message };
   return { rows: (data ?? []) as OpsDailySubmissionRow[], error: null };
+}
+
+export async function loadExecutiveReconciliationRows(
+  companyId: string,
+  locationScopeIds: string[],
+  hasAllLocationAccess: boolean,
+  params: { businessDate?: string; locationId?: string; status?: string }
+) {
+  if (!supabaseAdmin) {
+    return {
+      businessDate: params.businessDate || todayKolkata(),
+      error: "Supabase service role key is not configured.",
+      locations: [] as CodLocationRow[],
+      rows: [] as ExecutiveReconciliationViewRow[]
+    };
+  }
+
+  const businessDate = params.businessDate || todayKolkata();
+  const { locations, error: locationsError } = await loadCodLocations(companyId, locationScopeIds, hasAllLocationAccess);
+  if (locationsError) return { businessDate, locations, rows: [] as ExecutiveReconciliationViewRow[], error: locationsError };
+
+  const scopedLocations = params.locationId
+    ? locations.filter((location) => location.id === params.locationId)
+    : locations;
+  const stationScope = Array.from(new Set(scopedLocations.map((location) => location.station_code).filter(Boolean)));
+  if (!stationScope.length) return { businessDate, locations, rows: [] as ExecutiveReconciliationViewRow[], error: null };
+
+  const locationsByStation = new Map(
+    scopedLocations.map((location) => [String(location.station_code).trim().toUpperCase(), location])
+  );
+
+  const shipmentsResult = await supabaseAdmin
+    .from("cps_shipment_daily")
+    .select("id, client, work_date, station_code, provider_employee_id, provider_employee_name, shipment_type, total_delivery, total_activity, updated_at")
+    .eq("company_id", companyId)
+    .eq("work_date", businessDate)
+    .in("station_code", stationScope)
+    .order("station_code", { ascending: true })
+    .order("provider_employee_name", { ascending: true })
+    .limit(2000);
+  if (shipmentsResult.error) return { businessDate, locations, rows: [] as ExecutiveReconciliationViewRow[], error: shipmentsResult.error.message };
+
+  let reconciliationQuery = supabaseAdmin
+    .from("cod_executive_reconciliations")
+    .select("id, business_date, location_id, station_code, provider_employee_id, source_associate_name, manual_associate_name, shipment_type, total_delivery, total_activity, reconciliation_status, pending_amount, remarks, created_at, updated_at, stations (id, station_code, station_name, state)")
+    .eq("company_id", companyId)
+    .eq("business_date", businessDate);
+  if (params.locationId) reconciliationQuery = reconciliationQuery.eq("location_id", params.locationId);
+  if (!params.locationId && !hasAllLocationAccess) {
+    reconciliationQuery = reconciliationQuery.in("location_id", locationScopeIds.length ? locationScopeIds : ["00000000-0000-0000-0000-000000000000"]);
+  }
+  if (stationScope.length) reconciliationQuery = reconciliationQuery.in("station_code", stationScope);
+
+  const reconciliationResult = await reconciliationQuery.order("station_code", { ascending: true }).order("provider_employee_id", { ascending: true }).limit(2000);
+  if (reconciliationResult.error) return { businessDate, locations, rows: [] as ExecutiveReconciliationViewRow[], error: reconciliationResult.error.message };
+
+  const reconciliations = (reconciliationResult.data ?? []) as CodExecutiveReconciliationRow[];
+  const reconciliationByKey = new Map(reconciliations.map((row) => [executiveRowKey(row.station_code, row.provider_employee_id), row]));
+  const rowsByKey = new Map<string, ExecutiveReconciliationViewRow>();
+
+  ((shipmentsResult.data ?? []) as ShipmentExecutiveRow[]).forEach((shipment) => {
+    if (!shipment.provider_employee_id || !shipment.station_code) return;
+    const key = executiveRowKey(shipment.station_code, shipment.provider_employee_id);
+    const reconciliation = reconciliationByKey.get(key);
+    const station = locationsByStation.get(String(shipment.station_code).trim().toUpperCase());
+    rowsByKey.set(key, {
+      key,
+      reconciliation_id: reconciliation?.id ?? null,
+      business_date: businessDate,
+      location_id: reconciliation?.location_id ?? station?.id ?? null,
+      station_code: shipment.station_code,
+      station_name: station?.station_name ?? null,
+      state: station?.state ?? null,
+      provider_employee_id: shipment.provider_employee_id,
+      source_associate_name: shipment.provider_employee_name ?? reconciliation?.source_associate_name ?? null,
+      manual_associate_name: reconciliation?.manual_associate_name ?? null,
+      associate_name: shipment.provider_employee_name ?? reconciliation?.manual_associate_name ?? null,
+      shipment_type: shipment.shipment_type ?? reconciliation?.shipment_type ?? null,
+      total_delivery: shipment.total_delivery ?? reconciliation?.total_delivery ?? null,
+      total_activity: shipment.total_activity ?? reconciliation?.total_activity ?? null,
+      reconciliation_status: reconciliation?.reconciliation_status ?? "Pending",
+      pending_amount: reconciliation?.pending_amount ?? 0,
+      remarks: reconciliation?.remarks ?? null,
+      source_updated_at: shipment.updated_at,
+      updated_at: reconciliation?.updated_at ?? reconciliation?.created_at ?? null,
+      source: "shipment_import"
+    });
+  });
+
+  reconciliations.forEach((reconciliation) => {
+    const key = executiveRowKey(reconciliation.station_code, reconciliation.provider_employee_id);
+    if (rowsByKey.has(key)) return;
+    const station = firstRelation(reconciliation.stations) ?? locationsByStation.get(String(reconciliation.station_code).trim().toUpperCase()) ?? null;
+    rowsByKey.set(key, {
+      key,
+      reconciliation_id: reconciliation.id,
+      business_date: reconciliation.business_date,
+      location_id: reconciliation.location_id,
+      station_code: reconciliation.station_code,
+      station_name: station?.station_name ?? null,
+      state: station?.state ?? null,
+      provider_employee_id: reconciliation.provider_employee_id,
+      source_associate_name: reconciliation.source_associate_name,
+      manual_associate_name: reconciliation.manual_associate_name,
+      associate_name: reconciliation.source_associate_name ?? reconciliation.manual_associate_name,
+      shipment_type: reconciliation.shipment_type,
+      total_delivery: reconciliation.total_delivery,
+      total_activity: reconciliation.total_activity,
+      reconciliation_status: reconciliation.reconciliation_status,
+      pending_amount: reconciliation.pending_amount,
+      remarks: reconciliation.remarks,
+      source_updated_at: null,
+      updated_at: reconciliation.updated_at ?? reconciliation.created_at,
+      source: "manual"
+    });
+  });
+
+  const requestedStatus = params.status && executiveReconciliationStatuses.includes(params.status as ExecutiveReconciliationStatus)
+    ? params.status as ExecutiveReconciliationStatus
+    : "";
+  const rows = Array.from(rowsByKey.values())
+    .filter((row) => !requestedStatus || row.reconciliation_status === requestedStatus)
+    .sort((first, second) => `${first.station_code}${executiveDisplayName(first)}${first.provider_employee_id}`.localeCompare(`${second.station_code}${executiveDisplayName(second)}${second.provider_employee_id}`));
+
+  return { businessDate, locations, rows, error: null };
 }

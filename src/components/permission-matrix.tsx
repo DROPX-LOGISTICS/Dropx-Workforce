@@ -19,9 +19,11 @@ const actions: Array<{ key: PermissionAction; label: string }> = [
 const groupDefinitions = [
   { key: "leads", label: "Leads", codes: ["leads_dashboard", "leads_all", "leads_followups", "leads_interviews", "leads_reports", "leads_ads", "leads_sop"], hiddenCodes: ["leads"] },
   { key: "fleet", label: "Fleet", codes: ["fleet_action_center", "fleet_vehicle_view", "fleet_date_view", "fleet_station_view", "fleet_tracking", "fleet_fuel_log", "fleet_live_gps", "fleet_maintenance", "fleet_reports"], hiddenCodes: ["fleet"] },
+  { key: "ops_pulse", label: "Ops Pulse", codes: ["daily_submission", "cod", "cod_executive_reconciliation", "cod_submission", "cod_validation", "cod_reports", "cod_portal_checks"], hiddenCodes: ["ops_pulse"] },
   { key: "payments", label: "Payments", codes: ["expense_requests", "payment_requests", "payment_approvals", "payment_process", "payment_reports"], hiddenCodes: ["payments"] },
   { key: "onboard", label: "Onboard", codes: ["delivery_associates", "employees", "contractors", "vendors", "workers"] },
-  { key: "master_data", label: "Master Data", codes: ["master_locations", "master_providers", "master_models", "payment_methods", "master_payment_banks", "master_payment_heads", "designations", "master_documents"] }
+  { key: "master_data", label: "Master Data", codes: ["master_locations", "master_providers", "master_models", "payment_methods", "master_payment_banks", "master_payment_heads", "designations", "biometric_devices", "cod_master", "master_documents"] },
+  { key: "settings", label: "Settings", codes: ["app_settings", "ai_connector", "developer_mode"] }
 ];
 
 function emptyPermissionState(pages: PermissionPage[]) {

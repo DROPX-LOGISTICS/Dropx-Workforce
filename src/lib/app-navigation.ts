@@ -62,10 +62,7 @@ export const navItems: NavItem[] = [
     icon: "O",
     children: [
       { code: "daily_submission", label: "Daily Submission", href: "/ops-pulse/daily-submission" },
-      { code: "cod_submission", label: "COD Submission", href: "/ops-pulse/cod/submission" },
-      { code: "cod_validation", label: "COD Validation", href: "/ops-pulse/cod/validation" },
-      { code: "cod_reports", label: "COD Reports", href: "/ops-pulse/cod/reports" },
-      { code: "cod_portal_checks", label: "Portal Checks", href: "/ops-pulse/cod/portal-checks" }
+      { code: "cod", label: "COD", href: "/ops-pulse/cod" }
     ]
   },
   {
@@ -152,7 +149,8 @@ export const navItems: NavItem[] = [
       { code: "app_settings", label: "General", href: "/settings" },
       { code: "app_settings", label: "Biometric Config", href: "/settings/biometric" },
       { code: "app_settings", label: "Biometric Monitor", href: "/biometric" },
-      { code: "ai_connector", label: "AI Connector", href: "/settings/ai" }
+      { code: "ai_connector", label: "AI Connector", href: "/settings/ai" },
+      { code: "developer_mode", label: "Developer Mode", href: "/developer" }
     ]
   }
 ];

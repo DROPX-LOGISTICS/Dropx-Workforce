@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { accessPages, ensureAccessPages } from "@/lib/access-pages";
-import { requirePagePermission } from "@/lib/authorization";
+import { isCompanyOwner, requirePagePermission, type AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -233,6 +233,65 @@ function permissionsFromForm(formData: FormData): PermissionPayload {
   })).filter((permission) => permission.page_id);
 }
 
+function permissionHasAccess(permission?: PermissionPayload[number] | null) {
+  return Boolean(permission?.can_view || permission?.can_add || permission?.can_edit);
+}
+
+async function assertDeveloperPermissionChangeAllowed(
+  companyId: string,
+  authorization: AuthorizationContext,
+  submittedPermissions: PermissionPayload,
+  roleId?: string
+) {
+  if (isCompanyOwner(authorization)) return;
+  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
+
+  let pagesResult = await supabaseAdmin
+    .from("app_pages")
+    .select("id")
+    .eq("company_id", companyId)
+    .eq("code", "developer_mode");
+
+  if (!pagesResult.error && !(pagesResult.data ?? []).length) {
+    pagesResult = await supabaseAdmin
+      .from("app_pages")
+      .select("id")
+      .eq("code", "developer_mode");
+  }
+
+  if (pagesResult.error) throw new Error(pagesResult.error.message);
+  const developerPageIds = new Set((pagesResult.data ?? []).map((page) => String(page.id)));
+  if (!developerPageIds.size) return;
+
+  const submittedByPage = new Map(submittedPermissions.map((permission) => [permission.page_id, permission]));
+
+  if (!roleId) {
+    const wantsDeveloperAccess = [...developerPageIds].some((pageId) => permissionHasAccess(submittedByPage.get(pageId)));
+    if (wantsDeveloperAccess) throw new Error("Only owner can manage Developer Mode access.");
+    return;
+  }
+
+  const { data: existing, error } = await supabaseAdmin
+    .from("role_page_permissions")
+    .select("page_id, can_view, can_add, can_edit")
+    .eq("company_id", companyId)
+    .eq("role_id", roleId)
+    .in("page_id", [...developerPageIds]);
+  if (error) throw new Error(error.message);
+
+  const existingByPage = new Map((existing ?? []).map((permission) => [String(permission.page_id), permission]));
+  for (const pageId of developerPageIds) {
+    const before = existingByPage.get(pageId);
+    const after = submittedByPage.get(pageId);
+    const changed =
+      Boolean(before?.can_view || before?.can_add || before?.can_edit) !== permissionHasAccess(after) ||
+      Boolean(before?.can_view) !== Boolean(after?.can_view) ||
+      Boolean(before?.can_add) !== Boolean(after?.can_add) ||
+      Boolean(before?.can_edit) !== Boolean(after?.can_edit);
+    if (changed) throw new Error("Only owner can manage Developer Mode access.");
+  }
+}
+
 export async function createUserRole(formData: FormData) {
   try {
     const authorization = await requirePagePermission("users", "add");
@@ -274,6 +333,7 @@ export async function createUserRole(formData: FormData) {
     if (pagesError) throw new Error(pagesError.message);
 
     const submittedPermissions = permissionsFromForm(formData);
+    await assertDeveloperPermissionChangeAllowed(companyId, authorization, submittedPermissions);
     const submittedByPage = new Map(submittedPermissions.map((permission) => [permission.page_id, permission]));
 
     const permissions = (pages ?? []).map((page) => {
@@ -358,6 +418,7 @@ export async function updateUserRole(formData: FormData) {
     if (error) throw new Error(error.message);
 
     const submittedPermissions = permissionsFromForm(formData);
+    await assertDeveloperPermissionChangeAllowed(companyId, authorization, submittedPermissions, roleId);
     const { error: clearPermissionsError } = await supabaseAdmin
       .from("role_page_permissions")
       .delete()

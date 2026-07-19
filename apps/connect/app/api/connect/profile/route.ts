@@ -154,7 +154,15 @@ async function loadEmployee(employeeId: string, companyId: string) {
   return result.data as EmployeeProfileRow;
 }
 
-function serializeEmployee(row: EmployeeProfileRow) {
+async function signedProfileUrl(path: string | null) {
+  if (!supabaseAdmin || !path) return "";
+  const result = await supabaseAdmin.storage
+    .from("employee-profile-documents")
+    .createSignedUrl(path, 60 * 60);
+  return result.data?.signedUrl ?? "";
+}
+
+async function serializeEmployee(row: EmployeeProfileRow) {
   const station = firstRelation(row.stations);
   const designation = firstRelation(row.designations);
   return {
@@ -196,6 +204,7 @@ function serializeEmployee(row: EmployeeProfileRow) {
       pan: Boolean(row.pan_upload_path),
       photo: Boolean(row.profile_photo_path)
     },
+    profilePhotoUrl: await signedProfileUrl(row.profile_photo_path),
     status: row.profile_completion_status ?? "pending"
   };
 }
@@ -206,7 +215,7 @@ export async function GET(request: Request) {
     const employeeId = url.searchParams.get("employeeId") ?? "";
     const account = await requireEmployeeAccess(employeeId);
     const employee = await loadEmployee(account.id, account.companyId);
-    return NextResponse.json({ ok: true, profile: serializeEmployee(employee) });
+    return NextResponse.json({ ok: true, profile: await serializeEmployee(employee) });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to load profile." }, { status: 400 });
   }
@@ -279,7 +288,7 @@ export async function POST(request: Request) {
     if (updateResult.error) throw new Error(updateResult.error.message);
 
     const employee = await loadEmployee(account.id, account.companyId);
-    return NextResponse.json({ ok: true, profile: serializeEmployee(employee), notice: "Profile saved successfully." });
+    return NextResponse.json({ ok: true, profile: await serializeEmployee(employee), notice: "Profile saved successfully." });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to save profile." }, { status: 400 });
   }

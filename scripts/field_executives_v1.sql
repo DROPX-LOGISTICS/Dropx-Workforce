@@ -34,6 +34,7 @@ create table if not exists public.field_executives (
   emergency_contact_relation text,
   aadhaar_front_path text,
   aadhaar_back_path text,
+  pan_upload_path text,
   dl_front_path text,
   dl_back_path text,
   profile_photo_path text,
@@ -75,6 +76,7 @@ alter table public.field_executives
   add column if not exists emergency_contact_relation text,
   add column if not exists aadhaar_front_path text,
   add column if not exists aadhaar_back_path text,
+  add column if not exists pan_upload_path text,
   add column if not exists dl_front_path text,
   add column if not exists dl_back_path text,
   add column if not exists profile_photo_path text;

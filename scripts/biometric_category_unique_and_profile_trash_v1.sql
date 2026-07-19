@@ -7,6 +7,9 @@ create unique index if not exists biometric_enrolments_company_type_enrolment_ac
   on public.biometric_enrolments(company_id, worker_type, enrolment_id)
   where effective_to is null;
 
+alter table public.field_executives
+  add column if not exists pan_upload_path text;
+
 create table if not exists public.profile_document_trash (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete cascade,

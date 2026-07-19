@@ -40,6 +40,7 @@ type FieldExecutiveRow = {
   emergency_contact_relation: string | null;
   aadhaar_front_path: string | null;
   aadhaar_back_path: string | null;
+  pan_upload_path: string | null;
   dl_front_path: string | null;
   dl_back_path: string | null;
   profile_photo_path: string | null;
@@ -136,7 +137,7 @@ async function loadExecutive(executiveId: string, companyId: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const result = await supabaseAdmin
     .from("field_executives")
-    .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, stations (station_code, station_name)")
+    .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, stations (station_code, station_name)")
     .eq("id", executiveId)
     .eq("company_id", companyId)
     .maybeSingle();
@@ -195,6 +196,7 @@ async function serializeExecutive(row: FieldExecutiveRow) {
     uploads: {
       aadhaarFront: Boolean(row.aadhaar_front_path),
       aadhaarBack: Boolean(row.aadhaar_back_path),
+      pan: Boolean(row.pan_upload_path),
       dlFront: Boolean(row.dl_front_path),
       dlBack: Boolean(row.dl_back_path),
       photo: Boolean(row.profile_photo_path)
@@ -202,6 +204,7 @@ async function serializeExecutive(row: FieldExecutiveRow) {
     uploadUrls: {
       aadhaarFront: await signedProfileUrl(row.aadhaar_front_path),
       aadhaarBack: await signedProfileUrl(row.aadhaar_back_path),
+      pan: await signedProfileUrl(row.pan_upload_path),
       dlFront: await signedProfileUrl(row.dl_front_path),
       dlBack: await signedProfileUrl(row.dl_back_path),
       photo: await signedProfileUrl(row.profile_photo_path),
@@ -283,14 +286,16 @@ export async function POST(request: Request) {
     const uploads = await Promise.all([
       uploadExecutiveFile(formData.get("aadhaar_front"), account.companyId, account.id, "aadhaar-front"),
       uploadExecutiveFile(formData.get("aadhaar_back"), account.companyId, account.id, "aadhaar-back"),
+      uploadExecutiveFile(formData.get("pan_upload"), account.companyId, account.id, "pan"),
       uploadExecutiveFile(formData.get("dl_front"), account.companyId, account.id, "dl-front"),
       uploadExecutiveFile(formData.get("dl_back"), account.companyId, account.id, "dl-back"),
       uploadExecutiveFile(formData.get("profile_photo"), account.companyId, account.id, "photo")
     ]);
-    const [aadhaarFrontPath, aadhaarBackPath, dlFrontPath, dlBackPath, profilePhotoPath] = uploads;
+    const [aadhaarFrontPath, aadhaarBackPath, panUploadPath, dlFrontPath, dlBackPath, profilePhotoPath] = uploads;
     const uploadPayload: Record<string, unknown> = {};
     if (aadhaarFrontPath) uploadPayload.aadhaar_front_path = aadhaarFrontPath;
     if (aadhaarBackPath) uploadPayload.aadhaar_back_path = aadhaarBackPath;
+    if (panUploadPath) uploadPayload.pan_upload_path = panUploadPath;
     if (dlFrontPath) uploadPayload.dl_front_path = dlFrontPath;
     if (dlBackPath) uploadPayload.dl_back_path = dlBackPath;
     if (profilePhotoPath) uploadPayload.profile_photo_path = profilePhotoPath;

@@ -56,6 +56,7 @@ function generatedDropxId() {
 const fieldExecutiveDocumentFields = [
   { formKey: "aadhaar_front_file", pathKey: "aadhaar_front_path", label: "Aadhaar front" },
   { formKey: "aadhaar_back_file", pathKey: "aadhaar_back_path", label: "Aadhaar back" },
+  { formKey: "pan_upload_file", pathKey: "pan_upload_path", label: "PAN upload" },
   { formKey: "dl_front_file", pathKey: "dl_front_path", label: "DL front" },
   { formKey: "dl_back_file", pathKey: "dl_back_path", label: "DL back" },
   { formKey: "profile_photo_file", pathKey: "profile_photo_path", label: "Profile photo" }
@@ -269,7 +270,7 @@ export async function updateFieldExecutive(formData: FormData) {
     const executiveId = id;
     const existingResult = await supabaseAdmin
       .from("field_executives")
-      .select("aadhaar_front_path, aadhaar_back_path, dl_front_path, dl_back_path, profile_photo_path")
+      .select("aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path")
       .eq("id", executiveId)
       .eq("company_id", companyId)
       .maybeSingle();

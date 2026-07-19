@@ -56,6 +56,7 @@ type ExecutiveRow = {
   emergency_contact_relation: string | null;
   aadhaar_front_path?: string | null;
   aadhaar_back_path?: string | null;
+  pan_upload_path?: string | null;
   dl_front_path?: string | null;
   dl_back_path?: string | null;
   profile_photo_path?: string | null;
@@ -275,6 +276,7 @@ function FieldExecutiveDetails({ executive }: { executive: ExecutiveRow }) {
         <dl className="executive-detail-grid">
           <UploadDetail label="Aadhaar front" url={executive.upload_urls?.aadhaarFront} />
           <UploadDetail label="Aadhaar back" url={executive.upload_urls?.aadhaarBack} />
+          <UploadDetail label="PAN upload" url={executive.upload_urls?.pan} />
           <UploadDetail label="DL front" url={executive.upload_urls?.dlFront} />
           <UploadDetail label="DL back" url={executive.upload_urls?.dlBack} />
           <UploadDetail label="Profile photo" url={executive.upload_urls?.profilePhoto} />
@@ -363,6 +365,7 @@ function FieldExecutiveForm({
         <>
           <label>Aadhaar front file<input className="field" name="aadhaar_front_file" type="file" /></label>
           <label>Aadhaar back file<input className="field" name="aadhaar_back_file" type="file" /></label>
+          <label>PAN upload<input className="field" name="pan_upload_file" type="file" /></label>
           <label>DL front file<input className="field" name="dl_front_file" type="file" /></label>
           <label>DL back file<input className="field" name="dl_back_file" type="file" /></label>
           <label>Profile photo<input accept="image/*" className="field" name="profile_photo_file" type="file" /></label>
@@ -489,6 +492,7 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
         emergency_contact_relation,
         aadhaar_front_path,
         aadhaar_back_path,
+        pan_upload_path,
         dl_front_path,
         dl_back_path,
         profile_photo_path,
@@ -537,6 +541,7 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
     upload_urls: {
       aadhaarFront: await signedDocumentUrl(executive.aadhaar_front_path),
       aadhaarBack: await signedDocumentUrl(executive.aadhaar_back_path),
+      pan: await signedDocumentUrl(executive.pan_upload_path),
       dlFront: await signedDocumentUrl(executive.dl_front_path),
       dlBack: await signedDocumentUrl(executive.dl_back_path),
       profilePhoto: await signedDocumentUrl(executive.profile_photo_path)

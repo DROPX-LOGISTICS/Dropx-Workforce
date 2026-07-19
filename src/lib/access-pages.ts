@@ -80,7 +80,8 @@ export const accessPages = [
   { code: "payment_settings", name: "Payment Settings", sort_order: 131 },
   { code: "app_settings", name: "Settings", sort_order: 132 },
   { code: "ai_connector", name: "AI Connector", sort_order: 133 },
-  { code: "developer_mode", name: "Developer Mode", sort_order: 134 }
+  { code: "amazon_connector", name: "Amazon Connector", sort_order: 134 },
+  { code: "developer_mode", name: "Developer Mode", sort_order: 135 }
 ];
 
 type PageRow = { id: string; code: string; is_active?: boolean | null };

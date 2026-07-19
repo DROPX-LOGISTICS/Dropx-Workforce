@@ -37,7 +37,7 @@ const groupedParentPermissions: Record<string, string[]> = {
   cps: ["cps_overview", "cps_daily", "cps_monthly", "cps_cost_breakup", "cps_stations", "cps_shipments", "cps_associates", "cps_reports", "cps_inputs", "cps_unmapped"],
   reports: ["attendance_reports"],
   master_data: ["master_locations", "master_providers", "master_models", "payment_methods", "master_payment_banks", "master_payment_heads", "designations", "biometric_devices", "cod_master", "master_documents"],
-  app_settings: ["app_settings", "ai_connector", "developer_mode"],
+  app_settings: ["app_settings", "ai_connector", "amazon_connector", "developer_mode"],
   payments: ["expense_requests", "payment_requests", "payment_approvals", "payment_process", "payment_reports"]
 };
 
@@ -70,7 +70,7 @@ function inheritGroupedParentPermissions(permissions: Record<string, PagePermiss
 }
 
 async function ensureMissingCurrentAccessPages(companyId: string) {
-  const requiredCodes = ["payments", "expense_requests", "payment_requests", "payment_approvals", "payment_process", "payment_reports", "master_payment_banks", "master_payment_heads", "payment_settings", "imports", "ops_pulse", "daily_submission", "cod", "cod_executive_reconciliation", "cod_submission", "cod_validation", "cod_reports", "cod_portal_checks", "cod_master", "biometric_devices", "reports", "attendance_reports", "ai_connector", "developer_mode", "cps", "cps_overview", "cps_daily", "cps_monthly", "cps_cost_breakup", "cps_stations", "cps_shipments", "cps_associates", "cps_reports", "cps_inputs", "cps_unmapped"];
+  const requiredCodes = ["payments", "expense_requests", "payment_requests", "payment_approvals", "payment_process", "payment_reports", "master_payment_banks", "master_payment_heads", "payment_settings", "imports", "ops_pulse", "daily_submission", "cod", "cod_executive_reconciliation", "cod_submission", "cod_validation", "cod_reports", "cod_portal_checks", "cod_master", "biometric_devices", "reports", "attendance_reports", "ai_connector", "amazon_connector", "developer_mode", "cps", "cps_overview", "cps_daily", "cps_monthly", "cps_cost_breakup", "cps_stations", "cps_shipments", "cps_associates", "cps_reports", "cps_inputs", "cps_unmapped"];
   const { data, error } = await supabaseAdmin!
     .from("app_pages")
     .select("code")

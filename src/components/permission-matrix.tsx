@@ -23,7 +23,7 @@ const groupDefinitions = [
   { key: "payments", label: "Payments", codes: ["expense_requests", "payment_requests", "payment_approvals", "payment_process", "payment_reports"], hiddenCodes: ["payments"] },
   { key: "onboard", label: "Onboard", codes: ["delivery_associates", "employees", "contractors", "vendors", "workers"] },
   { key: "master_data", label: "Master Data", codes: ["master_locations", "master_providers", "master_models", "payment_methods", "master_payment_banks", "master_payment_heads", "designations", "biometric_devices", "cod_master", "master_documents"] },
-  { key: "settings", label: "Settings", codes: ["app_settings", "ai_connector", "developer_mode"] }
+  { key: "settings", label: "Settings", codes: ["app_settings", "ai_connector", "amazon_connector", "developer_mode"] }
 ];
 
 function emptyPermissionState(pages: PermissionPage[]) {

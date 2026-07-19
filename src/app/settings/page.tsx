@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import { PendingLink } from "@/components/pending-link";
-import { requirePagePermission } from "@/lib/authorization";
+import { isCompanyOwner, requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
@@ -103,6 +103,7 @@ async function loadDomainStatus(companyId: string) {
 export default async function SettingsPage() {
   const authorization = await requirePagePermission("app_settings", "access");
   const companyId = requireCompanyId(authorization);
+  const canManageAmazonConnectors = isCompanyOwner(authorization);
   const [whatsAppStatus, wheelseyeStatus, metaStatus, metaLeadsStatus, domainStatus] = await Promise.all([
     loadWhatsAppStatus(companyId),
     loadWheelseyeStatus(companyId),
@@ -177,6 +178,14 @@ export default async function SettingsPage() {
               <p className="subtle">Email templates for business document expiry and future workflow reminders.</p>
             </div>
           </PendingLink>
+          {canManageAmazonConnectors ? (
+            <PendingLink className="settings-tile actionable" href="/settings/amazon">
+              <div>
+                <h3>Amazon Connector</h3>
+                <p className="subtle">Owner-only access for YMS, LSC, and SCC portal automation.</p>
+              </div>
+            </PendingLink>
+          ) : null}
           <PendingLink className="settings-tile actionable" href="/settings/payments">
             <div>
               <h3>Payment Settings</h3>

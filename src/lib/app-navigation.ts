@@ -150,6 +150,7 @@ export const navItems: NavItem[] = [
       { code: "app_settings", label: "Biometric Config", href: "/settings/biometric" },
       { code: "app_settings", label: "Biometric Monitor", href: "/biometric" },
       { code: "ai_connector", label: "AI Connector", href: "/settings/ai" },
+      { code: "amazon_connector", label: "Amazon Connector", href: "/settings/amazon" },
       { code: "developer_mode", label: "Developer Mode", href: "/developer" }
     ]
   }

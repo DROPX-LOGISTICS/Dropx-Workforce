@@ -32,6 +32,7 @@ type CpsBreakupRow = {
 };
 
 type ParsedImportRow = {
+  duplicateScope: "existing" | "file" | null;
   hash: string;
   isDuplicate: boolean;
   issue: string | null;
@@ -54,6 +55,10 @@ function clean(value: unknown) {
 
 function key(value: unknown) {
   return clean(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function metricKey(value: unknown) {
+  return key(value).replace(/20$/, "2");
 }
 
 function normalizeStation(value: unknown) {
@@ -94,9 +99,9 @@ function findValue(raw: RawRecord, aliases: string[]) {
 }
 
 function findValueIncludes(raw: RawRecord, fragments: string[]) {
-  const normalizedFragments = fragments.map(key);
+  const normalizedFragments = fragments.map(metricKey);
   const entry = Object.entries(raw).find(([label]) => {
-    const labelKey = key(label);
+    const labelKey = metricKey(label);
     return normalizedFragments.some((fragment) => labelKey.includes(fragment));
   });
   return entry?.[1] ?? "";
@@ -154,9 +159,9 @@ function parseAmazon(raw: RawRecord, rowNumber: number): NormalizedImport | null
   const externalWorkerId = clean(findValue(raw, ["holder_employee_id", "Holder Employee ID", "Provider ID", "Driver ID", "DA ID", "Associate ID"]));
   if (!workDate || !stationCode) return null;
 
-  const delivered = toNumber(findValueIncludes(raw, ["finaldeliverycountexcludingswasmdsmd20", "finaldeliverycount", "delivered"]));
+  const delivered = toNumber(findValueIncludes(raw, ["finaldeliverycountexcludingswasmdsmd2", "finaldeliverycountexcludingswasmdsmd20", "finaldeliverycount", "delivered"]));
   const smd = toNumber(findValueIncludes(raw, ["overalldeliveredsmd"]));
-  const smd2 = toNumber(findValueIncludes(raw, ["overalldeliveredsmd20"]));
+  const smd2 = toNumber(findValueIncludes(raw, ["overalldeliveredsmd2", "overalldeliveredsmd20"]));
   const swa = toNumber(findValueIncludes(raw, ["overalldeliveredswa"])) + toNumber(findValueIncludes(raw, ["overalldeliveredswaconsumable"]));
   const shipmentType = clean(findValue(raw, ["Shipment Type", "Type"]));
   const finalCReturn = toNumber(findValue(raw, ["final_creturn_count", "Final CReturn Count", "C Return", "C_Return"]));
@@ -504,21 +509,44 @@ async function auditParsedRows(companyId: string, sourceType: SourceType, parsed
     if (!row.normalized) {
       return {
         ...row,
+        duplicateScope: null,
         isDuplicate: false,
         issue: "Required date/station/amount columns were missing or zero.",
         status: "Skipped"
       };
     }
 
-    const isDuplicate = existingHashes.has(row.hash) || seenInFile.has(row.hash);
+    const duplicateScope = seenInFile.has(row.hash) ? "file" : existingHashes.has(row.hash) ? "existing" : null;
+    const isDuplicate = duplicateScope !== null;
     if (!isDuplicate) seenInFile.add(row.hash);
     return {
       ...row,
+      duplicateScope,
       isDuplicate,
-      issue: isDuplicate ? "Duplicate row ignored; this exact row was already imported." : null,
+      issue: isDuplicate
+        ? duplicateScope === "file"
+          ? "Duplicate row ignored; this exact row is repeated in the same file."
+          : "Duplicate raw row already imported earlier. Daily totals will still be refreshed from this weekly file."
+        : null,
       status: isDuplicate ? "Skipped" : "Imported"
     };
   });
+}
+
+async function insertInChunks<T extends Record<string, unknown>>(table: string, rows: T[], chunkSize = 500) {
+  if (!supabaseAdmin || !rows.length) return;
+  for (let index = 0; index < rows.length; index += chunkSize) {
+    const result = await supabaseAdmin.from(table).insert(rows.slice(index, index + chunkSize) as never[]);
+    if (result.error) throw new Error(result.error.message);
+  }
+}
+
+async function upsertInChunks<T extends Record<string, unknown>>(table: string, rows: T[], onConflict: string, chunkSize = 500) {
+  if (!supabaseAdmin || !rows.length) return;
+  for (let index = 0; index < rows.length; index += chunkSize) {
+    const result = await supabaseAdmin.from(table).upsert(rows.slice(index, index + chunkSize) as never[], { onConflict });
+    if (result.error) throw new Error(result.error.message);
+  }
 }
 
 export async function GET() {
@@ -589,17 +617,12 @@ export async function POST(request: Request) {
       issue: row.issue,
       work_date: row.normalized?.workDate ?? null
     }));
-    if (rowPayload.length) {
-      const rowsResult = await supabaseAdmin.from("report_import_rows").insert(rowPayload);
-      if (rowsResult.error) throw new Error(rowsResult.error.message);
-    }
+    await insertInChunks("report_import_rows", rowPayload);
 
     if (sourceType === "amazon_shipments") {
-      const payload = aggregateAmazonRows(valid, batch.data.id, companyId);
-      if (payload.length) {
-        const result = await supabaseAdmin.from("cps_shipment_daily").upsert(payload, { onConflict: "company_id,client,work_date,station_code,provider_employee_id" });
-        if (result.error) throw new Error(result.error.message);
-      }
+      const currentFileRows = audited.filter((row) => row.normalized && row.duplicateScope !== "file");
+      const payload = aggregateAmazonRows(currentFileRows, batch.data.id, companyId);
+      await upsertInChunks("cps_shipment_daily", payload, "company_id,client,work_date,station_code,provider_employee_id");
     }
 
     if (sourceType === "iocl_fuel" || sourceType === "bpcl_fuel") {
@@ -616,10 +639,7 @@ export async function POST(request: Request) {
         transaction_id: clean(row.normalized!.normalizedData.transaction_id),
         vehicle_no: clean(row.normalized!.normalizedData.vehicle_no) || null
       }));
-      if (payload.length) {
-        const result = await supabaseAdmin.from("cps_fuel_daily").upsert(payload, { onConflict: "company_id,provider,transaction_id" });
-        if (result.error) throw new Error(result.error.message);
-      }
+      await upsertInChunks("cps_fuel_daily", payload, "company_id,provider,transaction_id");
     }
 
     if (sourceType === "cashbook") {
@@ -638,13 +658,13 @@ export async function POST(request: Request) {
         source_batch_id: batch.data.id,
         station_code: row.normalized!.stationCode!
       }));
-      if (payload.length) {
-        const result = await supabaseAdmin.from("cps_cashbook_daily").upsert(payload, { onConflict: "company_id,source_row_hash" });
-        if (result.error) throw new Error(result.error.message);
-      }
+      await upsertInChunks("cps_cashbook_daily", payload, "company_id,source_row_hash");
     }
 
-    await recalculateCps(companyId, valid.map((row) => ({ stationCode: row.normalized?.stationCode, workDate: row.normalized?.workDate })));
+    const cpsTouchedRows = sourceType === "amazon_shipments"
+      ? audited.filter((row) => row.normalized && row.duplicateScope !== "file")
+      : valid;
+    await recalculateCps(companyId, cpsTouchedRows.map((row) => ({ stationCode: row.normalized?.stationCode, workDate: row.normalized?.workDate })));
 
     const update = await supabaseAdmin.from("report_import_batches").update({
       completed_at: new Date().toISOString(),

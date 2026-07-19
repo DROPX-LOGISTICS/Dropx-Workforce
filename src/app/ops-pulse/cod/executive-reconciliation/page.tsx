@@ -192,7 +192,9 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
     location: defaultLocationId,
     status: searchParams?.status ?? ""
   });
-  const setupError = result.error && isMissingCodSetup({ message: result.error }) ? result.error : null;
+  const resultSetupError = result.error && isMissingCodSetup({ message: result.error }) ? result.error : null;
+  const flashSetupError = flash.error && isMissingCodSetup({ message: flash.error }) ? flash.error : null;
+  const setupError = resultSetupError ?? flashSetupError;
   const stationOptions = result.locations.map((location) => ({
     helper: [location.state, location.station_name].filter(Boolean).join(" / "),
     label: locationLabel(location),
@@ -245,7 +247,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
         <>
           <section className="panel">
             <div className="panel-body">
-              <form action="/ops-pulse/cod/executive-reconciliation" className="form-grid four">
+              <form action="/ops-pulse/cod/executive-reconciliation" className="form-grid cod-reconciliation-filter-grid">
                 <label>Business Date<input className="field" name="date" type="date" defaultValue={result.businessDate} /></label>
                 <label className="span-2">Station
                   <select className="field" name="location" defaultValue={defaultLocationId} disabled={hasSingleStationScope}>
@@ -260,7 +262,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     {executiveReconciliationStatuses.map((status) => <option key={status}>{status}</option>)}
                   </select>
                 </label>
-                <div className="form-actions span-4 align-right">
+                <div className="form-actions cod-filter-actions align-right">
                   <button className="button secondary" type="submit">Show sheet</button>
                 </div>
               </form>
@@ -290,7 +292,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
               </div>
               <span className="count-badge">{rows.length} records</span>
             </div>
-            <div className="table-wrap cash-reconciliation-wrap">
+            <div className="table-wrap cash-reconciliation-wrap" aria-label="Executive reconciliation sheet">
               <table className="cash-reconciliation-table">
                 <thead>
                   <tr>
@@ -366,7 +368,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                 </div>
               </div>
               <div className="panel-body">
-                <form action={addManualExecutiveReconciliation} className="form-grid four">
+                <form action={addManualExecutiveReconciliation} className="form-grid cod-manual-reconciliation-grid">
                   <input type="hidden" name="return_href" value={returnHref} />
                   <input type="hidden" name="provider_employee_id" value="__manual__" />
                   <label>Business Date<input className="field" name="business_date" type="date" defaultValue={result.businessDate} required /></label>

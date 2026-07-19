@@ -529,7 +529,7 @@ export async function loadCodStationSettings(companyId: string, locationScopeIds
 }
 
 export function codSetupMessage(error?: string | null) {
-  return `${error ? `${error} ` : ""}Run scripts/ops_pulse_cod_station_master_ai_v1.sql, scripts/ops_pulse_cod_portal_checks_v1.sql, and scripts/cod_driver_reconciliation_roster_v1.sql in Supabase SQL Editor, then refresh this page.`;
+  return `${error ? `${error} ` : ""}Run scripts/cod_station_settings_portal_columns_patch_v1.sql, scripts/ops_pulse_cod_portal_checks_v1.sql, and scripts/cod_driver_reconciliation_roster_v1.sql in Supabase SQL Editor, then refresh this page.`;
 }
 
 export async function loadPortalCheckRuns(

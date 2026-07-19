@@ -29,7 +29,14 @@ create table if not exists public.field_executives (
   vehicle_insurance_exp_date date,
   vehicle_pollution_exp_date date,
   biometric_id text,
+  emergency_contact_name text,
   emergency_contact_number text,
+  emergency_contact_relation text,
+  aadhaar_front_path text,
+  aadhaar_back_path text,
+  dl_front_path text,
+  dl_back_path text,
+  profile_photo_path text,
   is_active boolean not null default true,
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now(),
@@ -63,7 +70,14 @@ alter table public.field_executives
   add column if not exists vehicle_insurance_exp_date date,
   add column if not exists vehicle_pollution_exp_date date,
   add column if not exists biometric_id text,
-  add column if not exists emergency_contact_number text;
+  add column if not exists emergency_contact_name text,
+  add column if not exists emergency_contact_number text,
+  add column if not exists emergency_contact_relation text,
+  add column if not exists aadhaar_front_path text,
+  add column if not exists aadhaar_back_path text,
+  add column if not exists dl_front_path text,
+  add column if not exists dl_back_path text,
+  add column if not exists profile_photo_path text;
 
 alter table public.field_executives
   add column if not exists onboarding_token_hash text,

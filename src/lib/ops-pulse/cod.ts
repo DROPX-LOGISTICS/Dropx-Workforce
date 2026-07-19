@@ -141,12 +141,15 @@ export type OpsDailySubmissionRow = {
   submitter_name: string | null;
   remittance_codes: string[] | null;
   attachments: CodAttachment[] | null;
+  checklist_payload?: Record<string, unknown> | null;
   status: string;
   manager_status: string;
+  manager_remarks?: string | null;
   ai_status: string | null;
   ai_confidence: number | string | null;
   ai_summary: string | null;
   created_at: string;
+  stations?: CodLocationRow | CodLocationRow[] | null;
 };
 
 export const depositSlipAttachmentFields = [
@@ -438,4 +441,54 @@ export async function loadPortalCheckRuns(
   const { data, error } = await query.limit(200);
   if (error) return { rows: [] as PortalCheckRunRow[], error: error.message };
   return { rows: (data ?? []) as PortalCheckRunRow[], error: null };
+}
+
+export async function loadCodSubmissions(
+  companyId: string,
+  locationScopeIds: string[],
+  hasAllLocationAccess: boolean,
+  params: { fromDate?: string; toDate?: string; locationId?: string; validationStatus?: string; formType?: string }
+) {
+  if (!supabaseAdmin) return { rows: [] as CodSubmissionRow[], error: "Supabase service role key is not configured." };
+  let query = supabaseAdmin
+    .from("cod_submissions")
+    .select("id, submission_no, form_type, client, channel, location_id, station_code, cod_period_from, cod_period_to, cod_date, deposit_date, remittance_creation_date, remittance_creation_time, remittance_submission_date, remittance_amount, cod_as_per_erp, cod_amount, deposited_amount, remittance_code, deposit_window, cod_master_id, payment_mode, reference_no, proof_url, submitter_name, remarks, status, validation_status, validated_amount, validated_at, validation_remarks, validation_payload, attachments, deposit_slip_attachments, ai_status, ai_confidence, ai_summary, created_at, stations (id, station_code, station_name, state, providers (code, name), location_models (code, name))")
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: false });
+
+  if (!hasAllLocationAccess) query = query.in("location_id", locationScopeIds.length ? locationScopeIds : ["00000000-0000-0000-0000-000000000000"]);
+  if (params.fromDate) query = query.gte("cod_period_from", params.fromDate);
+  if (params.toDate) query = query.lte("cod_period_to", params.toDate);
+  if (params.locationId) query = query.eq("location_id", params.locationId);
+  if (params.validationStatus) query = query.eq("validation_status", params.validationStatus);
+  if (params.formType) query = query.eq("form_type", params.formType);
+
+  const { data, error } = await query.limit(250);
+  if (error) return { rows: [] as CodSubmissionRow[], error: error.message };
+  return { rows: (data ?? []) as CodSubmissionRow[], error: null };
+}
+
+export async function loadDailySubmissions(
+  companyId: string,
+  locationScopeIds: string[],
+  hasAllLocationAccess: boolean,
+  params: { businessDate?: string; locationId?: string; managerStatus?: string; aiStatus?: string }
+) {
+  if (!supabaseAdmin) return { rows: [] as OpsDailySubmissionRow[], error: "Supabase service role key is not configured." };
+  let query = supabaseAdmin
+    .from("ops_daily_submissions")
+    .select("id, submission_no, location_id, station_code, business_date, submitter_name, remittance_codes, attachments, checklist_payload, status, manager_status, manager_remarks, ai_status, ai_confidence, ai_summary, created_at, stations (id, station_code, station_name, state, providers (code, name), location_models (code, name))")
+    .eq("company_id", companyId)
+    .order("business_date", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (!hasAllLocationAccess) query = query.in("location_id", locationScopeIds.length ? locationScopeIds : ["00000000-0000-0000-0000-000000000000"]);
+  if (params.businessDate) query = query.eq("business_date", params.businessDate);
+  if (params.locationId) query = query.eq("location_id", params.locationId);
+  if (params.managerStatus) query = query.eq("manager_status", params.managerStatus);
+  if (params.aiStatus) query = query.eq("ai_status", params.aiStatus);
+
+  const { data, error } = await query.limit(250);
+  if (error) return { rows: [] as OpsDailySubmissionRow[], error: error.message };
+  return { rows: (data ?? []) as OpsDailySubmissionRow[], error: null };
 }

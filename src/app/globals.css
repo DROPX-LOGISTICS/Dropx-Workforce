@@ -1860,6 +1860,10 @@ h3 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.form-grid.five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .form-grid.two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -1898,9 +1902,44 @@ h3 {
   grid-column: span 4;
 }
 
+.span-5 {
+  grid-column: span 5;
+}
+
 .section-divider {
   border-top: 1px solid var(--border);
   margin: 12px 0;
+}
+
+.section-divider strong,
+.section-divider span {
+  display: block;
+}
+
+.section-divider span {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.subtle-list {
+  color: var(--muted);
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0 18px;
+  padding: 0;
+}
+
+.inline-validation-form {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 130px 110px minmax(150px, 1fr) auto;
+  min-width: 520px;
+}
+
+.compact-field {
+  min-height: 36px;
 }
 
 .compact-head {
@@ -3562,12 +3601,16 @@ tr:last-child td {
   .grid.two,
   .process-strip,
   .form-grid,
-  .form-grid.three {
+  .form-grid.three,
+  .form-grid.four,
+  .form-grid.five {
     grid-template-columns: 1fr;
   }
 
   .span-2,
-  .span-3 {
+  .span-3,
+  .span-4,
+  .span-5 {
     grid-column: span 1;
   }
 

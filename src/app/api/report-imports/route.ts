@@ -49,6 +49,7 @@ const sourceLabels: Record<SourceType, string> = {
   cashbook: "Cashbook",
   iocl_fuel: "IOC fuel"
 };
+const HASH_LOOKUP_CHUNK_SIZE = 25;
 
 function clean(value: unknown) {
   return String(value ?? "").trim().replace(/^'+/, "").replace(/'+$/, "");
@@ -273,8 +274,8 @@ function parseAmazon(raw: RawRecord, rowNumber: number): NormalizedImport | null
 function readableError(error: unknown) {
   if (error instanceof Error) return error.message;
   if (error && typeof error === "object") {
-    const candidate = error as { details?: unknown; hint?: unknown; message?: unknown; statusText?: unknown };
-    return [candidate.message, candidate.details, candidate.hint, candidate.statusText]
+    const candidate = error as { code?: unknown; details?: unknown; hint?: unknown; message?: unknown; status?: unknown; statusText?: unknown };
+    return [candidate.message, candidate.details, candidate.hint, candidate.statusText, candidate.code, candidate.status]
       .map((item) => clean(item))
       .filter(Boolean)
       .join(" ");
@@ -572,7 +573,7 @@ async function recalculateCps(companyId: string, touched: Array<{ stationCode?: 
 }
 
 function databaseSetupError(message: string) {
-  if (message.includes("does not exist") || message.includes("schema cache") || message.includes("cps_") || message.includes("report_import_")) {
+  if (message.includes("does not exist") || message.includes("schema cache")) {
     return Response.json({ error: `${message} Run scripts/cps_report_imports_v1.sql in Supabase SQL Editor, then retry.` }, { status: 400 });
   }
   return Response.json({ error: message }, { status: 400 });
@@ -581,8 +582,8 @@ function databaseSetupError(message: string) {
 async function loadExistingImportHashes(companyId: string, sourceType: SourceType, hashes: string[]) {
   if (!supabaseAdmin || !hashes.length) return new Set<string>();
   const existing = new Set<string>();
-  for (let index = 0; index < hashes.length; index += 500) {
-    const chunk = hashes.slice(index, index + 500);
+  for (let index = 0; index < hashes.length; index += HASH_LOOKUP_CHUNK_SIZE) {
+    const chunk = hashes.slice(index, index + HASH_LOOKUP_CHUNK_SIZE);
     const { data, error } = await supabaseAdmin
       .from("report_import_rows")
       .select("row_hash")
@@ -590,7 +591,14 @@ async function loadExistingImportHashes(companyId: string, sourceType: SourceTyp
       .eq("source_type", sourceType)
       .eq("status", "Imported")
       .in("row_hash", chunk);
-    if (error) throw new Error(`report_import_rows hash lookup rows ${index + 1}-${index + chunk.length}: ${readableError(error)}`);
+    if (error) {
+      const message = readableError(error);
+      if (message.includes("does not exist") || message.includes("schema cache")) {
+        throw new Error(`report_import_rows hash lookup rows ${index + 1}-${index + chunk.length}: ${message}`);
+      }
+      console.warn(`Skipping historical duplicate lookup rows ${index + 1}-${index + chunk.length}: ${message}`);
+      continue;
+    }
     (data ?? []).forEach((row) => existing.add(row.row_hash));
   }
   return existing;

@@ -234,13 +234,7 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const executiveId = String(formData.get("executive_id") ?? "");
     const account = await requireExecutiveAccess(executiveId);
-    const uploads = await Promise.all([
-      uploadExecutiveFile(formData.get("aadhaar_front"), account.companyId, account.id, "aadhaar-front"),
-      uploadExecutiveFile(formData.get("aadhaar_back"), account.companyId, account.id, "aadhaar-back"),
-      uploadExecutiveFile(formData.get("dl_front"), account.companyId, account.id, "dl-front"),
-      uploadExecutiveFile(formData.get("dl_back"), account.companyId, account.id, "dl-back"),
-      uploadExecutiveFile(formData.get("profile_photo"), account.companyId, account.id, "photo")
-    ]);
+
     const updatePayload: Record<string, unknown> = {
       gender: requiredText(formData.get("gender"), "Gender"),
       date_of_birth: normalizeDate(requiredText(formData.get("date_of_birth"), "Date of birth")),
@@ -267,18 +261,38 @@ export async function POST(request: Request) {
       is_active: true,
       updated_at: new Date().toISOString()
     };
-    const [aadhaarFrontPath, aadhaarBackPath, dlFrontPath, dlBackPath, profilePhotoPath] = uploads;
-    if (aadhaarFrontPath) updatePayload.aadhaar_front_path = aadhaarFrontPath;
-    if (aadhaarBackPath) updatePayload.aadhaar_back_path = aadhaarBackPath;
-    if (dlFrontPath) updatePayload.dl_front_path = dlFrontPath;
-    if (dlBackPath) updatePayload.dl_back_path = dlBackPath;
-    if (profilePhotoPath) updatePayload.profile_photo_path = profilePhotoPath;
-    const updateResult = await supabaseAdmin
+
+    const profileUpdateResult = await supabaseAdmin
       .from("field_executives")
       .update(updatePayload)
       .eq("id", account.id)
       .eq("company_id", account.companyId);
-    if (updateResult.error) throw new Error(updateResult.error.message);
+    if (profileUpdateResult.error) throw new Error(profileUpdateResult.error.message);
+
+    const uploads = await Promise.all([
+      uploadExecutiveFile(formData.get("aadhaar_front"), account.companyId, account.id, "aadhaar-front"),
+      uploadExecutiveFile(formData.get("aadhaar_back"), account.companyId, account.id, "aadhaar-back"),
+      uploadExecutiveFile(formData.get("dl_front"), account.companyId, account.id, "dl-front"),
+      uploadExecutiveFile(formData.get("dl_back"), account.companyId, account.id, "dl-back"),
+      uploadExecutiveFile(formData.get("profile_photo"), account.companyId, account.id, "photo")
+    ]);
+    const [aadhaarFrontPath, aadhaarBackPath, dlFrontPath, dlBackPath, profilePhotoPath] = uploads;
+    const uploadPayload: Record<string, unknown> = {};
+    if (aadhaarFrontPath) uploadPayload.aadhaar_front_path = aadhaarFrontPath;
+    if (aadhaarBackPath) uploadPayload.aadhaar_back_path = aadhaarBackPath;
+    if (dlFrontPath) uploadPayload.dl_front_path = dlFrontPath;
+    if (dlBackPath) uploadPayload.dl_back_path = dlBackPath;
+    if (profilePhotoPath) uploadPayload.profile_photo_path = profilePhotoPath;
+    if (Object.keys(uploadPayload).length > 0) {
+      const uploadUpdateResult = await supabaseAdmin
+        .from("field_executives")
+        .update(uploadPayload)
+        .eq("id", account.id)
+        .eq("company_id", account.companyId);
+      if (uploadUpdateResult.error) {
+        throw new Error(`Profile details were saved, but upload paths were not saved. Run scripts/field_executives_v1.sql in Supabase and try again. ${uploadUpdateResult.error.message}`);
+      }
+    }
     const executive = await loadExecutive(account.id, account.companyId);
     return NextResponse.json({ ok: true, profile: await serializeExecutive(executive), notice: "Profile saved successfully." });
   } catch (error) {

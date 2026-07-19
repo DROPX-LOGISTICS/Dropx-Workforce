@@ -1,0 +1,13 @@
+{
+  "name": "dropx-amazon-scc-playwright-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check server.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.49.1"
+  }
+}

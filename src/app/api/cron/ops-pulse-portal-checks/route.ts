@@ -28,6 +28,34 @@ type PortalRun = {
   }> | null;
 };
 
+type AmazonConnector = {
+  id: string;
+  username: string | null;
+  login_url: string | null;
+  base_url: string | null;
+  status: string | null;
+  is_enabled: boolean | null;
+  sync_enabled: boolean | null;
+  amazon_connector_tasks?: Array<{
+    task_code: string;
+    source_url: string | null;
+    is_enabled: boolean | null;
+    sync_interval_minutes: number | string | null;
+  }> | null;
+};
+
+type SccCredentials = {
+  connectorId: string;
+  username: string | null;
+  password: string | null;
+  mfaSecret: string | null;
+  loginUrl: string | null;
+  urls: {
+    driver_reconciliation: string | null;
+    bank_deposits: string | null;
+  };
+};
+
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
@@ -64,6 +92,46 @@ async function logRun(run: PortalRun, eventType: string, message: string, payloa
   });
 }
 
+async function loadSccCredentials(companyId: string): Promise<SccCredentials | null> {
+  if (!supabaseAdmin) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from("amazon_connectors")
+    .select("id, username, login_url, base_url, status, is_enabled, sync_enabled, amazon_connector_tasks(task_code, source_url, is_enabled, sync_interval_minutes)")
+    .eq("company_id", companyId)
+    .eq("portal_code", "scc")
+    .maybeSingle();
+
+  if (error || !data) return null;
+  const connector = data as unknown as AmazonConnector;
+  if (!connector.is_enabled) return null;
+
+  const passwordResult = await supabaseAdmin.rpc("get_amazon_connector_password", {
+    connector_uuid: connector.id
+  });
+  const mfaResult = await supabaseAdmin.rpc("get_amazon_connector_mfa_secret", {
+    connector_uuid: connector.id
+  });
+
+  const tasks = connector.amazon_connector_tasks ?? [];
+  const taskUrl = (taskCode: string) => {
+    const task = tasks.find((row) => row.task_code === taskCode && row.is_enabled !== false);
+    return task?.source_url ?? null;
+  };
+
+  return {
+    connectorId: connector.id,
+    username: connector.username,
+    password: typeof passwordResult.data === "string" ? passwordResult.data : null,
+    mfaSecret: typeof mfaResult.data === "string" ? mfaResult.data : null,
+    loginUrl: connector.login_url,
+    urls: {
+      driver_reconciliation: taskUrl("driver_reconciliation"),
+      bank_deposits: taskUrl("prepared_deposit")
+    }
+  };
+}
+
 async function processRun(run: PortalRun, workerUrl: string, workerSecret: string) {
   const setting = firstRelation(run.cod_station_settings);
   if (!setting) {
@@ -73,6 +141,25 @@ async function processRun(run: PortalRun, workerUrl: string, workerSecret: strin
       last_checked_at: new Date().toISOString(),
       attempt_count: Number(run.attempt_count ?? 0) + 1,
       next_check_at: retryAt(30)
+    });
+    return { error: 1, ok: 0 };
+  }
+
+  const sccCredentials = await loadSccCredentials(run.company_id);
+  const username = setting.portal_username || sccCredentials?.username || null;
+  const password = sccCredentials?.password || null;
+  const loginUrl = setting.portal_login_url || sccCredentials?.loginUrl || "https://www.amazonlogistics.eu/station/dashboard/workitemsvisibility";
+  const driverReconciliationUrl = setting.amazon_driver_recon_url || sccCredentials?.urls.driver_reconciliation || "https://www.amazonlogistics.eu/station/dashboard/driverreconciliation";
+  const bankDepositsUrl = setting.amazon_bank_deposit_url || sccCredentials?.urls.bank_deposits || "https://www.amazonlogistics.eu/station/dashboard/bankdeposits";
+
+  if (!username || !password) {
+    await markRun(run.id, {
+      status: "Error",
+      error_message: "Amazon SCC connector is not configured. Add SCC username/password in Settings > Amazon Connector.",
+      summary: "Waiting for owner-only SCC connector credentials.",
+      last_checked_at: new Date().toISOString(),
+      attempt_count: Number(run.attempt_count ?? 0) + 1,
+      next_check_at: retryAt(setting.portal_check_interval_minutes)
     });
     return { error: 1, ok: 0 };
   }
@@ -92,13 +179,17 @@ async function processRun(run: PortalRun, workerUrl: string, workerSecret: strin
     portal_station_code: run.portal_station_code,
     check_date: run.check_date,
     check_type: run.check_type,
-    login_url: setting.portal_login_url,
-    username: setting.portal_username,
+    login_url: loginUrl,
+    username,
+    password,
+    mfa_secret: sccCredentials?.mfaSecret ?? null,
     secret_name: setting.portal_secret_name,
     urls: {
-      driver_reconciliation: setting.amazon_driver_recon_url,
-      bank_deposits: setting.amazon_bank_deposit_url
-    }
+      driver_reconciliation: driverReconciliationUrl,
+      bank_deposits: bankDepositsUrl
+    },
+    portal: "scc",
+    task_code: run.check_type
   };
 
   try {

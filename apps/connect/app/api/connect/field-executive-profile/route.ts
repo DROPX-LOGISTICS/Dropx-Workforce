@@ -25,6 +25,7 @@ type FieldExecutiveRow = {
   state_code: string | null;
   father_name: string | null;
   blood_group: string | null;
+  is_handicapped: boolean | null;
   bank_account_no: string | null;
   ifsc_code: string | null;
   driving_license_no: string | null;
@@ -135,7 +136,7 @@ async function loadExecutive(executiveId: string, companyId: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const result = await supabaseAdmin
     .from("field_executives")
-    .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, address, postal_pin, landmark, state_code, father_name, blood_group, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, stations (station_code, station_name)")
+    .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, stations (station_code, station_name)")
     .eq("id", executiveId)
     .eq("company_id", companyId)
     .maybeSingle();
@@ -173,6 +174,7 @@ async function serializeExecutive(row: FieldExecutiveRow) {
       panNumber: row.pan_number ?? "",
       fatherName: row.father_name ?? "",
       bloodGroup: row.blood_group ?? "",
+      isHandicapped: typeof row.is_handicapped === "boolean" ? String(row.is_handicapped) : "",
       address: row.address ?? "",
       stateCode: row.state_code ?? "",
       pincode: row.postal_pin ?? "",
@@ -242,6 +244,7 @@ export async function POST(request: Request) {
       pan_number: requiredPan(formData.get("pan_number")),
       father_name: requiredText(formData.get("father_name"), "Father name"),
       blood_group: requiredText(formData.get("blood_group"), "Blood group"),
+      is_handicapped: requiredText(formData.get("is_handicapped"), "Handicapped") === "true",
       address: requiredText(formData.get("address"), "Address"),
       state_code: requiredText(formData.get("state_code"), "State code").toUpperCase(),
       postal_pin: requiredDigits(formData.get("pincode"), "Pincode"),

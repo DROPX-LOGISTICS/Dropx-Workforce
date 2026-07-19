@@ -41,7 +41,7 @@ type ExecutiveRow = {
   state_code: string | null;
   father_name: string | null;
   blood_group: string | null;
-  is_handicapped: boolean;
+  is_handicapped: boolean | null;
   bank_account_no: string | null;
   ifsc_code: string | null;
   driving_license_no: string | null;
@@ -51,7 +51,15 @@ type ExecutiveRow = {
   vehicle_insurance_exp_date: string | null;
   vehicle_pollution_exp_date: string | null;
   biometric_id: string | null;
+  emergency_contact_name: string | null;
   emergency_contact_number: string | null;
+  emergency_contact_relation: string | null;
+  aadhaar_front_path?: string | null;
+  aadhaar_back_path?: string | null;
+  dl_front_path?: string | null;
+  dl_back_path?: string | null;
+  profile_photo_path?: string | null;
+  upload_urls?: Record<string, string>;
   stations?: {
     station_code: string;
     station_name: string | null;
@@ -164,11 +172,35 @@ function displayValue(value: string | boolean | null | undefined) {
   return value || "-";
 }
 
+async function signedDocumentUrl(path: string | null | undefined) {
+  if (!supabaseAdmin || !path) return "";
+  const result = await supabaseAdmin.storage
+    .from("employee-profile-documents")
+    .createSignedUrl(path, 60 * 60);
+  return result.data?.signedUrl ?? "";
+}
+
 function ExecutiveDetail({ label, value }: { label: string; value: string | boolean | null | undefined }) {
   return (
     <div className="executive-detail-item">
       <dt>{label}</dt>
       <dd>{displayValue(value)}</dd>
+    </div>
+  );
+}
+
+function UploadDetail({ label, url }: { label: string; url?: string | null }) {
+  return (
+    <div className="executive-detail-item">
+      <dt>{label}</dt>
+      <dd>
+        {url ? (
+          <span className="inline-actions">
+            <a className="button secondary compact" href={url} rel="noreferrer" target="_blank">View</a>
+            <a className="button secondary compact" download href={url}>Download</a>
+          </span>
+        ) : "-"}
+      </dd>
     </div>
   );
 }
@@ -199,7 +231,14 @@ function FieldExecutiveDetails({ executive }: { executive: ExecutiveRow }) {
           <ExecutiveDetail label="Father name" value={executive.father_name} />
           <ExecutiveDetail label="Blood group" value={executive.blood_group} />
           <ExecutiveDetail label="Handicapped" value={executive.is_handicapped} />
-          <ExecutiveDetail label="Emergency contact" value={executive.emergency_contact_number} />
+        </dl>
+      </section>
+      <section>
+        <h3>Emergency contact</h3>
+        <dl className="executive-detail-grid">
+          <ExecutiveDetail label="Contact number" value={executive.emergency_contact_number} />
+          <ExecutiveDetail label="Contact name" value={executive.emergency_contact_name} />
+          <ExecutiveDetail label="Relation" value={executive.emergency_contact_relation} />
         </dl>
       </section>
       <section>
@@ -229,6 +268,16 @@ function FieldExecutiveDetails({ executive }: { executive: ExecutiveRow }) {
           <ExecutiveDetail label="Vehicle registration expiry" value={executive.vehicle_reg_exp_date} />
           <ExecutiveDetail label="Insurance expiry" value={executive.vehicle_insurance_exp_date} />
           <ExecutiveDetail label="Pollution expiry" value={executive.vehicle_pollution_exp_date} />
+        </dl>
+      </section>
+      <section>
+        <h3>Uploads</h3>
+        <dl className="executive-detail-grid">
+          <UploadDetail label="Aadhaar front" url={executive.upload_urls?.aadhaarFront} />
+          <UploadDetail label="Aadhaar back" url={executive.upload_urls?.aadhaarBack} />
+          <UploadDetail label="DL front" url={executive.upload_urls?.dlFront} />
+          <UploadDetail label="DL back" url={executive.upload_urls?.dlBack} />
+          <UploadDetail label="Profile photo" url={executive.upload_urls?.profilePhoto} />
         </dl>
       </section>
     </div>
@@ -287,12 +336,20 @@ function FieldExecutiveForm({
       <label>Father name<input className="field" name="father_name" placeholder="Enter father name" required defaultValue={textValue(executive?.father_name)} /></label>
       <label>Blood group<input className="field" name="blood_group" placeholder="Enter blood group" required defaultValue={textValue(executive?.blood_group)} /></label>
       <label>Handicapped
-        <SearchableSelect name="is_handicapped" options={yesNoOptions} defaultValue={executive?.is_handicapped ? "true" : "false"} placeholder="Select" required />
+        <SearchableSelect
+          name="is_handicapped"
+          options={yesNoOptions}
+          defaultValue={typeof executive?.is_handicapped === "boolean" ? String(executive.is_handicapped) : undefined}
+          placeholder="Select"
+          required
+        />
       </label>
 
       <label>Bank A/c No.<input className="field" inputMode="numeric" name="bank_account_no" placeholder="Enter bank account number" required defaultValue={textValue(executive?.bank_account_no)} /></label>
       <label>IFSC<input className="field" name="ifsc_code" placeholder="Enter IFSC" required defaultValue={textValue(executive?.ifsc_code)} /></label>
-      <label>Emergency contact<input className="field" inputMode="numeric" maxLength={10} name="emergency_contact_number" pattern="[0-9]{10}" placeholder="Enter emergency contact" required defaultValue={textValue(executive?.emergency_contact_number)} /></label>
+      <label>Emergency contact number<input className="field" inputMode="numeric" maxLength={10} name="emergency_contact_number" pattern="[0-9]{10}" placeholder="Enter emergency contact number" required defaultValue={textValue(executive?.emergency_contact_number)} /></label>
+      <label>Emergency contact name<input className="field" name="emergency_contact_name" placeholder="Enter contact person name" required defaultValue={textValue(executive?.emergency_contact_name)} /></label>
+      <label>Emergency relation<input className="field" name="emergency_contact_relation" placeholder="Enter relation" required defaultValue={textValue(executive?.emergency_contact_relation)} /></label>
 
       <label>Driving license no.<input className="field" name="driving_license_no" placeholder="Enter DL number" required defaultValue={textValue(executive?.driving_license_no)} /></label>
       <label>DL expiry date<input className="field" name="driving_license_exp_date" required type="date" defaultValue={textValue(executive?.driving_license_exp_date)} /></label>
@@ -417,7 +474,14 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
         vehicle_insurance_exp_date,
         vehicle_pollution_exp_date,
         biometric_id,
+        emergency_contact_name,
         emergency_contact_number,
+        emergency_contact_relation,
+        aadhaar_front_path,
+        aadhaar_back_path,
+        dl_front_path,
+        dl_back_path,
+        profile_photo_path,
         stations (station_code, station_name, providers (name))
       `;
   const legacyExecutiveSelect = executiveSelect.replace("mobile_country_code,", "");
@@ -458,12 +522,23 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
       status: fieldExecutiveStatus(executive)
     };
   });
+  const uploadUrlRows = await Promise.all(((executivesResult.data ?? []) as unknown as ExecutiveRow[]).map(async (executive) => ({
+    ...executive,
+    upload_urls: {
+      aadhaarFront: await signedDocumentUrl(executive.aadhaar_front_path),
+      aadhaarBack: await signedDocumentUrl(executive.aadhaar_back_path),
+      dlFront: await signedDocumentUrl(executive.dl_front_path),
+      dlBack: await signedDocumentUrl(executive.dl_back_path),
+      profilePhoto: await signedDocumentUrl(executive.profile_photo_path)
+    }
+  })));
+
   const editExecutive = editId
-    ? ((executivesResult.data ?? []) as unknown as ExecutiveRow[])
+    ? uploadUrlRows
         .find((executive) => executive.id === editId && (authorization.hasAllLocationAccess || allowedLocationIds.has(executive.location_id))) ?? null
     : null;
   const viewExecutive = viewId
-    ? ((executivesResult.data ?? []) as unknown as ExecutiveRow[])
+    ? uploadUrlRows
         .find((executive) => executive.id === viewId && (authorization.hasAllLocationAccess || allowedLocationIds.has(executive.location_id))) ?? null
     : null;
 

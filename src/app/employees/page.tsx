@@ -2,11 +2,12 @@ import { cookies } from "next/headers";
 import { AppShell } from "@/components/app-shell";
 import { EmployeeForm } from "@/components/employee-form";
 import { PageHead } from "@/components/page-head";
+import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
-import { createEmployee } from "./actions";
+import { createEmployee, updateEmployee } from "./actions";
 
 type LocationRow = {
   id: string;
@@ -31,6 +32,19 @@ type EmployeeRow = {
   mobile: string;
   email: string | null;
   date_of_join: string;
+  location_id?: string | null;
+  designation_id?: string | null;
+  gender?: string | null;
+  date_of_birth?: string | null;
+  father_name?: string | null;
+  blood_group?: string | null;
+  address?: string | null;
+  state_code?: string | null;
+  pincode?: string | null;
+  landmark?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_number?: string | null;
+  emergency_contact_relation?: string | null;
   statutory_applicability: string[] | null;
   profile_completion_status?: string | null;
   profile_completed_at?: string | null;
@@ -42,6 +56,7 @@ type EmployeeRow = {
   aadhaar_back_path?: string | null;
   pan_upload_path?: string | null;
   profile_photo_path?: string | null;
+  upload_urls?: Record<string, string>;
   is_active: boolean;
   stations?: { station_code: string; station_name: string | null } | { station_code: string; station_name: string | null }[] | null;
   designations?: { code: string; name: string } | { code: string; name: string }[] | null;
@@ -99,7 +114,113 @@ function isMissingColumnError(error: unknown) {
   return message.includes("column") && (message.includes("does not exist") || message.includes("schema cache"));
 }
 
-async function loadEmployees(companyId: string, locationScopeIds: string[], hasAllLocationAccess: boolean) {
+function displayValue(value: string | boolean | null | undefined) {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return value || "-";
+}
+
+function EmployeeDetail({ label, value }: { label: string; value: string | boolean | null | undefined }) {
+  return (
+    <div className="executive-detail-item">
+      <dt>{label}</dt>
+      <dd>{displayValue(value)}</dd>
+    </div>
+  );
+}
+
+function UploadDetail({ label, url }: { label: string; url?: string | null }) {
+  return (
+    <div className="executive-detail-item">
+      <dt>{label}</dt>
+      <dd>
+        {url ? (
+          <span className="inline-actions">
+            <a className="button secondary compact" href={url} rel="noreferrer" target="_blank">View</a>
+            <a className="button secondary compact" download href={url}>Download</a>
+          </span>
+        ) : "-"}
+      </dd>
+    </div>
+  );
+}
+
+function EmployeeDetails({ employee }: { employee: EmployeeRow }) {
+  const location = firstRelation(employee.stations);
+  const designation = firstRelation(employee.designations);
+  return (
+    <div className="executive-details">
+      <section>
+        <h3>Employment</h3>
+        <dl className="executive-detail-grid">
+          <EmployeeDetail label="Employee ID" value={employee.employee_code} />
+          <EmployeeDetail label="Full name" value={employee.full_name} />
+          <EmployeeDetail label="Biometric ID" value={employee.biometric_id} />
+          <EmployeeDetail label="Date of join" value={employee.date_of_join} />
+          <EmployeeDetail label="Location" value={location?.station_name || location?.station_code} />
+          <EmployeeDetail label="Designation" value={designation?.name} />
+          <EmployeeDetail label="Statutory" value={statutoryLabel(employee.statutory_applicability)} />
+          <EmployeeDetail label="Status" value={employeeStatus(employee)} />
+        </dl>
+      </section>
+      <section>
+        <h3>Personal and contact</h3>
+        <dl className="executive-detail-grid">
+          <EmployeeDetail label="Mobile" value={`+${employee.mobile_country_code ?? "91"} ${employee.mobile}`} />
+          <EmployeeDetail label="Email" value={employee.email} />
+          <EmployeeDetail label="Gender" value={employee.gender} />
+          <EmployeeDetail label="Date of birth" value={employee.date_of_birth} />
+          <EmployeeDetail label="Father name" value={employee.father_name} />
+          <EmployeeDetail label="Blood group" value={employee.blood_group} />
+        </dl>
+      </section>
+      <section>
+        <h3>Emergency contact</h3>
+        <dl className="executive-detail-grid">
+          <EmployeeDetail label="Contact number" value={employee.emergency_contact_number} />
+          <EmployeeDetail label="Contact name" value={employee.emergency_contact_name} />
+          <EmployeeDetail label="Relation" value={employee.emergency_contact_relation} />
+        </dl>
+      </section>
+      <section>
+        <h3>Identity and address</h3>
+        <dl className="executive-detail-grid">
+          <EmployeeDetail label="Aadhaar number" value={employee.aadhaar_number} />
+          <EmployeeDetail label="PAN number" value={employee.pan_number} />
+          <EmployeeDetail label="Address" value={employee.address} />
+          <EmployeeDetail label="State" value={employee.state_code} />
+          <EmployeeDetail label="Postal PIN" value={employee.pincode} />
+          <EmployeeDetail label="Landmark" value={employee.landmark} />
+        </dl>
+      </section>
+      <section>
+        <h3>Bank</h3>
+        <dl className="executive-detail-grid">
+          <EmployeeDetail label="Bank account number" value={employee.bank_account_no} />
+          <EmployeeDetail label="IFSC" value={employee.ifsc} />
+        </dl>
+      </section>
+      <section>
+        <h3>Uploads</h3>
+        <dl className="executive-detail-grid">
+          <UploadDetail label="Aadhaar front" url={employee.upload_urls?.aadhaarFront} />
+          <UploadDetail label="Aadhaar back" url={employee.upload_urls?.aadhaarBack} />
+          <UploadDetail label="PAN upload" url={employee.upload_urls?.pan} />
+          <UploadDetail label="Profile photo" url={employee.upload_urls?.profilePhoto} />
+        </dl>
+      </section>
+    </div>
+  );
+}
+
+async function signedDocumentUrl(path: string | null | undefined) {
+  if (!supabaseAdmin || !path) return "";
+  const result = await supabaseAdmin.storage
+    .from("employee-profile-documents")
+    .createSignedUrl(path, 60 * 60);
+  return result.data?.signedUrl ?? "";
+}
+
+async function loadEmployees(companyId: string, locationScopeIds: string[], hasAllLocationAccess: boolean, editId?: string, viewId?: string) {
   if (!supabaseAdmin) {
     return {
       employees: [] as EmployeeRow[],
@@ -112,7 +233,7 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
   const [initialEmployeesResult, locationsResult, designationsResult] = await Promise.all([
     supabaseAdmin
       .from("employees")
-      .select("id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, statutory_applicability, profile_completion_status, profile_completed_at, aadhaar_number, pan_number, bank_account_no, ifsc, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_photo_path, is_active, stations (station_code, station_name), designations (code, name)")
+      .select("id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, location_id, designation_id, statutory_applicability, profile_completion_status, profile_completed_at, gender, date_of_birth, aadhaar_number, pan_number, father_name, blood_group, address, state_code, pincode, landmark, emergency_contact_name, emergency_contact_number, emergency_contact_relation, bank_account_no, ifsc, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_photo_path, is_active, stations (station_code, station_name), designations (code, name)")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false }),
     supabaseAdmin
@@ -162,8 +283,20 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
       return location?.station_code ? allowedCodes.has(location.station_code) : false;
     });
 
+  const employeesWithUrls = await Promise.all((employees as EmployeeRow[]).map(async (employee) => ({
+    ...employee,
+    upload_urls: {
+      aadhaarFront: await signedDocumentUrl(employee.aadhaar_front_path),
+      aadhaarBack: await signedDocumentUrl(employee.aadhaar_back_path),
+      pan: await signedDocumentUrl(employee.pan_upload_path),
+      profilePhoto: await signedDocumentUrl(employee.profile_photo_path)
+    }
+  })));
+
   return {
-    employees: employees as EmployeeRow[],
+    employees: employeesWithUrls,
+    editEmployee: editId ? employeesWithUrls.find((employee) => employee.id === editId) ?? null : null,
+    viewEmployee: viewId ? employeesWithUrls.find((employee) => employee.id === viewId) ?? null : null,
     locations: allowedLocations as LocationRow[],
     designations: (designationsResult.data ?? []) as DesignationRow[],
     error: null
@@ -172,11 +305,11 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
 
 export const dynamic = "force-dynamic";
 
-export default async function EmployeesPage() {
+export default async function EmployeesPage({ searchParams }: { searchParams?: { edit?: string; view?: string } }) {
   const authorization = await requirePagePermission("employees", "access");
   const companyId = requireCompanyId(authorization);
   const pagePermission = authorization.permissions.employees;
-  const { employees, locations, designations, error } = await loadEmployees(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
+  const { employees, editEmployee, locations, designations, error, viewEmployee } = await loadEmployees(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess, searchParams?.edit, searchParams?.view);
   const flash = loadFlash();
   const locationOptions = locations.map((location) => ({
     value: location.id,
@@ -247,6 +380,7 @@ export default async function EmployeesPage() {
                   <th>Designation</th>
                   <th>Statutory</th>
                   <th>Status</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -265,15 +399,53 @@ export default async function EmployeesPage() {
                       <td>{designation?.name ?? "-"}</td>
                       <td>{statutoryLabel(employee.statutory_applicability)}</td>
                       <td><StatusPill status={employeeStatus(employee)} /></td>
+                      <td className="action-cell">
+                        <span className="inline-actions">
+                          <PendingLink className="button secondary compact" href={`/employees?view=${employee.id}`} scroll={false}>View</PendingLink>
+                          {pagePermission.canEdit ? (
+                            <PendingLink className="button secondary compact" href={`/employees?edit=${employee.id}`} scroll={false}>Edit</PendingLink>
+                          ) : null}
+                        </span>
+                      </td>
                     </tr>
                   );
                 }) : (
-                  <tr><td className="empty-cell" colSpan={10}>No employees added yet.</td></tr>
+                  <tr><td className="empty-cell" colSpan={11}>No employees added yet.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </section>
+      ) : null}
+
+      {!error && pagePermission.canView && viewEmployee ? (
+        <div className="modal-backdrop">
+          <section className="modal-panel wide" aria-label="View employee">
+            <div className="panel-head">
+              <div>
+                <h2>{viewEmployee.full_name}</h2>
+                <p className="subtle">Complete Employee profile</p>
+              </div>
+              <PendingLink className="icon-button" href="/employees" scroll={false} aria-label="Close employee details">x</PendingLink>
+            </div>
+            <EmployeeDetails employee={viewEmployee} />
+          </section>
+        </div>
+      ) : null}
+
+      {!error && pagePermission.canEdit && editEmployee ? (
+        <div className="modal-backdrop">
+          <section className="modal-panel wide" aria-label="Edit employee">
+            <div className="panel-head">
+              <div>
+                <h2>Edit employee</h2>
+                <p className="subtle">Maintain employee registration details.</p>
+              </div>
+              <PendingLink className="icon-button" href="/employees" scroll={false} aria-label="Close edit employee">x</PendingLink>
+            </div>
+            <EmployeeForm action={updateEmployee} designationOptions={designationOptions} employee={editEmployee} locationOptions={locationOptions} mode="edit" />
+          </section>
+        </div>
       ) : null}
     </AppShell>
   );

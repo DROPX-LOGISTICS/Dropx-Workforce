@@ -81,7 +81,9 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
   const vehicleInsuranceExpDate = required(formData.get("vehicle_insurance_exp_date"), "Vehicle insurance expiry date");
   const vehiclePollutionExpDate = required(formData.get("vehicle_pollution_exp_date"), "Vehicle pollution expiry date");
   const biometricId = required(formData.get("biometric_id"), "Biometric enrolment ID");
+  const emergencyContactName = required(formData.get("emergency_contact_name"), "Emergency contact name");
   const emergencyContactNumber = required(formData.get("emergency_contact_number"), "Emergency contact number").replace(/\D/g, "");
+  const emergencyContactRelation = required(formData.get("emergency_contact_relation"), "Emergency contact relation");
   const isActive = optional(formData.get("is_active")) !== "false";
 
   if (!/^\d{6,15}$/.test(mobile)) throw new Error("Mobile number must contain 6 to 15 digits.");
@@ -132,7 +134,9 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
       vehicle_insurance_exp_date: vehicleInsuranceExpDate,
       vehicle_pollution_exp_date: vehiclePollutionExpDate,
       biometric_id: biometricId,
+      emergency_contact_name: emergencyContactName,
       emergency_contact_number: emergencyContactNumber,
+      emergency_contact_relation: emergencyContactRelation,
       is_active: isActive
     }
   };

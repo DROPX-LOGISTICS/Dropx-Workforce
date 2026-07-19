@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { AppShell } from "@/components/app-shell";
+import { EmployeeActionMenu } from "@/components/employee-action-menu";
 import { EmployeeForm } from "@/components/employee-form";
 import { PageHead } from "@/components/page-head";
 import { PendingLink } from "@/components/pending-link";
@@ -366,7 +367,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
               <p className="subtle">{employees.length} records</p>
             </div>
           </div>
-          <div className="table-wrap">
+          <div className="table-wrap field-executive-table-wrap employee-table-wrap">
             <table>
               <thead>
                 <tr>
@@ -400,12 +401,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
                       <td>{statutoryLabel(employee.statutory_applicability)}</td>
                       <td><StatusPill status={employeeStatus(employee)} /></td>
                       <td className="action-cell">
-                        <span className="inline-actions">
-                          <PendingLink className="button secondary compact" href={`/employees?view=${employee.id}`} scroll={false}>View</PendingLink>
-                          {pagePermission.canEdit ? (
-                            <PendingLink className="button secondary compact" href={`/employees?edit=${employee.id}`} scroll={false}>Edit</PendingLink>
-                          ) : null}
-                        </span>
+                        <EmployeeActionMenu canEdit={pagePermission.canEdit} employeeId={employee.id} fullName={employee.full_name} />
                       </td>
                     </tr>
                   );

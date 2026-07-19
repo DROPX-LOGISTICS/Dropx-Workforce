@@ -32,6 +32,23 @@ function formatDateTime(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
+function effectiveTaskStatus({
+  connectorReady,
+  taskEnabled,
+  sourceUrl,
+  savedStatus
+}: {
+  connectorReady: boolean;
+  taskEnabled: boolean;
+  sourceUrl: string | null | undefined;
+  savedStatus: string | null | undefined;
+}) {
+  if (!taskEnabled) return "Paused";
+  if (!connectorReady || !sourceUrl) return "Not configured";
+  if (!savedStatus || savedStatus === "Not configured") return "Ready";
+  return savedStatus;
+}
+
 export default async function AmazonConnectorPage() {
   const authorization = await requirePagePermission("amazon_connector", "access");
   if (!isCompanyOwner(authorization)) redirect("/unauthorized?page=amazon_connector&action=owner");
@@ -77,6 +94,7 @@ export default async function AmazonConnectorPage() {
 
       <div className="whatsapp-settings-stack">
         {loaded.connectors.map(({ definition, connector, tasks }) => {
+          const connectorReady = Boolean(connector?.is_enabled && connector.status === "Ready");
           const taskRows = tasks.length ? tasks : amazonTaskDefinitions[definition.code].map((task) => ({
             connector_id: "",
             id: task.code,
@@ -165,22 +183,31 @@ export default async function AmazonConnectorPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {taskRows.map((task) => (
-                          <tr key={task.task_code}>
-                            <td><strong>{task.task_name}</strong></td>
-                            <td>
-                              <input defaultChecked={task.is_enabled} name="enabled_tasks" type="checkbox" value={task.task_code} />
-                            </td>
-                            <td>
-                              <input className="field" defaultValue={task.source_url} name={`task_url_${task.task_code}`} />
-                            </td>
-                            <td>
-                              <input className="field" defaultValue={task.sync_interval_minutes} min={5} max={1440} name={`task_interval_${task.task_code}`} type="number" />
-                            </td>
-                            <td>{formatDateTime(task.last_run_at)}</td>
-                            <td><StatusPill status={task.last_status} /></td>
-                          </tr>
-                        ))}
+                        {taskRows.map((task) => {
+                          const displayStatus = effectiveTaskStatus({
+                            connectorReady,
+                            savedStatus: task.last_status,
+                            sourceUrl: task.source_url,
+                            taskEnabled: task.is_enabled
+                          });
+
+                          return (
+                            <tr key={task.task_code}>
+                              <td><strong>{task.task_name}</strong></td>
+                              <td>
+                                <input defaultChecked={task.is_enabled} name="enabled_tasks" type="checkbox" value={task.task_code} />
+                              </td>
+                              <td>
+                                <input className="field" defaultValue={task.source_url} name={`task_url_${task.task_code}`} />
+                              </td>
+                              <td>
+                                <input className="field" defaultValue={task.sync_interval_minutes} min={5} max={1440} name={`task_interval_${task.task_code}`} type="number" />
+                              </td>
+                              <td>{formatDateTime(task.last_run_at)}</td>
+                              <td><StatusPill status={displayStatus} /></td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

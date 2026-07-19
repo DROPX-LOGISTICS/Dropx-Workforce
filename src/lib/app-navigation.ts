@@ -83,7 +83,6 @@ export const navItems: NavItem[] = [
       { code: "cps_inputs", label: "Inputs", href: "/cps?view=inputs" }
     ]
   },
-  { code: "report_upload", label: "Report Upload", href: "/report-upload", icon: "^" },
   { code: "earnings", label: "Earnings Review", href: "/earnings", icon: "$" },
   { code: "exceptions", label: "Exceptions", href: "/exceptions", icon: "!" },
   { code: "inbox", label: "Inbox", href: "/inbox", icon: "I" },

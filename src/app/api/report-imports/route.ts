@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 import crypto from "crypto";
 import * as XLSX from "xlsx";
@@ -92,6 +93,35 @@ function parseDate(value: unknown) {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
 }
 
+function formatDateUtc(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addUtcDays(date: Date, days: number) {
+  const next = new Date(date.getTime());
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function startOfAmazonWeek(dateText: string) {
+  const date = new Date(`${dateText}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - date.getUTCDay());
+  return date;
+}
+
+function amazonWeekInfo(workDate: string) {
+  const year = Number(workDate.slice(0, 4));
+  const weekStart = startOfAmazonWeek(workDate);
+  const yearWeekOneStart = startOfAmazonWeek(`${year}-01-01`);
+  const weekNo = Math.floor((weekStart.getTime() - yearWeekOneStart.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+  return {
+    amazon_week_from: formatDateUtc(weekStart),
+    amazon_week_no: weekNo,
+    amazon_week_to: formatDateUtc(addUtcDays(weekStart, 6)),
+    amazon_week_year: year
+  };
+}
+
 function findValue(raw: RawRecord, aliases: string[]) {
   const normalizedAliases = aliases.map(key);
   const entry = Object.entries(raw).find(([label]) => normalizedAliases.includes(key(label)));
@@ -176,6 +206,7 @@ function parseAmazon(raw: RawRecord, rowNumber: number): NormalizedImport | null
   return {
     externalWorkerId: externalWorkerId || `ROW-${rowNumber}`,
     normalizedData: {
+      ...amazonWeekInfo(workDate),
       amazon_delivery: amazonDelivery,
       client: "Amazon",
       c_return: cReturn,
@@ -194,6 +225,28 @@ function parseAmazon(raw: RawRecord, rowNumber: number): NormalizedImport | null
     stationCode,
     workDate
   };
+}
+
+function readableError(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object") {
+    const candidate = error as { details?: unknown; hint?: unknown; message?: unknown; statusText?: unknown };
+    return [candidate.message, candidate.details, candidate.hint, candidate.statusText]
+      .map((item) => clean(item))
+      .filter(Boolean)
+      .join(" ");
+  }
+  return clean(error) || "Unknown error";
+}
+
+async function importStep<T>(step: string, action: () => Promise<T>) {
+  try {
+    return await action();
+  } catch (error) {
+    const message = readableError(error);
+    console.error(`Report import failed at ${step}:`, error);
+    throw new Error(`${step}: ${message}`);
+  }
 }
 
 function aggregateAmazonRows(rows: Array<{ normalized: NormalizedImport | null }>, batchId: string, companyId: string) {
@@ -494,7 +547,7 @@ async function loadExistingImportHashes(companyId: string, sourceType: SourceTyp
       .eq("source_type", sourceType)
       .eq("status", "Imported")
       .in("row_hash", chunk);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(`report_import_rows hash lookup rows ${index + 1}-${index + chunk.length}: ${readableError(error)}`);
     (data ?? []).forEach((row) => existing.add(row.row_hash));
   }
   return existing;
@@ -537,7 +590,7 @@ async function insertInChunks<T extends Record<string, unknown>>(table: string, 
   if (!supabaseAdmin || !rows.length) return;
   for (let index = 0; index < rows.length; index += chunkSize) {
     const result = await supabaseAdmin.from(table).insert(rows.slice(index, index + chunkSize) as never[]);
-    if (result.error) throw new Error(result.error.message);
+    if (result.error) throw new Error(`${table} insert rows ${index + 1}-${Math.min(index + chunkSize, rows.length)}: ${readableError(result.error)}`);
   }
 }
 
@@ -545,7 +598,7 @@ async function upsertInChunks<T extends Record<string, unknown>>(table: string, 
   if (!supabaseAdmin || !rows.length) return;
   for (let index = 0; index < rows.length; index += chunkSize) {
     const result = await supabaseAdmin.from(table).upsert(rows.slice(index, index + chunkSize) as never[], { onConflict });
-    if (result.error) throw new Error(result.error.message);
+    if (result.error) throw new Error(`${table} upsert rows ${index + 1}-${Math.min(index + chunkSize, rows.length)} on ${onConflict}: ${readableError(result.error)}`);
   }
 }
 
@@ -567,6 +620,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   if (!supabaseAdmin) return Response.json({ error: "Supabase service key is not configured." }, { status: 500 });
+  const db = supabaseAdmin;
   const authorization = await getAuthorization();
   if (!authorization) return Response.json({ error: "Login required." }, { status: 401 });
   const companyId = requireCompanyId(authorization);
@@ -574,32 +628,43 @@ export async function POST(request: Request) {
     return Response.json({ error: "Report import permission denied." }, { status: 403 });
   }
 
-  const formData = await request.formData();
+  const formData = await importStep("Read uploaded form", () => request.formData());
   const sourceType = clean(formData.get("source_type")) as SourceType;
   const file = formData.get("file");
   if (!sourceLabels[sourceType]) return Response.json({ error: "Select a valid import type." }, { status: 400 });
   if (!(file instanceof File)) return Response.json({ error: "Upload an Excel or CSV file." }, { status: 400 });
 
-  const batch = await supabaseAdmin.from("report_import_batches").insert({
+  const batch = await importStep("Create import batch", async () => db.from("report_import_batches").insert({
     company_id: companyId,
     created_by: authorization.userId,
     file_name: file.name,
     file_size: file.size,
     source_type: sourceType,
     status: "Processing"
-  }).select("id").single();
+  }).select("id").single());
   if (batch.error) return databaseSetupError(batch.error.message);
 
   try {
-    const fileBuffer = await file.arrayBuffer();
+    const fileBuffer = await importStep("Read uploaded file", () => file.arrayBuffer());
     const parsed = parseFile(sourceType, readWorkbookRows(fileBuffer));
-    if (sourceType === "iocl_fuel" || sourceType === "bpcl_fuel") await mapFuelStations(companyId, parsed);
+    if (sourceType === "iocl_fuel" || sourceType === "bpcl_fuel") await importStep("Map fuel vehicles to stations", () => mapFuelStations(companyId, parsed));
 
-    const audited = await auditParsedRows(companyId, sourceType, parsed);
+    const audited = await importStep("Audit duplicate rows", () => auditParsedRows(companyId, sourceType, parsed));
     const valid = audited.filter((row) => row.status === "Imported" && row.normalized);
     const skipped = audited.length - valid.length;
     const duplicateRows = audited.filter((row) => row.isDuplicate).length;
-    const dates = valid.map((row) => row.normalized?.workDate).filter(Boolean).sort() as string[];
+    const factRows = sourceType === "amazon_shipments"
+      ? audited.filter((row) => row.normalized && row.duplicateScope !== "file")
+      : valid;
+    const dates = factRows.map((row) => row.normalized?.workDate).filter(Boolean).sort() as string[];
+    const amazonWeeks = sourceType === "amazon_shipments"
+      ? Array.from(new Map(factRows.map((row) => {
+        const workDate = row.normalized?.workDate;
+        if (!workDate) return null;
+        const week = amazonWeekInfo(workDate);
+        return [`${week.amazon_week_year}-W${week.amazon_week_no}`, week] as const;
+      }).filter(Boolean) as Array<readonly [string, ReturnType<typeof amazonWeekInfo>]>).values())
+      : [];
 
     const rowPayload = audited.map((row) => ({
       amount: row.normalized?.amount ?? null,
@@ -617,12 +682,11 @@ export async function POST(request: Request) {
       issue: row.issue,
       work_date: row.normalized?.workDate ?? null
     }));
-    await insertInChunks("report_import_rows", rowPayload);
+    await importStep("Save raw import audit rows", () => insertInChunks("report_import_rows", rowPayload, 250));
 
     if (sourceType === "amazon_shipments") {
-      const currentFileRows = audited.filter((row) => row.normalized && row.duplicateScope !== "file");
-      const payload = aggregateAmazonRows(currentFileRows, batch.data.id, companyId);
-      await upsertInChunks("cps_shipment_daily", payload, "company_id,client,work_date,station_code,provider_employee_id");
+      const payload = aggregateAmazonRows(factRows, batch.data.id, companyId);
+      await importStep("Refresh Amazon shipment totals", () => upsertInChunks("cps_shipment_daily", payload, "company_id,client,work_date,station_code,provider_employee_id", 250));
     }
 
     if (sourceType === "iocl_fuel" || sourceType === "bpcl_fuel") {
@@ -639,7 +703,7 @@ export async function POST(request: Request) {
         transaction_id: clean(row.normalized!.normalizedData.transaction_id),
         vehicle_no: clean(row.normalized!.normalizedData.vehicle_no) || null
       }));
-      await upsertInChunks("cps_fuel_daily", payload, "company_id,provider,transaction_id");
+      await importStep("Save fuel transactions", () => upsertInChunks("cps_fuel_daily", payload, "company_id,provider,transaction_id", 250));
     }
 
     if (sourceType === "cashbook") {
@@ -658,35 +722,39 @@ export async function POST(request: Request) {
         source_batch_id: batch.data.id,
         station_code: row.normalized!.stationCode!
       }));
-      await upsertInChunks("cps_cashbook_daily", payload, "company_id,source_row_hash");
+      await importStep("Save cashbook expenses", () => upsertInChunks("cps_cashbook_daily", payload, "company_id,source_row_hash", 250));
     }
 
-    const cpsTouchedRows = sourceType === "amazon_shipments"
-      ? audited.filter((row) => row.normalized && row.duplicateScope !== "file")
-      : valid;
-    await recalculateCps(companyId, cpsTouchedRows.map((row) => ({ stationCode: row.normalized?.stationCode, workDate: row.normalized?.workDate })));
+    await importStep("Recalculate CPS rows", () => recalculateCps(companyId, factRows.map((row) => ({ stationCode: row.normalized?.stationCode, workDate: row.normalized?.workDate }))));
+    const factRowCount = sourceType === "amazon_shipments" ? aggregateAmazonRows(factRows, batch.data.id, companyId).length : valid.length;
+    const amazonWeekMessage = amazonWeeks.length
+      ? ` Amazon week${amazonWeeks.length === 1 ? "" : "s"} ${amazonWeeks.map((week) => `${week.amazon_week_no} (${week.amazon_week_from} to ${week.amazon_week_to})`).join(", ")}.`
+      : "";
+    const message = sourceType === "amazon_shipments"
+      ? `${factRowCount} station/date/associate shipment total${factRowCount === 1 ? "" : "s"} refreshed from ${factRows.length} weekly row${factRows.length === 1 ? "" : "s"}.${amazonWeekMessage} ${skipped} raw rows skipped, including ${duplicateRows} duplicate${duplicateRows === 1 ? "" : "s"}.`
+      : `${valid.length} ${sourceLabels[sourceType]} row${valid.length === 1 ? "" : "s"} imported. ${skipped} skipped, including ${duplicateRows} duplicate${duplicateRows === 1 ? "" : "s"}.`;
 
-    const update = await supabaseAdmin.from("report_import_batches").update({
+    const update = await importStep("Mark import completed", async () => db.from("report_import_batches").update({
       completed_at: new Date().toISOString(),
       imported_row_count: valid.length,
-      message: `${valid.length} ${sourceLabels[sourceType]} row${valid.length === 1 ? "" : "s"} imported. ${skipped} skipped, including ${duplicateRows} duplicate${duplicateRows === 1 ? "" : "s"}.`,
+      message,
       report_from: dates[0] ?? null,
       report_to: dates.at(-1) ?? null,
       row_count: audited.length,
       skipped_row_count: skipped,
       status: "Completed"
-    }).eq("id", batch.data.id).eq("company_id", companyId);
+    }).eq("id", batch.data.id).eq("company_id", companyId));
     if (update.error) throw new Error(update.error.message);
 
     return Response.json({
       duplicateRows,
-      imported: valid.length,
-      message: `${valid.length} ${sourceLabels[sourceType]} row${valid.length === 1 ? "" : "s"} imported. ${skipped} skipped, including ${duplicateRows} duplicate${duplicateRows === 1 ? "" : "s"}.`,
+      imported: sourceType === "amazon_shipments" ? factRowCount : valid.length,
+      message,
       skipped,
       totalRows: audited.length
     });
   } catch (error) {
-    await supabaseAdmin.from("report_import_batches").update({
+    await db.from("report_import_batches").update({
       completed_at: new Date().toISOString(),
       message: error instanceof Error ? error.message : "Import failed.",
       status: "Failed"

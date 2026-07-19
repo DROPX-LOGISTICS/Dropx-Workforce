@@ -77,20 +77,60 @@ function toNumber(value: unknown) {
   return Number.isFinite(number) ? number : 0;
 }
 
-function parseDate(value: unknown) {
+type DateOrder = "dmy" | "mdy";
+
+function parseDateWithOrder(value: unknown, order: DateOrder = "dmy") {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
   const text = clean(value);
   if (!text) return null;
   if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
-  const indian = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
-  if (indian) {
-    const day = indian[1].padStart(2, "0");
-    const month = indian[2].padStart(2, "0");
-    const year = indian[3].length === 2 ? `20${indian[3]}` : indian[3];
-    return `${year}-${month}-${day}`;
+
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    const serial = Number(text);
+    if (serial > 20000 && serial < 80000) {
+      const date = new Date(Date.UTC(1899, 11, 30) + serial * 24 * 60 * 60 * 1000);
+      return date.toISOString().slice(0, 10);
+    }
+  }
+
+  const slashDate = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
+  if (slashDate) {
+    const first = Number(slashDate[1]);
+    const second = Number(slashDate[2]);
+    const year = slashDate[3].length === 2 ? `20${slashDate[3]}` : slashDate[3];
+    let day = order === "mdy" ? second : first;
+    let month = order === "mdy" ? first : second;
+
+    if (first > 12) {
+      day = first;
+      month = second;
+    } else if (second > 12) {
+      day = second;
+      month = first;
+    }
+
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    const normalized = new Date(Date.UTC(Number(year), month - 1, day));
+    if (
+      Number.isNaN(normalized.getTime()) ||
+      normalized.getUTCFullYear() !== Number(year) ||
+      normalized.getUTCMonth() !== month - 1 ||
+      normalized.getUTCDate() !== day
+    ) {
+      return null;
+    }
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   }
   const parsed = new Date(text);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
+
+function parseDate(value: unknown) {
+  return parseDateWithOrder(value, "dmy");
+}
+
+function parseAmazonDate(value: unknown) {
+  return parseDateWithOrder(value, "mdy");
 }
 
 function formatDateUtc(date: Date) {
@@ -104,12 +144,15 @@ function addUtcDays(date: Date, days: number) {
 }
 
 function startOfAmazonWeek(dateText: string) {
-  const date = new Date(`${dateText}T00:00:00Z`);
+  const parts = dateText.split("-").map(Number);
+  const date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  if (Number.isNaN(date.getTime())) throw new Error(`Invalid Amazon report date "${dateText}".`);
   date.setUTCDate(date.getUTCDate() - date.getUTCDay());
   return date;
 }
 
 function amazonWeekInfo(workDate: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(workDate)) throw new Error(`Invalid Amazon report date "${workDate}".`);
   const year = Number(workDate.slice(0, 4));
   const weekStart = startOfAmazonWeek(workDate);
   const yearWeekOneStart = startOfAmazonWeek(`${year}-01-01`);
@@ -184,7 +227,7 @@ function cashbookHead(raw: RawRecord) {
 }
 
 function parseAmazon(raw: RawRecord, rowNumber: number): NormalizedImport | null {
-  const workDate = parseDate(findValue(raw, ["Report Date", "Date", "Shipment Date", "Business Date", "Delivery Date"]));
+  const workDate = parseAmazonDate(findValue(raw, ["Report Date", "Date", "Shipment Date", "Business Date", "Delivery Date"]));
   const stationCode = normalizeStation(findValue(raw, ["Station Code", "Station", "Location", "DS", "Delivery Station"]));
   const externalWorkerId = clean(findValue(raw, ["holder_employee_id", "Holder Employee ID", "Provider ID", "Driver ID", "DA ID", "Associate ID"]));
   if (!workDate || !stationCode) return null;
@@ -646,7 +689,7 @@ export async function POST(request: Request) {
 
   try {
     const fileBuffer = await importStep("Read uploaded file", () => file.arrayBuffer());
-    const parsed = parseFile(sourceType, readWorkbookRows(fileBuffer));
+    const parsed = await importStep("Parse uploaded report rows", async () => parseFile(sourceType, readWorkbookRows(fileBuffer)));
     if (sourceType === "iocl_fuel" || sourceType === "bpcl_fuel") await importStep("Map fuel vehicles to stations", () => mapFuelStations(companyId, parsed));
 
     const audited = await importStep("Audit duplicate rows", () => auditParsedRows(companyId, sourceType, parsed));

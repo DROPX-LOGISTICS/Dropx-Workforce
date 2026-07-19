@@ -1,5 +1,7 @@
 # DropX Partner Dashboard
 
+Deployment sync: dashboard Git connection enabled on 2026-07-19.
+
 Next.js dashboard for Provider ID mapping, rate cards, report imports, earnings, exceptions, and salary controls.
 
 ## Current Status

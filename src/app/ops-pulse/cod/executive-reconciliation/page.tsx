@@ -13,10 +13,10 @@ import {
   executiveDisplayName,
   executiveReconciliationStatuses,
   formatAmount,
-  formatDateTime,
   isMissingCodSetup,
   loadExecutiveReconciliationRows,
-  locationLabel
+  locationLabel,
+  type ExecutiveReconciliationViewRow
 } from "@/lib/ops-pulse/cod";
 import { isSupabaseAdminConfigured } from "@/lib/supabase-admin";
 import { addManualExecutiveReconciliation, saveExecutiveReconciliation } from "./actions";
@@ -26,6 +26,21 @@ type SearchParams = {
   location?: string;
   status?: string;
 };
+
+const denominations = [
+  ["cash_500_count", "500"],
+  ["cash_200_count", "200"],
+  ["cash_100_count", "100"],
+  ["cash_50_count", "50"],
+  ["cash_20_count", "20"],
+  ["cash_10_count", "10"]
+] as const;
+
+type DenominationField = typeof denominations[number][0];
+
+function denominationValue(row: ExecutiveReconciliationViewRow, field: DenominationField) {
+  return row[field] ?? 0;
+}
 
 function loadFlash() {
   const raw = cookies().get("dropx_cod_executive_reconciliation_flash")?.value;
@@ -50,6 +65,18 @@ function currentHref(searchParams?: SearchParams) {
   return `/ops-pulse/cod/executive-reconciliation${suffix ? `?${suffix}` : ""}`;
 }
 
+function moneyClass(value: number) {
+  if (value < 0) return "amount-negative";
+  if (value > 0) return "amount-positive";
+  return "amount-neutral";
+}
+
+function differenceLabel(value: number) {
+  if (value < 0) return `Short ${formatAmount(Math.abs(value))}`;
+  if (value > 0) return `Excess ${formatAmount(value)}`;
+  return "0.00";
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function ExecutiveReconciliationPage({ searchParams }: { searchParams?: SearchParams }) {
@@ -57,7 +84,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
   const companyId = requireCompanyId(authorization);
   const permission = authorization.permissions.cod_executive_reconciliation;
   const flash = loadFlash();
-  const returnHref = currentHref(searchParams);
+
   const result = await loadExecutiveReconciliationRows(
     companyId,
     authorization.locationScopeIds,
@@ -68,31 +95,47 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
       status: searchParams?.status ?? ""
     }
   );
+
+  const defaultLocationId = searchParams?.location ?? (result.locations.length === 1 ? result.locations[0]?.id ?? "" : "");
+  const returnHref = currentHref({
+    date: searchParams?.date ?? result.businessDate,
+    location: defaultLocationId,
+    status: searchParams?.status ?? ""
+  });
   const setupError = result.error && isMissingCodSetup({ message: result.error }) ? result.error : null;
   const stationOptions = result.locations.map((location) => ({
     helper: [location.state, location.station_name].filter(Boolean).join(" / "),
     label: locationLabel(location),
     value: location.id
   }));
-  const rows = result.rows;
+  const selectedStation = result.locations.find((location) => location.id === defaultLocationId);
+  const rows = defaultLocationId
+    ? result.rows.filter((row) => row.location_id === defaultLocationId || row.station_code === selectedStation?.station_code)
+    : result.rows;
   const completed = rows.filter((row) => row.reconciliation_status === "Completed").length;
-  const openRows = rows.filter((row) => !["Completed", "Not applicable"].includes(row.reconciliation_status)).length;
-  const pendingAmount = rows.reduce((sum, row) => sum + amountValue(row.pending_amount), 0);
-  const manualRows = rows.filter((row) => row.source === "manual").length;
+  const expectedTotal = rows.reduce((sum, row) => sum + amountValue(row.expected_amount), 0);
+  const collectedTotal = rows.reduce((sum, row) => sum + amountValue(row.collected_amount), 0);
+  const netDifference = rows.reduce((sum, row) => sum + amountValue(row.difference_amount), 0);
+  const hasSingleStationScope = result.locations.length === 1;
 
   return (
     <AppShell active="COD" pageCode="cod_executive_reconciliation">
       <PageHead
         eyebrow="Ops Pulse"
         title="COD"
-        subtitle="Executive reconciliation is created from uploaded Amazon shipment data. Manual entry is only for executives missing from the source file."
+        subtitle="Collect associate-wise COD and count cash denominations against the expected amount."
         action={<span className={`status-pill ${isSupabaseAdminConfigured ? "good" : "warn"}`}>{isSupabaseAdminConfigured ? "Database connected" : "Database key missing"}</span>}
       />
       <CodSectionTabs active="executive-reconciliation" />
 
       {setupError ? (
         <section className="panel message-panel error">
-          <div className="panel-body"><strong>Database setup needed</strong><p className="subtle" style={{ marginTop: 6 }}>{codSetupMessage(setupError)} Also run scripts/dev_mode_cod_executive_reconciliation_v1.sql.</p></div>
+          <div className="panel-body">
+            <strong>Database setup needed</strong>
+            <p className="subtle" style={{ marginTop: 6 }}>
+              {codSetupMessage(setupError)} Also run scripts/cod_executive_reconciliation_denominations_v2.sql.
+            </p>
+          </div>
         </section>
       ) : null}
 
@@ -115,10 +158,11 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
               <form action="/ops-pulse/cod/executive-reconciliation" className="form-grid four">
                 <label>Business Date<input className="field" name="date" type="date" defaultValue={result.businessDate} /></label>
                 <label className="span-2">Station
-                  <select className="field" name="location" defaultValue={searchParams?.location ?? ""}>
-                    <option value="">All permitted stations</option>
+                  <select className="field" name="location" defaultValue={defaultLocationId} disabled={hasSingleStationScope}>
+                    {!hasSingleStationScope ? <option value="">All permitted stations</option> : null}
                     {result.locations.map((location) => <option key={location.id} value={location.id}>{locationLabel(location)}</option>)}
                   </select>
+                  {hasSingleStationScope ? <input type="hidden" name="location" value={defaultLocationId} /> : null}
                 </label>
                 <label>Status
                   <select className="field" name="status" defaultValue={searchParams?.status ?? ""}>
@@ -127,87 +171,88 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                   </select>
                 </label>
                 <div className="form-actions span-4 align-right">
-                  <button className="button secondary" type="submit">Show executives</button>
+                  <button className="button secondary" type="submit">Show sheet</button>
                 </div>
               </form>
             </div>
           </section>
 
           <section className="summary-grid">
-            <div className="metric-card"><span>Source Rows</span><strong>{rows.length}</strong><small>From shipment import plus manual additions</small></div>
-            <div className="metric-card"><span>Completed</span><strong>{completed}</strong><small>Reconciliation closed</small></div>
-            <div className="metric-card"><span>Open</span><strong>{openRows}</strong><small>Pending, mismatch, or pending amount</small></div>
-            <div className="metric-card"><span>Pending Amount</span><strong>{formatAmount(pendingAmount)}</strong><small>{manualRows} manual rows</small></div>
+            <div className="metric-card"><span>Associates</span><strong>{rows.length}</strong><small>Shipment import plus manual rows</small></div>
+            <div className="metric-card"><span>Balanced</span><strong>{completed}</strong><small>Cash equals expected COD</small></div>
+            <div className="metric-card"><span>Expected COD</span><strong>{formatAmount(expectedTotal)}</strong><small>Amount entered by station</small></div>
+            <div className="metric-card"><span>Net Cash Difference</span><strong className={moneyClass(netDifference)}>{differenceLabel(netDifference)}</strong><small>Collected {formatAmount(collectedTotal)}</small></div>
           </section>
 
           <section className="panel">
             <div className="panel-head">
               <div>
-                <h2>Executive reconciliation</h2>
-                <p className="subtle">Associate names come from Amazon shipment imports. Enter manually only when the source file missed the executive.</p>
+                <h2>Executive reconciliation sheet</h2>
+                <p className="subtle">Associate names are pulled from Amazon Daily Shipment Count for the selected date and station. Save rows after counting cash.</p>
               </div>
               <span className="count-badge">{rows.length} records</span>
             </div>
-            <div className="table-wrap">
-              <table>
+            <div className="table-wrap cash-reconciliation-wrap">
+              <table className="cash-reconciliation-table">
                 <thead>
                   <tr>
                     <th>Station</th>
-                    <th>Executive ID</th>
                     <th>Associate</th>
-                    <th>Ship Type</th>
-                    <th>Delivery</th>
-                    <th>Activity</th>
+                    <th>Executive ID</th>
+                    <th>Expected COD</th>
+                    {denominations.map(([, label]) => <th key={label}>{label}</th>)}
+                    <th>Other</th>
+                    <th>Collected</th>
+                    <th>Short / Excess</th>
                     <th>Status</th>
-                    <th>Pending Amount</th>
                     <th>Remarks</th>
-                    <th>Source</th>
-                    <th>Updated</th>
-                    <th>Action</th>
+                    <th>Save</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.length ? rows.map((row) => (
-                    <tr key={row.key}>
-                      <td><strong>{row.station_code}</strong><br /><span className="subtle">{row.station_name ?? row.state ?? "-"}</span></td>
-                      <td>{row.provider_employee_id}</td>
-                      <td>
-                        {row.source_associate_name ? (
-                          <strong>{executiveDisplayName(row)}</strong>
-                        ) : null}
-                        {!row.source_associate_name ? (
-                          <input className="field compact-field" form={`recon-${row.key}`} name="manual_associate_name" defaultValue={row.manual_associate_name ?? ""} placeholder="Enter associate name" required />
-                        ) : null}
-                      </td>
-                      <td>{row.shipment_type ?? "-"}</td>
-                      <td>{row.total_delivery ?? 0}</td>
-                      <td>{row.total_activity ?? 0}</td>
-                      <td>
-                        <select className="field compact-field" form={`recon-${row.key}`} name="reconciliation_status" defaultValue={row.reconciliation_status}>
-                          {executiveReconciliationStatuses.map((status) => <option key={status}>{status}</option>)}
-                        </select>
-                      </td>
-                      <td><input className="field compact-field" form={`recon-${row.key}`} name="pending_amount" defaultValue={String(row.pending_amount ?? 0)} inputMode="decimal" /></td>
-                      <td><input className="field compact-field" form={`recon-${row.key}`} name="remarks" defaultValue={row.remarks ?? ""} placeholder="Notes" /></td>
-                      <td><StatusPill status={row.source === "shipment_import" ? "Shipment Import" : "Manual"} /></td>
-                      <td>{formatDateTime(row.updated_at ?? row.source_updated_at)}</td>
-                      <td>
-                        <form action={saveExecutiveReconciliation} id={`recon-${row.key}`}>
-                          <input type="hidden" name="return_href" value={returnHref} />
-                          <input type="hidden" name="business_date" value={row.business_date} />
-                          <input type="hidden" name="location_id" value={row.location_id ?? ""} />
-                          <input type="hidden" name="station_code" value={row.station_code} />
-                          <input type="hidden" name="provider_employee_id" value={row.provider_employee_id} />
-                          <input type="hidden" name="source_associate_name" value={row.source_associate_name ?? ""} />
-                          <input type="hidden" name="shipment_type" value={row.shipment_type ?? ""} />
-                          <input type="hidden" name="total_delivery" value={String(row.total_delivery ?? 0)} />
-                          <input type="hidden" name="total_activity" value={String(row.total_activity ?? 0)} />
-                          <SubmitButton className="button secondary small-button" disabled={!permission.canEdit}>Save</SubmitButton>
-                        </form>
-                      </td>
-                    </tr>
-                  )) : (
-                    <tr><td className="empty-cell" colSpan={12}>No executives found. Upload Amazon shipment count for this date/station, then refresh this page.</td></tr>
+                  {rows.length ? rows.map((row) => {
+                    const difference = amountValue(row.difference_amount);
+                    return (
+                      <tr key={row.key}>
+                        <td><strong>{row.station_code}</strong><br /><span className="subtle">{row.station_name ?? row.state ?? "-"}</span></td>
+                        <td>
+                          {row.source_associate_name ? (
+                            <strong>{executiveDisplayName(row)}</strong>
+                          ) : (
+                            <input className="field compact-field associate-field" form={`recon-${row.key}`} name="manual_associate_name" defaultValue={row.manual_associate_name ?? ""} placeholder="Associate name" required />
+                          )}
+                          <br /><span className="subtle">{row.shipment_type ?? "No shipment type"}</span>
+                        </td>
+                        <td>{row.provider_employee_id}</td>
+                        <td><input className="field compact-field amount-field" form={`recon-${row.key}`} name="expected_amount" defaultValue={String(row.expected_amount ?? 0)} inputMode="decimal" /></td>
+                        {denominations.map(([name]) => (
+                          <td key={`${row.key}-${name}`}>
+                            <input className="field compact-field cash-count-field" form={`recon-${row.key}`} name={name} defaultValue={String(denominationValue(row, name))} inputMode="numeric" />
+                          </td>
+                        ))}
+                        <td><input className="field compact-field cash-count-field" form={`recon-${row.key}`} name="cash_other_amount" defaultValue={String(row.cash_other_amount ?? 0)} inputMode="decimal" /></td>
+                        <td><strong>{formatAmount(row.collected_amount)}</strong></td>
+                        <td><strong className={moneyClass(difference)}>{differenceLabel(difference)}</strong></td>
+                        <td><StatusPill status={row.reconciliation_status} /></td>
+                        <td><input className="field compact-field remarks-field" form={`recon-${row.key}`} name="remarks" defaultValue={row.remarks ?? ""} placeholder="Notes" /></td>
+                        <td>
+                          <form action={saveExecutiveReconciliation} id={`recon-${row.key}`}>
+                            <input type="hidden" name="return_href" value={returnHref} />
+                            <input type="hidden" name="business_date" value={row.business_date} />
+                            <input type="hidden" name="location_id" value={row.location_id ?? ""} />
+                            <input type="hidden" name="station_code" value={row.station_code} />
+                            <input type="hidden" name="provider_employee_id" value={row.provider_employee_id} />
+                            <input type="hidden" name="source_associate_name" value={row.source_associate_name ?? ""} />
+                            <input type="hidden" name="shipment_type" value={row.shipment_type ?? ""} />
+                            <input type="hidden" name="total_delivery" value={String(row.total_delivery ?? 0)} />
+                            <input type="hidden" name="total_activity" value={String(row.total_activity ?? 0)} />
+                            <SubmitButton className="button secondary small-button" disabled={!permission.canEdit}>Save</SubmitButton>
+                          </form>
+                        </td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr><td className="empty-cell" colSpan={16}>No associates found from shipment import. Upload Amazon Daily Shipment Count for this date/station, or add a missing associate below.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -218,28 +263,26 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
             <section className="panel">
               <div className="panel-head">
                 <div>
-                  <h2>Add missing executive</h2>
-                  <p className="subtle">Use only when the shipment report has missing or unreadable associate details.</p>
+                  <h2>Associate not in shipment file</h2>
+                  <p className="subtle">Use this only when an executive collected COD but is missing from the uploaded Amazon report.</p>
                 </div>
               </div>
               <div className="panel-body">
                 <form action={addManualExecutiveReconciliation} className="form-grid four">
                   <input type="hidden" name="return_href" value={returnHref} />
+                  <input type="hidden" name="provider_employee_id" value="__manual__" />
                   <label>Business Date<input className="field" name="business_date" type="date" defaultValue={result.businessDate} required /></label>
-                  <label className="span-2">Station<SearchableSelect name="location_id" options={stationOptions} placeholder="Select station" required /></label>
-                  <label>Executive ID<input className="field" name="provider_employee_id" placeholder="Provider / DA ID" required /></label>
-                  <label className="span-2">Associate Name<input className="field" name="manual_associate_name" placeholder="Name missing from shipment file" required /></label>
-                  <label>Ship Type<input className="field" name="shipment_type" placeholder="Optional" /></label>
-                  <label>Status
-                    <select className="field" name="reconciliation_status" defaultValue="Pending">
-                      {executiveReconciliationStatuses.map((status) => <option key={status}>{status}</option>)}
-                    </select>
-                  </label>
-                  <label>Pending Amount<input className="field" name="pending_amount" inputMode="decimal" placeholder="0" /></label>
-                  <label className="span-3">Remarks<input className="field" name="remarks" placeholder="Reason for manual row" /></label>
-                  <input type="hidden" name="station_code" value="manual" />
+                  <label className="span-2">Station<SearchableSelect name="location_id" options={stationOptions} defaultValue={defaultLocationId} placeholder="Select station" required disabled={hasSingleStationScope} /></label>
+                  {hasSingleStationScope ? <input type="hidden" name="location_id" value={defaultLocationId} /> : null}
+                  <label>Associate Name<input className="field" name="manual_associate_name" placeholder="Missing associate name" required /></label>
+                  <label>Expected COD<input className="field" name="expected_amount" inputMode="decimal" placeholder="0" /></label>
+                  {denominations.map(([name, label]) => (
+                    <label key={`manual-${name}`}>{label}<input className="field" name={name} inputMode="numeric" placeholder="0" /></label>
+                  ))}
+                  <label>Other / coins<input className="field" name="cash_other_amount" inputMode="decimal" placeholder="0" /></label>
+                  <label className="span-3">Remarks<input className="field" name="remarks" placeholder="Why this associate was added manually" /></label>
                   <div className="form-actions span-4 align-right">
-                    <SubmitButton>Add executive</SubmitButton>
+                    <SubmitButton>Add and calculate</SubmitButton>
                   </div>
                 </form>
               </div>

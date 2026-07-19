@@ -2878,6 +2878,51 @@ h3 {
   overflow-x: auto;
 }
 
+.cash-reconciliation-wrap {
+  max-height: 66vh;
+}
+
+.cash-reconciliation-table {
+  min-width: 1560px;
+}
+
+.cash-reconciliation-table th {
+  white-space: nowrap;
+}
+
+.cash-reconciliation-table td {
+  vertical-align: middle;
+}
+
+.compact-field.amount-field {
+  width: 112px;
+}
+
+.compact-field.cash-count-field {
+  width: 72px;
+  text-align: right;
+}
+
+.compact-field.associate-field {
+  min-width: 190px;
+}
+
+.compact-field.remarks-field {
+  min-width: 170px;
+}
+
+.amount-negative {
+  color: #b42318;
+}
+
+.amount-positive {
+  color: #027a48;
+}
+
+.amount-neutral {
+  color: var(--ink);
+}
+
 .permission-table {
   min-width: 720px;
 }

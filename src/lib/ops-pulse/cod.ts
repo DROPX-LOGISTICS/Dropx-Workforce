@@ -180,6 +180,16 @@ export type CodExecutiveReconciliationRow = {
   total_activity: number | string | null;
   reconciliation_status: ExecutiveReconciliationStatus;
   pending_amount: number | string | null;
+  expected_amount: number | string | null;
+  cash_500_count: number | string | null;
+  cash_200_count: number | string | null;
+  cash_100_count: number | string | null;
+  cash_50_count: number | string | null;
+  cash_20_count: number | string | null;
+  cash_10_count: number | string | null;
+  cash_other_amount: number | string | null;
+  collected_amount: number | string | null;
+  difference_amount: number | string | null;
   remarks: string | null;
   created_at: string;
   updated_at: string | null;
@@ -203,6 +213,16 @@ export type ExecutiveReconciliationViewRow = {
   total_activity: number | string | null;
   reconciliation_status: ExecutiveReconciliationStatus;
   pending_amount: number | string | null;
+  expected_amount: number | string | null;
+  cash_500_count: number | string | null;
+  cash_200_count: number | string | null;
+  cash_100_count: number | string | null;
+  cash_50_count: number | string | null;
+  cash_20_count: number | string | null;
+  cash_10_count: number | string | null;
+  cash_other_amount: number | string | null;
+  collected_amount: number | string | null;
+  difference_amount: number | string | null;
   remarks: string | null;
   source_updated_at: string | null;
   updated_at: string | null;
@@ -514,7 +534,13 @@ function executiveRowKey(stationCode: string | null | undefined, providerEmploye
 }
 
 export function executiveDisplayName(row: Pick<ExecutiveReconciliationViewRow, "source_associate_name" | "manual_associate_name">) {
-  return row.source_associate_name || row.manual_associate_name || "-";
+  const rawName = row.source_associate_name || row.manual_associate_name || "";
+  const name = rawName.split("/")[0]?.trim() || rawName.trim();
+  return name || "-";
+}
+
+function executiveRawName(row: Pick<ExecutiveReconciliationViewRow, "source_associate_name" | "manual_associate_name">) {
+  return executiveDisplayName(row).toLowerCase();
 }
 
 export async function loadCodSubmissions(
@@ -609,7 +635,7 @@ export async function loadExecutiveReconciliationRows(
 
   let reconciliationQuery = supabaseAdmin
     .from("cod_executive_reconciliations")
-    .select("id, business_date, location_id, station_code, provider_employee_id, source_associate_name, manual_associate_name, shipment_type, total_delivery, total_activity, reconciliation_status, pending_amount, remarks, created_at, updated_at, stations (id, station_code, station_name, state)")
+    .select("id, business_date, location_id, station_code, provider_employee_id, source_associate_name, manual_associate_name, shipment_type, total_delivery, total_activity, reconciliation_status, pending_amount, expected_amount, cash_500_count, cash_200_count, cash_100_count, cash_50_count, cash_20_count, cash_10_count, cash_other_amount, collected_amount, difference_amount, remarks, created_at, updated_at, stations (id, station_code, station_name, state)")
     .eq("company_id", companyId)
     .eq("business_date", businessDate);
   if (params.locationId) reconciliationQuery = reconciliationQuery.eq("location_id", params.locationId);
@@ -624,9 +650,28 @@ export async function loadExecutiveReconciliationRows(
   const reconciliations = (reconciliationResult.data ?? []) as CodExecutiveReconciliationRow[];
   const reconciliationByKey = new Map(reconciliations.map((row) => [executiveRowKey(row.station_code, row.provider_employee_id), row]));
   const rowsByKey = new Map<string, ExecutiveReconciliationViewRow>();
+  const shipmentsByKey = new Map<string, ShipmentExecutiveRow>();
 
   ((shipmentsResult.data ?? []) as ShipmentExecutiveRow[]).forEach((shipment) => {
     if (!shipment.provider_employee_id || !shipment.station_code) return;
+    const key = executiveRowKey(shipment.station_code, shipment.provider_employee_id);
+    const existing = shipmentsByKey.get(key);
+    if (existing) {
+      existing.total_delivery = amountValue(existing.total_delivery) + amountValue(shipment.total_delivery);
+      existing.total_activity = amountValue(existing.total_activity) + amountValue(shipment.total_activity);
+      existing.provider_employee_name = existing.provider_employee_name || shipment.provider_employee_name;
+      if (shipment.shipment_type && !String(existing.shipment_type ?? "").split(", ").includes(shipment.shipment_type)) {
+        existing.shipment_type = [existing.shipment_type, shipment.shipment_type].filter(Boolean).join(", ");
+      }
+      if (shipment.updated_at && (!existing.updated_at || new Date(shipment.updated_at) > new Date(existing.updated_at))) {
+        existing.updated_at = shipment.updated_at;
+      }
+      return;
+    }
+    shipmentsByKey.set(key, { ...shipment });
+  });
+
+  shipmentsByKey.forEach((shipment) => {
     const key = executiveRowKey(shipment.station_code, shipment.provider_employee_id);
     const reconciliation = reconciliationByKey.get(key);
     const station = locationsByStation.get(String(shipment.station_code).trim().toUpperCase());
@@ -647,6 +692,16 @@ export async function loadExecutiveReconciliationRows(
       total_activity: shipment.total_activity ?? reconciliation?.total_activity ?? null,
       reconciliation_status: reconciliation?.reconciliation_status ?? "Pending",
       pending_amount: reconciliation?.pending_amount ?? 0,
+      expected_amount: reconciliation?.expected_amount ?? 0,
+      cash_500_count: reconciliation?.cash_500_count ?? 0,
+      cash_200_count: reconciliation?.cash_200_count ?? 0,
+      cash_100_count: reconciliation?.cash_100_count ?? 0,
+      cash_50_count: reconciliation?.cash_50_count ?? 0,
+      cash_20_count: reconciliation?.cash_20_count ?? 0,
+      cash_10_count: reconciliation?.cash_10_count ?? 0,
+      cash_other_amount: reconciliation?.cash_other_amount ?? 0,
+      collected_amount: reconciliation?.collected_amount ?? 0,
+      difference_amount: reconciliation?.difference_amount ?? 0,
       remarks: reconciliation?.remarks ?? null,
       source_updated_at: shipment.updated_at,
       updated_at: reconciliation?.updated_at ?? reconciliation?.created_at ?? null,
@@ -675,6 +730,16 @@ export async function loadExecutiveReconciliationRows(
       total_activity: reconciliation.total_activity,
       reconciliation_status: reconciliation.reconciliation_status,
       pending_amount: reconciliation.pending_amount,
+      expected_amount: reconciliation.expected_amount,
+      cash_500_count: reconciliation.cash_500_count,
+      cash_200_count: reconciliation.cash_200_count,
+      cash_100_count: reconciliation.cash_100_count,
+      cash_50_count: reconciliation.cash_50_count,
+      cash_20_count: reconciliation.cash_20_count,
+      cash_10_count: reconciliation.cash_10_count,
+      cash_other_amount: reconciliation.cash_other_amount,
+      collected_amount: reconciliation.collected_amount,
+      difference_amount: reconciliation.difference_amount,
       remarks: reconciliation.remarks,
       source_updated_at: null,
       updated_at: reconciliation.updated_at ?? reconciliation.created_at,
@@ -687,7 +752,7 @@ export async function loadExecutiveReconciliationRows(
     : "";
   const rows = Array.from(rowsByKey.values())
     .filter((row) => !requestedStatus || row.reconciliation_status === requestedStatus)
-    .sort((first, second) => `${first.station_code}${executiveDisplayName(first)}${first.provider_employee_id}`.localeCompare(`${second.station_code}${executiveDisplayName(second)}${second.provider_employee_id}`));
+    .sort((first, second) => `${first.station_code}${executiveRawName(first)}${first.provider_employee_id}`.localeCompare(`${second.station_code}${executiveRawName(second)}${second.provider_employee_id}`));
 
   return { businessDate, locations, rows, error: null };
 }

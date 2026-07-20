@@ -7915,6 +7915,10 @@ tr:last-child td {
   gap: 10px;
 }
 
+.designation-modal {
+  overflow: visible;
+}
+
 .designation-location-menu {
   left: auto;
   min-width: min(440px, calc(100vw - 48px));
@@ -7924,6 +7928,26 @@ tr:last-child td {
 
 .designation-location-menu .multi-select-options {
   max-height: min(320px, calc(100vh - 330px));
+}
+
+.form-grid .designation-location-menu .multi-select-all,
+.form-grid .designation-location-menu .multi-select-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: none;
+}
+
+.form-grid .designation-location-menu .multi-select-all span,
+.form-grid .designation-location-menu .multi-select-option > span {
+  min-width: 0;
+}
+
+.form-grid .designation-location-menu .multi-select-all span {
+  white-space: nowrap;
 }
 
 .mini-chip-list {

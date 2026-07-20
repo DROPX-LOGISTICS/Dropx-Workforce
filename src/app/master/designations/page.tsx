@@ -230,7 +230,7 @@ export default async function DesignationsPage({
 
       {!error && searchParams?.add === "1" && pagePermission.canAdd ? (
         <div className="modal-backdrop">
-          <section className="modal-panel wide">
+          <section className="modal-panel wide designation-modal">
             <div className="panel-head">
               <div>
                 <h2>Add designation</h2>
@@ -245,7 +245,7 @@ export default async function DesignationsPage({
 
       {!error && editDesignation && pagePermission.canEdit ? (
         <div className="modal-backdrop">
-          <section className="modal-panel wide">
+          <section className="modal-panel wide designation-modal">
             <div className="panel-head">
               <div>
                 <h2>Edit designation</h2>

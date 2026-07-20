@@ -71,6 +71,7 @@ export function WhatsAppSettingsPanel({
   canEdit,
   config,
   employeeConfig = emptyNotificationConfig,
+  vendorConfig = emptyNotificationConfig,
   otpConfig = emptyNotificationConfig,
   flash,
   general,
@@ -83,6 +84,7 @@ export function WhatsAppSettingsPanel({
   canEdit: boolean;
   config: NotificationConfig;
   employeeConfig?: NotificationConfig;
+  vendorConfig?: NotificationConfig;
   otpConfig?: NotificationConfig;
   flash: { error: string | null; notice: string | null };
   general: GeneralSettings;
@@ -101,6 +103,7 @@ export function WhatsAppSettingsPanel({
   const [whatsAppEnabled, setWhatsAppEnabled] = useState(general.is_enabled);
   const [onboardingEnabled, setOnboardingEnabled] = useState(config.is_enabled);
   const [configuring, setConfiguring] = useState<string | null>(flashTarget);
+  const [onboardingTarget, setOnboardingTarget] = useState("field_executive_onboarding");
   const [editingProfile, setEditingProfile] = useState<WhatsAppProfile | null>(null);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [settingsProfile, setSettingsProfile] = useState<WhatsAppProfile | null>(null);
@@ -154,6 +157,7 @@ export function WhatsAppSettingsPanel({
   const notificationConfigByCode: Record<string, NotificationConfig> = {
     employee_onboarding: employeeConfig,
     field_executive_onboarding: config,
+    vendor_onboarding: vendorConfig,
     onboarding_otp_verification: otpConfig
   };
   const templateLabel = (notificationConfig: NotificationConfig) => {
@@ -165,6 +169,9 @@ export function WhatsAppSettingsPanel({
   };
   const openNotificationConfig = (code: string) => {
     const nextConfig = notificationConfigByCode[code] ?? emptyNotificationConfig;
+    if (code === "employee_onboarding" || code === "field_executive_onboarding" || code === "vendor_onboarding") {
+      setOnboardingTarget(code);
+    }
     setOnboardingEnabled(nextConfig.is_enabled);
     setNotificationProfileId(nextConfig.whatsapp_profile_id ?? profiles.find((profile) => profile.is_default)?.id ?? "");
     setTemplateId(nextConfig.template_id ?? "");
@@ -172,21 +179,37 @@ export function WhatsAppSettingsPanel({
     setOtpExpiryMinutes(nextConfig.variable_mappings?.__otp_expiry_minutes ?? "10");
     setConfiguring(code);
   };
+  const openOnboardingGroup = () => {
+    const firstConfigured = [
+      ["employee_onboarding", employeeConfig],
+      ["field_executive_onboarding", config],
+      ["vendor_onboarding", vendorConfig]
+    ].find(([, item]) => (item as NotificationConfig).is_enabled)?.[0] as string | undefined;
+    openNotificationConfig(firstConfigured ?? "field_executive_onboarding");
+    setConfiguring("onboarding_group");
+  };
+  const switchOnboardingTarget = (code: string) => {
+    const nextConfig = notificationConfigByCode[code] ?? emptyNotificationConfig;
+    setOnboardingTarget(code);
+    setOnboardingEnabled(nextConfig.is_enabled);
+    setNotificationProfileId(nextConfig.whatsapp_profile_id ?? profiles.find((profile) => profile.is_default)?.id ?? "");
+    setTemplateId(nextConfig.template_id ?? "");
+    setMappings(nextConfig.variable_mappings ?? {});
+    setOtpExpiryMinutes(nextConfig.variable_mappings?.__otp_expiry_minutes ?? "10");
+  };
+  const onboardingTargets = [
+    { code: "employee_onboarding", label: "Employees", config: employeeConfig },
+    { code: "field_executive_onboarding", label: "Field executives", config },
+    { code: "vendor_onboarding", label: "Vendors", config: vendorConfig }
+  ];
+  const onboardingEnabledCount = onboardingTargets.filter((target) => target.config.is_enabled).length;
   const notificationRows = [
     {
-      code: "employee_onboarding",
-      title: "Employee onboarding message",
-      description: "Send registration message when an Employee is added.",
-      enabled: employeeConfig.is_enabled,
-      template: templateLabel(employeeConfig),
-      configurable: true
-    },
-    {
-      code: "field_executive_onboarding",
-      title: "Field executive onboarding message",
-      description: "Send registration message when a Field Executive is added.",
-      enabled: config.is_enabled,
-      template: templateLabel(config),
+      code: "onboarding_group",
+      title: "Onboarding message",
+      description: "Configure onboarding messages separately for employees, field executives, vendors, and other worker types.",
+      enabled: onboardingEnabledCount > 0,
+      template: `${onboardingEnabledCount} enabled`,
       configurable: true
     },
     {
@@ -529,7 +552,7 @@ export function WhatsAppSettingsPanel({
               <button
                 className="button secondary compact"
                 disabled={!canEdit || !canUseWhatsApp || !row.configurable}
-                onClick={() => openNotificationConfig(row.code)}
+                onClick={() => row.code === "onboarding_group" ? openOnboardingGroup() : openNotificationConfig(row.code)}
                 type="button"
               >
                 Configure
@@ -539,7 +562,7 @@ export function WhatsAppSettingsPanel({
         </div>
       </section>
 
-      {configuring === "employee_onboarding" || configuring === "field_executive_onboarding" || configuring === "onboarding_otp_verification" ? (
+      {configuring === "onboarding_group" || configuring === "onboarding_otp_verification" ? (
         <div
           className="modal-backdrop"
           onMouseDown={(event) => {
@@ -549,19 +572,34 @@ export function WhatsAppSettingsPanel({
           <section className="modal-panel wide" aria-label="Configure WhatsApp notification message">
             <div className="panel-head">
               <div>
-                <h2>{configuring === "onboarding_otp_verification" ? "Onboarding OTP Verification" : configuring === "employee_onboarding" ? "Employee onboarding message" : "Field executive onboarding message"}</h2>
+                <h2>{configuring === "onboarding_otp_verification" ? "Onboarding OTP Verification" : "Onboarding message"}</h2>
                 <p className="subtle">Select the approved WhatsApp template and map each variable to dashboard data.</p>
               </div>
               <button className="icon-button" onClick={() => setConfiguring(null)} type="button">x</button>
             </div>
             <form action={saveWhatsAppNotificationConfig} className={`whatsapp-notification-form ${!canUseWhatsApp ? "disabled-form-area" : ""}`}>
-              <input name="event_code" type="hidden" value={configuring} />
+              <input name="event_code" type="hidden" value={configuring === "onboarding_group" ? onboardingTarget : configuring} />
               {flash.error ? (
                 <div className="inline-error"><strong>Action required</strong><span>{flash.error}</span></div>
               ) : null}
+              {configuring === "onboarding_group" ? (
+                <div className="segmented-control" aria-label="Onboarding worker type">
+                  {onboardingTargets.map((target) => (
+                    <button
+                      className={onboardingTarget === target.code ? "active" : ""}
+                      key={target.code}
+                      onClick={() => switchOnboardingTarget(target.code)}
+                      type="button"
+                    >
+                      {target.label}
+                      {target.config.is_enabled ? <span className="status-dot" /> : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <label className="toggle-field">
                 <input checked={onboardingEnabled} disabled={!canEdit || !canUseWhatsApp} name="is_enabled" onChange={(event) => setOnboardingEnabled(event.target.checked)} type="checkbox" />
-                <span>Enable {configuring === "onboarding_otp_verification" ? "onboarding OTP verification" : "onboarding"} message</span>
+                <span>Enable {configuring === "onboarding_otp_verification" ? "onboarding OTP verification" : onboardingTargets.find((target) => target.code === onboardingTarget)?.label.toLowerCase() ?? "onboarding"} message</span>
               </label>
               <div className="whatsapp-config-layout">
                 <div className="whatsapp-config-fields">

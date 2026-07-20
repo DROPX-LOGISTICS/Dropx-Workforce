@@ -89,6 +89,7 @@ async function loadWhatsAppSettings(companyId: string) {
     profiles: [] as Array<{ id: string; profile_name: string; business_account_id: string | null; phone_number_id: string; graph_api_version: string; default_country_code: string; chat_enabled: boolean; greeting_enabled: boolean; greeting_message: string | null; is_active: boolean; is_default: boolean; token_configured: boolean; token_mask: string; usage_count: number }>,
     employeeConfig: { is_enabled: false, template_id: null as string | null, whatsapp_profile_id: null as string | null, variable_mappings: {} as Record<string, string> },
     config: { is_enabled: false, template_id: null as string | null, whatsapp_profile_id: null as string | null, variable_mappings: {} as Record<string, string> },
+    vendorConfig: { is_enabled: false, template_id: null as string | null, whatsapp_profile_id: null as string | null, variable_mappings: {} as Record<string, string> },
     otpConfig: { is_enabled: false, template_id: null as string | null, whatsapp_profile_id: null as string | null, variable_mappings: {} as Record<string, string> },
     templates: [] as Array<{ template_id: string; whatsapp_profile_id: string | null; name: string; language: string; category: string | null; status: string; components: WhatsAppTemplateComponent[] }>
   };
@@ -98,7 +99,7 @@ async function loadWhatsAppSettings(companyId: string) {
   const [settings, profiles, configs, templates] = await Promise.all([
     admin.from("whatsapp_settings").select("is_enabled, webhook_verify_token").eq("company_id", companyId).eq("id", true).maybeSingle(),
     admin.from("whatsapp_profiles").select("id, profile_name, business_account_id, phone_number_id, graph_api_version, default_country_code, chat_enabled, greeting_enabled, greeting_message, is_active, is_default, token_secret_id").eq("company_id", companyId).order("profile_name"),
-    admin.from("whatsapp_notification_configs").select("event_code, is_enabled, template_id, whatsapp_profile_id, variable_mappings").eq("company_id", companyId).in("event_code", ["employee_onboarding", "field_executive_onboarding", "onboarding_otp_verification"]),
+    admin.from("whatsapp_notification_configs").select("event_code, is_enabled, template_id, whatsapp_profile_id, variable_mappings").eq("company_id", companyId).in("event_code", ["employee_onboarding", "field_executive_onboarding", "vendor_onboarding", "onboarding_otp_verification"]),
     admin.from("whatsapp_template_cache").select("template_id, whatsapp_profile_id, name, language, category, status, components").eq("company_id", companyId).order("name")
   ]);
   const error = settings.error?.message || profiles.error?.message || configs.error?.message || templates.error?.message || null;
@@ -128,6 +129,7 @@ async function loadWhatsAppSettings(companyId: string) {
     profiles: profileRows,
     employeeConfig: configByEvent.get("employee_onboarding") ?? defaults.employeeConfig,
     config: configByEvent.get("field_executive_onboarding") ?? defaults.config,
+    vendorConfig: configByEvent.get("vendor_onboarding") ?? defaults.vendorConfig,
     otpConfig: configByEvent.get("onboarding_otp_verification") ?? defaults.otpConfig,
     templates: (templates.data ?? []) as typeof defaults.templates,
     error
@@ -298,6 +300,7 @@ export default async function MetaMessagingSettingsPage({
           commonWebhookMode
           config={whatsAppData.config}
           employeeConfig={whatsAppData.employeeConfig}
+          vendorConfig={whatsAppData.vendorConfig}
           otpConfig={whatsAppData.otpConfig}
           detailMode
           flash={whatsAppFlash}

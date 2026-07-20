@@ -278,6 +278,10 @@ const whatsappNotificationEvents: Record<string, { label: string; templateLabel:
     label: "Field Executive onboarding notification saved.",
     templateLabel: "field executive onboarding"
   },
+  vendor_onboarding: {
+    label: "Vendor onboarding notification saved.",
+    templateLabel: "vendor onboarding"
+  },
   onboarding_otp_verification: {
     label: "Onboarding OTP verification notification saved.",
     templateLabel: "OTP verification"

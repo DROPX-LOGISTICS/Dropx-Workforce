@@ -563,7 +563,9 @@ export async function refreshExecutiveReconciliationRoster(formData: FormData) {
       redirectWithFlash({ notice: `SCC sync completed. ${imported} associate${imported === 1 ? "" : "s"} imported for ${station.station_code}.` }, returnHref);
     }
     if (status === "Manual Review") {
-      redirectWithFlash({ error: summary || "Amazon SCC needs manual login/MFA verification before this station can be fetched." }, returnHref);
+      redirectWithFlash({
+        error: summary || "Amazon SCC needs MFA/manual approval. Save the authenticator setup key in Settings > Amazon Connector, then approve Amazon once if it asks for push/captcha verification."
+      }, returnHref);
     }
     if (status === "Error") {
       throw new Error(errorMessage || summary || "SCC worker could not complete the refresh.");

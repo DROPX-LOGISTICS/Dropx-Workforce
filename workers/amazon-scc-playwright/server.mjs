@@ -1,5 +1,6 @@
 import http from "node:http";
-import { mkdir, writeFile } from "node:fs/promises";
+import crypto from "node:crypto";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
 
@@ -9,6 +10,8 @@ const HEADLESS = String(process.env.HEADLESS ?? "true").toLowerCase() !== "false
 const SLOW_MO_MS = Number(process.env.SLOW_MO_MS || 0);
 const WORKER_TIMEOUT_MS = Number(process.env.WORKER_TIMEOUT_MS || 90000);
 const DEBUG_ARTIFACT_DIR = process.env.DEBUG_ARTIFACT_DIR || "";
+const SESSION_STATE_DIR = process.env.SESSION_STATE_DIR || path.join(process.cwd(), ".scc-sessions");
+const MANUAL_APPROVAL_WAIT_MS = Number(process.env.MANUAL_APPROVAL_WAIT_MS || 45000);
 
 const DRIVER_RECON_URL = "https://www.amazonlogistics.eu/station/dashboard/driverreconciliation";
 const BANK_DEPOSITS_URL = "https://www.amazonlogistics.eu/station/dashboard/bankdeposits";
@@ -452,6 +455,139 @@ function isLoginVisible(text, url) {
   return /sign in|login|password|email|username/i.test(text) || /signin|login/i.test(url);
 }
 
+function sessionStatePath(payload) {
+  const key = [
+    payload.company_id || "company",
+    payload.portal_code || "scc",
+    payload.username || "user"
+  ].map((part) => compactIdentifier(part) || "X").join("-");
+  return path.join(SESSION_STATE_DIR, `${key}.json`);
+}
+
+async function pathExists(filePath) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function normalizeTotpSecret(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^otpauth:\/\//i.test(raw)) {
+    try {
+      return normalizeTotpSecret(new URL(raw).searchParams.get("secret") || "");
+    } catch {
+      return "";
+    }
+  }
+  return raw.replace(/[\s-]/g, "").toUpperCase();
+}
+
+function base32ToBuffer(secret) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const normalized = normalizeTotpSecret(secret).replace(/=+$/g, "");
+  if (!normalized || /[^A-Z2-7]/.test(normalized)) {
+    throw new Error("Invalid MFA authenticator secret.");
+  }
+
+  let bits = "";
+  for (const char of normalized) {
+    bits += alphabet.indexOf(char).toString(2).padStart(5, "0");
+  }
+
+  const bytes = [];
+  for (let index = 0; index + 8 <= bits.length; index += 8) {
+    bytes.push(Number.parseInt(bits.slice(index, index + 8), 2));
+  }
+  return Buffer.from(bytes);
+}
+
+function generateTotp(secret, now = Date.now()) {
+  const key = base32ToBuffer(secret);
+  const counter = Math.floor(now / 1000 / 30);
+  const counterBuffer = Buffer.alloc(8);
+  counterBuffer.writeUInt32BE(Math.floor(counter / 0x100000000), 0);
+  counterBuffer.writeUInt32BE(counter & 0xffffffff, 4);
+
+  const hmac = crypto.createHmac("sha1", key).update(counterBuffer).digest();
+  const offset = hmac[hmac.length - 1] & 0x0f;
+  const binary = hmac.readUInt32BE(offset) & 0x7fffffff;
+  return String(binary % 1_000_000).padStart(6, "0");
+}
+
+async function waitForLoginToClear(page, waitMs) {
+  const deadline = Date.now() + Math.max(0, Number.isFinite(waitMs) ? waitMs : 0);
+  while (Date.now() < deadline) {
+    await page.waitForTimeout(3000).catch(() => null);
+    await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => null);
+    const text = await page.locator("body").innerText({ timeout: 5000 }).catch(() => "");
+    if (!hasMfaOrHumanBlocker(text) && !isLoginVisible(text, page.url())) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function attemptMfa(page, payload) {
+  const secret = normalizeTotpSecret(payload.mfa_secret);
+  if (!secret) return { attempted: false, submitted: false, message: "No MFA authenticator secret saved." };
+
+  let code = "";
+  try {
+    code = generateTotp(secret);
+  } catch (error) {
+    return { attempted: true, submitted: false, message: (error).message || "Invalid MFA authenticator secret." };
+  }
+
+  const filled = await fillFirst(page, [
+    "#auth-mfa-otpcode",
+    "input[name='otpCode']",
+    "input[name='code']",
+    "input[autocomplete='one-time-code']",
+    "input[id*='otp' i]",
+    "input[id*='mfa' i]",
+    "input[type='tel']",
+    "input[type='text']"
+  ], code);
+
+  if (!filled) return { attempted: true, submitted: false, message: "MFA code field was not found." };
+
+  await clickFirst(page, [
+    "#auth-signin-button",
+    "#signInSubmit",
+    { role: "button", name: /verify|submit|continue|sign in|log in|login/i },
+    "button[type='submit']",
+    "input[type='submit']"
+  ]);
+  await page.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => null);
+  await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
+  return { attempted: true, submitted: true, message: "MFA authenticator code submitted." };
+}
+
+async function resolveMfaOrManualBlocker(page, payload) {
+  const mfaAttempt = await attemptMfa(page, payload);
+  if (mfaAttempt.submitted) {
+    const text = await page.locator("body").innerText({ timeout: 10000 }).catch(() => "");
+    if (!hasMfaOrHumanBlocker(text) && !isLoginVisible(text, page.url())) {
+      return { resolved: true, message: "Login completed with saved MFA authenticator secret.", mfaAttempt };
+    }
+  }
+
+  const approved = await waitForLoginToClear(page, MANUAL_APPROVAL_WAIT_MS);
+  if (approved) {
+    return { resolved: true, message: "Login completed after Amazon approval.", mfaAttempt };
+  }
+
+  const message = mfaAttempt.attempted
+    ? `${mfaAttempt.message} Amazon still needs MFA/manual verification.`
+    : "Amazon requested MFA or manual verification. Save the authenticator setup key in Settings > Amazon Connector, or approve the Amazon challenge once when prompted.";
+
+  return { resolved: false, message, mfaAttempt };
+}
+
 async function fillFirst(page, selectors, value) {
   for (const selector of selectors) {
     const locator = page.locator(selector).first();
@@ -517,7 +653,13 @@ async function maybeLogin(page, payload) {
 
   if (!passwordFilled) {
     text = await page.locator("body").innerText({ timeout: 10000 }).catch(() => "");
-    if (hasMfaOrHumanBlocker(text)) return { loggedIn: false, manualReview: true, message: "Amazon requested MFA or manual verification." };
+    if (hasMfaOrHumanBlocker(text)) {
+      const challenge = await resolveMfaOrManualBlocker(page, payload);
+      if (challenge.resolved) {
+        return { loggedIn: true, message: challenge.message, mfaAttempt: challenge.mfaAttempt };
+      }
+      return { loggedIn: false, manualReview: true, message: challenge.message, mfaAttempt: challenge.mfaAttempt };
+    }
     return { loggedIn: false, manualReview: true, message: "Password field was not found. Amazon login layout needs mapping." };
   }
 
@@ -531,7 +673,13 @@ async function maybeLogin(page, payload) {
   await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
 
   text = await page.locator("body").innerText({ timeout: 10000 }).catch(() => "");
-  if (hasMfaOrHumanBlocker(text)) return { loggedIn: false, manualReview: true, message: "Amazon requested MFA or manual verification." };
+  if (hasMfaOrHumanBlocker(text)) {
+    const challenge = await resolveMfaOrManualBlocker(page, payload);
+    if (challenge.resolved) {
+      return { loggedIn: true, message: challenge.message, mfaAttempt: challenge.mfaAttempt };
+    }
+    return { loggedIn: false, manualReview: true, message: challenge.message, mfaAttempt: challenge.mfaAttempt };
+  }
   if (isLoginVisible(text, page.url())) return { loggedIn: false, manualReview: true, message: "Login did not complete. Check SCC credentials or Amazon login challenge." };
   return { loggedIn: true, message: "Login completed." };
 }
@@ -797,10 +945,14 @@ async function runSccCheck(payload) {
   });
 
   try {
+    await mkdir(SESSION_STATE_DIR, { recursive: true });
+    const statePath = sessionStatePath(payload);
+    const hasStoredSession = await pathExists(statePath);
     const context = await browser.newContext({
       locale: "en-IN",
       timezoneId: "Asia/Kolkata",
-      viewport: { width: 1440, height: 1000 }
+      viewport: { width: 1440, height: 1000 },
+      ...(hasStoredSession ? { storageState: statePath } : {})
     });
     const page = await context.newPage();
     page.setDefaultTimeout(30000);
@@ -819,9 +971,11 @@ async function runSccCheck(payload) {
           title: await page.title().catch(() => ""),
           debug_screenshot: debugScreenshot
         },
-        raw_result: { login: loginResult }
+        raw_result: { login: { ...loginResult, session_reused: hasStoredSession } }
       };
     }
+
+    await context.storageState({ path: statePath }).catch(() => null);
 
     const targetUrl = checkType === "prepared_deposit"
       ? payload.urls?.bank_deposits || BANK_DEPOSITS_URL
@@ -863,7 +1017,7 @@ async function runSccCheck(payload) {
         date_selector: dateResult
       },
       raw_result: {
-        login: loginResult,
+        login: { ...loginResult, session_reused: hasStoredSession, session_saved: true },
         station_selector: stationResult,
         date_selector: dateResult,
         inspected_url: evidence.url,

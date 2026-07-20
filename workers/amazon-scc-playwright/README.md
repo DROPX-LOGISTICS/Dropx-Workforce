@@ -20,6 +20,8 @@ HEADLESS=true
 SLOW_MO_MS=0
 WORKER_TIMEOUT_MS=90000
 DEBUG_ARTIFACT_DIR=/tmp/dropx-scc-artifacts
+SESSION_STATE_DIR=/var/lib/dropx-scc-worker/sessions
+MANUAL_APPROVAL_WAIT_MS=45000
 ```
 
 Then set these in the Vercel dashboard project:
@@ -50,6 +52,8 @@ CRON_SECRET=your-existing-cron-secret
   }
 }
 ```
+
+`mfa_secret` is the authenticator setup key or full `otpauth://` URL, not the current 6-digit OTP. When this is saved in Settings > Amazon Connector, the worker can generate the current code during login. If Amazon shows push approval, captcha, or another manual verification screen, that cannot be bypassed; approve it once and the worker will save the browser session under `SESSION_STATE_DIR` for reuse.
 
 ## What It Checks
 
@@ -87,3 +91,4 @@ curl -X POST http://localhost:8080/run \
 ```
 
 The worker never stores Amazon passwords. The dashboard sends credentials only for the current run over HTTPS.
+The worker does store browser session cookies locally so repeated checks do not restart Amazon login every time.

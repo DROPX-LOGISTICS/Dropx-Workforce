@@ -147,8 +147,11 @@ export default async function AmazonConnectorPage() {
                   <label>Password
                     <input className="field" name="password" placeholder={connector?.password_secret_id ? "Saved. Leave blank to keep." : "Portal password"} type="password" />
                   </label>
-                  <label>MFA / Recovery Secret
-                    <input className="field" name="mfa_secret" placeholder={connector?.mfa_secret_id ? "Saved. Leave blank to keep." : "Optional"} type="password" />
+                  <label>MFA authenticator setup key
+                    <input className="field" name="mfa_secret" placeholder={connector?.mfa_secret_id ? "Saved. Leave blank to keep." : "Optional TOTP setup key"} type="password" />
+                    <span className="muted">
+                      Save the authenticator setup key or otpauth URL, not the current 6-digit code. Amazon push/captcha challenges still need manual approval.
+                    </span>
                   </label>
                   <label>Base URL
                     <input className="field" defaultValue={connector?.base_url ?? definition.baseUrl} name="base_url" required />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { SubmitButton } from "@/components/submit-button";
 
 type ProviderOption = {
@@ -39,20 +40,40 @@ function LocationMultiSelect({
   const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
-  const filtered = locations.filter((location) => {
+  const filtered = useMemo(() => locations.filter((location) => {
     const haystack = `${location.station_code} ${location.station_name ?? ""}`.toLowerCase();
     return haystack.includes(query.trim().toLowerCase());
-  });
+  }), [locations, query]);
   const selectedLocations = locations.filter((location) => selectedSet.has(location.id));
   const allFilteredSelected = filtered.length > 0 && filtered.every((location) => selectedSet.has(location.id));
+  const summary = selectedLocations.length
+    ? `${selectedLocations.length} selected`
+    : locations.length
+      ? "Select locations"
+      : "No locations added";
 
   useEffect(() => {
-    function close(event: MouseEvent) {
+    if (!open) return;
+
+    function close(event: PointerEvent) {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     }
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, []);
+
+    function closeWithEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", closeWithEscape);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", closeWithEscape);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) setQuery("");
+  }, [open]);
 
   function toggle(id: string) {
     setSelected(selectedSet.has(id) ? selected.filter((value) => value !== id) : [...selected, id]);
@@ -74,32 +95,35 @@ function LocationMultiSelect({
         onClick={() => setOpen((value) => !value)}
         type="button"
       >
-        <span>{selectedLocations.length ? `${selectedLocations.length} selected` : "Select locations"}</span>
-        <span>v</span>
+        <span>{summary}</span>
+        <ChevronDown aria-hidden="true" className="multi-select-chevron" size={16} strokeWidth={2.4} />
       </button>
       {open ? (
-        <div className="multi-select-menu designation-provider-menu">
-          <input
-            className="field multi-select-search-field"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search location"
-            value={query}
-          />
+        <div className="multi-select-menu designation-location-menu">
+          <div className="multi-select-search">
+            <input
+              className="field"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search location"
+              value={query}
+            />
+            <button className="button secondary" onClick={() => setQuery("")} type="button">Clear</button>
+          </div>
           <label className="multi-select-all">
-            <input checked={allFilteredSelected} onChange={toggleAllFiltered} type="checkbox" />
-            <span>Select all</span>
+            <input checked={allFilteredSelected} className="matrix-checkbox" onChange={toggleAllFiltered} type="checkbox" />
+            <span>Check all filtered</span>
             <small>{filtered.length} shown</small>
           </label>
           <div className="multi-select-options">
             {filtered.length ? filtered.map((location) => (
               <label className="multi-select-option" key={location.id}>
-                <input checked={selectedSet.has(location.id)} onChange={() => toggle(location.id)} type="checkbox" />
+                <input checked={selectedSet.has(location.id)} className="matrix-checkbox" onChange={() => toggle(location.id)} type="checkbox" />
                 <span>
                   <strong>{location.station_code}</strong>
-                  <small>{[location.station_name, location.hide_from_location_list ? "Hidden" : ""].filter(Boolean).join(" | ")}</small>
+                  <small>{[location.station_name, location.hide_from_location_list ? "Hidden" : ""].filter(Boolean).join(" - ")}</small>
                 </span>
               </label>
-            )) : <div className="searchable-empty">No locations found.</div>}
+            )) : <div className="searchable-empty">No locations found</div>}
           </div>
         </div>
       ) : null}

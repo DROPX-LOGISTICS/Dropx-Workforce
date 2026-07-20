@@ -7915,13 +7915,15 @@ tr:last-child td {
   gap: 10px;
 }
 
-.designation-provider-menu {
-  min-width: 320px;
+.designation-location-menu {
+  left: auto;
+  min-width: min(440px, calc(100vw - 48px));
+  right: 0;
+  width: min(440px, calc(100vw - 48px));
 }
 
-.multi-select-search-field {
-  width: 100%;
-  margin-bottom: 8px;
+.designation-location-menu .multi-select-options {
+  max-height: min(320px, calc(100vh - 330px));
 }
 
 .mini-chip-list {

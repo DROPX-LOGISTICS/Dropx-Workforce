@@ -35,6 +35,13 @@ function isNextRedirectError(error: unknown) {
     String((error as { digest: string }).digest).startsWith("NEXT_REDIRECT");
 }
 
+function isMissingPortalCheckSetup(error: unknown) {
+  const message = String((error as { message?: unknown })?.message ?? error ?? "").toLowerCase();
+  return message.includes("ops_portal_check_runs") ||
+    message.includes("ops_portal_check_events") ||
+    (message.includes("schema cache") && message.includes("portal_check"));
+}
+
 function optionalAmount(value: FormDataEntryValue | null, field = "Amount") {
   const text = clean(value);
   if (!text) return 0;
@@ -253,6 +260,14 @@ export async function refreshExecutiveReconciliationRoster(formData: FormData) {
       .upsert(payload, { onConflict: "company_id,station_code,check_date,check_type" });
 
     if (queued.error) {
+      if (isMissingPortalCheckSetup(queued.error)) {
+        redirectWithFlash(
+          {
+            error: "SCC roster automation is not installed yet. Run scripts/ops_pulse_cod_portal_checks_v1.sql in Supabase SQL Editor. The COD sheet is still usable for manual reconciliation."
+          },
+          returnHref
+        );
+      }
       if (queued.error.code === "42P10") {
         const inserted = await supabaseAdmin.from("ops_portal_check_runs").insert(payload);
         if (inserted.error) throw new Error(inserted.error.message);

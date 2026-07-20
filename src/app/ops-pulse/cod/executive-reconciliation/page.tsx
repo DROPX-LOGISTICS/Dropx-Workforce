@@ -193,8 +193,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
     status: searchParams?.status ?? ""
   });
   const resultSetupError = result.error && isMissingCodSetup({ message: result.error }) ? result.error : null;
-  const flashSetupError = flash.error && isMissingCodSetup({ message: flash.error }) ? flash.error : null;
-  const setupError = resultSetupError ?? flashSetupError;
+  const setupError = resultSetupError;
   const stationOptions = result.locations.map((location) => ({
     helper: [location.state, location.station_name].filter(Boolean).join(" / "),
     label: locationLabel(location),

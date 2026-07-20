@@ -50,8 +50,6 @@ function StationFields({
           defaultValue={row?.location_id ?? ""}
         />
       </label>
-      <label>Station Code<input className="field" defaultValue={row?.station_code ?? ""} name="station_code" placeholder="Auto from Location Master" /></label>
-      <label>State<input className="field" defaultValue={row?.state ?? ""} name="state" placeholder="Auto from Location Master" /></label>
       <label>CMS Agency<input className="field" defaultValue={row?.cms_agency ?? ""} name="cms_agency" placeholder="Radiant, Airtel, etc." required /></label>
       <label>Agent Name<input className="field" defaultValue={row?.agent_name ?? ""} name="agent_name" placeholder="CMS agent name" required /></label>
       <label>Mobile No<input className="field" defaultValue={row?.agent_mobile ?? ""} name="agent_mobile" inputMode="tel" placeholder="Agent mobile no." required /></label>
@@ -68,20 +66,14 @@ function StationFields({
       <label>EOD Due Time<input className="field" defaultValue={timeText(row?.eod_submission_due_time)} name="eod_submission_due_time" type="time" /></label>
       <label>Escalation Contact<input className="field" defaultValue={row?.escalation_contact ?? ""} name="escalation_contact" inputMode="tel" placeholder="Escalation mobile" /></label>
       <label>Escalation Email<input className="field" defaultValue={row?.escalation_email ?? ""} name="escalation_email" type="email" placeholder="Escalation email" /></label>
-      <label className="span-2">COD Sheet Link<input className="field" defaultValue={row?.cod_sheet_link ?? ""} name="cod_sheet_link" placeholder="Internal COD sheet/reference link" /></label>
       <div className="span-3 section-divider">
         <strong>Station Command Center checks</strong>
-        <span>Used by the backend checker to verify driver reconciliation and prepared deposit status.</span>
+        <span>Station-specific schedule for driver reconciliation and prepared deposit checks. Login credentials and base URLs stay in Settings.</span>
       </div>
-      <label>Portal Station Code<input className="field" defaultValue={row?.portal_station_code ?? row?.station_code ?? ""} name="portal_station_code" placeholder="TIRC / JDBD / station portal code" /></label>
-      <label>Portal Username<input className="field" defaultValue={row?.portal_username ?? ""} name="portal_username" placeholder="Login username or email" /></label>
-      <label>Secret Name<input className="field" defaultValue={row?.portal_secret_name ?? ""} name="portal_secret_name" placeholder="AMAZON_SCC_PASSWORD_TIRC" /></label>
-      <label className="span-3">Portal Login URL<input className="field" defaultValue={row?.portal_login_url ?? ""} name="portal_login_url" placeholder="https://www.amazonlogistics.eu/station/..." /></label>
-      <label className="span-3">Driver Reconciliation URL<input className="field" defaultValue={row?.amazon_driver_recon_url ?? ""} name="amazon_driver_recon_url" placeholder="https://www.amazonlogistics.eu/station/dashboard/driverreconciliation" /></label>
-      <label className="span-3">Bank Deposit URL<input className="field" defaultValue={row?.amazon_bank_deposit_url ?? ""} name="amazon_bank_deposit_url" placeholder="https://www.amazonlogistics.eu/station/dashboard/bankdeposits" /></label>
+      <label>SCC Station Code<input className="field" defaultValue={row?.portal_station_code ?? row?.station_code ?? ""} name="portal_station_code" placeholder="TIRC / JDBD / station portal code" /></label>
       <label>Driver Recon Due<input className="field" defaultValue={timeText(row?.driver_recon_due_time)} name="driver_recon_due_time" type="time" /></label>
       <label>Prepared Deposit Due<input className="field" defaultValue={timeText(row?.prepared_deposit_due_time)} name="prepared_deposit_due_time" type="time" /></label>
-      <label>Retry Gap Minutes<input className="field" defaultValue={String(row?.portal_check_interval_minutes ?? 30)} name="portal_check_interval_minutes" inputMode="numeric" /></label>
+      <label>Check Gap Minutes<input className="field" defaultValue={String(row?.portal_check_interval_minutes ?? 30)} name="portal_check_interval_minutes" inputMode="numeric" /></label>
       <label>Portal Checks
         <select className="field" defaultValue={row?.portal_checks_enabled ? "true" : "false"} name="portal_checks_enabled">
           <option value="false">Disabled</option>

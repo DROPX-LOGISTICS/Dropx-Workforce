@@ -37,6 +37,7 @@ function addFormParams(formData: FormData) {
     email: String(formData.get("email") ?? "").trim().toLowerCase(),
     date_of_join: String(formData.get("date_of_join") ?? ""),
     location_id: String(formData.get("location_id") ?? ""),
+    designation: String(formData.get("designation") ?? ""),
     biometric_id: String(formData.get("biometric_id") ?? "").replace(/\D/g, "")
   };
 }
@@ -166,6 +167,7 @@ export async function createFieldExecutive(formData: FormData) {
     const email = required(formData.get("email"), "Email").toLowerCase();
     const dateOfJoin = required(formData.get("date_of_join"), "Date of join");
     const locationId = required(formData.get("location_id"), "Location");
+    const designation = required(formData.get("designation"), "Designation");
 
     if (!/^\d{6,15}$/.test(mobile)) throw new Error("Mobile number must contain 6 to 15 digits.");
     if (biometricId && !/^\d{1,20}$/.test(biometricId)) throw new Error("Biometric enrolment ID must be numeric.");
@@ -192,6 +194,7 @@ export async function createFieldExecutive(formData: FormData) {
       email,
       date_of_join: dateOfJoin,
       location_id: locationId,
+      designation,
       biometric_id: biometricId,
       dropx_id: dropxId,
       created_by: authorization.userId,

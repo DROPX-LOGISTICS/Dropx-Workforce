@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
+import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 function clean(value: FormDataEntryValue | null) {
@@ -49,6 +50,10 @@ function locationIds(formData: FormData) {
   ));
 }
 
+function onboardingCategories(formData: FormData) {
+  return normalizeDesignationCategories(formData.getAll("onboarding_categories"));
+}
+
 export async function createDesignation(formData: FormData) {
   const authorization = await requirePagePermission("designations", "add");
   const companyId = requireCompanyId(authorization);
@@ -62,6 +67,7 @@ export async function createDesignation(formData: FormData) {
       name,
       provider_ids: providerIds(formData),
       location_ids: locationIds(formData),
+      onboarding_categories: onboardingCategories(formData),
       is_active: true
     }, companyId));
     if (error) throw new Error(error.message);
@@ -92,6 +98,7 @@ export async function updateDesignation(formData: FormData) {
         name,
         provider_ids: providerIds(formData),
         location_ids: locationIds(formData),
+        onboarding_categories: onboardingCategories(formData),
         is_active: status,
         updated_at: new Date().toISOString()
       })

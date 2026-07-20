@@ -7926,12 +7926,29 @@ tr:last-child td {
   width: min(440px, calc(100vw - 48px));
 }
 
+.designation-category-menu {
+  min-width: min(280px, calc(100vw - 48px));
+}
+
 .designation-location-menu .multi-select-options {
   max-height: min(320px, calc(100vh - 330px));
 }
 
+.multi-select-search-field {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.multi-select-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .form-grid .designation-location-menu .multi-select-all,
-.form-grid .designation-location-menu .multi-select-option {
+.form-grid .designation-location-menu .multi-select-option,
+.form-grid .designation-category-menu .multi-select-option {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -7942,7 +7959,8 @@ tr:last-child td {
 }
 
 .form-grid .designation-location-menu .multi-select-all span,
-.form-grid .designation-location-menu .multi-select-option > span {
+.form-grid .designation-location-menu .multi-select-option > span,
+.form-grid .designation-category-menu .multi-select-option > span {
   min-width: 0;
 }
 

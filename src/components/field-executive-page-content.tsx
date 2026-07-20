@@ -8,6 +8,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { type AuthorizationContext, requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { countryCodeOptions } from "@/lib/country-codes";
+import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type LocationRow = {
@@ -17,6 +18,14 @@ type LocationRow = {
   hide_from_location_list?: boolean | null;
   providers?: { name: string } | { name: string }[] | null;
   location_models?: { code: string; name: string } | { code: string; name: string }[] | null;
+};
+
+type DesignationRow = {
+  id: string;
+  code: string;
+  name: string;
+  onboarding_categories?: string[] | null;
+  is_active: boolean;
 };
 
 type ExecutiveRow = {
@@ -80,6 +89,7 @@ type FieldExecutiveAddFormValues = {
   dateOfJoin?: string;
   locationId?: string;
   biometricId?: string;
+  designation?: string;
 };
 
 function firstRelation<T>(value: T | T[] | null | undefined) {
@@ -289,14 +299,20 @@ function FieldExecutiveDetails({ executive }: { executive: ExecutiveRow }) {
 function FieldExecutiveForm({
   action,
   executive,
+  designationOptions,
   locationOptions,
   mode
 }: {
   action: (formData: FormData) => Promise<void>;
   executive?: ExecutiveRow | null;
+  designationOptions: { value: string; label: string; helper?: string }[];
   locationOptions: { value: string; label: string; helper?: string }[];
   mode: "create" | "edit";
 }) {
+  const effectiveDesignationOptions = executive?.designation && !designationOptions.some((option) => option.value === executive.designation)
+    ? [{ value: executive.designation, label: executive.designation, helper: "Current" }, ...designationOptions]
+    : designationOptions;
+
   return (
     <form action={action} className="form-grid three">
       {executive ? <input type="hidden" name="id" value={executive.id} /> : null}
@@ -318,7 +334,9 @@ function FieldExecutiveForm({
         <SearchableSelect name="location_id" options={locationOptions} defaultValue={executive?.location_id} placeholder="Select location" required />
       </label>
 
-      <label>Designation<input className="field" name="designation" placeholder="Enter designation" required defaultValue={textValue(executive?.designation)} /></label>
+      <label>Designation
+        <SearchableSelect name="designation" options={effectiveDesignationOptions} defaultValue={executive?.designation} placeholder="Select designation" required />
+      </label>
       <label>Gender
         <SearchableSelect name="gender" options={genderOptions} defaultValue={executive?.gender} placeholder="Select gender" required />
       </label>
@@ -379,7 +397,7 @@ function FieldExecutiveForm({
       ) : null}
 
       <div className="form-actions span-3 align-right">
-        <SubmitButton disabled={!locationOptions.length} disabledText="Add location first">
+        <SubmitButton disabled={!locationOptions.length || !designationOptions.length} disabledText={!locationOptions.length ? "Add location first" : "Add designation first"}>
           {mode === "edit" ? "Save changes" : "Add field executive"}
         </SubmitButton>
       </div>
@@ -388,9 +406,11 @@ function FieldExecutiveForm({
 }
 
 function AddFieldExecutiveForm({
+  designationOptions,
   locationOptions,
   values
 }: {
+  designationOptions: { value: string; label: string; helper?: string }[];
   locationOptions: { value: string; label: string; helper?: string }[];
   values?: FieldExecutiveAddFormValues;
 }) {
@@ -408,6 +428,9 @@ function AddFieldExecutiveForm({
       <label>Email<input className="field" name="email" placeholder="Enter email" required type="email" defaultValue={values?.email ?? ""} /></label>
       <label>Date of join<input className="field" name="date_of_join" required type="date" defaultValue={values?.dateOfJoin ?? ""} /></label>
       <label>Biometric enrolment ID<input className="field" inputMode="numeric" name="biometric_id" pattern="[0-9]{1,20}" placeholder="Auto generated if blank" defaultValue={values?.biometricId ?? ""} /></label>
+      <label>Designation
+        <SearchableSelect name="designation" options={designationOptions} defaultValue={values?.designation} placeholder="Select designation" required />
+      </label>
       <div className="span-2 field-executive-location-submit">
         <label>Location
           <SearchableSelect name="location_id" options={locationOptions} defaultValue={values?.locationId} placeholder="Select location" required />
@@ -419,8 +442,8 @@ function AddFieldExecutiveForm({
             confirmMessage="Do you want to submit this Field Executive registration?"
             confirmSubmitText="Yes"
             confirmTitle="Confirm submission"
-            disabled={!locationOptions.length}
-            disabledText="Add location first"
+            disabled={!locationOptions.length || !designationOptions.length}
+            disabledText={!locationOptions.length ? "Add location first" : "Add designation first"}
           >Submit</SubmitButton>
         </div>
       </div>
@@ -433,6 +456,7 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
     return {
       executives: [] as FieldExecutiveListRow[],
       locations: [] as LocationRow[],
+      designations: [] as DesignationRow[],
       editExecutive: null as ExecutiveRow | null,
       viewExecutive: null as ExecutiveRow | null,
       error: "Supabase service role key is not configured."
@@ -453,6 +477,25 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("station_code");
+  }
+
+  let designationsResult: { data: unknown[] | null; error: { message?: string } | null } = await supabaseAdmin
+    .from("designations")
+    .select("id, code, name, onboarding_categories, is_active")
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .order("name");
+  if (isMissingColumnError(designationsResult.error)) {
+    const fallbackDesignationsResult: { data: unknown[] | null; error: { message?: string } | null } = await supabaseAdmin
+      .from("designations")
+      .select("id, code, name, is_active")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .order("name");
+    designationsResult = {
+      ...fallbackDesignationsResult,
+      data: (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...(designation as Record<string, unknown>), onboarding_categories: ["employees"] }))
+    };
   }
 
   const executiveSelect = `
@@ -518,6 +561,10 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
     providers: firstRelation(location.providers),
     location_models: firstRelation(location.location_models)
   })) as LocationRow[];
+  const designations = ((designationsResult.data ?? []) as unknown as DesignationRow[]).filter((designation) => {
+    const categories = normalizeDesignationCategories(designation.onboarding_categories);
+    return categories.includes("field_executives") || categories.includes("delivery_executives");
+  });
   const allowedLocationIds = new Set(locations.map((location) => location.id));
   const executives = ((executivesResult.data ?? []) as unknown as ExecutiveRow[])
     .filter((executive) => authorization.hasAllLocationAccess || allowedLocationIds.has(executive.location_id))
@@ -560,9 +607,10 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
   return {
     executives,
     locations,
+    designations,
     editExecutive,
     viewExecutive,
-    error: executivesResult.error?.message || locationsResult.error?.message || null
+    error: executivesResult.error?.message || locationsResult.error?.message || designationsResult.error?.message || null
   };
 }
 
@@ -581,7 +629,7 @@ export async function FieldExecutivePageContent({
 }) {
   const authorization = await requirePagePermission("delivery_associates", "access");
   const permission = authorization.permissions.delivery_associates;
-  const { executives, locations, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, editId, viewId);
+  const { executives, locations, designations, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, editId, viewId);
   const activeMessage = error ?? errorMessage ?? notice;
   const needsOperationModeMigration = Boolean(activeMessage?.toLowerCase().includes("operation_mode_id"));
   const locationOptions = locations.map((location) => ({
@@ -590,6 +638,11 @@ export async function FieldExecutivePageContent({
     helper: [firstRelation(location.providers)?.name, firstRelation(location.location_models)?.name || firstRelation(location.location_models)?.code]
       .filter(Boolean)
       .join(" - ") || location.station_name || undefined
+  }));
+  const designationOptions = designations.map((designation) => ({
+    value: designation.name,
+    label: designation.name,
+    helper: designation.code
   }));
 
   return (
@@ -620,7 +673,7 @@ export async function FieldExecutivePageContent({
       {permission.canAdd ? (
         <section className="panel">
           <div className="panel-head"><h2>Add field executive</h2></div>
-          <AddFieldExecutiveForm locationOptions={locationOptions} values={addFormValues} />
+          <AddFieldExecutiveForm designationOptions={designationOptions} locationOptions={locationOptions} values={addFormValues} />
         </section>
       ) : null}
 
@@ -651,7 +704,7 @@ export async function FieldExecutivePageContent({
               </div>
               <PendingLink className="icon-button" href="/field-executive" scroll={false} aria-label="Close edit field executive">x</PendingLink>
             </div>
-            <FieldExecutiveForm action={updateFieldExecutive} executive={editExecutive} locationOptions={locationOptions} mode="edit" />
+            <FieldExecutiveForm action={updateFieldExecutive} designationOptions={designationOptions} executive={editExecutive} locationOptions={locationOptions} mode="edit" />
           </section>
         </div>
       ) : null}

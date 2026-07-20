@@ -7,6 +7,7 @@ import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { designationCategoryLabel, normalizeDesignationCategories } from "@/lib/designation-categories";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import { createDesignation, deleteDesignation, updateDesignation } from "./actions";
 
@@ -30,6 +31,7 @@ type DesignationRow = {
   name: string;
   provider_ids: string[];
   location_ids: string[];
+  onboarding_categories: string[];
   is_active: boolean;
 };
 
@@ -63,16 +65,30 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
   }
 
   const [designationsResult, providersResult, locationsResult] = await Promise.all([
-    supabaseAdmin.from("designations").select("id, code, name, provider_ids, location_ids, is_active").eq("company_id", companyId).order("code"),
+    supabaseAdmin.from("designations").select("id, code, name, provider_ids, location_ids, onboarding_categories, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("providers").select("id, code, name, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("stations").select("id, station_code, station_name, hide_from_location_list").eq("company_id", companyId).eq("is_active", true).order("station_code")
   ]);
-  let designationRows = designationsResult.data ?? [];
-  let designationError = designationsResult.error;
+  let designationRows: unknown[] = designationsResult.data ?? [];
+  let designationError: { message?: string } | null = designationsResult.error;
   if (isMissingColumnError(designationsResult.error)) {
-    const fallbackResult = await supabaseAdmin.from("designations").select("id, code, name, provider_ids, is_active").eq("company_id", companyId).order("code");
-    designationRows = (fallbackResult.data ?? []).map((row) => ({ ...row, location_ids: [] }));
-    designationError = fallbackResult.error;
+    let fallbackRows: unknown[] = [];
+    let fallbackError: { message?: string } | null = null;
+    const fallbackResult = await supabaseAdmin.from("designations").select("id, code, name, provider_ids, location_ids, is_active").eq("company_id", companyId).order("code");
+    if (isMissingColumnError(fallbackResult.error)) {
+      const legacyResult = await supabaseAdmin.from("designations").select("id, code, name, provider_ids, is_active").eq("company_id", companyId).order("code");
+      fallbackRows = (legacyResult.data ?? []).map((row) => ({ ...row, location_ids: [] }));
+      fallbackError = legacyResult.error;
+    } else {
+      fallbackRows = fallbackResult.data ?? [];
+      fallbackError = fallbackResult.error;
+    }
+    designationRows = fallbackRows.map((row) => ({
+      ...(row as Record<string, unknown>),
+      location_ids: Array.isArray((row as { location_ids?: unknown }).location_ids) ? (row as { location_ids: string[] }).location_ids : [],
+      onboarding_categories: ["employees"]
+    }));
+    designationError = fallbackError;
   }
 
   if (designationError) {
@@ -105,7 +121,10 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
     : (locationsResult.data ?? []).filter((location) => locationScopeIds.includes(location.id) && !location.hide_from_location_list);
 
   return {
-    designations: designationRows as DesignationRow[],
+    designations: (designationRows as DesignationRow[]).map((designation) => ({
+      ...designation,
+      onboarding_categories: normalizeDesignationCategories(designation.onboarding_categories)
+    })),
     providers: (providersResult.data ?? []) as ProviderRow[],
     locations: locations as LocationRow[],
     error: null
@@ -138,7 +157,8 @@ export default async function DesignationsPage({
       .filter(Boolean)
       .map((location) => `${location?.station_code} ${location?.station_name ?? ""}`)
       .join(" ");
-    return `${designation.code} ${designation.name} ${providerText} ${locationText}`.toLowerCase().includes(query);
+    const categoryText = normalizeDesignationCategories(designation.onboarding_categories).map(designationCategoryLabel).join(" ");
+    return `${designation.code} ${designation.name} ${providerText} ${locationText} ${categoryText}`.toLowerCase().includes(query);
   });
   const editDesignation = designations.find((designation) => designation.id === searchParams?.edit) ?? null;
 
@@ -193,6 +213,7 @@ export default async function DesignationsPage({
                 <tr>
                   <th>Code</th>
                   <th>Designation</th>
+                  <th>Categories</th>
                   <th>Locations</th>
                   <th>Status</th>
                   {pagePermission.canEdit ? <th>Action</th> : null}
@@ -208,6 +229,13 @@ export default async function DesignationsPage({
                       <td><strong>{designation.code}</strong></td>
                       <td>{designation.name}</td>
                       <td>
+                        <div className="mini-chip-list">
+                          {normalizeDesignationCategories(designation.onboarding_categories).map((category) => (
+                            <span className="mini-tag" key={category}>{designationCategoryLabel(category)}</span>
+                          ))}
+                        </div>
+                      </td>
+                      <td>
                         {designationLocations.length ? (
                           <div className="mini-chip-list">
                             {designationLocations.slice(0, 3).map((location) => <span className="mini-tag" key={location.id}>{location.station_code}</span>)}
@@ -220,7 +248,7 @@ export default async function DesignationsPage({
                     </tr>
                   );
                 }) : (
-                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 5 : 4}>No designations found.</td></tr>
+                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 6 : 5}>No designations found.</td></tr>
                 )}
               </tbody>
             </table>

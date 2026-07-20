@@ -24,6 +24,7 @@ create table if not exists public.designations (
   code text not null unique,
   name text not null,
   provider_ids uuid[] not null default '{}',
+  onboarding_categories text[] not null default array['employees']::text[],
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -31,6 +32,9 @@ create table if not exists public.designations (
 
 create index if not exists designations_provider_ids_idx
   on public.designations using gin(provider_ids);
+
+create index if not exists designations_onboarding_categories_idx
+  on public.designations using gin(onboarding_categories);
 
 alter table public.designations enable row level security;
 

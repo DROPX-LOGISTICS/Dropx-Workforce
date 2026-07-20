@@ -14,6 +14,7 @@ export default function FieldExecutivePage({
     email?: string;
     date_of_join?: string;
     location_id?: string;
+    designation?: string;
   };
 }) {
   return (
@@ -28,7 +29,8 @@ export default function FieldExecutivePage({
         mobile: searchParams?.mobile,
         email: searchParams?.email,
         dateOfJoin: searchParams?.date_of_join,
-        locationId: searchParams?.location_id
+        locationId: searchParams?.location_id,
+        designation: searchParams?.designation
       }}
     />
   );

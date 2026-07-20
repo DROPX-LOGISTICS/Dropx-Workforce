@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { SubmitButton } from "@/components/submit-button";
+import { designationCategoryOptions, normalizeDesignationCategories, type DesignationCategory } from "@/lib/designation-categories";
 
 type ProviderOption = {
   id: string;
@@ -24,8 +25,77 @@ type DesignationInitial = {
   name: string;
   provider_ids: string[];
   location_ids: string[];
+  onboarding_categories?: string[] | null;
   is_active: boolean;
 };
+
+function CategoryMultiSelect({
+  selected,
+  setSelected
+}: {
+  selected: DesignationCategory[];
+  setSelected: (value: DesignationCategory[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const summary = selected.length
+    ? selected.map((category) => designationCategoryOptions.find((option) => option.value === category)?.label ?? category).join(", ")
+    : "Select categories";
+
+  useEffect(() => {
+    if (!open) return;
+
+    function close(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+
+    function closeWithEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", closeWithEscape);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", closeWithEscape);
+    };
+  }, [open]);
+
+  function toggle(value: DesignationCategory) {
+    setSelected(selectedSet.has(value) ? selected.filter((item) => item !== value) : [...selected, value]);
+  }
+
+  return (
+    <div className="multi-select" ref={rootRef}>
+      <button
+        className={`multi-select-trigger ${open ? "open" : ""}`}
+        onClick={() => setOpen((value) => !value)}
+        type="button"
+      >
+        <span className="multi-select-summary">{summary}</span>
+        <ChevronDown aria-hidden="true" className="multi-select-chevron" size={16} strokeWidth={2.4} />
+      </button>
+      {open ? (
+        <div className="multi-select-menu designation-category-menu">
+          <div className="multi-select-options compact">
+            {designationCategoryOptions.map((category) => (
+              <label className="multi-select-option" key={category.value}>
+                <input
+                  checked={selectedSet.has(category.value)}
+                  className="matrix-checkbox"
+                  onChange={() => toggle(category.value)}
+                  type="checkbox"
+                />
+                <span><strong>{category.label}</strong></span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function LocationMultiSelect({
   locations,
@@ -144,12 +214,18 @@ export function DesignationForm({
   submitLabel?: string;
 }) {
   const [selectedLocations, setSelectedLocations] = useState<string[]>(initial?.location_ids ?? []);
+  const [selectedCategories, setSelectedCategories] = useState<DesignationCategory[]>(
+    normalizeDesignationCategories(initial?.onboarding_categories)
+  );
 
   return (
     <form action={action} className="designation-form">
       {initial ? <input name="id" type="hidden" value={initial.id} /> : null}
       {selectedLocations.map((locationId) => (
         <input key={locationId} name="location_ids" type="hidden" value={locationId} />
+      ))}
+      {selectedCategories.map((category) => (
+        <input key={category} name="onboarding_categories" type="hidden" value={category} />
       ))}
       <div className="form-grid three">
         <label>
@@ -159,6 +235,10 @@ export function DesignationForm({
         <label>
           Designation name
           <input className="field" defaultValue={initial?.name ?? ""} name="name" placeholder="Enter designation name" required />
+        </label>
+        <label>
+          Category
+          <CategoryMultiSelect selected={selectedCategories} setSelected={setSelectedCategories} />
         </label>
         <label>
           Locations

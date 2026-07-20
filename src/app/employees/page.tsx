@@ -7,6 +7,7 @@ import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import { createEmployee, updateEmployee } from "./actions";
 
@@ -21,6 +22,7 @@ type DesignationRow = {
   id: string;
   code: string;
   name: string;
+  onboarding_categories?: string[] | null;
   is_active: boolean;
 };
 
@@ -245,7 +247,7 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
       .order("station_code"),
     supabaseAdmin
       .from("designations")
-      .select("id, code, name, is_active")
+      .select("id, code, name, onboarding_categories, is_active")
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("name")
@@ -269,8 +271,21 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
   if (locationsResult.error) {
     return { employees: [], locations: [], designations: [], error: locationsResult.error.message };
   }
-  if (designationsResult.error) {
-    return { employees: [], locations: [], designations: [], error: designationsResult.error.message };
+  let designationRows = designationsResult.data ?? [];
+  let designationError = designationsResult.error;
+  if (isMissingColumnError(designationsResult.error)) {
+    const fallbackDesignationsResult = await supabaseAdmin
+      .from("designations")
+      .select("id, code, name, is_active")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .order("name");
+    designationRows = (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...designation, onboarding_categories: ["employees"] }));
+    designationError = fallbackDesignationsResult.error;
+  }
+
+  if (designationError) {
+    return { employees: [], locations: [], designations: [], error: designationError.message };
   }
 
   const allowedLocations = hasAllLocationAccess
@@ -299,7 +314,8 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
     editEmployee: editId ? employeesWithUrls.find((employee) => employee.id === editId) ?? null : null,
     viewEmployee: viewId ? employeesWithUrls.find((employee) => employee.id === viewId) ?? null : null,
     locations: allowedLocations as LocationRow[],
-    designations: (designationsResult.data ?? []) as DesignationRow[],
+    designations: (designationRows as DesignationRow[])
+      .filter((designation) => normalizeDesignationCategories(designation.onboarding_categories).includes("employees")),
     error: null
   };
 }

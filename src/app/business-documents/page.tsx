@@ -1,12 +1,11 @@
 import { cookies } from "next/headers";
-import { Download, Eye } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import { PendingLink } from "@/components/pending-link";
-import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
 import { BusinessDocumentForm } from "@/components/business-document-form";
 import { BusinessDocumentFilters } from "@/components/business-document-filters";
+import { BusinessDocumentsTable } from "@/components/business-documents-table";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
@@ -274,6 +273,23 @@ export default async function BusinessDocumentsPage({ searchParams }: { searchPa
   const safePage = Math.min(currentPage, totalPages);
   const pagedDocuments = filteredDocuments.slice((safePage - 1) * pageSize, safePage * pageSize);
   const visibleDocuments = await attachSignedUrls(pagedDocuments);
+  const visibleDocumentRows = visibleDocuments.map((document) => ({
+    id: document.id,
+    documentName: document.document_types?.name ?? document.document_type_code,
+    scope: scopeCode(document),
+    reference: document.reference_no ?? "-",
+    issue: formatDate(document.issue_date),
+    expiry: formatDate(document.expiry_date),
+    expiryClassName: expiryClassName(document.expiry_date),
+    status: statusLabel(document),
+    days: daysLabel(document.expiry_date),
+    signedUrl: document.signed_url ?? null,
+    canDownload: Boolean(document.storage_bucket && document.storage_path),
+    manageUrl: `/business-documents?edit=${document.id}`
+  }));
+  const filteredDownloadableIds = filteredDocuments
+    .filter((document) => document.storage_bucket && document.storage_path)
+    .map((document) => document.id);
   const expirySummary = expirySummaryCounts(baseFilteredDocuments);
   const editDocument = documents.find((document) => document.id === searchParams?.edit) ?? null;
 
@@ -356,49 +372,11 @@ export default async function BusinessDocumentsPage({ searchParams }: { searchPa
             <SummaryCard active={expiryFilters.includes("0-7")} href={businessDocumentsHref(searchParams, { expiry: "0-7" })} label="Expires in 0-7 D" value={expirySummary.due7} tone="business-dark-orange" />
             <SummaryCard active={expiryFilters.includes("expired")} href={businessDocumentsHref(searchParams, { expiry: "expired" })} label="Expired" value={expirySummary.expired} tone="business-red" />
           </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Document</th>
-                  <th>Scope</th>
-                  <th>Reference</th>
-                  <th>Issue</th>
-                  <th>Expiry</th>
-                  <th>Status</th>
-                  <th>Days</th>
-                  <th>File</th>
-                  {pagePermission.canEdit ? <th>Action</th> : null}
-                </tr>
-              </thead>
-              <tbody>
-                {visibleDocuments.length ? visibleDocuments.map((document) => (
-                  <tr key={document.id}>
-                    <td>
-                      <strong>{document.document_types?.name ?? document.document_type_code}</strong>
-                    </td>
-                    <td><strong>{scopeCode(document)}</strong></td>
-                    <td>{document.reference_no ?? "-"}</td>
-                    <td>{formatDate(document.issue_date)}</td>
-                    <td><span className={expiryClassName(document.expiry_date)}>{formatDate(document.expiry_date)}</span></td>
-                    <td><StatusPill status={statusLabel(document)} /></td>
-                    <td>{daysLabel(document.expiry_date)}</td>
-                    <td>
-                      {document.signed_url ? (
-                        <div className="business-doc-file-actions">
-                          <a className="icon-button" href={document.signed_url} target="_blank" rel="noreferrer" aria-label="Open document" title="Open document"><Eye size={16} /></a>
-                          <a className="icon-button" href={`/api/business-documents/download?id=${encodeURIComponent(document.id)}`} aria-label="Download document" title="Download document"><Download size={16} /></a>
-                        </div>
-                      ) : "-"}
-                    </td>
-                    {pagePermission.canEdit ? <td><PendingLink className="button secondary compact" href={`/business-documents?edit=${document.id}`} scroll={false}>Manage</PendingLink></td> : null}
-                  </tr>
-                )) : (
-                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 9 : 8}>No business documents found.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <BusinessDocumentsTable
+            allFilteredIds={filteredDownloadableIds}
+            canEdit={Boolean(pagePermission.canEdit)}
+            rows={visibleDocumentRows}
+          />
           {filteredDocuments.length > pageSize ? (
             <div className="panel-foot pagination">
               <span>Page {safePage} of {totalPages}</span>

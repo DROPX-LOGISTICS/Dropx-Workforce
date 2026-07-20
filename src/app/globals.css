@@ -5820,6 +5820,57 @@ tr:last-child td {
   width: min(260px, 82vw);
 }
 
+.business-doc-selection {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.business-doc-bulk-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 0 14px;
+}
+
+.business-doc-selection-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.business-doc-bulk-error {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  color: #be123c;
+  font-size: 13px;
+  margin: 0 14px;
+  padding: 9px 12px;
+}
+
+.select-cell {
+  text-align: center;
+  width: 42px;
+}
+
+.select-cell input {
+  accent-color: #ea580c;
+  height: 16px;
+  width: 16px;
+}
+
+.business-doc-bulk-dialog {
+  max-width: 480px;
+}
+
+.business-doc-download-options {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
 .business-doc-expiry-summary {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   padding: 12px 14px 0;

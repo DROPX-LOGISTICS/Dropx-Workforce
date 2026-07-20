@@ -104,27 +104,29 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
   return (
     <form action={action} className="form-grid three employee-form">
       {employee ? <input name="id" type="hidden" value={employee.id} /> : null}
-      <label>
-        Employee ID
-        <input
-          className="field"
-          defaultValue={employee?.employee_code ?? ""}
-          disabled={autoGenerateEmployeeCode || isEdit}
-          name="employee_code"
-          placeholder={autoGenerateEmployeeCode ? "Auto generated" : "Enter employee ID"}
-          required={!autoGenerateEmployeeCode && !isEdit}
-        />
-      </label>
-      {!isEdit ? <label className="check-row employee-code-auto-check">
-        <input
-          checked={autoGenerateEmployeeCode}
-          name="auto_generate_employee_code"
-          onChange={(event) => setAutoGenerateEmployeeCode(event.target.checked)}
-          type="checkbox"
-          value="yes"
-        />
-        <span>Auto generate employee ID</span>
-      </label> : <div />}
+      <div className="employee-id-field">
+        <label>
+          Employee ID
+          <input
+            className="field"
+            defaultValue={employee?.employee_code ?? ""}
+            disabled={autoGenerateEmployeeCode || isEdit}
+            name="employee_code"
+            placeholder={autoGenerateEmployeeCode ? "Auto generated" : "Enter employee ID"}
+            required={!autoGenerateEmployeeCode && !isEdit}
+          />
+        </label>
+        {!isEdit ? <label className="check-row employee-code-auto-check">
+          <input
+            checked={autoGenerateEmployeeCode}
+            name="auto_generate_employee_code"
+            onChange={(event) => setAutoGenerateEmployeeCode(event.target.checked)}
+            type="checkbox"
+            value="yes"
+          />
+          <span>Auto generate</span>
+        </label> : null}
+      </div>
       <label>
         Full name
         <input className="field" defaultValue={employee?.full_name ?? ""} name="full_name" placeholder="Enter full name" required={!isEdit} />

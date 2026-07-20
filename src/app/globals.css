@@ -2446,6 +2446,116 @@ h3 {
   min-height: 34px;
 }
 
+.employee-form,
+.field-executive-add-form {
+  align-items: end;
+  gap: 12px 14px;
+  padding: 16px 18px 18px;
+}
+
+.employee-form label,
+.field-executive-add-form label {
+  gap: 7px;
+  color: #5f6670;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.employee-form .field,
+.employee-form .select,
+.field-executive-add-form .field,
+.field-executive-add-form .select {
+  height: 42px;
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+.employee-form .searchable-control,
+.field-executive-add-form .searchable-control {
+  height: 42px;
+  border-radius: 7px;
+}
+
+.employee-form .searchable-input,
+.field-executive-add-form .searchable-input {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.employee-form .field-executive-mobile-row,
+.field-executive-add-form .field-executive-mobile-row {
+  grid-template-columns: 188px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.employee-form .field-executive-country-code,
+.field-executive-add-form .field-executive-country-code {
+  min-width: 0;
+}
+
+.employee-form .field-executive-submit-slot,
+.field-executive-add-form .field-executive-submit-slot {
+  min-height: 42px;
+}
+
+.employee-form .field-executive-submit-slot .button,
+.field-executive-add-form .field-executive-submit-slot .button {
+  min-width: 108px;
+  height: 42px;
+  border-radius: 7px;
+}
+
+.employee-form .field-executive-location-submit,
+.field-executive-add-form .field-executive-location-submit {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.employee-form .tag-select {
+  min-height: 42px;
+  gap: 8px;
+}
+
+.employee-form .tag-select-option {
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.employee-id-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  min-width: 0;
+}
+
+.employee-id-field > label:first-child {
+  min-width: 0;
+}
+
+.employee-form label.employee-code-auto-check {
+  align-self: end;
+  min-height: 42px;
+  padding-top: 0;
+  padding-inline: 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #ffffff;
+  color: #5f6670;
+  font-size: 12px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.employee-form label.employee-code-auto-check input {
+  width: 15px;
+  height: 15px;
+}
+
 .payment-method-form {
   display: grid;
   gap: 12px;
@@ -4022,6 +4132,17 @@ tr:last-child td {
   .span-2,
   .span-3 {
     grid-column: span 1;
+  }
+
+  .employee-id-field,
+  .employee-form .field-executive-location-submit,
+  .field-executive-add-form .field-executive-location-submit {
+    grid-template-columns: 1fr;
+  }
+
+  .employee-form .field-executive-submit-slot,
+  .field-executive-add-form .field-executive-submit-slot {
+    justify-content: flex-end;
   }
 
   .add-user-actions {

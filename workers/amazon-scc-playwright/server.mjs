@@ -12,6 +12,8 @@ const WORKER_TIMEOUT_MS = Number(process.env.WORKER_TIMEOUT_MS || 240000);
 const DEBUG_ARTIFACT_DIR = process.env.DEBUG_ARTIFACT_DIR || "";
 const SESSION_STATE_DIR = process.env.SESSION_STATE_DIR || path.join(process.cwd(), ".scc-sessions");
 const MANUAL_APPROVAL_WAIT_MS = Number(process.env.MANUAL_APPROVAL_WAIT_MS || 180000);
+const ENABLE_VNC = String(process.env.ENABLE_VNC || "false").toLowerCase() === "true";
+const NOVNC_PORT = Number(process.env.NOVNC_PORT || 6080);
 
 const DRIVER_RECON_URL = "https://www.amazonlogistics.eu/station/dashboard/driverreconciliation";
 const BANK_DEPOSITS_URL = "https://www.amazonlogistics.eu/station/dashboard/bankdeposits";
@@ -23,6 +25,14 @@ function jsonResponse(res, status, body) {
     "Content-Length": Buffer.byteLength(payload)
   });
   res.end(payload);
+}
+
+function htmlResponse(res, status, body) {
+  res.writeHead(status, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Content-Length": Buffer.byteLength(body)
+  });
+  res.end(body);
 }
 
 function unauthorized(res) {
@@ -49,13 +59,126 @@ function workerInfo() {
     ok: true,
     service: "dropx-amazon-scc-playwright-worker",
     headless: HEADLESS,
+    vnc_enabled: ENABLE_VNC,
+    vnc_port: ENABLE_VNC ? NOVNC_PORT : null,
+    vnc_path: ENABLE_VNC ? "/vnc.html" : null,
+    interactive_login_supported: ENABLE_VNC || !HEADLESS,
     session_mode: "worker_browser_storage_state",
     local_chrome_session_reused: false,
     biometric_attendance_safe: true,
+    biometric_middleware_host: "bio.dropxlogistics.com is not used by this worker",
     session_state_dir: SESSION_STATE_DIR,
     manual_approval_wait_ms: MANUAL_APPROVAL_WAIT_MS,
     worker_timeout_ms: WORKER_TIMEOUT_MS
   };
+}
+
+function landingPage() {
+  const info = workerInfo();
+  const vncMarkup = info.vnc_enabled
+    ? `<a class="button primary" href="/vnc.html" target="_blank" rel="noreferrer">Open SCC worker browser</a>
+       <p class="hint">Use this browser for the one-time Amazon SCC login, MFA, or captcha approval. The session is saved on this worker.</p>`
+    : `<p class="warn">Interactive browser is disabled. Start the worker with ENABLE_VNC=true and HEADLESS=false for the first Amazon approval.</p>`;
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DropX Amazon SCC Worker</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f7f8fb;
+        color: #1f2933;
+      }
+      body { margin: 0; padding: 32px; }
+      main {
+        max-width: 920px;
+        margin: 0 auto;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+        padding: 28px;
+      }
+      .eyebrow {
+        color: #e94b22;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+      }
+      h1 { margin: 6px 0 8px; font-size: 30px; line-height: 1.1; }
+      p { color: #58616f; line-height: 1.55; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 12px;
+        margin: 22px 0;
+      }
+      .card {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 14px;
+        background: #fbfcfe;
+      }
+      .label { color: #6b7280; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+      .value { margin-top: 6px; font-weight: 800; word-break: break-word; }
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0 16px;
+        border-radius: 7px;
+        border: 1px solid #d1d5db;
+        color: #111827;
+        text-decoration: none;
+        font-weight: 800;
+        margin-right: 10px;
+      }
+      .primary {
+        background: #e94b22;
+        border-color: #e94b22;
+        color: #fff;
+      }
+      .hint { margin-top: 10px; }
+      .warn {
+        border: 1px solid #fecaca;
+        background: #fff1f2;
+        color: #991b1b;
+        border-radius: 8px;
+        padding: 12px;
+      }
+      code {
+        background: #f3f4f6;
+        border-radius: 5px;
+        padding: 2px 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">Worker service</div>
+      <h1>Amazon SCC automation is running</h1>
+      <p>This service logs in to Amazon SCC with its own saved browser session and sends Driver Reconciliation results back to the DropX dashboard.</p>
+
+      <div class="grid">
+        <div class="card"><div class="label">Worker</div><div class="value">${info.service}</div></div>
+        <div class="card"><div class="label">Browser mode</div><div class="value">${info.headless ? "Headless" : "Interactive"}</div></div>
+        <div class="card"><div class="label">noVNC</div><div class="value">${info.vnc_enabled ? `Enabled on ${info.vnc_port}` : "Disabled"}</div></div>
+        <div class="card"><div class="label">Biometric safety</div><div class="value">Separate from bio.dropxlogistics.com</div></div>
+      </div>
+
+      ${vncMarkup}
+      <a class="button" href="/health" target="_blank" rel="noreferrer">Open health check</a>
+
+      <p>The normal Chrome login on your laptop is not shared with this worker. For stable automation, approve Amazon once inside the worker browser and keep <code>SESSION_STATE_DIR</code> on persistent storage.</p>
+    </main>
+  </body>
+</html>`;
 }
 
 function assertAuthorized(req, res) {
@@ -615,7 +738,10 @@ async function resolveMfaOrManualBlocker(page, payload) {
     return { resolved: true, message: "Login completed after Amazon approval.", mfaAttempt };
   }
 
-  const workerApprovalMessage = "Amazon requested MFA/manual verification inside the SCC worker browser. Your normal Chrome login is not shared with this worker. Open Settings > Amazon Connector, click Login worker once, approve Amazon/TOTP/captcha there, then retry Sync SCC now. The biometric attendance middleware is separate.";
+  const interactiveHint = ENABLE_VNC
+    ? "Open the SCC worker noVNC browser at /vnc.html on the worker host, approve Amazon/TOTP/captcha there, then retry Sync SCC now."
+    : "Run the SCC worker with ENABLE_VNC=true and HEADLESS=false for the first approval, then retry Sync SCC now.";
+  const workerApprovalMessage = `Amazon requested MFA/manual verification inside the SCC worker browser. Your normal Chrome login is not shared with this worker. ${interactiveHint} The biometric attendance middleware is separate.`;
   const message = mfaAttempt.attempted
     ? `${mfaAttempt.message} ${workerApprovalMessage}`
     : workerApprovalMessage;
@@ -1153,6 +1279,9 @@ async function handleWarmup(req, res) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+    if (req.method === "GET" && url.pathname === "/") {
+      return htmlResponse(res, 200, landingPage());
+    }
     if (req.method === "GET" && url.pathname === "/health") {
       return jsonResponse(res, 200, workerInfo());
     }

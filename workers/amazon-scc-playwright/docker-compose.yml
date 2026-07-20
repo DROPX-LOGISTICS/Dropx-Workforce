@@ -1,0 +1,27 @@
+services:
+  amazon-scc-worker:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "6080:6080"
+    environment:
+      PORT: "8080"
+      OPS_PORTAL_WORKER_SECRET: "${OPS_PORTAL_WORKER_SECRET}"
+      HEADLESS: "false"
+      ENABLE_VNC: "true"
+      VNC_PASSWORD: "${VNC_PASSWORD:-}"
+      SLOW_MO_MS: "${SLOW_MO_MS:-0}"
+      WORKER_TIMEOUT_MS: "${WORKER_TIMEOUT_MS:-240000}"
+      MANUAL_APPROVAL_WAIT_MS: "${MANUAL_APPROVAL_WAIT_MS:-300000}"
+      SESSION_STATE_DIR: "/var/lib/dropx-scc-worker/sessions"
+      DEBUG_ARTIFACT_DIR: "/var/lib/dropx-scc-worker/artifacts"
+      SCREEN_WIDTH: "${SCREEN_WIDTH:-1440}"
+      SCREEN_HEIGHT: "${SCREEN_HEIGHT:-1000}"
+    volumes:
+      - scc_sessions:/var/lib/dropx-scc-worker/sessions
+      - scc_artifacts:/var/lib/dropx-scc-worker/artifacts
+
+volumes:
+  scc_sessions:
+  scc_artifacts:

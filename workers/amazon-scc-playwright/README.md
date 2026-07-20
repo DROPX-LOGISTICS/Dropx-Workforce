@@ -1,31 +1,101 @@
 # Amazon SCC Playwright Worker
 
-This worker is the browser automation layer for DropX Ops Pulse portal checks.
+This worker is the live browser automation layer for DropX Ops Pulse COD checks.
 
-It is intentionally separate from the Vercel dashboard. Vercel queues and stores check runs, while this service opens Amazon SCC with Playwright, inspects the station pages, and returns a structured result.
+It is intentionally separate from the Vercel dashboard and separate from biometric attendance. The dashboard stores settings and COD data. This worker opens Amazon SCC with Playwright, reads Driver Reconciliation / Bank Deposit pages, and sends structured results back to the dashboard.
 
-## Endpoints
+## What This Solves
 
-- `GET /health` confirms the worker is alive.
-- `POST /warmup` opens SCC, logs in once, and saves the browser session for later automatic checks.
-- `POST /run` performs one queued SCC check.
+- The station team should not manually type every associate name.
+- Ops Pulse > COD > Executive Reconciliation can fetch the SCC Driver Reconciliation roster for the selected station/date.
+- Amazon SCC can ask for MFA, captcha, or manual approval. This worker supports a persistent interactive browser session so the owner can approve Amazon once and reuse the saved session.
+- Biometric attendance remains untouched. This worker does not call `bio.dropxlogistics.com` and does not change attendance punch ingestion.
 
-The dashboard cron calls this worker using `OPS_PORTAL_WORKER_URL` and `OPS_PORTAL_WORKER_SECRET`.
+## Service Endpoints
 
-## Required Environment Variables
+- `GET /` opens the worker status page.
+- `GET /health` confirms the worker is alive and shows configuration state.
+- `GET /vnc.html` opens the worker browser when `ENABLE_VNC=true`.
+- `POST /warmup` opens SCC and saves the browser session.
+- `POST /run` performs one SCC check.
 
-```bash
-PORT=8080
-OPS_PORTAL_WORKER_SECRET=change-this-long-random-secret
-HEADLESS=true
-SLOW_MO_MS=0
-WORKER_TIMEOUT_MS=240000
-DEBUG_ARTIFACT_DIR=/tmp/dropx-scc-artifacts
-SESSION_STATE_DIR=/var/lib/dropx-scc-worker/sessions
-MANUAL_APPROVAL_WAIT_MS=180000
+The dashboard calls this worker using `OPS_PORTAL_WORKER_URL` and `OPS_PORTAL_WORKER_SECRET`.
+
+## Required Deployment Shape
+
+Do not deploy this worker to Vercel. Vercel is not suitable for long-running Playwright browser sessions or saved Amazon login cookies.
+
+Deploy this worker on a persistent Docker host such as:
+
+- AWS EC2 / Lightsail
+- Render private service with persistent disk
+- Fly.io machine with persistent volume
+- Any Ubuntu server with Docker and HTTPS reverse proxy
+
+Recommended domain:
+
+```text
+scc.dropxlogistics.com
 ```
 
-Then set these in the Vercel dashboard project:
+Keep this separate from:
+
+```text
+bio.dropxlogistics.com
+```
+
+`bio.dropxlogistics.com` is only for biometric device punch middleware.
+
+## Worker Environment
+
+Copy `.env.example` to `.env` on the worker host:
+
+```bash
+OPS_PORTAL_WORKER_SECRET=change-this-long-random-secret
+VNC_PASSWORD=change-this-vnc-password
+SLOW_MO_MS=0
+WORKER_TIMEOUT_MS=240000
+MANUAL_APPROVAL_WAIT_MS=300000
+SCREEN_WIDTH=1440
+SCREEN_HEIGHT=1000
+```
+
+The Docker compose file already sets:
+
+```bash
+HEADLESS=false
+ENABLE_VNC=true
+SESSION_STATE_DIR=/var/lib/dropx-scc-worker/sessions
+DEBUG_ARTIFACT_DIR=/var/lib/dropx-scc-worker/artifacts
+```
+
+`SESSION_STATE_DIR` is mounted as a Docker volume. Do not remove it unless you want Amazon SCC to ask for login again.
+
+## Start The Worker
+
+From this folder:
+
+```bash
+docker compose up -d --build
+```
+
+Open:
+
+```text
+https://scc.dropxlogistics.com/
+```
+
+Then open:
+
+```text
+https://scc.dropxlogistics.com/vnc.html
+```
+
+Enter the VNC password from `.env`, then approve Amazon SCC login/MFA inside that browser.
+
+## Connect The Dashboard
+
+Set these in the Vercel dashboard project:
 
 ```bash
 OPS_PORTAL_WORKER_URL=https://scc.dropxlogistics.com/run
@@ -33,30 +103,44 @@ OPS_PORTAL_WORKER_SECRET=the-same-secret-as-the-worker
 CRON_SECRET=your-existing-cron-secret
 ```
 
-Do not point `OPS_PORTAL_WORKER_URL` to `bio.dropxlogistics.com`. The `bio` host is for biometric device punch middleware only. SCC automation should run on its own worker host, for example `scc.dropxlogistics.com`, so Amazon checks cannot disturb attendance ingestion.
+Then in the dashboard:
 
-## Owner Warm-Up Flow
+1. Open Settings > Amazon Connector.
+2. Save Amazon SCC credentials.
+3. Click `Login worker once`.
+4. If Amazon asks for MFA or manual verification, open the worker noVNC browser and approve it.
+5. Open Ops Pulse > COD > Executive Reconciliation.
+6. Select date and station.
+7. Click `Sync SCC now`.
 
-1. Deploy this worker on a host that supports long-running Playwright and persistent disk.
-2. In the dashboard, open Settings > Amazon Connector.
-3. Save Amazon SCC credentials.
-4. Click `Login worker once` on the Amazon SCC card.
-5. If Amazon asks for MFA, push approval, captcha, or manual verification, complete it once in the worker session and run warm-up again.
-6. Once warm-up returns Ready, Ops Pulse > COD > Executive Reconciliation can use `Sync SCC now` and scheduled checks.
+If Amazon accepts the saved session, associate rows should be imported automatically from SCC Driver Reconciliation.
 
-The worker stores only browser session cookies under `SESSION_STATE_DIR`. Passwords remain in Supabase/Vercel flow and are sent only to the worker for login over HTTPS.
+## Can The Owner Login In The Worker?
 
-## Worker Login vs Chrome Login
+Yes. That is the correct stable flow.
 
-The worker cannot reuse the owner's normal Chrome profile. Amazon SCC must be approved inside the Playwright worker browser because it is a different browser environment from the laptop Chrome window.
+The owner cannot reuse normal laptop Chrome login directly because Playwright runs in its own browser on the worker host. Instead:
 
-- `Login worker once` warms up the worker's own browser session.
-- `SESSION_STATE_DIR` must be persistent across restarts or Amazon will ask for login again.
-- A TOTP setup key can let the worker generate MFA codes. Push approval, captcha, or manual Amazon security checks still require one-time human approval in the worker browser.
-- On a headless server, use a host that supports an interactive browser/VNC/noVNC during warm-up, or run the worker with `HEADLESS=false` during the first approval.
-- This does not affect biometric attendance. The SCC worker only reads Amazon SCC and writes Ops Pulse/COD check tables. It does not call `bio.dropxlogistics.com` and does not change biometric punch ingestion.
+- Open the worker browser through noVNC.
+- Login to Amazon SCC once.
+- Approve MFA/captcha/manual prompt if Amazon asks.
+- The worker saves session cookies in `SESSION_STATE_DIR`.
+- Scheduled checks reuse that worker session.
 
-## Expected Request
+If Amazon expires the session later, repeat the same noVNC login once.
+
+## Does This Affect Biometric Attendance?
+
+No.
+
+Biometric attendance and SCC automation are separated:
+
+- Biometric device punches go to `bio.dropxlogistics.com`.
+- SCC automation goes to `scc.dropxlogistics.com`.
+- SCC worker reads Amazon SCC and writes Ops Pulse/COD tables only.
+- It does not touch attendance punch APIs, attendance reports, device master ingestion, or payroll attendance calculations.
+
+## Expected Run Request
 
 ```json
 {
@@ -77,7 +161,7 @@ The worker cannot reuse the owner's normal Chrome profile. Amazon SCC must be ap
 }
 ```
 
-`mfa_secret` is the authenticator setup key or full `otpauth://` URL, not the current 6-digit OTP. When this is saved in Settings > Amazon Connector, the worker can generate the current code during login. If Amazon shows push approval, captcha, or another manual verification screen, that cannot be bypassed; approve it once and the worker will save the browser session under `SESSION_STATE_DIR` for reuse.
+`mfa_secret` is the authenticator setup key or full `otpauth://` URL, not the current 6-digit OTP. If Amazon shows push approval, captcha, or another manual verification screen, it cannot be bypassed; approve it once in the worker browser.
 
 ## What It Checks
 
@@ -86,17 +170,15 @@ For `driver_reconciliation`:
 - Logs in to Amazon SCC.
 - Opens Driver Reconciliation.
 - Applies station and business date where the page exposes controls.
-- Reads table/body text.
-- Returns Pass when no pending reconciliation is visible.
-- Returns Fail when pending reconciliation rows/amounts are visible.
-- Returns Manual Review if Amazon shows MFA, a blocker, or an unfamiliar page layout.
+- Reads associate rows, expected amount, pending amount, pending details, and page status.
+- Returns structured associate rows to Ops Pulse COD.
 
 For `prepared_deposit`:
 
 - Opens Bank Deposits.
 - Clicks prepared deposit related action where available.
 - Returns Pass when no liability/pending amount is visible.
-- Returns Fail when a pending liability/amount is visible.
+- Returns Fail when pending liability or amount is visible.
 
 ## Local Test
 
@@ -114,5 +196,10 @@ curl -X POST http://localhost:8080/run \
   -d @sample-request.json
 ```
 
-The worker never stores Amazon passwords. The dashboard sends credentials only for the current run over HTTPS.
-The worker does store browser session cookies locally so repeated checks do not restart Amazon login every time.
+## Operational Notes
+
+- Keep the worker URL private where possible.
+- Always use HTTPS in production.
+- Rotate `OPS_PORTAL_WORKER_SECRET` if it is shared accidentally.
+- If SCC layout changes, the extraction logic in `server.mjs` may need an update.
+- Save debug artifacts only on secured storage because screenshots may show Amazon operational data.

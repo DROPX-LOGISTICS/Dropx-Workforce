@@ -22,7 +22,6 @@ import {
 import { isSupabaseAdminConfigured } from "@/lib/supabase-admin";
 import {
   addManualExecutiveReconciliation,
-  pasteSccDriverReconciliationRoster,
   refreshExecutiveReconciliationRoster,
   saveExecutiveReconciliation
 } from "./actions";
@@ -283,8 +282,8 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
               <div className="scc-sync-card">
                 <div className="scc-sync-item">
                   <span>SCC source</span>
-                  <strong>{workerReady ? "Automation connected" : "Paste import available"}</strong>
-                  <small>{workerReady ? "Sync button can call the SCC browser worker." : "Copy rows from SCC and paste below until the worker is connected."}</small>
+                  <strong>{workerReady ? "Automation connected" : "Automation not configured"}</strong>
+                  <small>{workerReady ? "Use Sync SCC now or wait for scheduled checks to pull Amazon SCC Driver Reconciliation." : "Connect the live SCC worker before station teams use this page."}</small>
                 </div>
                 <div className="scc-sync-item">
                   <span>Imported rows</span>
@@ -293,46 +292,12 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                 </div>
                 <div className="scc-sync-item">
                   <span>Station flow</span>
-                  <strong>Paste once, count cash</strong>
-                  <small>No manual associate typing when rows are copied from SCC.</small>
+                  <strong>Sync, then count cash</strong>
+                  <small>Associates should come from SCC automatically for the selected date and station.</small>
                 </div>
               </div>
             </div>
           </section>
-
-          {permission.canAdd && defaultLocationId ? (
-            <section className="panel scc-paste-panel">
-              <div className="panel-head">
-                <div>
-                  <h2>Import SCC associates</h2>
-                  <p className="subtle">Open SCC Driver Reconciliation for the same date and station, copy the table rows, paste here, then import.</p>
-                </div>
-                <span className={`status-pill ${sccRows ? "good" : "warn"}`}>{sccRows ? `${sccRows} imported` : "No SCC rows yet"}</span>
-              </div>
-              <div className="panel-body">
-                <form action={pasteSccDriverReconciliationRoster} className="scc-paste-grid">
-                  <input type="hidden" name="return_href" value={returnHref} />
-                  <input type="hidden" name="business_date" value={result.businessDate} />
-                  <input type="hidden" name="location_id" value={defaultLocationId} />
-                  <label>SCC Driver Reconciliation rows
-                    <textarea
-                      className="field scc-paste-textarea"
-                      name="pasted_roster"
-                      placeholder={"Paste copied SCC rows here...\nPASUPULETI HARI KRISHNA\tA2TQ5SXWBEP8NI\tDROPX LOGISTICS\tDSP\t560.04\t560.04\t5284.1\t5284.1\t0\t13830.09"}
-                      required
-                    />
-                  </label>
-                  <div className="scc-paste-help">
-                    <strong>Fast station flow</strong>
-                    <span>1. Select the same date and station in SCC.</span>
-                    <span>2. Copy only the Driver Reconciliation rows.</span>
-                    <span>3. Import here, then count cash.</span>
-                    <SubmitButton className="button">Import associates</SubmitButton>
-                  </div>
-                </form>
-              </div>
-            </section>
-          ) : null}
 
           <section className="summary-grid">
             <div className="metric-card"><span>Associates</span><strong>{rows.length}</strong><small>SCC roster plus manual rows</small></div>
@@ -409,7 +374,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                       </tr>
                     );
                   }) : (
-                    <tr><td className="empty-cell" colSpan={16}>No SCC associates imported yet. Paste the SCC Driver Reconciliation rows above, or use Sync SCC now after the automation worker is connected.</td></tr>
+                    <tr><td className="empty-cell" colSpan={16}>No SCC associates found yet. Click Sync SCC now for the selected date and station.</td></tr>
                   )}
                 </tbody>
               </table>

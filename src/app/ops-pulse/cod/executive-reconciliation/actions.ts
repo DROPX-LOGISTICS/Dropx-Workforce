@@ -431,14 +431,17 @@ export async function refreshExecutiveReconciliationRoster(formData: FormData) {
     }, companyId);
 
     let runId = "";
-    const queued = await supabaseAdmin
+    const existingRun = await supabaseAdmin
       .from("ops_portal_check_runs")
-      .upsert(payload, { onConflict: "company_id,station_code,check_date,check_type" })
       .select("id")
+      .eq("company_id", companyId)
+      .eq("location_id", station.id)
+      .eq("check_date", businessDate)
+      .eq("check_type", "driver_reconciliation")
       .maybeSingle();
 
-    if (queued.error) {
-      if (isMissingPortalCheckSetup(queued.error)) {
+    if (existingRun.error) {
+      if (isMissingPortalCheckSetup(existingRun.error)) {
         redirectWithFlash(
           {
             error: "SCC roster automation is not installed yet. Run scripts/ops_pulse_cod_portal_checks_v1.sql in Supabase SQL Editor."
@@ -446,19 +449,65 @@ export async function refreshExecutiveReconciliationRoster(formData: FormData) {
           returnHref
         );
       }
-      if (queued.error.code === "42P10") {
-        const inserted = await supabaseAdmin
-          .from("ops_portal_check_runs")
-          .insert(payload)
-          .select("id")
-          .single();
-        if (inserted.error) throw new Error(inserted.error.message);
-        runId = inserted.data.id as string;
-      } else {
-        throw new Error(queued.error.message);
-      }
+      throw new Error(existingRun.error.message);
+    }
+
+    if (existingRun.data?.id) {
+      const updated = await supabaseAdmin
+        .from("ops_portal_check_runs")
+        .update({
+          cod_master_id: setting.id,
+          station_code: station.station_code,
+          portal_station_code: setting.portal_station_code ?? station.station_code,
+          status: "Queued",
+          pending_count: 0,
+          pending_amount: 0,
+          summary: "Queued from Executive Reconciliation.",
+          evidence: {},
+          raw_result: {},
+          attempt_count: 0,
+          error_message: null,
+          next_check_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", existingRun.data.id)
+        .select("id")
+        .single();
+
+      if (updated.error) throw new Error(updated.error.message);
+      runId = updated.data.id as string;
     } else {
-      runId = queued.data?.id as string;
+      const inserted = await supabaseAdmin
+        .from("ops_portal_check_runs")
+        .insert(payload)
+        .select("id")
+        .single();
+
+      if (inserted.error?.code === "23505") {
+        const racedRun = await supabaseAdmin
+          .from("ops_portal_check_runs")
+          .select("id")
+          .eq("company_id", companyId)
+          .eq("location_id", station.id)
+          .eq("check_date", businessDate)
+          .eq("check_type", "driver_reconciliation")
+          .maybeSingle();
+
+        if (racedRun.error) throw new Error(racedRun.error.message);
+        runId = racedRun.data?.id as string;
+      } else if (inserted.error) {
+        if (isMissingPortalCheckSetup(inserted.error)) {
+          redirectWithFlash(
+            {
+              error: "SCC roster automation is not installed yet. Run scripts/ops_pulse_cod_portal_checks_v1.sql in Supabase SQL Editor."
+            },
+            returnHref
+          );
+        }
+        throw new Error(inserted.error.message);
+      } else {
+        runId = inserted.data.id as string;
+      }
     }
 
     if (!runId) {
@@ -466,7 +515,7 @@ export async function refreshExecutiveReconciliationRoster(formData: FormData) {
         .from("ops_portal_check_runs")
         .select("id")
         .eq("company_id", companyId)
-        .eq("station_code", station.station_code)
+        .eq("location_id", station.id)
         .eq("check_date", businessDate)
         .eq("check_type", "driver_reconciliation")
         .maybeSingle();

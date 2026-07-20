@@ -2970,8 +2970,9 @@ h3 {
 }
 
 .cash-reconciliation-table {
-  min-width: 1320px;
+  min-width: 1160px;
   table-layout: fixed;
+  font-size: 12px;
 }
 
 .cash-reconciliation-table th {
@@ -2980,23 +2981,23 @@ h3 {
 
 .cash-reconciliation-table th,
 .cash-reconciliation-table td {
-  padding: 8px 9px;
+  padding: 6px 7px;
   vertical-align: middle;
 }
 
 .cash-reconciliation-table th:nth-child(1),
 .cash-reconciliation-table td:nth-child(1) {
-  width: 122px;
+  width: 105px;
 }
 
 .cash-reconciliation-table th:nth-child(2),
 .cash-reconciliation-table td:nth-child(2) {
-  width: 220px;
+  width: 190px;
 }
 
 .cash-reconciliation-table th:nth-child(3),
 .cash-reconciliation-table td:nth-child(3) {
-  width: 116px;
+  width: 105px;
 }
 
 .cash-reconciliation-table th:nth-child(4),
@@ -3005,7 +3006,7 @@ h3 {
 .cash-reconciliation-table td:nth-child(12),
 .cash-reconciliation-table th:nth-child(13),
 .cash-reconciliation-table td:nth-child(13) {
-  width: 112px;
+  width: 96px;
 }
 
 .cash-reconciliation-table th:nth-child(5),
@@ -3022,22 +3023,22 @@ h3 {
 .cash-reconciliation-table td:nth-child(10),
 .cash-reconciliation-table th:nth-child(11),
 .cash-reconciliation-table td:nth-child(11) {
-  width: 74px;
+  width: 60px;
 }
 
 .cash-reconciliation-table th:nth-child(14),
 .cash-reconciliation-table td:nth-child(14) {
-  width: 104px;
+  width: 96px;
 }
 
 .cash-reconciliation-table th:nth-child(15),
 .cash-reconciliation-table td:nth-child(15) {
-  width: 160px;
+  width: 132px;
 }
 
 .cash-reconciliation-table th:nth-child(16),
 .cash-reconciliation-table td:nth-child(16) {
-  width: 78px;
+  width: 62px;
 }
 
 .compact-field.amount-field {
@@ -3071,6 +3072,77 @@ h3 {
 
 .scc-refresh-form {
   padding-top: 8px;
+}
+
+.scc-sync-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.scc-sync-item {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.scc-sync-item span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.scc-sync-item strong {
+  font-size: 13px;
+}
+
+.scc-sync-item small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.scc-paste-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 0.35fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.scc-paste-textarea {
+  min-height: 116px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.scc-paste-help {
+  align-content: start;
+  background: #fff7ed;
+  border: 1px dashed #fed7aa;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.scc-paste-help span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+@media (max-width: 900px) {
+  .scc-sync-card,
+  .scc-paste-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .cod-manual-reconciliation-grid {

@@ -409,7 +409,7 @@ export async function refreshExecutiveReconciliationRoster(formData: FormData) {
     const workerUrl = process.env.OPS_PORTAL_WORKER_URL?.trim();
     const workerSecret = process.env.OPS_PORTAL_WORKER_SECRET?.trim();
     if (!workerUrl || !workerSecret) {
-      throw new Error("Automatic SCC sync is not connected on the server yet. Configure the live SCC worker URL and secret, then retry.");
+      throw new Error("Automatic SCC sync worker is not connected on this deployment yet. Configure OPS_PORTAL_WORKER_URL and OPS_PORTAL_WORKER_SECRET for the SCC worker. This is separate from the biometric middleware.");
     }
 
     const payload = withCompany({
@@ -494,7 +494,31 @@ export async function refreshExecutiveReconciliationRoster(formData: FormData) {
           .maybeSingle();
 
         if (racedRun.error) throw new Error(racedRun.error.message);
-        runId = racedRun.data?.id as string;
+        if (racedRun.data?.id) {
+          const resetRun = await supabaseAdmin
+            .from("ops_portal_check_runs")
+            .update({
+              cod_master_id: setting.id,
+              station_code: station.station_code,
+              portal_station_code: setting.portal_station_code ?? station.station_code,
+              status: "Queued",
+              pending_count: 0,
+              pending_amount: 0,
+              summary: "Queued from Executive Reconciliation.",
+              evidence: {},
+              raw_result: {},
+              attempt_count: 0,
+              error_message: null,
+              next_check_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", racedRun.data.id)
+            .select("id")
+            .single();
+
+          if (resetRun.error) throw new Error(resetRun.error.message);
+          runId = resetRun.data.id as string;
+        }
       } else if (inserted.error) {
         if (isMissingPortalCheckSetup(inserted.error)) {
           redirectWithFlash(
@@ -557,6 +581,8 @@ export async function refreshExecutiveReconciliationRoster(formData: FormData) {
     const status = String(run.status ?? "");
     const summary = String(run.summary ?? "").trim();
     const errorMessage = String(run.error_message ?? "").trim();
+    const workerApprovalHelp =
+      "Amazon SCC needs worker login approval. Your normal Chrome login is not shared with the worker. Open Settings > Amazon Connector, click Login worker once, approve Amazon/TOTP/captcha in the worker session, then come back and click Sync SCC now. Biometric attendance is separate and will not be affected.";
 
     revalidatePath(pagePath);
     if (imported > 0) {
@@ -564,7 +590,7 @@ export async function refreshExecutiveReconciliationRoster(formData: FormData) {
     }
     if (status === "Manual Review") {
       redirectWithFlash({
-        error: summary || "Amazon SCC needs MFA/manual approval. Save the authenticator setup key in Settings > Amazon Connector, then approve Amazon once if it asks for push/captcha verification."
+        error: summary || workerApprovalHelp
       }, returnHref);
     }
     if (status === "Error") {

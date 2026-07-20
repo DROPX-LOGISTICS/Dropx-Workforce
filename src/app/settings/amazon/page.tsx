@@ -9,7 +9,7 @@ import { isCompanyOwner, requirePagePermission } from "@/lib/authorization";
 import { amazonTaskDefinitions, isAmazonConnectorSetupError, loadAmazonConnectors } from "@/lib/amazon-connectors";
 import { requireCompanyId } from "@/lib/company-scope";
 import { isSupabaseAdminConfigured } from "@/lib/supabase-admin";
-import { saveAmazonConnector } from "./actions";
+import { saveAmazonConnector, warmupAmazonSccSession } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -169,6 +169,11 @@ export default async function AmazonConnectorPage() {
                     <input className="field" defaultValue={connector?.notes ?? ""} name="notes" placeholder="Internal note for this credential or portal" />
                   </label>
                 </div>
+                {definition.code === "scc" ? (
+                  <div className="field-hint" style={{ marginTop: 12 }}>
+                    <strong>SCC worker login:</strong> Login worker once saves the worker&apos;s own Amazon SCC browser session. Your Chrome login is not reused. Approve Amazon MFA, captcha, or manual checks there if asked. This does not touch biometric attendance or the bio.dropxlogistics.com middleware.
+                  </div>
+                ) : null}
 
                 <div className="panel-body">
                   <h3>Automation coverage</h3>
@@ -218,6 +223,11 @@ export default async function AmazonConnectorPage() {
                 </div>
                 <div className="form-actions">
                   <SubmitButton pendingText="Saving">Save {definition.shortName}</SubmitButton>
+                  {definition.code === "scc" ? (
+                    <button className="button secondary" formAction={warmupAmazonSccSession} type="submit">
+                      Login worker once
+                    </button>
+                  ) : null}
                 </div>
               </form>
             </section>

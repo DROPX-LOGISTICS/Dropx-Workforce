@@ -8,10 +8,10 @@ const PORT = Number(process.env.PORT || 8080);
 const WORKER_SECRET = process.env.OPS_PORTAL_WORKER_SECRET || "";
 const HEADLESS = String(process.env.HEADLESS ?? "true").toLowerCase() !== "false";
 const SLOW_MO_MS = Number(process.env.SLOW_MO_MS || 0);
-const WORKER_TIMEOUT_MS = Number(process.env.WORKER_TIMEOUT_MS || 90000);
+const WORKER_TIMEOUT_MS = Number(process.env.WORKER_TIMEOUT_MS || 240000);
 const DEBUG_ARTIFACT_DIR = process.env.DEBUG_ARTIFACT_DIR || "";
 const SESSION_STATE_DIR = process.env.SESSION_STATE_DIR || path.join(process.cwd(), ".scc-sessions");
-const MANUAL_APPROVAL_WAIT_MS = Number(process.env.MANUAL_APPROVAL_WAIT_MS || 45000);
+const MANUAL_APPROVAL_WAIT_MS = Number(process.env.MANUAL_APPROVAL_WAIT_MS || 180000);
 
 const DRIVER_RECON_URL = "https://www.amazonlogistics.eu/station/dashboard/driverreconciliation";
 const BANK_DEPOSITS_URL = "https://www.amazonlogistics.eu/station/dashboard/bankdeposits";
@@ -42,6 +42,40 @@ function readBody(req) {
     req.on("end", () => resolve(raw));
     req.on("error", reject);
   });
+}
+
+function workerInfo() {
+  return {
+    ok: true,
+    service: "dropx-amazon-scc-playwright-worker",
+    headless: HEADLESS,
+    session_mode: "worker_browser_storage_state",
+    local_chrome_session_reused: false,
+    biometric_attendance_safe: true,
+    session_state_dir: SESSION_STATE_DIR,
+    manual_approval_wait_ms: MANUAL_APPROVAL_WAIT_MS,
+    worker_timeout_ms: WORKER_TIMEOUT_MS
+  };
+}
+
+function assertAuthorized(req, res) {
+  if (!WORKER_SECRET) return true;
+  const auth = req.headers.authorization || "";
+  if (auth === `Bearer ${WORKER_SECRET}`) return true;
+  unauthorized(res);
+  return false;
+}
+
+async function parseJsonBody(req) {
+  const raw = await readBody(req);
+  return JSON.parse(raw || "{}");
+}
+
+function withWorkerTimeout(task) {
+  const timeout = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(`Worker timed out after ${WORKER_TIMEOUT_MS}ms.`)), WORKER_TIMEOUT_MS);
+  });
+  return Promise.race([task, timeout]);
 }
 
 function requiredString(value, field) {
@@ -581,9 +615,10 @@ async function resolveMfaOrManualBlocker(page, payload) {
     return { resolved: true, message: "Login completed after Amazon approval.", mfaAttempt };
   }
 
+  const workerApprovalMessage = "Amazon requested MFA/manual verification inside the SCC worker browser. Your normal Chrome login is not shared with this worker. Open Settings > Amazon Connector, click Login worker once, approve Amazon/TOTP/captcha there, then retry Sync SCC now. The biometric attendance middleware is separate.";
   const message = mfaAttempt.attempted
-    ? `${mfaAttempt.message} Amazon still needs MFA/manual verification.`
-    : "Amazon requested MFA or manual verification. Save the authenticator setup key in Settings > Amazon Connector, or approve the Amazon challenge once when prompted.";
+    ? `${mfaAttempt.message} ${workerApprovalMessage}`
+    : workerApprovalMessage;
 
   return { resolved: false, message, mfaAttempt };
 }
@@ -1029,18 +1064,89 @@ async function runSccCheck(payload) {
   }
 }
 
-async function handleRun(req, res) {
-  if (WORKER_SECRET) {
-    const auth = req.headers.authorization || "";
-    if (auth !== `Bearer ${WORKER_SECRET}`) return unauthorized(res);
-  }
+async function runSccWarmup(payload) {
+  requiredString(payload.username, "username");
+  requiredString(payload.password, "password");
+  const warmupPayload = { ...payload, portal_code: payload.portal_code || "scc" };
 
-  const raw = await readBody(req);
-  const payload = JSON.parse(raw || "{}");
-  const timeout = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error(`Worker timed out after ${WORKER_TIMEOUT_MS}ms.`)), WORKER_TIMEOUT_MS);
+  const browser = await chromium.launch({
+    headless: HEADLESS,
+    slowMo: Number.isFinite(SLOW_MO_MS) ? SLOW_MO_MS : 0
   });
-  const result = await Promise.race([runSccCheck(payload), timeout]);
+
+  try {
+    await mkdir(SESSION_STATE_DIR, { recursive: true });
+    const statePath = sessionStatePath(warmupPayload);
+    const hasStoredSession = await pathExists(statePath);
+    const context = await browser.newContext({
+      locale: "en-IN",
+      timezoneId: "Asia/Kolkata",
+      viewport: { width: 1440, height: 1000 },
+      ...(hasStoredSession ? { storageState: statePath } : {})
+    });
+    const page = await context.newPage();
+    page.setDefaultTimeout(30000);
+    page.setDefaultNavigationTimeout(60000);
+
+    const loginResult = await maybeLogin(page, warmupPayload);
+    const text = await page.locator("body").innerText({ timeout: 10000 }).catch(() => "");
+    const stillBlocked = !loginResult.loggedIn || hasMfaOrHumanBlocker(text) || isLoginVisible(text, page.url());
+
+    if (stillBlocked) {
+      const debugScreenshot = await captureDebug(page, warmupPayload.run_id || "warmup", "login-blocked");
+      const pageTitle = await page.title().catch(() => "");
+      const pageUrl = page.url();
+      await context.close().catch(() => null);
+      return {
+        status: "Manual Review",
+        pending_count: 0,
+        pending_amount: 0,
+        summary: loginResult.message || "Amazon still needs approval inside the SCC worker browser. Your Chrome login is not reused by the worker. Complete Login worker once, then retry Sync SCC now.",
+        evidence: {
+          url: pageUrl,
+          title: pageTitle,
+          debug_screenshot: debugScreenshot
+        },
+        raw_result: {
+          login: { ...loginResult, session_reused: hasStoredSession }
+        }
+      };
+    }
+
+    await context.storageState({ path: statePath });
+    const pageTitle = await page.title().catch(() => "");
+    const pageUrl = page.url();
+    await context.close().catch(() => null);
+    return {
+      status: "Ready",
+      pending_count: 0,
+      pending_amount: 0,
+      summary: "SCC worker session is ready and saved for automatic roster sync.",
+      evidence: {
+        url: pageUrl,
+        title: pageTitle,
+        session_state_saved: true
+      },
+      raw_result: {
+        login: { ...loginResult, session_reused: hasStoredSession, session_saved: true }
+      }
+    };
+  } finally {
+    await browser.close().catch(() => null);
+  }
+}
+
+async function handleRun(req, res) {
+  if (!assertAuthorized(req, res)) return;
+  const payload = await parseJsonBody(req);
+  const result = await withWorkerTimeout(runSccCheck(payload));
+  jsonResponse(res, 200, result);
+}
+
+async function handleWarmup(req, res) {
+  if (!assertAuthorized(req, res)) return;
+  const payload = await parseJsonBody(req);
+  const result = await withWorkerTimeout(runSccWarmup(payload));
   jsonResponse(res, 200, result);
 }
 
@@ -1048,12 +1154,9 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
     if (req.method === "GET" && url.pathname === "/health") {
-      return jsonResponse(res, 200, {
-        ok: true,
-        service: "dropx-amazon-scc-playwright-worker",
-        headless: HEADLESS
-      });
+      return jsonResponse(res, 200, workerInfo());
     }
+    if (req.method === "POST" && url.pathname === "/warmup") return await handleWarmup(req, res);
     if (req.method === "POST" && (url.pathname === "/run" || url.pathname === "/")) {
       return await handleRun(req, res);
     }

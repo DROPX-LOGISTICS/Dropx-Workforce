@@ -240,23 +240,35 @@ a {
 }
 
 .nav-submenu {
-  display: none;
+  display: grid;
+  gap: 4px;
   position: absolute;
   left: calc(100% + 8px);
   top: 0;
   z-index: 30;
   min-width: 190px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 16px 36px rgba(17, 24, 39, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.nav-group.submenu-up .nav-submenu {
+  top: auto;
+  bottom: 0;
 }
 
 .nav-group:hover .nav-submenu,
 .nav-group:focus-within .nav-submenu {
-  display: grid;
-  gap: 4px;
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
 }
 
 .nav-submenu::before {
@@ -270,6 +282,11 @@ a {
   border-bottom: 1px solid var(--line);
   border-left: 1px solid var(--line);
   transform: rotate(45deg);
+}
+
+.nav-group.submenu-up .nav-submenu::before {
+  top: auto;
+  bottom: 14px;
 }
 
 .nav-subitem {
@@ -4139,6 +4156,8 @@ tr:last-child td {
     position: static;
     display: grid;
     min-width: 0;
+    max-height: none;
+    overflow: visible;
     margin: 4px 0 7px 28px;
     padding: 4px;
     border: 0;
@@ -4146,6 +4165,9 @@ tr:last-child td {
     background: #fff8ed;
     box-shadow: none;
     gap: 2px;
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
   }
 
   .nav-submenu::before {

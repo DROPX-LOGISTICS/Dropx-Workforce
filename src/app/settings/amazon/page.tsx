@@ -9,7 +9,7 @@ import { isCompanyOwner, requirePagePermission } from "@/lib/authorization";
 import { amazonTaskDefinitions, isAmazonConnectorSetupError, loadAmazonConnectors } from "@/lib/amazon-connectors";
 import { requireCompanyId } from "@/lib/company-scope";
 import { isSupabaseAdminConfigured } from "@/lib/supabase-admin";
-import { saveAmazonConnector, warmupAmazonSccSession } from "./actions";
+import { saveAmazonConnector, warmupAmazonPortalSession } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -169,11 +169,9 @@ export default async function AmazonConnectorPage() {
                     <input className="field" defaultValue={connector?.notes ?? ""} name="notes" placeholder="Internal note for this credential or portal" />
                   </label>
                 </div>
-                {definition.code === "scc" ? (
-                  <div className="field-hint" style={{ marginTop: 12 }}>
-                    <strong>SCC worker login:</strong> Login worker once saves the worker&apos;s own Amazon SCC browser session. Your Chrome login is not reused. Approve Amazon MFA, captcha, or manual checks there if asked. This does not touch biometric attendance or the bio.dropxlogistics.com middleware.
-                  </div>
-                ) : null}
+                <div className="field-hint" style={{ marginTop: 12 }}>
+                  <strong>{definition.shortName} worker login:</strong> Login worker once saves this portal&apos;s backend browser session. Your Chrome login is not reused. Approve MFA, captcha, or manual checks in that worker if Amazon asks. This does not touch biometric attendance or the bio.dropxlogistics.com middleware.
+                </div>
 
                 <div className="panel-body">
                   <h3>Automation coverage</h3>
@@ -223,11 +221,9 @@ export default async function AmazonConnectorPage() {
                 </div>
                 <div className="form-actions">
                   <SubmitButton pendingText="Saving">Save {definition.shortName}</SubmitButton>
-                  {definition.code === "scc" ? (
-                    <button className="button secondary" formAction={warmupAmazonSccSession} type="submit">
-                      Login worker once
-                    </button>
-                  ) : null}
+                  <button className="button secondary" formAction={warmupAmazonPortalSession} type="submit">
+                    Login worker once
+                  </button>
                 </div>
               </form>
             </section>

@@ -10,13 +10,56 @@ const HEADLESS = String(process.env.HEADLESS ?? "true").toLowerCase() !== "false
 const SLOW_MO_MS = Number(process.env.SLOW_MO_MS || 0);
 const WORKER_TIMEOUT_MS = Number(process.env.WORKER_TIMEOUT_MS || 240000);
 const DEBUG_ARTIFACT_DIR = process.env.DEBUG_ARTIFACT_DIR || "";
-const SESSION_STATE_DIR = process.env.SESSION_STATE_DIR || path.join(process.cwd(), ".scc-sessions");
+const SESSION_STATE_DIR = process.env.SESSION_STATE_DIR || path.join(process.cwd(), ".amazon-portal-sessions");
 const MANUAL_APPROVAL_WAIT_MS = Number(process.env.MANUAL_APPROVAL_WAIT_MS || 180000);
 const ENABLE_VNC = String(process.env.ENABLE_VNC || "false").toLowerCase() === "true";
 const NOVNC_PORT = Number(process.env.NOVNC_PORT || 6080);
 
 const DRIVER_RECON_URL = "https://www.amazonlogistics.eu/station/dashboard/driverreconciliation";
 const BANK_DEPOSITS_URL = "https://www.amazonlogistics.eu/station/dashboard/bankdeposits";
+const PORTAL_DEFINITIONS = {
+  scc: {
+    baseUrl: "https://www.amazonlogistics.eu/",
+    code: "scc",
+    loginUrl: "https://www.amazonlogistics.eu/station/dashboard/workitemsvisibility",
+    name: "Amazon SCC",
+    shortName: "SCC"
+  },
+  lsc: {
+    baseUrl: "https://logistics.amazon.in/",
+    code: "lsc",
+    loginUrl: "https://logistics.amazon.in/",
+    name: "Amazon LSC",
+    shortName: "LSC"
+  },
+  yms: {
+    baseUrl: "https://www.amazonlogistics.eu/",
+    code: "yms",
+    loginUrl: "https://www.amazonlogistics.eu/",
+    name: "Amazon YMS",
+    shortName: "YMS"
+  }
+};
+
+function portalDefinition(payload = {}) {
+  const code = String(payload.portal_code || payload.portal || "scc").toLowerCase();
+  return PORTAL_DEFINITIONS[code] || PORTAL_DEFINITIONS.scc;
+}
+
+function normalizePortalPayload(payload = {}) {
+  const definition = portalDefinition(payload);
+  return {
+    ...payload,
+    base_url: payload.base_url || definition.baseUrl,
+    login_url: payload.login_url || definition.loginUrl,
+    portal: definition.code,
+    portal_code: definition.code
+  };
+}
+
+function portalShortName(payload = {}) {
+  return portalDefinition(payload).shortName;
+}
 
 function jsonResponse(res, status, body) {
   const payload = JSON.stringify(body);
@@ -57,7 +100,7 @@ function readBody(req) {
 function workerInfo() {
   return {
     ok: true,
-    service: "dropx-amazon-scc-playwright-worker",
+    service: "dropx-amazon-portal-playwright-worker",
     headless: HEADLESS,
     vnc_enabled: ENABLE_VNC,
     vnc_port: ENABLE_VNC ? NOVNC_PORT : null,
@@ -76,8 +119,8 @@ function workerInfo() {
 function landingPage() {
   const info = workerInfo();
   const vncMarkup = info.vnc_enabled
-    ? `<a class="button primary" href="/vnc.html" target="_blank" rel="noreferrer">Open SCC worker browser</a>
-       <p class="hint">Use this browser for the one-time Amazon SCC login, MFA, or captcha approval. The session is saved on this worker.</p>`
+    ? `<a class="button primary" href="/vnc.html" target="_blank" rel="noreferrer">Open Amazon worker browser</a>
+       <p class="hint">Use this browser for one-time Amazon SCC/LSC/YMS login, MFA, or captcha approval. The session is saved on this worker.</p>`
     : `<p class="warn">Interactive browser is disabled. Start the worker with ENABLE_VNC=true and HEADLESS=false for the first Amazon approval.</p>`;
 
   return `<!doctype html>
@@ -85,7 +128,7 @@ function landingPage() {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DropX Amazon SCC Worker</title>
+    <title>DropX Amazon Portal Worker</title>
     <style>
       :root {
         color-scheme: light;
@@ -162,8 +205,8 @@ function landingPage() {
   <body>
     <main>
       <div class="eyebrow">Worker service</div>
-      <h1>Amazon SCC automation is running</h1>
-      <p>This service logs in to Amazon SCC with its own saved browser session and sends Driver Reconciliation results back to the DropX dashboard.</p>
+      <h1>Amazon portal automation is running</h1>
+      <p>This service logs in to Amazon SCC/LSC/YMS with its own saved browser sessions. SCC checks can send Driver Reconciliation and Prepared Deposit results back to the DropX dashboard.</p>
 
       <div class="grid">
         <div class="card"><div class="label">Worker</div><div class="value">${info.service}</div></div>
@@ -175,7 +218,7 @@ function landingPage() {
       ${vncMarkup}
       <a class="button" href="/health" target="_blank" rel="noreferrer">Open health check</a>
 
-      <p>The normal Chrome login on your laptop is not shared with this worker. For stable automation, approve Amazon once inside the worker browser and keep <code>SESSION_STATE_DIR</code> on persistent storage.</p>
+      <p>The normal Chrome login on your laptop is not shared with this worker. For stable automation, approve Amazon once inside the worker browser for each portal and keep <code>SESSION_STATE_DIR</code> on persistent storage.</p>
     </main>
   </body>
 </html>`;
@@ -725,6 +768,7 @@ async function attemptMfa(page, payload) {
 }
 
 async function resolveMfaOrManualBlocker(page, payload) {
+  const portalName = portalShortName(payload);
   const mfaAttempt = await attemptMfa(page, payload);
   if (mfaAttempt.submitted) {
     const text = await page.locator("body").innerText({ timeout: 10000 }).catch(() => "");
@@ -739,9 +783,9 @@ async function resolveMfaOrManualBlocker(page, payload) {
   }
 
   const interactiveHint = ENABLE_VNC
-    ? "Open the SCC worker noVNC browser at /vnc.html on the worker host, approve Amazon/TOTP/captcha there, then retry Sync SCC now."
-    : "Run the SCC worker with ENABLE_VNC=true and HEADLESS=false for the first approval, then retry Sync SCC now.";
-  const workerApprovalMessage = `Amazon requested MFA/manual verification inside the SCC worker browser. Your normal Chrome login is not shared with this worker. ${interactiveHint} The biometric attendance middleware is separate.`;
+    ? `Open the ${portalName} worker noVNC browser at /vnc.html on the worker host, approve Amazon/TOTP/captcha there, then retry sync/check.`
+    : `Run the Amazon worker with ENABLE_VNC=true and HEADLESS=false for the first ${portalName} approval, then retry sync/check.`;
+  const workerApprovalMessage = `Amazon requested MFA/manual verification inside the ${portalName} worker browser. Your normal Chrome login is not shared with this worker. ${interactiveHint} The biometric attendance middleware is separate.`;
   const message = mfaAttempt.attempted
     ? `${mfaAttempt.message} ${workerApprovalMessage}`
     : workerApprovalMessage;
@@ -778,7 +822,8 @@ async function clickFirst(page, candidates) {
 }
 
 async function maybeLogin(page, payload) {
-  const loginUrl = payload.login_url || "https://www.amazonlogistics.eu/";
+  payload = normalizePortalPayload(payload);
+  const loginUrl = payload.login_url || portalDefinition(payload).loginUrl;
   await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
   await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
 
@@ -841,7 +886,7 @@ async function maybeLogin(page, payload) {
     }
     return { loggedIn: false, manualReview: true, message: challenge.message, mfaAttempt: challenge.mfaAttempt };
   }
-  if (isLoginVisible(text, page.url())) return { loggedIn: false, manualReview: true, message: "Login did not complete. Check SCC credentials or Amazon login challenge." };
+  if (isLoginVisible(text, page.url())) return { loggedIn: false, manualReview: true, message: `Login did not complete. Check ${portalShortName(payload)} credentials or Amazon login challenge.` };
   return { loggedIn: true, message: "Login completed." };
 }
 
@@ -1094,6 +1139,7 @@ async function captureDebug(page, runId, label) {
 }
 
 async function runSccCheck(payload) {
+  payload = normalizePortalPayload({ ...payload, portal_code: "scc" });
   requiredString(payload.username, "username");
   requiredString(payload.password, "password");
   const stationCode = requiredString(payload.portal_station_code || payload.station_code, "station_code");
@@ -1193,7 +1239,8 @@ async function runSccCheck(payload) {
 async function runSccWarmup(payload) {
   requiredString(payload.username, "username");
   requiredString(payload.password, "password");
-  const warmupPayload = { ...payload, portal_code: payload.portal_code || "scc" };
+  const warmupPayload = normalizePortalPayload(payload);
+  const portalName = portalShortName(warmupPayload);
 
   const browser = await chromium.launch({
     headless: HEADLESS,
@@ -1227,7 +1274,7 @@ async function runSccWarmup(payload) {
         status: "Manual Review",
         pending_count: 0,
         pending_amount: 0,
-        summary: loginResult.message || "Amazon still needs approval inside the SCC worker browser. Your Chrome login is not reused by the worker. Complete Login worker once, then retry Sync SCC now.",
+        summary: loginResult.message || `Amazon still needs approval inside the ${portalName} worker browser. Your Chrome login is not reused by the worker. Complete Login worker once, then retry sync/check.`,
         evidence: {
           url: pageUrl,
           title: pageTitle,
@@ -1247,7 +1294,7 @@ async function runSccWarmup(payload) {
       status: "Ready",
       pending_count: 0,
       pending_amount: 0,
-      summary: "SCC worker session is ready and saved for automatic roster sync.",
+      summary: `${portalName} worker session is ready and saved for automatic sync.`,
       evidence: {
         url: pageUrl,
         title: pageTitle,
@@ -1302,5 +1349,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Amazon SCC Playwright worker listening on ${PORT}`);
+  console.log(`Amazon Portal Playwright worker listening on ${PORT}`);
 });

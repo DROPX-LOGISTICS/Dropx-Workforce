@@ -25,25 +25,6 @@ function isNextRedirectError(error: unknown) {
     String((error as { digest: string }).digest).startsWith("NEXT_REDIRECT");
 }
 
-async function existingRunId(params: {
-  checkDate: string;
-  checkType: string;
-  companyId: string;
-  locationId: string;
-}) {
-  if (!supabaseAdmin) return null;
-  const { data, error } = await supabaseAdmin
-    .from("ops_portal_check_runs")
-    .select("id")
-    .eq("company_id", params.companyId)
-    .eq("location_id", params.locationId)
-    .eq("check_date", params.checkDate)
-    .eq("check_type", params.checkType)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return data?.id ?? null;
-}
-
 export async function queuePortalChecks(formData: FormData) {
   const authorization = await requirePagePermission("cod_portal_checks", "add");
   const companyId = requireCompanyId(authorization);
@@ -75,12 +56,6 @@ export async function queuePortalChecks(formData: FormData) {
     const now = new Date().toISOString();
     for (const setting of settings) {
       for (const checkType of ["driver_reconciliation", "prepared_deposit"]) {
-        const runId = await existingRunId({
-          checkDate,
-          checkType,
-          companyId,
-          locationId: setting.location_id
-        });
         const payload = {
           company_id: companyId,
           location_id: setting.location_id,
@@ -100,17 +75,10 @@ export async function queuePortalChecks(formData: FormData) {
           updated_at: now,
           created_by: authorization.userId
         };
-        if (runId) {
-          const { error } = await supabaseAdmin
-            .from("ops_portal_check_runs")
-            .update(payload)
-            .eq("company_id", companyId)
-            .eq("id", runId);
-          if (error) throw new Error(error.message);
-        } else {
-          const { error } = await supabaseAdmin.from("ops_portal_check_runs").insert(payload);
-          if (error) throw new Error(error.message);
-        }
+        const { error } = await supabaseAdmin
+          .from("ops_portal_check_runs")
+          .upsert(payload, { onConflict: "company_id,location_id,check_date,check_type" });
+        if (error) throw new Error(error.message);
         queued += 1;
       }
     }

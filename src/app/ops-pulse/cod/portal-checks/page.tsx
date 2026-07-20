@@ -51,6 +51,42 @@ function loadFlash() {
   }
 }
 
+function workerLinks() {
+  const raw = process.env.OPS_PORTAL_WORKER_URL?.trim();
+  if (!raw) {
+    return {
+      base: null as string | null,
+      browser: null as string | null,
+      configured: false,
+      health: null as string | null,
+      message: "OPS_PORTAL_WORKER_URL is not configured in Vercel."
+    };
+  }
+
+  try {
+    const url = new URL(raw);
+    url.pathname = url.pathname.replace(/\/(run|warmup)\/?$/, "").replace(/\/$/, "");
+    url.search = "";
+    url.hash = "";
+    const base = url.toString().replace(/\/$/, "");
+    return {
+      base,
+      browser: `${base}/vnc.html`,
+      configured: true,
+      health: `${base}/health`,
+      message: null as string | null
+    };
+  } catch {
+    return {
+      base: null,
+      browser: null,
+      configured: false,
+      health: null,
+      message: "OPS_PORTAL_WORKER_URL is invalid."
+    };
+  }
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function PortalChecksPage({ searchParams }: { searchParams?: SearchParams }) {
@@ -74,6 +110,9 @@ export default async function PortalChecksPage({ searchParams }: { searchParams?
   const failed = rows.filter((row) => ["Fail", "Error", "Manual Review"].includes(row.status)).length;
   const queued = rows.filter((row) => ["Queued", "Running"].includes(row.status)).length;
   const pendingAmount = rows.reduce((sum, row) => sum + amountValue(row.pending_amount), 0);
+  const manualReview = rows.filter((row) => row.status === "Manual Review").length;
+  const workerErrors = rows.filter((row) => row.status === "Error").length;
+  const worker = workerLinks();
 
   return (
     <AppShell active="COD" pageCode="cod_portal_checks">
@@ -105,6 +144,34 @@ export default async function PortalChecksPage({ searchParams }: { searchParams?
 
       {!setupError ? (
         <>
+          <section className="panel">
+            <div className="panel-head toolbar">
+              <div>
+                <h2>Control tower worker</h2>
+                <p className="subtle">Monitor the Amazon backend browser session and open it only when Amazon asks for MFA/manual approval.</p>
+              </div>
+              <StatusPill status={worker.configured ? "Ready" : "Not configured"} />
+            </div>
+            <div className="panel-body">
+              <section className="summary-grid">
+                <div className="metric-card"><span>Worker config</span><strong>{worker.configured ? "Ready" : "Missing"}</strong><small>{worker.base ?? "Set worker URL in Vercel"}</small></div>
+                <div className="metric-card"><span>Manual login needed</span><strong>{manualReview}</strong><small>MFA/captcha or Amazon approval</small></div>
+                <div className="metric-card"><span>Worker errors</span><strong>{workerErrors}</strong><small>Needs control tower review</small></div>
+                <div className="metric-card"><span>Biometric middleware</span><strong>Separate</strong><small>This does not touch bio.dropxlogistics.com</small></div>
+              </section>
+              {worker.configured && worker.health && worker.browser ? (
+                <div className="form-actions">
+                  <a className="button secondary" href={worker.health} target="_blank" rel="noreferrer">Health check</a>
+                  <a className="button" href={worker.browser} target="_blank" rel="noreferrer">Open worker browser</a>
+                  <a className="button secondary" href="/settings/amazon">Amazon credentials</a>
+                </div>
+              ) : (
+                <div className="alert danger"><strong>Worker link missing</strong><span>{worker.message}</span></div>
+              )}
+              <p className="field-hint">Control tower can relogin inside the worker browser. The dashboard queues/checks SCC work; the worker browser keeps Amazon session separately from your laptop Chrome.</p>
+            </div>
+          </section>
+
           <section className="panel">
             <div className="panel-head toolbar">
               <div>

@@ -34,7 +34,7 @@ function isSecretPlaceholder(value: string | null) {
 
 function amazonWorkerWarmupUrl(rawUrl: string | undefined) {
   const value = rawUrl?.trim();
-  if (!value) throw new Error("SCC worker URL is missing. Set OPS_PORTAL_WORKER_URL in Vercel and the worker host.");
+  if (!value) throw new Error("Amazon portal worker URL is missing. Set OPS_PORTAL_WORKER_URL in Vercel and the worker host.");
 
   const url = new URL(value);
   if (url.pathname.endsWith("/run")) {
@@ -170,34 +170,35 @@ export async function saveAmazonConnector(formData: FormData) {
   amazonSettingsRedirect({ notice: "Amazon connector saved." });
 }
 
-export async function warmupAmazonSccSession(formData: FormData) {
+export async function warmupAmazonPortalSession(formData: FormData) {
   const authorization = await requirePagePermission("amazon_connector", "edit");
   const companyId = requireCompanyId(authorization);
 
   try {
-    if (!isCompanyOwner(authorization)) throw new Error("Only the owner can warm up Amazon SCC sessions.");
+    if (!isCompanyOwner(authorization)) throw new Error("Only the owner can warm up Amazon portal sessions.");
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
 
     const portalCode = clean(formData.get("portal_code")) as AmazonPortalCode | null;
-    if (portalCode !== "scc") throw new Error("Warm up is available only for Amazon SCC.");
+    const definition = amazonPortalDefinitions.find((portal) => portal.code === portalCode);
+    if (!portalCode || !definition) throw new Error("Select a valid Amazon portal.");
 
     const connectorResult = await supabaseAdmin
       .from("amazon_connectors")
       .select("id, company_id, portal_code, base_url, login_url, username, auth_mode, is_enabled, status, password_secret_id, mfa_secret_id")
       .eq("company_id", companyId)
-      .eq("portal_code", "scc")
+      .eq("portal_code", portalCode)
       .maybeSingle();
     if (connectorResult.error) throw new Error(connectorResult.error.message);
 
     const connector = connectorResult.data;
-    if (!connector) throw new Error("Save Amazon SCC credentials first.");
-    if (!connector.is_enabled) throw new Error("Enable Amazon SCC before warming up the worker session.");
-    if (!connector.username) throw new Error("Amazon SCC username is missing.");
+    if (!connector) throw new Error(`Save ${definition.shortName} credentials first.`);
+    if (!connector.is_enabled) throw new Error(`Enable ${definition.shortName} before warming up the worker session.`);
+    if (!connector.username) throw new Error(`${definition.shortName} username is missing.`);
 
     const password = connector.password_secret_id
       ? await readConnectorSecret(connector.id, "get_amazon_connector_password")
       : null;
-    if (!password) throw new Error("Amazon SCC password is missing. Re-enter password and save SCC first.");
+    if (!password) throw new Error(`${definition.shortName} password is missing. Re-enter password and save ${definition.shortName} first.`);
 
     const mfaSecret = connector.mfa_secret_id
       ? await readConnectorSecret(connector.id, "get_amazon_connector_mfa_secret")
@@ -213,9 +214,10 @@ export async function warmupAmazonSccSession(formData: FormData) {
       },
       body: JSON.stringify({
         company_id: companyId,
-        portal_code: "scc",
-        login_url: connector.login_url || "https://www.amazonlogistics.eu/station/dashboard/workitemsvisibility",
-        base_url: connector.base_url || "https://www.amazonlogistics.eu/",
+        portal_code: portalCode,
+        portal: portalCode,
+        login_url: connector.login_url || definition.loginUrl,
+        base_url: connector.base_url || definition.baseUrl,
         username: connector.username,
         password,
         mfa_secret: mfaSecret || ""
@@ -229,13 +231,13 @@ export async function warmupAmazonSccSession(formData: FormData) {
       summary?: string;
     };
     if (!response.ok) {
-      throw new Error(workerResult?.error || workerResult?.summary || `SCC worker returned ${response.status}.`);
+      throw new Error(workerResult?.error || workerResult?.summary || `${definition.shortName} worker returned ${response.status}.`);
     }
 
     const status = String(workerResult?.status || "");
     const summary = String(workerResult?.summary || "");
     const workerApprovalHelp =
-      "Amazon needs approval inside the SCC worker browser. Your Chrome login cannot be reused by the worker. This is separate from bio.dropxlogistics.com attendance. Click Login worker once, approve Amazon/TOTP/captcha in that worker session, then retry Sync SCC now.";
+      `Amazon needs approval inside the ${definition.shortName} worker browser. Your Chrome login cannot be reused by the worker. This is separate from bio.dropxlogistics.com attendance. Click Login worker once, approve Amazon/TOTP/captcha in that worker session, then retry sync/check.`;
     if (status === "Ready") {
       await supabaseAdmin
         .from("amazon_connectors")
@@ -249,7 +251,7 @@ export async function warmupAmazonSccSession(formData: FormData) {
         .eq("id", connector.id);
       revalidatePath("/settings");
       revalidatePath("/settings/amazon");
-      amazonSettingsRedirect({ notice: summary || "SCC worker session warmed up and saved." });
+      amazonSettingsRedirect({ notice: summary || `${definition.shortName} worker session warmed up and saved.` });
     }
 
     await supabaseAdmin
@@ -265,6 +267,8 @@ export async function warmupAmazonSccSession(formData: FormData) {
     revalidatePath("/settings/amazon");
     amazonSettingsRedirect({ error: summary || workerApprovalHelp });
   } catch (error) {
-    amazonSettingsRedirect({ error: error instanceof Error ? error.message : "Unable to warm up Amazon SCC session." });
+    amazonSettingsRedirect({ error: error instanceof Error ? error.message : "Unable to warm up Amazon portal session." });
   }
 }
+
+export const warmupAmazonSccSession = warmupAmazonPortalSession;

@@ -72,37 +72,39 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
   const dateOfJoin = required(formData.get("date_of_join"), "Date of join");
   const locationId = required(formData.get("location_id"), "Location");
   const designation = required(formData.get("designation"), "Designation");
-  const gender = required(formData.get("gender"), "Gender");
-  const dateOfBirth = required(formData.get("date_of_birth"), "Date of birth");
-  const aadhaarNumber = required(formData.get("aadhaar_number"), "Aadhaar number").replace(/\D/g, "");
-  const panNumber = required(formData.get("pan_number"), "PAN number").toUpperCase();
-  const address = required(formData.get("address"), "Address");
-  const postalPin = required(formData.get("postal_pin"), "Postal PIN").replace(/\D/g, "");
-  const landmark = required(formData.get("landmark"), "Land mark");
-  const stateCode = required(formData.get("state_code"), "State");
-  const fatherName = required(formData.get("father_name"), "Father name");
-  const bloodGroup = required(formData.get("blood_group"), "Blood group");
-  const isHandicapped = required(formData.get("is_handicapped"), "Handicapped") === "true";
-  const bankAccountNo = required(formData.get("bank_account_no"), "Bank account number").replace(/\D/g, "");
-  const ifscCode = required(formData.get("ifsc_code"), "IFSC").toUpperCase();
-  const drivingLicenseNo = required(formData.get("driving_license_no"), "Driving license number").toUpperCase();
-  const drivingLicenseExpDate = required(formData.get("driving_license_exp_date"), "Driving license expiry date");
-  const vehicleRegNo = required(formData.get("vehicle_reg_no"), "Vehicle registration number").toUpperCase();
-  const vehicleRegExpDate = required(formData.get("vehicle_reg_exp_date"), "Vehicle registration expiry date");
-  const vehicleInsuranceExpDate = required(formData.get("vehicle_insurance_exp_date"), "Vehicle insurance expiry date");
-  const vehiclePollutionExpDate = required(formData.get("vehicle_pollution_exp_date"), "Vehicle pollution expiry date");
-  const biometricId = required(formData.get("biometric_id"), "Biometric enrolment ID");
-  const emergencyContactName = required(formData.get("emergency_contact_name"), "Emergency contact name");
-  const emergencyContactNumber = required(formData.get("emergency_contact_number"), "Emergency contact number").replace(/\D/g, "");
-  const emergencyContactRelation = required(formData.get("emergency_contact_relation"), "Emergency contact relation");
+  const gender = optional(formData.get("gender"));
+  const dateOfBirth = optional(formData.get("date_of_birth"));
+  const aadhaarNumber = optional(formData.get("aadhaar_number"))?.replace(/\D/g, "") ?? null;
+  const panNumber = optional(formData.get("pan_number"))?.toUpperCase() ?? null;
+  const address = optional(formData.get("address"));
+  const postalPin = optional(formData.get("postal_pin"))?.replace(/\D/g, "") ?? null;
+  const landmark = optional(formData.get("landmark"));
+  const stateCode = optional(formData.get("state_code"));
+  const fatherName = optional(formData.get("father_name"));
+  const bloodGroup = optional(formData.get("blood_group"));
+  const isHandicappedValue = optional(formData.get("is_handicapped"));
+  const isHandicapped = isHandicappedValue === null ? null : isHandicappedValue === "true";
+  const bankAccountNo = optional(formData.get("bank_account_no"))?.replace(/\D/g, "") ?? null;
+  const ifscCode = optional(formData.get("ifsc_code"))?.toUpperCase() ?? null;
+  const drivingLicenseNo = optional(formData.get("driving_license_no"))?.toUpperCase() ?? null;
+  const drivingLicenseExpDate = optional(formData.get("driving_license_exp_date"));
+  const vehicleRegNo = optional(formData.get("vehicle_reg_no"))?.toUpperCase() ?? null;
+  const vehicleRegExpDate = optional(formData.get("vehicle_reg_exp_date"));
+  const vehicleInsuranceExpDate = optional(formData.get("vehicle_insurance_exp_date"));
+  const vehiclePollutionExpDate = optional(formData.get("vehicle_pollution_exp_date"));
+  const biometricId = optional(formData.get("biometric_id"));
+  const emergencyContactName = optional(formData.get("emergency_contact_name"));
+  const emergencyContactNumber = optional(formData.get("emergency_contact_number"))?.replace(/\D/g, "") ?? null;
+  const emergencyContactRelation = optional(formData.get("emergency_contact_relation"));
   const isActive = optional(formData.get("is_active")) !== "false";
 
   if (!/^\d{6,15}$/.test(mobile)) throw new Error("Mobile number must contain 6 to 15 digits.");
-  if (!/^\d{10}$/.test(emergencyContactNumber)) throw new Error("Emergency contact number must contain exactly 10 digits.");
-  if (!/^\d{12}$/.test(aadhaarNumber)) throw new Error("Aadhaar number must contain exactly 12 digits.");
-  if (!/^\d{6}$/.test(postalPin)) throw new Error("Postal PIN must contain exactly 6 digits.");
-  if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panNumber)) throw new Error("PAN number format is invalid.");
-  if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode)) throw new Error("IFSC format is invalid.");
+  if (biometricId && !/^\d{1,20}$/.test(biometricId)) throw new Error("Biometric enrolment ID must be numeric.");
+  if (emergencyContactNumber && !/^\d{10}$/.test(emergencyContactNumber)) throw new Error("Emergency contact number must contain exactly 10 digits.");
+  if (aadhaarNumber && !/^\d{12}$/.test(aadhaarNumber)) throw new Error("Aadhaar number must contain exactly 12 digits.");
+  if (postalPin && !/^\d{6}$/.test(postalPin)) throw new Error("Postal PIN must contain exactly 6 digits.");
+  if (panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panNumber)) throw new Error("PAN number format is invalid.");
+  if (ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode)) throw new Error("IFSC format is invalid.");
 
   [
     ["Date of join", dateOfJoin],
@@ -112,7 +114,7 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
     ["Vehicle insurance expiry date", vehicleInsuranceExpDate],
     ["Vehicle pollution expiry date", vehiclePollutionExpDate]
   ].forEach(([label, value]) => {
-    if (Number.isNaN(Date.parse(value))) throw new Error(`Enter a valid ${String(label).toLowerCase()}.`);
+    if (value && Number.isNaN(Date.parse(value))) throw new Error(`Enter a valid ${String(label).toLowerCase()}.`);
   });
 
   return {

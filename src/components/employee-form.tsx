@@ -127,7 +127,7 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
       </label> : <div />}
       <label>
         Full name
-        <input className="field" defaultValue={employee?.full_name ?? ""} name="full_name" placeholder="Enter full name" required />
+        <input className="field" defaultValue={employee?.full_name ?? ""} name="full_name" placeholder="Enter full name" required={!isEdit} />
       </label>
       <label>
         Biometric enrolment ID
@@ -137,9 +137,9 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
         Mobile number
         <div className="field-executive-mobile-row">
           <div className="field-executive-country-code">
-            <SearchableSelect name="mobile_country_code" options={countryCodeSelectOptions} defaultValue={employee?.mobile_country_code ?? "91"} placeholder="+91" required />
+            <SearchableSelect name="mobile_country_code" options={countryCodeSelectOptions} defaultValue={employee?.mobile_country_code ?? "91"} placeholder="+91" required={!isEdit} />
           </div>
-          <input className="field" defaultValue={employee?.mobile ?? ""} inputMode="tel" maxLength={15} name="mobile" pattern="[0-9]{6,15}" placeholder="Enter mobile number" required />
+          <input className="field" defaultValue={employee?.mobile ?? ""} inputMode="tel" maxLength={15} name="mobile" pattern="[0-9]{6,15}" placeholder="Enter mobile number" required={!isEdit} />
         </div>
       </label>
       <label>
@@ -148,15 +148,15 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
       </label>
       <label>
         Date of join
-        <input className="field" defaultValue={employee?.date_of_join ?? ""} name="date_of_join" required type="date" />
+        <input className="field" defaultValue={employee?.date_of_join ?? ""} name="date_of_join" required={!isEdit} type="date" />
       </label>
       <label>
         Location
-        <SearchableSelect name="location_id" options={locationOptions} defaultValue={employee?.location_id ?? undefined} placeholder="Select location" required />
+        <SearchableSelect name="location_id" options={locationOptions} defaultValue={employee?.location_id ?? undefined} placeholder="Select location" required={!isEdit} />
       </label>
       <label>
         Designation
-        <SearchableSelect name="designation_id" options={designationOptions} defaultValue={employee?.designation_id ?? undefined} placeholder="Select designation" required />
+        <SearchableSelect name="designation_id" options={designationOptions} defaultValue={employee?.designation_id ?? undefined} placeholder="Select designation" required={!isEdit} />
       </label>
       <label className="span-2">
         Statutory applicability

@@ -338,46 +338,45 @@ function FieldExecutiveForm({
         <SearchableSelect name="designation" options={effectiveDesignationOptions} defaultValue={executive?.designation} placeholder="Select designation" required />
       </label>
       <label>Gender
-        <SearchableSelect name="gender" options={genderOptions} defaultValue={executive?.gender} placeholder="Select gender" required />
+        <SearchableSelect name="gender" options={genderOptions} defaultValue={executive?.gender} placeholder="Select gender" />
       </label>
-      <label>Date of birth<input className="field" name="date_of_birth" required type="date" defaultValue={textValue(executive?.date_of_birth)} /></label>
+      <label>Date of birth<input className="field" name="date_of_birth" type="date" defaultValue={textValue(executive?.date_of_birth)} /></label>
 
-      <label>Aadhaar number<input className="field" inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" required defaultValue={textValue(executive?.aadhaar_number)} /></label>
-      <label>PAN number<input className="field" name="pan_number" placeholder="Enter PAN number" required defaultValue={textValue(executive?.pan_number)} /></label>
-      <label>Biometric enrolment ID<input className="field" inputMode="numeric" name="biometric_id" pattern="[0-9]{1,20}" placeholder="Numeric ID from device" required defaultValue={textValue(executive?.biometric_id)} /></label>
+      <label>Aadhaar number<input className="field" inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" defaultValue={textValue(executive?.aadhaar_number)} /></label>
+      <label>PAN number<input className="field" name="pan_number" placeholder="Enter PAN number" defaultValue={textValue(executive?.pan_number)} /></label>
+      <label>Biometric enrolment ID<input className="field" inputMode="numeric" name="biometric_id" pattern="[0-9]{1,20}" placeholder="Numeric ID from device" defaultValue={textValue(executive?.biometric_id)} /></label>
 
-      <label className="span-3">Address<input className="field" name="address" placeholder="Enter complete address" required defaultValue={textValue(executive?.address)} /></label>
-      <label>Postal PIN<input className="field" inputMode="numeric" maxLength={6} name="postal_pin" pattern="[0-9]{6}" placeholder="Enter PIN" required defaultValue={textValue(executive?.postal_pin)} /></label>
-      <label>Land mark<input className="field" name="landmark" placeholder="Enter landmark" required defaultValue={textValue(executive?.landmark)} /></label>
+      <label className="span-3">Address<input className="field" name="address" placeholder="Enter complete address" defaultValue={textValue(executive?.address)} /></label>
+      <label>Postal PIN<input className="field" inputMode="numeric" maxLength={6} name="postal_pin" pattern="[0-9]{6}" placeholder="Enter PIN" defaultValue={textValue(executive?.postal_pin)} /></label>
+      <label>Land mark<input className="field" name="landmark" placeholder="Enter landmark" defaultValue={textValue(executive?.landmark)} /></label>
       <label>State
-        <SearchableSelect name="state_code" options={stateOptions} defaultValue={executive?.state_code} placeholder="Search state code" required />
+        <SearchableSelect name="state_code" options={stateOptions} defaultValue={executive?.state_code} placeholder="Search state code" />
       </label>
 
-      <label>Father name<input className="field" name="father_name" placeholder="Enter father name" required defaultValue={textValue(executive?.father_name)} /></label>
-      <label>Blood group<input className="field" name="blood_group" placeholder="Enter blood group" required defaultValue={textValue(executive?.blood_group)} /></label>
+      <label>Father name<input className="field" name="father_name" placeholder="Enter father name" defaultValue={textValue(executive?.father_name)} /></label>
+      <label>Blood group<input className="field" name="blood_group" placeholder="Enter blood group" defaultValue={textValue(executive?.blood_group)} /></label>
       <label>Handicapped
         <SearchableSelect
           name="is_handicapped"
           options={yesNoOptions}
           defaultValue={typeof executive?.is_handicapped === "boolean" ? String(executive.is_handicapped) : undefined}
           placeholder="Select"
-          required
         />
       </label>
 
-      <label>Bank A/c No.<input className="field" inputMode="numeric" name="bank_account_no" placeholder="Enter bank account number" required defaultValue={textValue(executive?.bank_account_no)} /></label>
-      <label>IFSC<input className="field" name="ifsc_code" placeholder="Enter IFSC" required defaultValue={textValue(executive?.ifsc_code)} /></label>
-      <label>Emergency contact number<input className="field" inputMode="numeric" maxLength={10} name="emergency_contact_number" pattern="[0-9]{10}" placeholder="Enter emergency contact number" required defaultValue={textValue(executive?.emergency_contact_number)} /></label>
-      <label>Emergency contact name<input className="field" name="emergency_contact_name" placeholder="Enter contact person name" required defaultValue={textValue(executive?.emergency_contact_name)} /></label>
-      <label>Emergency relation<input className="field" name="emergency_contact_relation" placeholder="Enter relation" required defaultValue={textValue(executive?.emergency_contact_relation)} /></label>
+      <label>Bank A/c No.<input className="field" inputMode="numeric" name="bank_account_no" placeholder="Enter bank account number" defaultValue={textValue(executive?.bank_account_no)} /></label>
+      <label>IFSC<input className="field" name="ifsc_code" placeholder="Enter IFSC" defaultValue={textValue(executive?.ifsc_code)} /></label>
+      <label>Emergency contact number<input className="field" inputMode="numeric" maxLength={10} name="emergency_contact_number" pattern="[0-9]{10}" placeholder="Enter emergency contact number" defaultValue={textValue(executive?.emergency_contact_number)} /></label>
+      <label>Emergency contact name<input className="field" name="emergency_contact_name" placeholder="Enter contact person name" defaultValue={textValue(executive?.emergency_contact_name)} /></label>
+      <label>Emergency relation<input className="field" name="emergency_contact_relation" placeholder="Enter relation" defaultValue={textValue(executive?.emergency_contact_relation)} /></label>
 
-      <label>Driving license no.<input className="field" name="driving_license_no" placeholder="Enter DL number" required defaultValue={textValue(executive?.driving_license_no)} /></label>
-      <label>DL expiry date<input className="field" name="driving_license_exp_date" required type="date" defaultValue={textValue(executive?.driving_license_exp_date)} /></label>
-      <label>Vehicle reg no.<input className="field" name="vehicle_reg_no" placeholder="Enter vehicle number" required defaultValue={textValue(executive?.vehicle_reg_no)} /></label>
+      <label>Driving license no.<input className="field" name="driving_license_no" placeholder="Enter DL number" defaultValue={textValue(executive?.driving_license_no)} /></label>
+      <label>DL expiry date<input className="field" name="driving_license_exp_date" type="date" defaultValue={textValue(executive?.driving_license_exp_date)} /></label>
+      <label>Vehicle reg no.<input className="field" name="vehicle_reg_no" placeholder="Enter vehicle number" defaultValue={textValue(executive?.vehicle_reg_no)} /></label>
 
-      <label>Vehicle reg expiry<input className="field" name="vehicle_reg_exp_date" required type="date" defaultValue={textValue(executive?.vehicle_reg_exp_date)} /></label>
-      <label>Insurance expiry<input className="field" name="vehicle_insurance_exp_date" required type="date" defaultValue={textValue(executive?.vehicle_insurance_exp_date)} /></label>
-      <label>Pollution expiry<input className="field" name="vehicle_pollution_exp_date" required type="date" defaultValue={textValue(executive?.vehicle_pollution_exp_date)} /></label>
+      <label>Vehicle reg expiry<input className="field" name="vehicle_reg_exp_date" type="date" defaultValue={textValue(executive?.vehicle_reg_exp_date)} /></label>
+      <label>Insurance expiry<input className="field" name="vehicle_insurance_exp_date" type="date" defaultValue={textValue(executive?.vehicle_insurance_exp_date)} /></label>
+      <label>Pollution expiry<input className="field" name="vehicle_pollution_exp_date" type="date" defaultValue={textValue(executive?.vehicle_pollution_exp_date)} /></label>
 
       {mode === "edit" ? (
         <>

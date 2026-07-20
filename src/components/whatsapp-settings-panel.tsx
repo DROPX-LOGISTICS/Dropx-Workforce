@@ -70,6 +70,7 @@ const dataOptions = [
 export function WhatsAppSettingsPanel({
   canEdit,
   config,
+  employeeConfig = emptyNotificationConfig,
   otpConfig = emptyNotificationConfig,
   flash,
   general,
@@ -81,6 +82,7 @@ export function WhatsAppSettingsPanel({
 }: {
   canEdit: boolean;
   config: NotificationConfig;
+  employeeConfig?: NotificationConfig;
   otpConfig?: NotificationConfig;
   flash: { error: string | null; notice: string | null };
   general: GeneralSettings;
@@ -150,6 +152,7 @@ export function WhatsAppSettingsPanel({
     helper: `${profile.phone_number_id} - ${profile.default_country_code}`
   }));
   const notificationConfigByCode: Record<string, NotificationConfig> = {
+    employee_onboarding: employeeConfig,
     field_executive_onboarding: config,
     onboarding_otp_verification: otpConfig
   };
@@ -171,8 +174,16 @@ export function WhatsAppSettingsPanel({
   };
   const notificationRows = [
     {
+      code: "employee_onboarding",
+      title: "Employee onboarding message",
+      description: "Send registration message when an Employee is added.",
+      enabled: employeeConfig.is_enabled,
+      template: templateLabel(employeeConfig),
+      configurable: true
+    },
+    {
       code: "field_executive_onboarding",
-      title: "Onboarding message",
+      title: "Field executive onboarding message",
       description: "Send registration message when a Field Executive is added.",
       enabled: config.is_enabled,
       template: templateLabel(config),
@@ -528,7 +539,7 @@ export function WhatsAppSettingsPanel({
         </div>
       </section>
 
-      {configuring === "field_executive_onboarding" || configuring === "onboarding_otp_verification" ? (
+      {configuring === "employee_onboarding" || configuring === "field_executive_onboarding" || configuring === "onboarding_otp_verification" ? (
         <div
           className="modal-backdrop"
           onMouseDown={(event) => {
@@ -538,7 +549,7 @@ export function WhatsAppSettingsPanel({
           <section className="modal-panel wide" aria-label="Configure WhatsApp notification message">
             <div className="panel-head">
               <div>
-                <h2>{configuring === "onboarding_otp_verification" ? "Onboarding OTP Verification" : "Onboarding message"}</h2>
+                <h2>{configuring === "onboarding_otp_verification" ? "Onboarding OTP Verification" : configuring === "employee_onboarding" ? "Employee onboarding message" : "Field executive onboarding message"}</h2>
                 <p className="subtle">Select the approved WhatsApp template and map each variable to dashboard data.</p>
               </div>
               <button className="icon-button" onClick={() => setConfiguring(null)} type="button">x</button>

@@ -3,7 +3,8 @@ import { extractWhatsAppTemplateVariables, type WhatsAppTemplateComponent } from
 
 type OnboardingMessageData = {
   companyId: string;
-  fieldExecutiveId: string;
+  workerId: string;
+  workerType: "employee" | "field_executive";
   fullName: string;
   mobile: string;
   dropxId: string;
@@ -14,6 +15,20 @@ type OnboardingMessageData = {
   registrationToken: string;
   triggeredBy?: string | null;
 };
+
+type FieldExecutiveOnboardingMessageData = Omit<OnboardingMessageData, "workerId" | "workerType"> & {
+  fieldExecutiveId: string;
+};
+
+type EmployeeOnboardingMessageData = Omit<OnboardingMessageData, "workerId" | "workerType" | "registrationToken"> & {
+  employeeId: string;
+  registrationToken?: string;
+};
+
+const onboardingEventByWorkerType = {
+  employee: "employee_onboarding",
+  field_executive: "field_executive_onboarding"
+} as const;
 
 function mappedValue(source: string, data: Record<string, string>) {
   return data[source] ?? "";
@@ -131,7 +146,7 @@ async function syncAutoTriggerToInbox({
       request: requestPayload,
       response: responsePayload,
       campaign_code: campaignCode,
-      auto_trigger: "field_executive_onboarding",
+      auto_trigger: "onboarding",
       sender_name: "System",
       sender_user_id: triggeredBy ?? null
     },
@@ -143,8 +158,9 @@ async function syncAutoTriggerToInbox({
   }
 }
 
-export async function sendFieldExecutiveOnboardingWhatsApp(data: OnboardingMessageData) {
+async function sendOnboardingWhatsApp(data: OnboardingMessageData) {
   if (!supabaseAdmin) return;
+  const eventCode = onboardingEventByWorkerType[data.workerType];
   let recipient = data.mobile;
   let templateName: string | null = null;
   let campaignId: string | null = null;
@@ -160,13 +176,13 @@ export async function sendFieldExecutiveOnboardingWhatsApp(data: OnboardingMessa
         .from("whatsapp_notification_configs")
         .select("is_enabled, whatsapp_profile_id, template_id, template_name, template_language, variable_mappings")
         .eq("company_id", data.companyId)
-        .eq("event_code", "field_executive_onboarding")
+        .eq("event_code", eventCode)
         .maybeSingle()
     ]);
     if (settings.error) throw new Error(settings.error.message);
     if (config.error) throw new Error(config.error.message);
     if (!settings.data?.is_enabled || !config.data?.is_enabled) {
-      await writeLog({ event_code: "field_executive_onboarding", field_executive_id: data.fieldExecutiveId, recipient, template_name: config.data?.template_name, status: "skipped", error_message: "WhatsApp or onboarding notification is disabled." });
+      await writeLog({ event_code: eventCode, field_executive_id: data.workerType === "field_executive" ? data.workerId : null, recipient, template_name: config.data?.template_name, status: "skipped", error_message: "WhatsApp or onboarding notification is disabled." });
       return;
     }
     if (!config.data.whatsapp_profile_id || !config.data.template_id || !config.data.template_name || !config.data.template_language) throw new Error("WhatsApp onboarding configuration is incomplete.");
@@ -191,7 +207,9 @@ export async function sendFieldExecutiveOnboardingWhatsApp(data: OnboardingMessa
     const components = (template.data.components ?? []) as WhatsAppTemplateComponent[];
     const variables = extractWhatsAppTemplateVariables(components);
     const mappings = (config.data.variable_mappings ?? {}) as Record<string, string>;
-    const registrationLink = `https://dashboard.dropxlogistics.com/register/${encodeURIComponent(data.registrationToken)}`;
+    const registrationLink = data.registrationToken
+      ? `https://dashboard.dropxlogistics.com/register/${encodeURIComponent(data.registrationToken)}`
+      : (process.env.NEXT_PUBLIC_CONNECT_WEB_URL || "https://team.dropxlogistics.com/account/register");
     const values: Record<string, string> = {
       full_name: data.fullName,
       mobile: data.mobile,
@@ -271,10 +289,11 @@ export async function sendFieldExecutiveOnboardingWhatsApp(data: OnboardingMessa
       recipient_name: data.fullName,
       recipient_mobile: data.mobile,
       country_code: profile.default_country_code,
-      source: "field_executive",
-      source_id: data.fieldExecutiveId,
+      source: data.workerType,
+      source_id: data.workerId,
       recipient_payload: {
-        field_executive_id: data.fieldExecutiveId,
+        worker_id: data.workerId,
+        worker_type: data.workerType,
         full_name: data.fullName,
         dropx_id: data.dropxId,
         location_code: data.locationCode,
@@ -316,8 +335,8 @@ export async function sendFieldExecutiveOnboardingWhatsApp(data: OnboardingMessa
     });
 
     await writeLog({
-      event_code: "field_executive_onboarding",
-      field_executive_id: data.fieldExecutiveId,
+      event_code: eventCode,
+      field_executive_id: data.workerType === "field_executive" ? data.workerId : null,
       whatsapp_profile_id: profile.id,
       whatsapp_profile_name: profile.profile_name,
       recipient,
@@ -338,10 +357,11 @@ export async function sendFieldExecutiveOnboardingWhatsApp(data: OnboardingMessa
         recipient_name: data.fullName,
         recipient_mobile: data.mobile,
         country_code: campaignProfile?.default_country_code ?? null,
-        source: "field_executive",
-        source_id: data.fieldExecutiveId,
+        source: data.workerType,
+        source_id: data.workerId,
         recipient_payload: {
-          field_executive_id: data.fieldExecutiveId,
+          worker_id: data.workerId,
+          worker_type: data.workerType,
           full_name: data.fullName,
           dropx_id: data.dropxId,
           location_code: data.locationCode,
@@ -365,8 +385,8 @@ export async function sendFieldExecutiveOnboardingWhatsApp(data: OnboardingMessa
       }).eq("id", campaignId);
     }
     await writeLog({
-      event_code: "field_executive_onboarding",
-      field_executive_id: data.fieldExecutiveId,
+      event_code: eventCode,
+      field_executive_id: data.workerType === "field_executive" ? data.workerId : null,
       whatsapp_profile_id: campaignProfile?.id,
       whatsapp_profile_name: campaignProfile?.profile_name,
       recipient,
@@ -377,4 +397,21 @@ export async function sendFieldExecutiveOnboardingWhatsApp(data: OnboardingMessa
       response_payload: responsePayloadForFailure
     });
   }
+}
+
+export async function sendFieldExecutiveOnboardingWhatsApp(data: FieldExecutiveOnboardingMessageData) {
+  await sendOnboardingWhatsApp({
+    ...data,
+    workerId: data.fieldExecutiveId,
+    workerType: "field_executive"
+  });
+}
+
+export async function sendEmployeeOnboardingWhatsApp(data: EmployeeOnboardingMessageData) {
+  await sendOnboardingWhatsApp({
+    ...data,
+    registrationToken: data.registrationToken ?? "",
+    workerId: data.employeeId,
+    workerType: "employee"
+  });
 }

@@ -105,4 +105,5 @@ alter table public.whatsapp_notification_configs enable row level security;
 alter table public.whatsapp_message_logs enable row level security;
 
 insert into public.whatsapp_settings (id) values (true) on conflict (id) do nothing;
+insert into public.whatsapp_notification_configs (event_code) values ('employee_onboarding') on conflict (event_code) do nothing;
 insert into public.whatsapp_notification_configs (event_code) values ('field_executive_onboarding') on conflict (event_code) do nothing;

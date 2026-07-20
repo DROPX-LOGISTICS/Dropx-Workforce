@@ -270,9 +270,13 @@ export async function syncWhatsAppTemplates() {
 }
 
 const whatsappNotificationEvents: Record<string, { label: string; templateLabel: string }> = {
+  employee_onboarding: {
+    label: "Employee onboarding notification saved.",
+    templateLabel: "employee onboarding"
+  },
   field_executive_onboarding: {
     label: "Field Executive onboarding notification saved.",
-    templateLabel: "onboarding"
+    templateLabel: "field executive onboarding"
   },
   onboarding_otp_verification: {
     label: "Onboarding OTP verification notification saved.",

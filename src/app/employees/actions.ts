@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { waitUntil } from "@vercel/functions";
 import { requirePagePermission } from "@/lib/authorization";
 import { syncBiometricEnrolment } from "@/lib/biometric/enrolments";
 import { generateBiometricEnrolmentId } from "@/lib/biometric/ids";
@@ -10,6 +11,7 @@ import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { sendEmployeeOnboardingWhatsApp } from "@/lib/whatsapp";
 
 function required(value: FormDataEntryValue | null, field: string) {
   const text = String(value ?? "").trim();
@@ -85,8 +87,8 @@ export async function createEmployee(formData: FormData) {
     }
 
     const [locationResult, designationResult] = await Promise.all([
-      supabaseAdmin.from("stations").select("id").eq("id", locationId).eq("company_id", companyId).maybeSingle(),
-      supabaseAdmin.from("designations").select("id").eq("id", designationId).eq("company_id", companyId).eq("is_active", true).maybeSingle()
+      supabaseAdmin.from("stations").select("id, station_code, station_name").eq("id", locationId).eq("company_id", companyId).maybeSingle(),
+      supabaseAdmin.from("designations").select("id, name").eq("id", designationId).eq("company_id", companyId).eq("is_active", true).maybeSingle()
     ]);
     if (locationResult.error) throw new Error(locationResult.error.message);
     if (designationResult.error) throw new Error(designationResult.error.message);
@@ -125,6 +127,19 @@ export async function createEmployee(formData: FormData) {
       locationId,
       workerType: "employee"
     });
+
+    waitUntil(sendEmployeeOnboardingWhatsApp({
+      companyId,
+      employeeId: employee.id,
+      fullName,
+      mobile,
+      dropxId: employeeCode,
+      dateOfJoin,
+      locationCode: locationResult.data.station_code ?? "",
+      locationName: locationResult.data.station_name ?? "",
+      providerName: designationResult.data.name ?? "Employee",
+      triggeredBy: authorization.userId
+    }));
 
     revalidatePath("/employees");
     employeesRedirect({ notice: "Employee added successfully." });
@@ -183,8 +198,8 @@ export async function updateEmployee(formData: FormData) {
     }
 
     const [locationResult, designationResult] = await Promise.all([
-      supabaseAdmin.from("stations").select("id").eq("id", locationId).eq("company_id", companyId).maybeSingle(),
-      supabaseAdmin.from("designations").select("id").eq("id", designationId).eq("company_id", companyId).eq("is_active", true).maybeSingle()
+      supabaseAdmin.from("stations").select("id, station_code, station_name").eq("id", locationId).eq("company_id", companyId).maybeSingle(),
+      supabaseAdmin.from("designations").select("id, name").eq("id", designationId).eq("company_id", companyId).eq("is_active", true).maybeSingle()
     ]);
     if (locationResult.error) throw new Error(locationResult.error.message);
     if (designationResult.error) throw new Error(designationResult.error.message);

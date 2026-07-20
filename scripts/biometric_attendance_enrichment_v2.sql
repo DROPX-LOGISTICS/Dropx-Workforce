@@ -37,6 +37,7 @@ where ad.id = target.id
 
 with ordered_punches as (
   select
+    p.id,
     p.company_id,
     p.enrolment_id,
     p.punch_date,
@@ -51,6 +52,27 @@ with ordered_punches as (
     ) as punch_order
   from public.attendance_punches p
   where p.calculated is true
+),
+relabelled_punches as (
+  update public.attendance_punches p
+  set
+    punch_order = op.punch_order,
+    punch_label = case
+      when op.punch_order = 1 then 'In1'
+      else 'Out' || (op.punch_order - 1)::text
+    end
+  from ordered_punches op
+  where p.id = op.id
+  returning
+    op.company_id,
+    op.enrolment_id,
+    op.punch_date,
+    op.punch_time,
+    op.worker_type,
+    op.employee_id,
+    op.field_executive_id,
+    op.location_id,
+    op.punch_order
 ),
 daily_summary as (
   select
@@ -69,7 +91,7 @@ daily_summary as (
       when count(*) = 1 then 'Single punch'
       else null
     end as remark
-  from ordered_punches
+  from relabelled_punches
   group by company_id, enrolment_id, punch_date
 ),
 latest_worker as (
@@ -81,7 +103,7 @@ latest_worker as (
     employee_id,
     field_executive_id,
     location_id
-  from ordered_punches
+  from relabelled_punches
   order by company_id, enrolment_id, punch_date, punch_time desc
 )
 update public.attendance_daily ad

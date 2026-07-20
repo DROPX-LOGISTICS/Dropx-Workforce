@@ -71,6 +71,8 @@ type DriverReconciliationAssociate = {
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+const PORTAL_RUN_SELECT = "id, company_id, location_id, cod_master_id, station_code, portal_station_code, check_date, check_type, attempt_count, cod_station_settings (amazon_driver_recon_url, amazon_bank_deposit_url, portal_login_url, portal_username, portal_secret_name, portal_check_interval_minutes)";
+
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
@@ -346,6 +348,30 @@ async function processRun(run: PortalRun, workerUrl: string, workerSecret: strin
   }
 }
 
+async function loadPortalRun(runId: string) {
+  if (!supabaseAdmin) return { data: null, error: "Supabase service role key is not configured." };
+  const { data, error } = await supabaseAdmin
+    .from("ops_portal_check_runs")
+    .select(PORTAL_RUN_SELECT)
+    .eq("id", runId)
+    .maybeSingle();
+
+  return {
+    data: data as unknown as PortalRun | null,
+    error: error?.message ?? null
+  };
+}
+
+async function loadRunStatus(runId: string) {
+  if (!supabaseAdmin) return null;
+  const { data } = await supabaseAdmin
+    .from("ops_portal_check_runs")
+    .select("id, status, summary, error_message, pending_count, pending_amount, raw_result, updated_at")
+    .eq("id", runId)
+    .maybeSingle();
+  return data;
+}
+
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET?.trim();
   if (secret) {
@@ -360,7 +386,7 @@ export async function GET(request: Request) {
 
   const runsResult = await supabaseAdmin
     .from("ops_portal_check_runs")
-    .select("id, company_id, location_id, cod_master_id, station_code, portal_station_code, check_date, check_type, attempt_count, cod_station_settings (amazon_driver_recon_url, amazon_bank_deposit_url, portal_login_url, portal_username, portal_secret_name, portal_check_interval_minutes)")
+    .select(PORTAL_RUN_SELECT)
     .in("status", ["Queued", "Fail", "Manual Review", "Error"])
     .or(`next_check_at.is.null,next_check_at.lte.${now}`)
     .order("created_at", { ascending: true })
@@ -390,4 +416,33 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({ processed: runs.length, ...totals });
+}
+
+export async function POST(request: Request) {
+  const secret = process.env.CRON_SECRET?.trim();
+  if (secret) {
+    const auth = request.headers.get("authorization") ?? "";
+    if (auth !== `Bearer ${secret}`) return unauthorized();
+  }
+  if (!supabaseAdmin) return NextResponse.json({ error: "Supabase service role key is not configured." }, { status: 500 });
+
+  const workerUrl = process.env.OPS_PORTAL_WORKER_URL?.trim();
+  const workerSecret = process.env.OPS_PORTAL_WORKER_SECRET?.trim();
+  if (!workerUrl || !workerSecret) {
+    return NextResponse.json({
+      error: "Portal worker not configured. Set OPS_PORTAL_WORKER_URL and OPS_PORTAL_WORKER_SECRET in deployment secrets."
+    }, { status: 500 });
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const runId = typeof body.run_id === "string" ? body.run_id.trim() : "";
+  if (!runId) return NextResponse.json({ error: "run_id is required." }, { status: 400 });
+
+  const loaded = await loadPortalRun(runId);
+  if (loaded.error) return NextResponse.json({ error: loaded.error }, { status: 500 });
+  if (!loaded.data) return NextResponse.json({ error: "Portal check run not found." }, { status: 404 });
+
+  const totals = await processRun(loaded.data, workerUrl, workerSecret);
+  const run = await loadRunStatus(runId);
+  return NextResponse.json({ processed: 1, ...totals, run });
 }

@@ -30,6 +30,12 @@ function safeReturnHref(value: FormDataEntryValue | null) {
   return href;
 }
 
+function appBaseUrl() {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || process.env.VERCEL_URL;
+  if (!appUrl) return "";
+  return appUrl.startsWith("http") ? appUrl : `https://${appUrl}`;
+}
+
 function isNextRedirectError(error: unknown) {
   return typeof (error as { digest?: unknown })?.digest === "string" &&
     String((error as { digest: string }).digest).startsWith("NEXT_REDIRECT");
@@ -403,7 +409,7 @@ export async function refreshExecutiveReconciliationRoster(formData: FormData) {
     const workerUrl = process.env.OPS_PORTAL_WORKER_URL?.trim();
     const workerSecret = process.env.OPS_PORTAL_WORKER_SECRET?.trim();
     if (!workerUrl || !workerSecret) {
-      throw new Error("Automatic SCC sync is not connected yet. Paste the SCC Driver Reconciliation rows below to import today's associates immediately, or configure OPS_PORTAL_WORKER_URL and OPS_PORTAL_WORKER_SECRET in Vercel.");
+      throw new Error("Automatic SCC sync is not connected on the server yet. Configure the live SCC worker URL and secret, then retry.");
     }
 
     const payload = withCompany({
@@ -424,36 +430,96 @@ export async function refreshExecutiveReconciliationRoster(formData: FormData) {
       next_check_at: new Date().toISOString()
     }, companyId);
 
+    let runId = "";
     const queued = await supabaseAdmin
       .from("ops_portal_check_runs")
-      .upsert(payload, { onConflict: "company_id,station_code,check_date,check_type" });
+      .upsert(payload, { onConflict: "company_id,station_code,check_date,check_type" })
+      .select("id")
+      .maybeSingle();
 
     if (queued.error) {
       if (isMissingPortalCheckSetup(queued.error)) {
         redirectWithFlash(
           {
-            error: "SCC roster automation is not installed yet. Run scripts/ops_pulse_cod_portal_checks_v1.sql in Supabase SQL Editor. The COD sheet is still usable for manual reconciliation."
+            error: "SCC roster automation is not installed yet. Run scripts/ops_pulse_cod_portal_checks_v1.sql in Supabase SQL Editor."
           },
           returnHref
         );
       }
       if (queued.error.code === "42P10") {
-        const inserted = await supabaseAdmin.from("ops_portal_check_runs").insert(payload);
+        const inserted = await supabaseAdmin
+          .from("ops_portal_check_runs")
+          .insert(payload)
+          .select("id")
+          .single();
         if (inserted.error) throw new Error(inserted.error.message);
+        runId = inserted.data.id as string;
       } else {
         throw new Error(queued.error.message);
       }
+    } else {
+      runId = queued.data?.id as string;
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || process.env.VERCEL_URL;
-    const baseUrl = appUrl?.startsWith("http") ? appUrl : appUrl ? `https://${appUrl}` : "";
-    if (baseUrl) {
-      const headers = process.env.CRON_SECRET ? { Authorization: `Bearer ${process.env.CRON_SECRET}` } : undefined;
-      fetch(`${baseUrl}/api/cron/ops-pulse-portal-checks`, { headers, cache: "no-store" }).catch(() => null);
+    if (!runId) {
+      const existing = await supabaseAdmin
+        .from("ops_portal_check_runs")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("station_code", station.station_code)
+        .eq("check_date", businessDate)
+        .eq("check_type", "driver_reconciliation")
+        .maybeSingle();
+      if (existing.error) throw new Error(existing.error.message);
+      runId = existing.data?.id as string;
     }
+
+    if (!runId) throw new Error("Could not create SCC refresh run.");
+
+    const baseUrl = appBaseUrl();
+    if (!baseUrl) {
+      throw new Error("Dashboard base URL is not configured for live SCC sync.");
+    }
+
+    const response = await fetch(`${baseUrl}/api/cron/ops-pulse-portal-checks`, {
+      method: "POST",
+      headers: {
+        ...(process.env.CRON_SECRET ? { Authorization: `Bearer ${process.env.CRON_SECRET}` } : {}),
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ run_id: runId }),
+      cache: "no-store"
+    });
+    const responseBody = await response.json().catch(() => ({} as Record<string, unknown>));
+    if (!response.ok) {
+      throw new Error(String(responseBody.error ?? `SCC worker returned HTTP ${response.status}`));
+    }
+
+    const run = responseBody.run && typeof responseBody.run === "object"
+      ? responseBody.run as Record<string, unknown>
+      : {};
+    const rawResult = run.raw_result && typeof run.raw_result === "object"
+      ? run.raw_result as Record<string, unknown>
+      : {};
+    const rosterSync = rawResult.roster_sync && typeof rawResult.roster_sync === "object"
+      ? rawResult.roster_sync as Record<string, unknown>
+      : {};
+    const imported = Number(rosterSync.imported ?? 0) || 0;
+    const status = String(run.status ?? "");
+    const summary = String(run.summary ?? "").trim();
+    const errorMessage = String(run.error_message ?? "").trim();
 
     revalidatePath(pagePath);
-    redirectWithFlash({ notice: "SCC Driver Reconciliation refresh queued. Reopen this sheet in a minute to see tracking-level pending details." }, returnHref);
+    if (imported > 0) {
+      redirectWithFlash({ notice: `SCC sync completed. ${imported} associate${imported === 1 ? "" : "s"} imported for ${station.station_code}.` }, returnHref);
+    }
+    if (status === "Manual Review") {
+      redirectWithFlash({ error: summary || "Amazon SCC needs manual login/MFA verification before this station can be fetched." }, returnHref);
+    }
+    if (status === "Error") {
+      throw new Error(errorMessage || summary || "SCC worker could not complete the refresh.");
+    }
+    redirectWithFlash({ notice: summary || `SCC sync completed, but no associates were found for ${station.station_code} on ${businessDate}.` }, returnHref);
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     redirectWithFlash({ error: (error as Error).message }, safeReturnHref(formData.get("return_href")));

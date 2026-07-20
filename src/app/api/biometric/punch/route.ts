@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { istDate, rebuildAttendanceDay } from "@/lib/biometric/attendance";
+import { istDate, punchLabel, rebuildAttendanceDay } from "@/lib/biometric/attendance";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -404,7 +404,7 @@ export async function POST(request: NextRequest) {
         punch_time: punchTime.toISOString(),
         punch_date: punchDate,
         punch_order: nextOrder,
-        punch_label: nextOrder % 2 === 1 ? `In${Math.ceil(nextOrder / 2)}` : `Out${nextOrder / 2}`,
+        punch_label: punchLabel(nextOrder),
         worker_status: enrolment.status,
         calculated: active
       }, { onConflict: "company_id,device_serial,enrolment_id,punch_time" })
@@ -433,7 +433,7 @@ export async function POST(request: NextRequest) {
       enrolmentId: canonicalEnrolmentId,
       punchDate,
       punchOrder: nextOrder,
-      punchLabel: nextOrder % 2 === 1 ? `In${Math.ceil(nextOrder / 2)}` : `Out${nextOrder / 2}`
+      punchLabel: punchLabel(nextOrder)
     });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "Unable to process biometric punch.", 500);

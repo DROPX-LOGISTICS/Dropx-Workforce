@@ -48,11 +48,7 @@ with ordered_punches as (
     row_number() over (
       partition by p.company_id, p.enrolment_id, p.punch_date
       order by p.punch_time asc, p.id asc
-    ) as punch_order,
-    lag(p.punch_time) over (
-      partition by p.company_id, p.enrolment_id, p.punch_date
-      order by p.punch_time asc, p.id asc
-    ) as previous_punch_time
+    ) as punch_order
   from public.attendance_punches p
   where p.calculated is true
 ),
@@ -61,23 +57,16 @@ daily_summary as (
     company_id,
     enrolment_id,
     punch_date,
-    min(punch_time) filter (where punch_order = 1) as in_time,
-    max(punch_time) filter (where punch_order % 2 = 0) as out_time,
+    min(punch_time) as in_time,
+    case when count(*) >= 2 then max(punch_time) else null end as out_time,
     count(*) as punch_count,
-    coalesce(
-      sum(
-        case
-          when punch_order % 2 = 0 and previous_punch_time is not null and punch_time >= previous_punch_time
-            then extract(epoch from (punch_time - previous_punch_time)) / 60
-          else 0
-        end
-      ),
-      0
-    )::integer as work_minutes,
+    case
+      when count(*) >= 2 then round(extract(epoch from (max(punch_time) - min(punch_time))) / 60)::integer
+      else 0
+    end as work_minutes,
     case
       when count(*) = 0 then 'No punch'
       when count(*) = 1 then 'Single punch'
-      when count(*) % 2 = 1 then 'Missing out punch'
       else null
     end as remark
   from ordered_punches

@@ -142,24 +142,24 @@ export function formatDuration(minutes: number | null | undefined) {
 }
 
 export function punchLabel(position: number) {
-  const pair = Math.ceil(position / 2);
-  return position % 2 === 1 ? `In${pair}` : `Out${pair}`;
+  return position === 1 ? "In1" : `Out${position - 1}`;
 }
 
-function summarizePunchPairs(punchTimes: string[]) {
-  let workMinutes = 0;
-  let lastOutTime: string | null = null;
-
-  for (let index = 0; index + 1 < punchTimes.length; index += 2) {
-    const inTime = new Date(punchTimes[index]);
-    const outTime = new Date(punchTimes[index + 1]);
-    if (!Number.isNaN(inTime.getTime()) && !Number.isNaN(outTime.getTime()) && outTime >= inTime) {
-      workMinutes += Math.round((outTime.getTime() - inTime.getTime()) / 60000);
-      lastOutTime = punchTimes[index + 1];
-    }
+function summarizeFirstInLastOut(punchTimes: string[]) {
+  if (punchTimes.length < 2) {
+    return { lastOutTime: null, workMinutes: 0 };
   }
 
-  return { lastOutTime, workMinutes };
+  const firstInTime = new Date(punchTimes[0]);
+  const lastOutTime = new Date(punchTimes[punchTimes.length - 1]);
+  if (Number.isNaN(firstInTime.getTime()) || Number.isNaN(lastOutTime.getTime()) || lastOutTime < firstInTime) {
+    return { lastOutTime: null, workMinutes: 0 };
+  }
+
+  return {
+    lastOutTime: punchTimes[punchTimes.length - 1],
+    workMinutes: Math.round((lastOutTime.getTime() - firstInTime.getTime()) / 60000)
+  };
 }
 
 async function loadDailyWorkerSnapshot({
@@ -245,14 +245,12 @@ export async function rebuildAttendanceDay(companyId: string, enrolmentId: strin
 
   const first = punches[0]?.punch_time ? new Date(punches[0].punch_time) : null;
   const punchTimes = punches.map((punch) => punch.punch_time).filter(Boolean);
-  const summary = summarizePunchPairs(punchTimes);
+  const summary = summarizeFirstInLastOut(punchTimes);
   const remark = punches.length === 0
     ? "No punch"
     : punches.length === 1
       ? "Single punch"
-      : punches.length % 2 === 1
-        ? "Missing out punch"
-        : null;
+      : null;
 
   const latestPunch = await supabaseAdmin
     .from("attendance_punches")

@@ -139,7 +139,6 @@ function inOutHeader() {
   const columns = ["Empcode", "Name", "Shift", "INTime"];
   for (let index = 1; index <= inOutPairs; index += 1) {
     columns.push(`Out${index}`);
-    if (index < inOutPairs) columns.push(`In${index + 1}`);
   }
   columns.push("OUTTime", "Work+OT", "OT", "Break");
   return columns;
@@ -149,7 +148,6 @@ function inOutRow(row: AttendanceReportRow) {
   const values = [row.workerCode, row.workerName, "-", label(row, "In1") || row.inTime];
   for (let index = 1; index <= inOutPairs; index += 1) {
     values.push(label(row, `Out${index}`));
-    if (index < inOutPairs) values.push(label(row, `In${index + 1}`));
   }
   values.push(row.outTime, row.workHours, "00:00", "00:00");
   return values;

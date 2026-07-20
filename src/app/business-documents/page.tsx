@@ -48,6 +48,8 @@ type OptionRow = {
   id: string;
   code: string;
   name: string;
+  location_model_id?: string | null;
+  provider_id?: string | null;
   state?: string | null;
 };
 
@@ -87,6 +89,7 @@ async function loadBusinessDocuments(companyId: string, authorization: Awaited<R
       documents: [] as BusinessDocumentRow[],
       documentTypes: [] as DocumentTypeRow[],
       locations: [] as OptionRow[],
+      models: [] as OptionRow[],
       providers: [] as OptionRow[],
       states: [] as OptionRow[],
       users: [] as UserOption[],
@@ -96,7 +99,7 @@ async function loadBusinessDocuments(companyId: string, authorization: Awaited<R
     };
   }
 
-  const [typesResult, recordsResult, locationsResult, providersResult, usersResult, rolesResult, roleAccessResult, settingsResult] = await Promise.all([
+  const [typesResult, recordsResult, locationsResult, providersResult, modelsResult, usersResult, rolesResult, roleAccessResult, settingsResult] = await Promise.all([
     supabaseAdmin
       .from("document_types")
       .select("id, code, name, description, requires_expiry, business_scope_mode, doc_access_mode, enable_scope_access")
@@ -131,13 +134,19 @@ async function loadBusinessDocuments(companyId: string, authorization: Awaited<R
       .order("uploaded_at", { ascending: false }),
     supabaseAdmin
       .from("stations")
-      .select("id, station_code, station_name, state")
+      .select("id, station_code, station_name, state, provider_id, location_model_id")
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("station_code"),
     supabaseAdmin
       .from("providers")
       .select("id, code, name")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .order("code"),
+    supabaseAdmin
+      .from("location_models")
+      .select("id, code, name, provider_id")
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("code"),
@@ -167,12 +176,13 @@ async function loadBusinessDocuments(companyId: string, authorization: Awaited<R
     recordsResult.error?.message ||
     locationsResult.error?.message ||
     providersResult.error?.message ||
+    modelsResult.error?.message ||
     usersResult.error?.message ||
     rolesResult.error?.message ||
     (roleAccessResult.error && !isMissingRoleAccessTable(roleAccessResult.error) ? roleAccessResult.error.message : null) ||
     null;
   if (error) {
-    return { documents: [], documentTypes: [], locations: [], providers: [], states: [], users: [], settings: { compliance_manager_user_id: null }, settingsError: null, error };
+    return { documents: [], documentTypes: [], locations: [], models: [], providers: [], states: [], users: [], settings: { compliance_manager_user_id: null }, settingsError: null, error };
   }
 
   const allowedLocationIds = new Set(authorization.locationScopeIds);
@@ -218,8 +228,11 @@ async function loadBusinessDocuments(companyId: string, authorization: Awaited<R
       id: row.id,
       code: row.station_code,
       name: row.station_name && row.station_name !== row.station_code ? row.station_name : row.station_code,
+      location_model_id: row.location_model_id,
+      provider_id: row.provider_id,
       state: row.state
     })),
+    models: (modelsResult.data ?? []).map((row) => ({ id: row.id, code: row.code, name: row.name, provider_id: row.provider_id })),
     providers: (providersResult.data ?? []).map((row) => ({ id: row.id, code: row.code, name: row.name })),
     states: Array.from(stateByCode.values()).sort((a, b) => a.code.localeCompare(b.code)),
     users: (usersResult.data ?? []).map((user) => ({
@@ -239,16 +252,18 @@ async function loadBusinessDocuments(companyId: string, authorization: Awaited<R
 
 export const dynamic = "force-dynamic";
 
-export default async function BusinessDocumentsPage({ searchParams }: { searchParams?: { add?: string; edit?: string; q?: string; state?: string; location?: string; document?: string; expiry?: string; page?: string } }) {
+export default async function BusinessDocumentsPage({ searchParams }: { searchParams?: { add?: string; edit?: string; q?: string; state?: string; location?: string; document?: string; provider?: string; model?: string; expiry?: string; page?: string } }) {
   const authorization = await requirePagePermission("business_documents", "access");
   const companyId = requireCompanyId(authorization);
   const pagePermission = authorization.permissions.business_documents;
-  const { documents, documentTypes, locations, providers, states, users, settings, settingsError, error } = await loadBusinessDocuments(companyId, authorization);
+  const { documents, documentTypes, locations, models, providers, states, users, settings, settingsError, error } = await loadBusinessDocuments(companyId, authorization);
   const flash = loadFlash();
   const query = String(searchParams?.q ?? "").trim().toLowerCase();
   const stateFilters = parseFilterValues(searchParams?.state).map((value) => value.toUpperCase());
   const locationFilters = parseFilterValues(searchParams?.location);
   const documentFilters = parseFilterValues(searchParams?.document);
+  const providerFilters = parseFilterValues(searchParams?.provider);
+  const modelFilters = parseFilterValues(searchParams?.model);
   const expiryFilters = parseFilterValues(searchParams?.expiry);
   const locationById = new Map(locations.map((location) => [location.id, location]));
   const selectedComplianceManager = users.find((user) => user.id === settings.compliance_manager_user_id) ?? null;
@@ -261,7 +276,9 @@ export default async function BusinessDocumentsPage({ searchParams }: { searchPa
     const additionalScopes = document.additional_scope_ids ?? [];
     const locationAccessMatches = !locationFilters.length || (document.scope_type === "location" && additionalScopes.some((id) => locationFilters.includes(id)));
     const stateMatches = !stateFilters.length || stateFilters.includes(documentStateCode(document, locationById)) || (document.scope_type === "state" && additionalScopes.some((id) => stateFilters.includes(id.toUpperCase())));
-    return textMatches && documentMatches && (locationMatches || locationAccessMatches) && stateMatches;
+    const providerMatches = documentMatchesProvider(document, locationById, providerFilters);
+    const modelMatches = documentMatchesModel(document, locationById, modelFilters);
+    return textMatches && documentMatches && (locationMatches || locationAccessMatches) && stateMatches && providerMatches && modelMatches;
   });
   const filteredDocuments = baseFilteredDocuments.filter((document) => {
     const expiryMatches = !expiryFilters.length || expiryFilters.includes(expiryBucket(document.expiry_date));
@@ -353,6 +370,8 @@ export default async function BusinessDocumentsPage({ searchParams }: { searchPa
               <BusinessDocumentFilters
                 documentOptions={documentTypes.map((document) => ({ value: document.id, label: document.name }))}
                 locationOptions={locations.map((location) => ({ value: location.id, label: location.code }))}
+                modelOptions={models.map((model) => ({ value: model.id, label: `${model.code} - ${model.name}` }))}
+                providerOptions={providers.map((provider) => ({ value: provider.id, label: `${provider.code} - ${provider.name}` }))}
                 stateOptions={states.map((state) => ({ value: state.code, label: state.code }))}
               />
               {pagePermission.canAdd ? <PendingLink className="button compact" href="/business-documents?add=1" scroll={false}>Add document</PendingLink> : null}
@@ -493,6 +512,35 @@ function documentStateCode(document: BusinessDocumentRow, locationById: Map<stri
   return "";
 }
 
+function documentLocationIds(document: BusinessDocumentRow) {
+  if (document.scope_type !== "location") return [];
+  return [document.scope_id, ...document.additional_scope_ids ?? []].filter(Boolean) as string[];
+}
+
+function documentMatchesProvider(document: BusinessDocumentRow, locationById: Map<string, OptionRow>, providerFilters: string[]) {
+  if (!providerFilters.length) return true;
+  const selected = new Set(providerFilters);
+  if (document.scope_type === "provider") {
+    return Boolean(
+      (document.scope_id && selected.has(document.scope_id)) ||
+      (document.additional_scope_ids ?? []).some((id) => selected.has(id))
+    );
+  }
+  return documentLocationIds(document).some((locationId) => {
+    const location = locationById.get(locationId);
+    return Boolean(location?.provider_id && selected.has(location.provider_id));
+  });
+}
+
+function documentMatchesModel(document: BusinessDocumentRow, locationById: Map<string, OptionRow>, modelFilters: string[]) {
+  if (!modelFilters.length) return true;
+  const selected = new Set(modelFilters);
+  return documentLocationIds(document).some((locationId) => {
+    const location = locationById.get(locationId);
+    return Boolean(location?.location_model_id && selected.has(location.location_model_id));
+  });
+}
+
 function expiryClassName(value: string | null | undefined) {
   const days = daysUntil(value);
   if (days === null) return "";
@@ -540,7 +588,7 @@ function withAccessRoleIds<T extends { access_role_ids?: string[] } | null>(valu
 }
 
 function businessDocumentsHref(
-  current: { q?: string; state?: string; location?: string; document?: string; expiry?: string; page?: string } | undefined,
+  current: { q?: string; state?: string; location?: string; document?: string; provider?: string; model?: string; expiry?: string; page?: string } | undefined,
   next: { page?: string; expiry?: string }
 ) {
   const params = new URLSearchParams();
@@ -548,6 +596,8 @@ function businessDocumentsHref(
   if (current?.state) params.set("state", current.state);
   if (current?.location) params.set("location", current.location);
   if (current?.document) params.set("document", current.document);
+  if (current?.provider) params.set("provider", current.provider);
+  if (current?.model) params.set("model", current.model);
   if (current?.expiry) params.set("expiry", current.expiry);
   if (next.expiry !== undefined) {
     if (next.expiry) params.set("expiry", next.expiry);

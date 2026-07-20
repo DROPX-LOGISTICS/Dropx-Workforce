@@ -12,10 +12,14 @@ type FilterOption = {
 export function BusinessDocumentFilters({
   documentOptions,
   locationOptions,
+  modelOptions,
+  providerOptions,
   stateOptions
 }: {
   documentOptions: FilterOption[];
   locationOptions: FilterOption[];
+  modelOptions: FilterOption[];
+  providerOptions: FilterOption[];
   stateOptions: FilterOption[];
 }) {
   const router = useRouter();
@@ -35,12 +39,14 @@ export function BusinessDocumentFilters({
   }, [pathname, router, search, searchParams]);
 
   const selectedDocuments = useMemo(() => parseSelected(searchParams.get("document")), [searchParams]);
+  const selectedModels = useMemo(() => parseSelected(searchParams.get("model")), [searchParams]);
+  const selectedProviders = useMemo(() => parseSelected(searchParams.get("provider")), [searchParams]);
   const selectedStates = useMemo(() => parseSelected(searchParams.get("state")), [searchParams]);
   const selectedLocations = useMemo(() => parseSelected(searchParams.get("location")), [searchParams]);
   const selectedExpiry = useMemo(() => parseSelected(searchParams.get("expiry")), [searchParams]);
-  const hasFilters = Boolean(search.trim() || selectedDocuments.length || selectedStates.length || selectedLocations.length || selectedExpiry.length);
+  const hasFilters = Boolean(search.trim() || selectedDocuments.length || selectedProviders.length || selectedModels.length || selectedStates.length || selectedLocations.length || selectedExpiry.length);
 
-  function toggleFilter(key: "document" | "state" | "location" | "expiry", value: string) {
+  function toggleFilter(key: "document" | "provider" | "model" | "state" | "location" | "expiry", value: string) {
     const current = parseSelected(searchParams.get(key));
     const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
     updateParams(router, pathname, searchParams, { [key]: next.join(","), page: "" });
@@ -59,6 +65,18 @@ export function BusinessDocumentFilters({
         options={documentOptions}
         selected={selectedDocuments}
         onToggle={(value) => toggleFilter("document", value)}
+      />
+      <FilterDropdown
+        label="Providers"
+        options={providerOptions}
+        selected={selectedProviders}
+        onToggle={(value) => toggleFilter("provider", value)}
+      />
+      <FilterDropdown
+        label="Models"
+        options={modelOptions}
+        selected={selectedModels}
+        onToggle={(value) => toggleFilter("model", value)}
       />
       <FilterDropdown
         label="States"

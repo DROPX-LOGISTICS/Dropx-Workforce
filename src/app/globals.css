@@ -5785,8 +5785,8 @@ tr:last-child td {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  flex-wrap: nowrap;
-  width: min(100%, 980px);
+  flex-wrap: wrap;
+  width: min(100%, 1220px);
 }
 
 .business-doc-filter-bar .field,
@@ -5800,8 +5800,8 @@ tr:last-child td {
 }
 
 .business-doc-filter {
-  width: 130px;
-  flex: 0 0 130px;
+  width: 122px;
+  flex: 0 0 122px;
 }
 
 .business-doc-filter .bulk-multi-filter-trigger {

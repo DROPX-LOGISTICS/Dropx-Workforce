@@ -15,6 +15,7 @@ type LocationRow = {
   id: string;
   station_code: string;
   station_name: string | null;
+  location_model_id?: string | null;
   hide_from_location_list?: boolean | null;
 };
 
@@ -22,6 +23,7 @@ type DesignationRow = {
   id: string;
   code: string;
   name: string;
+  model_ids?: string[] | null;
   onboarding_categories?: string[] | null;
   is_active: boolean;
 };
@@ -241,13 +243,13 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
       .order("created_at", { ascending: false }),
     supabaseAdmin
       .from("stations")
-      .select("id, station_code, station_name, hide_from_location_list")
+      .select("id, station_code, station_name, location_model_id, hide_from_location_list")
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("station_code"),
     supabaseAdmin
       .from("designations")
-      .select("id, code, name, onboarding_categories, is_active")
+      .select("id, code, name, model_ids, onboarding_categories, is_active")
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("name")
@@ -280,7 +282,7 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("name");
-    designationRows = (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...designation, onboarding_categories: ["employees"] }));
+    designationRows = (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...designation, model_ids: [], onboarding_categories: ["employees"] }));
     designationError = fallbackDesignationsResult.error;
   }
 
@@ -331,12 +333,14 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
   const locationOptions = locations.map((location) => ({
     value: location.id,
     label: location.station_code,
-    helper: location.station_name ?? undefined
+    helper: location.station_name ?? undefined,
+    modelId: location.location_model_id ?? null
   }));
   const designationOptions = designations.map((designation) => ({
     value: designation.id,
     label: designation.name,
-    helper: designation.code
+    helper: designation.code,
+    modelIds: designation.model_ids ?? []
   }));
 
   return (

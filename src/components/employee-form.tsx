@@ -5,9 +5,17 @@ import { SearchableSelect, type SearchableSelectOption } from "@/components/sear
 import { SubmitButton } from "@/components/submit-button";
 import { countryCodeOptions } from "@/lib/country-codes";
 
+type LocationSelectOption = SearchableSelectOption & {
+  modelId?: string | null;
+};
+
+type DesignationSelectOption = SearchableSelectOption & {
+  modelIds?: string[];
+};
+
 type EmployeeFormProps = {
   action: (formData: FormData) => void;
-  designationOptions: SearchableSelectOption[];
+  designationOptions: DesignationSelectOption[];
   employee?: {
     id: string;
     employee_code: string | null;
@@ -37,7 +45,7 @@ type EmployeeFormProps = {
     statutory_applicability: string[] | null;
     is_active?: boolean;
   } | null;
-  locationOptions: SearchableSelectOption[];
+  locationOptions: LocationSelectOption[];
   mode?: "create" | "edit";
 };
 
@@ -99,7 +107,24 @@ function StatutoryMultiSelect({ defaultValue }: { defaultValue?: string[] | null
 
 export function EmployeeForm({ action, designationOptions, employee, locationOptions, mode = "create" }: EmployeeFormProps) {
   const [autoGenerateEmployeeCode, setAutoGenerateEmployeeCode] = useState(mode === "create" && !employee?.employee_code);
+  const [selectedLocationId, setSelectedLocationId] = useState(employee?.location_id ?? "");
+  const [selectedDesignationId, setSelectedDesignationId] = useState(employee?.designation_id ?? "");
   const isEdit = mode === "edit";
+  const selectedLocation = locationOptions.find((option) => option.value === selectedLocationId);
+  const selectedModelId = selectedLocation?.modelId ?? "";
+  const filteredDesignationOptions = selectedLocationId
+    ? designationOptions.filter((option) => {
+      const modelIds = option.modelIds ?? [];
+      return !modelIds.length || (selectedModelId ? modelIds.includes(selectedModelId) : false);
+    })
+    : [];
+  const effectiveDesignationOptions = selectedDesignationId && !filteredDesignationOptions.some((option) => option.value === selectedDesignationId)
+    ? [
+      designationOptions.find((option) => option.value === selectedDesignationId) ?? { value: selectedDesignationId, label: "Current designation", helper: "Current", modelIds: [] },
+      ...filteredDesignationOptions
+    ]
+    : filteredDesignationOptions;
+  const designationDisabled = !selectedLocationId || !effectiveDesignationOptions.length;
 
   return (
     <form action={action} className="form-grid three employee-form">
@@ -154,11 +179,29 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
       </label>
       <label>
         Location
-        <SearchableSelect name="location_id" options={locationOptions} defaultValue={employee?.location_id ?? undefined} placeholder="Select location" required={!isEdit} />
+        <SearchableSelect
+          name="location_id"
+          onValueChange={(value) => {
+            setSelectedLocationId(value);
+            setSelectedDesignationId("");
+          }}
+          options={locationOptions}
+          value={selectedLocationId}
+          placeholder="Select location"
+          required={!isEdit}
+        />
       </label>
       <label>
         Designation
-        <SearchableSelect name="designation_id" options={designationOptions} defaultValue={employee?.designation_id ?? undefined} placeholder="Select designation" required={!isEdit} />
+        <SearchableSelect
+          disabled={designationDisabled}
+          name="designation_id"
+          onValueChange={setSelectedDesignationId}
+          options={effectiveDesignationOptions}
+          placeholder={selectedLocationId ? "Select designation" : "Select location first"}
+          required={!isEdit && !designationDisabled}
+          value={selectedDesignationId}
+        />
       </label>
       <label className="span-2">
         Statutory applicability
@@ -206,8 +249,8 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
           confirmMessage={`Do you want to ${isEdit ? "save" : "submit"} this Employee registration?`}
           confirmSubmitText="Yes"
           confirmTitle="Confirm submission"
-          disabled={!locationOptions.length || !designationOptions.length}
-          disabledText={!locationOptions.length ? "Add location first" : "Add designation first"}
+          disabled={!locationOptions.length || designationDisabled}
+          disabledText={!locationOptions.length ? "Add location first" : !selectedLocationId ? "Select location first" : "Add designation for this model first"}
         >
           {isEdit ? "Save changes" : "Submit"}
         </SubmitButton>

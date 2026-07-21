@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { FieldExecutiveList, type FieldExecutiveListRow } from "@/components/field-executive-list";
 import { PageHead } from "@/components/page-head";
 import { PendingLink } from "@/components/pending-link";
+import { ScopedDesignationFields, type ScopedDesignationOption, type ScopedLocationOption } from "@/components/scoped-designation-fields";
 import { SearchableSelect } from "@/components/searchable-select";
 import { SubmitButton } from "@/components/submit-button";
 import { type AuthorizationContext, requirePagePermission } from "@/lib/authorization";
@@ -15,6 +16,7 @@ type LocationRow = {
   id: string;
   station_code: string;
   station_name: string | null;
+  location_model_id?: string | null;
   hide_from_location_list?: boolean | null;
   providers?: { name: string } | { name: string }[] | null;
   location_models?: { code: string; name: string } | { code: string; name: string }[] | null;
@@ -24,6 +26,7 @@ type DesignationRow = {
   id: string;
   code: string;
   name: string;
+  model_ids?: string[] | null;
   onboarding_categories?: string[] | null;
   is_active: boolean;
 };
@@ -307,14 +310,10 @@ function FieldExecutiveForm({
 }: {
   action: (formData: FormData) => Promise<void>;
   executive?: ExecutiveRow | null;
-  designationOptions: { value: string; label: string; helper?: string }[];
-  locationOptions: { value: string; label: string; helper?: string }[];
+  designationOptions: ScopedDesignationOption[];
+  locationOptions: ScopedLocationOption[];
   mode: "create" | "edit";
 }) {
-  const effectiveDesignationOptions = executive?.designation && !designationOptions.some((option) => option.value === executive.designation)
-    ? [{ value: executive.designation, label: executive.designation, helper: "Current" }, ...designationOptions]
-    : designationOptions;
-
   return (
     <form action={action} className="form-grid three">
       {executive ? <input type="hidden" name="id" value={executive.id} /> : null}
@@ -332,13 +331,14 @@ function FieldExecutiveForm({
       </label>
       <label>Mobile number<input className="field" inputMode="tel" maxLength={15} name="mobile" pattern="[0-9]{6,15}" placeholder="Enter mobile number" required defaultValue={textValue(executive?.mobile)} /></label>
       <label>Date of join<input className="field" name="date_of_join" required type="date" defaultValue={textValue(executive?.date_of_join)} /></label>
-      <label>Location
-        <SearchableSelect name="location_id" options={locationOptions} defaultValue={executive?.location_id} placeholder="Select location" required />
-      </label>
-
-      <label>Designation
-        <SearchableSelect name="designation" options={effectiveDesignationOptions} defaultValue={executive?.designation} placeholder="Select designation" required />
-      </label>
+      <ScopedDesignationFields
+        designationName="designation"
+        designationOptions={designationOptions}
+        initialDesignation={executive?.designation}
+        initialLocationId={executive?.location_id}
+        locationName="location_id"
+        locationOptions={locationOptions}
+      />
       <label>Gender
         <SearchableSelect name="gender" options={genderOptions} defaultValue={executive?.gender} placeholder="Select gender" />
       </label>
@@ -412,8 +412,8 @@ function AddFieldExecutiveForm({
   locationOptions,
   values
 }: {
-  designationOptions: { value: string; label: string; helper?: string }[];
-  locationOptions: { value: string; label: string; helper?: string }[];
+  designationOptions: ScopedDesignationOption[];
+  locationOptions: ScopedLocationOption[];
   values?: FieldExecutiveAddFormValues;
 }) {
   return (
@@ -430,13 +430,15 @@ function AddFieldExecutiveForm({
       <label>Email<input className="field" name="email" placeholder="Enter email" required type="email" defaultValue={values?.email ?? ""} /></label>
       <label>Date of join<input className="field" name="date_of_join" required type="date" defaultValue={values?.dateOfJoin ?? ""} /></label>
       <label>Biometric enrolment ID<input className="field" inputMode="numeric" name="biometric_id" pattern="[0-9]{1,20}" placeholder="Auto generated if blank" defaultValue={values?.biometricId ?? ""} /></label>
-      <label>Designation
-        <SearchableSelect name="designation" options={designationOptions} defaultValue={values?.designation} placeholder="Select designation" required />
-      </label>
+      <ScopedDesignationFields
+        designationName="designation"
+        designationOptions={designationOptions}
+        initialDesignation={values?.designation}
+        initialLocationId={values?.locationId}
+        locationName="location_id"
+        locationOptions={locationOptions}
+      />
       <div className="span-2 field-executive-location-submit">
-        <label>Location
-          <SearchableSelect name="location_id" options={locationOptions} defaultValue={values?.locationId} placeholder="Select location" required />
-        </label>
         <div className="form-actions align-right field-executive-submit-slot">
           <SubmitButton
             confirmCancelText="No"
@@ -468,14 +470,14 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
   const companyId = requireCompanyId(authorization);
   let locationsResult: { data: unknown[] | null; error: { message?: string } | null } = await supabaseAdmin
     .from("stations")
-    .select("id, station_code, station_name, hide_from_location_list, providers (name), location_models (code, name)")
+    .select("id, station_code, station_name, location_model_id, hide_from_location_list, providers (name), location_models (code, name)")
     .eq("company_id", companyId)
     .eq("is_active", true)
     .order("station_code");
   if (isMissingColumnError(locationsResult.error)) {
     locationsResult = await supabaseAdmin
       .from("stations")
-      .select("id, station_code, station_name, providers (name), location_models (code, name)")
+      .select("id, station_code, station_name, location_model_id, providers (name), location_models (code, name)")
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("station_code");
@@ -483,7 +485,7 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
 
   let designationsResult: { data: unknown[] | null; error: { message?: string } | null } = await supabaseAdmin
     .from("designations")
-    .select("id, code, name, onboarding_categories, is_active")
+    .select("id, code, name, model_ids, onboarding_categories, is_active")
     .eq("company_id", companyId)
     .eq("is_active", true)
     .order("name");
@@ -496,7 +498,7 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
       .order("name");
     designationsResult = {
       ...fallbackDesignationsResult,
-      data: (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...(designation as Record<string, unknown>), onboarding_categories: ["employees"] }))
+      data: (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...(designation as Record<string, unknown>), model_ids: [], onboarding_categories: ["employees"] }))
     };
   }
 
@@ -640,12 +642,14 @@ export async function FieldExecutivePageContent({
     label: location.station_code,
     helper: [firstRelation(location.providers)?.name, firstRelation(location.location_models)?.name || firstRelation(location.location_models)?.code]
       .filter(Boolean)
-      .join(" - ") || location.station_name || undefined
+      .join(" - ") || location.station_name || undefined,
+    modelId: location.location_model_id ?? null
   }));
   const designationOptions = designations.map((designation) => ({
     value: designation.name,
     label: designation.name,
-    helper: designation.code
+    helper: designation.code,
+    modelIds: designation.model_ids ?? []
   }));
 
   return (

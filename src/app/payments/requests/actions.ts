@@ -762,7 +762,7 @@ export async function resubmitPaymentRequest(formData: FormData) {
 
     const { data: request, error: requestError } = await admin
       .from("payment_requests")
-      .select("id, location_id, payment_head_id, requested_by, status, approval_status")
+      .select("id, location_id, payment_head_id, requested_by, status, approval_status, processed_at, utr_cin")
       .eq("id", requestId)
       .eq("company_id", companyId)
       .single();
@@ -773,6 +773,10 @@ export async function resubmitPaymentRequest(formData: FormData) {
     if (normalizedApprovalStatus !== "RETURNED" && normalizedStatus !== "returned") {
       throw new Error("Only returned requests can be resubmitted.");
     }
+    const wasReturnedAfterProcessing = Boolean(
+      (request as { processed_at?: string | null; utr_cin?: string | null }).processed_at ||
+      (request as { utr_cin?: string | null }).utr_cin
+    );
 
     const [locationResult, headResult] = await Promise.all([
       admin.from("stations").select("id, station_code, station_manager_email").eq("id", request.location_id).eq("company_id", companyId).single(),
@@ -786,16 +790,19 @@ export async function resubmitPaymentRequest(formData: FormData) {
     if (locationResult.error) throw new Error("Location not found for this company.");
     if (headResult.error) throw new Error("Payment head not found for this company.");
 
-    const finalApprovalRoleIds = (headResult.data.final_approval_role_ids?.length ? headResult.data.final_approval_role_ids : headResult.data.final_approval_role_id ? [headResult.data.final_approval_role_id] : []) as string[];
-    if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
+    let approver: { userId: string | null; roleId: string | null } = { userId: null, roleId: null };
+    if (!wasReturnedAfterProcessing) {
+      const finalApprovalRoleIds = (headResult.data.final_approval_role_ids?.length ? headResult.data.final_approval_role_ids : headResult.data.final_approval_role_id ? [headResult.data.final_approval_role_id] : []) as string[];
+      if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
 
-    const approver = await firstApproverTarget({
-      companyId,
-      finalApprovalRoleIds,
-      locationManagerEmail: locationResult.data.station_manager_email,
-      requesterRoleId: authorization.roleId,
-      requesterUserId: authorization.userId
-    });
+      approver = await firstApproverTarget({
+        companyId,
+        finalApprovalRoleIds,
+        locationManagerEmail: locationResult.data.station_manager_email,
+        requesterRoleId: authorization.roleId,
+        requesterUserId: authorization.userId
+      });
+    }
 
     const { data: existingAnswers } = await admin
       .from("payment_request_answers")
@@ -847,6 +854,23 @@ export async function resubmitPaymentRequest(formData: FormData) {
       }
     }
 
+    const statusPayload = wasReturnedAfterProcessing
+      ? {
+        status: "processed",
+        approval_status: "PROCESSED",
+        bank_status: "Paid",
+        current_step_order: null,
+        current_approver_user_id: null,
+        current_approver_role_id: null
+      }
+      : {
+        status: "pending",
+        approval_status: "PENDING",
+        current_step_order: 1,
+        current_approver_user_id: approver.userId,
+        current_approver_role_id: approver.roleId
+      };
+
     const { error: updateError } = await admin
       .from("payment_requests")
       .update({
@@ -864,11 +888,7 @@ export async function resubmitPaymentRequest(formData: FormData) {
         contact_no: contactNo,
         email,
         remarks,
-        status: "pending",
-        approval_status: "PENDING",
-        current_step_order: 1,
-        current_approver_user_id: approver.userId,
-        current_approver_role_id: approver.roleId,
+        ...statusPayload,
         updated_at: new Date().toISOString()
       })
       .eq("id", request.id)
@@ -877,6 +897,7 @@ export async function resubmitPaymentRequest(formData: FormData) {
 
     revalidatePath("/payments/requests");
     revalidatePath("/payments/approvals");
+    revalidatePath("/payments/process");
     revalidatePath("/payments/report");
     const emailResult = await sendPaymentNotification({
       actorUserId: authorization.userId,

@@ -35,6 +35,14 @@ function isNextRedirectError(error: unknown) {
     String((error as { digest: string }).digest).startsWith("NEXT_REDIRECT");
 }
 
+function friendlyError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : fallback;
+  if (message.toLowerCase().includes("model_ids")) {
+    return "Designation model setup is pending. Run scripts/designations_model_scope_v1.sql in Supabase SQL Editor, then try again.";
+  }
+  return message;
+}
+
 function providerIds(formData: FormData) {
   return Array.from(new Set(
     formData.getAll("provider_ids")
@@ -92,7 +100,7 @@ export async function createDesignation(formData: FormData) {
     designationRedirect({ notice: "Designation added." });
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
-    designationRedirect({ error: error instanceof Error ? error.message : "Unable to add designation." });
+    designationRedirect({ error: friendlyError(error, "Unable to add designation.") });
   }
 }
 
@@ -128,7 +136,7 @@ export async function updateDesignation(formData: FormData) {
     designationRedirect({ notice: "Designation updated." });
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
-    designationRedirect({ error: error instanceof Error ? error.message : "Unable to update designation." });
+    designationRedirect({ error: friendlyError(error, "Unable to update designation.") });
   }
 }
 

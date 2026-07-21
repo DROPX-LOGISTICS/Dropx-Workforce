@@ -74,3 +74,5 @@ where is_active = true
 on conflict (code) do update
 set name = excluded.name,
     updated_at = now();
+
+notify pgrst, 'reload schema';

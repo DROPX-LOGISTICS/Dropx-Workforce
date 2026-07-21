@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
+import { normalizeProfileFieldRules } from "@/lib/profile-field-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 function clean(value: FormDataEntryValue | null) {
@@ -54,6 +55,19 @@ function onboardingCategories(formData: FormData) {
   return normalizeDesignationCategories(formData.getAll("onboarding_categories"));
 }
 
+function profileFieldRules(formData: FormData) {
+  return normalizeProfileFieldRules({
+    employees: {
+      enabled: formData.getAll("employees_enabled_fields"),
+      required: formData.getAll("employees_required_fields")
+    },
+    field_executives: {
+      enabled: formData.getAll("field_executives_enabled_fields"),
+      required: formData.getAll("field_executives_required_fields")
+    }
+  });
+}
+
 export async function createDesignation(formData: FormData) {
   const authorization = await requirePagePermission("designations", "add");
   const companyId = requireCompanyId(authorization);
@@ -68,6 +82,7 @@ export async function createDesignation(formData: FormData) {
       provider_ids: providerIds(formData),
       location_ids: locationIds(formData),
       onboarding_categories: onboardingCategories(formData),
+      profile_field_rules: profileFieldRules(formData),
       is_active: true
     }, companyId));
     if (error) throw new Error(error.message);
@@ -99,6 +114,7 @@ export async function updateDesignation(formData: FormData) {
         provider_ids: providerIds(formData),
         location_ids: locationIds(formData),
         onboarding_categories: onboardingCategories(formData),
+        profile_field_rules: profileFieldRules(formData),
         is_active: status,
         updated_at: new Date().toISOString()
       })

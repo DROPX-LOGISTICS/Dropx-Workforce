@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { connectSessionCookieName, findConnectAccounts } from "../../../../src/lib/connect-auth";
+import { normalizeProfileFieldRules } from "../../../../src/lib/profile-field-rules";
 import { supabaseAdmin } from "../../../../src/lib/supabase-admin";
 
 type FieldExecutiveRow = {
@@ -174,6 +175,15 @@ async function signedProfileUrl(path: string | null) {
 
 async function serializeExecutive(row: FieldExecutiveRow) {
   const station = firstRelation(row.stations);
+  const designationResult = row.designation && supabaseAdmin
+    ? await supabaseAdmin
+      .from("designations")
+      .select("profile_field_rules")
+      .eq("company_id", row.company_id)
+      .eq("name", row.designation)
+      .maybeSingle()
+    : null;
+  const fieldRules = normalizeProfileFieldRules(designationResult?.data?.profile_field_rules).field_executives;
   return {
     id: row.id,
     readOnly: {
@@ -212,6 +222,7 @@ async function serializeExecutive(row: FieldExecutiveRow) {
       pollutionExpiry: formatDisplayDate(row.vehicle_pollution_exp_date) === "-" ? "" : formatDisplayDate(row.vehicle_pollution_exp_date)
     },
     statutoryApplicability: [],
+    fieldRules,
     uploads: {
       aadhaarFront: Boolean(row.aadhaar_front_path),
       aadhaarBack: Boolean(row.aadhaar_back_path),
@@ -266,31 +277,48 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const executiveId = String(formData.get("executive_id") ?? "");
     const account = await requireExecutiveAccess(executiveId);
+    const currentExecutive = await loadExecutive(account.id, account.companyId);
+    const designationResult = currentExecutive.designation
+      ? await supabaseAdmin
+        .from("designations")
+        .select("profile_field_rules")
+        .eq("company_id", account.companyId)
+        .eq("name", currentExecutive.designation)
+        .maybeSingle()
+      : null;
+    const rules = normalizeProfileFieldRules(designationResult?.data?.profile_field_rules).field_executives;
+    const requiredFields = new Set(rules.required);
+    const isRequired = (key: string) => requiredFields.has(key);
+    const textValue = (key: string, label: string) => isRequired(key) ? requiredText(formData.get(key), label) : cleanText(formData.get(key));
+    const digitsValue = (key: string, label: string) => isRequired(key) ? requiredDigits(formData.get(key), label) : cleanDigits(formData.get(key));
+    const dateValue = (key: string, label: string) => normalizeDate(isRequired(key) ? requiredText(formData.get(key), label) : formData.get(key));
+    const panValue = isRequired("pan_number") || cleanText(formData.get("pan_number")) ? requiredPan(formData.get("pan_number")) : null;
+    const eshramValue = isRequired("eshram_uan") || cleanText(formData.get("eshram_uan")) ? requiredTwelveDigits(formData.get("eshram_uan"), "eShram UAN") : null;
 
     const updatePayload: Record<string, unknown> = {
-      gender: requiredText(formData.get("gender"), "Gender"),
-      date_of_birth: normalizeDate(requiredText(formData.get("date_of_birth"), "Date of birth")),
-      aadhaar_number: requiredDigits(formData.get("aadhaar_number"), "Aadhaar number"),
-      pan_number: requiredPan(formData.get("pan_number")),
-      eshram_uan: requiredTwelveDigits(formData.get("eshram_uan"), "eShram UAN"),
-      father_name: requiredText(formData.get("father_name"), "Father name"),
-      blood_group: requiredText(formData.get("blood_group"), "Blood group"),
-      is_handicapped: requiredText(formData.get("is_handicapped"), "Handicapped") === "true",
-      address: requiredText(formData.get("address"), "Address"),
-      state_code: requiredText(formData.get("state_code"), "State code").toUpperCase(),
-      postal_pin: requiredDigits(formData.get("pincode"), "Pincode"),
-      landmark: requiredText(formData.get("landmark"), "Landmark"),
-      bank_account_no: requiredDigits(formData.get("bank_account_no"), "Bank account no"),
-      ifsc_code: requiredText(formData.get("ifsc"), "IFSC").toUpperCase(),
-      emergency_contact_name: requiredText(formData.get("emergency_contact_name"), "Emergency contact name"),
-      emergency_contact_number: requiredDigits(formData.get("emergency_contact_number"), "Emergency contact number"),
-      emergency_contact_relation: requiredText(formData.get("emergency_contact_relation"), "Emergency relation"),
-      driving_license_no: requiredText(formData.get("driving_license_no"), "Driving license no").toUpperCase(),
-      driving_license_exp_date: normalizeDate(requiredText(formData.get("driving_license_exp_date"), "DL expiry date")),
-      vehicle_reg_no: requiredText(formData.get("vehicle_reg_no"), "Vehicle reg no").toUpperCase(),
-      vehicle_reg_exp_date: normalizeDate(requiredText(formData.get("vehicle_reg_exp_date"), "Reg expiry date")),
-      vehicle_insurance_exp_date: normalizeDate(requiredText(formData.get("vehicle_insurance_exp_date"), "Insurance expiry date")),
-      vehicle_pollution_exp_date: normalizeDate(requiredText(formData.get("vehicle_pollution_exp_date"), "Pollution expiry date")),
+      gender: textValue("gender", "Gender"),
+      date_of_birth: dateValue("date_of_birth", "Date of birth"),
+      aadhaar_number: digitsValue("aadhaar_number", "Aadhaar number"),
+      pan_number: panValue,
+      eshram_uan: eshramValue,
+      father_name: textValue("father_name", "Father name"),
+      blood_group: textValue("blood_group", "Blood group"),
+      is_handicapped: textValue("is_handicapped", "Handicapped") === "true",
+      address: textValue("address", "Address"),
+      state_code: textValue("state_code", "State code")?.toUpperCase() ?? null,
+      postal_pin: digitsValue("pincode", "Pincode"),
+      landmark: textValue("landmark", "Landmark"),
+      bank_account_no: digitsValue("bank_account_no", "Bank account no"),
+      ifsc_code: textValue("ifsc", "IFSC")?.toUpperCase() ?? null,
+      emergency_contact_name: textValue("emergency_contact_name", "Emergency contact name"),
+      emergency_contact_number: digitsValue("emergency_contact_number", "Emergency contact number"),
+      emergency_contact_relation: textValue("emergency_contact_relation", "Emergency relation"),
+      driving_license_no: textValue("driving_license_no", "Driving license no")?.toUpperCase() ?? null,
+      driving_license_exp_date: dateValue("driving_license_exp_date", "DL expiry date"),
+      vehicle_reg_no: textValue("vehicle_reg_no", "Vehicle reg no")?.toUpperCase() ?? null,
+      vehicle_reg_exp_date: dateValue("vehicle_reg_exp_date", "Reg expiry date"),
+      vehicle_insurance_exp_date: dateValue("vehicle_insurance_exp_date", "Insurance expiry date"),
+      vehicle_pollution_exp_date: dateValue("vehicle_pollution_exp_date", "Pollution expiry date"),
       onboarding_status: "active",
       is_active: true,
       updated_at: new Date().toISOString()

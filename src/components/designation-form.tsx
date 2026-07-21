@@ -4,6 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { SubmitButton } from "@/components/submit-button";
 import { designationCategoryOptions, normalizeDesignationCategories, type DesignationCategory } from "@/lib/designation-categories";
+import {
+  employeeProfileFields,
+  fieldExecutiveProfileFields,
+  normalizeProfileFieldRules,
+  type DesignationProfileFieldRules,
+  type ProfileFieldRule
+} from "@/lib/profile-field-rules";
 
 type ProviderOption = {
   id: string;
@@ -26,6 +33,7 @@ type DesignationInitial = {
   provider_ids: string[];
   location_ids: string[];
   onboarding_categories?: string[] | null;
+  profile_field_rules?: unknown;
   is_active: boolean;
 };
 
@@ -94,6 +102,80 @@ function CategoryMultiSelect({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function FieldRuleMatrix({
+  fields,
+  namePrefix,
+  rules,
+  title
+}: {
+  fields: ProfileFieldRule[];
+  namePrefix: "employees" | "field_executives";
+  rules: DesignationProfileFieldRules["employees"];
+  title: string;
+}) {
+  const [enabled, setEnabled] = useState<string[]>(rules.enabled);
+  const [required, setRequired] = useState<string[]>(rules.required.filter((key) => rules.enabled.includes(key)));
+  const enabledSet = useMemo(() => new Set(enabled), [enabled]);
+  const requiredSet = useMemo(() => new Set(required), [required]);
+
+  function toggleEnabled(key: string) {
+    if (enabledSet.has(key)) {
+      setEnabled(enabled.filter((value) => value !== key));
+      setRequired(required.filter((value) => value !== key));
+      return;
+    }
+    setEnabled([...enabled, key]);
+  }
+
+  function toggleRequired(key: string) {
+    if (!enabledSet.has(key)) {
+      setEnabled([...enabled, key]);
+      setRequired([...required, key]);
+      return;
+    }
+    setRequired(requiredSet.has(key) ? required.filter((value) => value !== key) : [...required, key]);
+  }
+
+  const grouped = fields.reduce<Record<string, ProfileFieldRule[]>>((acc, field) => {
+    acc[field.group] = [...(acc[field.group] ?? []), field];
+    return acc;
+  }, {});
+
+  return (
+    <section className="designation-field-rules">
+      {enabled.map((key) => <input key={`enabled-${key}`} name={`${namePrefix}_enabled_fields`} type="hidden" value={key} />)}
+      {required.map((key) => <input key={`required-${key}`} name={`${namePrefix}_required_fields`} type="hidden" value={key} />)}
+      <div className="designation-field-rules-head">
+        <h3>{title}</h3>
+        <p className="subtle">Choose which profile fields appear in app onboarding and which must be filled.</p>
+      </div>
+      {Object.entries(grouped).map(([group, groupFields]) => (
+        <div className="designation-rule-group" key={group}>
+          <h4>{group}</h4>
+          <div className="designation-rule-list">
+            {groupFields.map((field) => (
+              <div className="designation-rule-row" key={field.key}>
+                <div>
+                  <strong>{field.label}</strong>
+                  <small>{field.kind}</small>
+                </div>
+                <label className="check-row">
+                  <input checked={enabledSet.has(field.key)} className="matrix-checkbox" onChange={() => toggleEnabled(field.key)} type="checkbox" />
+                  <span>Enable</span>
+                </label>
+                <label className="check-row">
+                  <input checked={requiredSet.has(field.key)} className="matrix-checkbox" onChange={() => toggleRequired(field.key)} type="checkbox" />
+                  <span>Required</span>
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -217,6 +299,7 @@ export function DesignationForm({
   const [selectedCategories, setSelectedCategories] = useState<DesignationCategory[]>(
     normalizeDesignationCategories(initial?.onboarding_categories)
   );
+  const fieldRules = normalizeProfileFieldRules(initial?.profile_field_rules);
 
   return (
     <form action={action} className="designation-form">
@@ -253,6 +336,10 @@ export function DesignationForm({
             </select>
           </label>
         ) : null}
+      </div>
+      <div className="designation-field-rule-grid">
+        <FieldRuleMatrix fields={employeeProfileFields} namePrefix="employees" rules={fieldRules.employees} title="Employee fields" />
+        <FieldRuleMatrix fields={fieldExecutiveProfileFields} namePrefix="field_executives" rules={fieldRules.field_executives} title="Delivery executive fields" />
       </div>
       <div className="form-actions right">
         <SubmitButton className="button" pendingText="Saving">{submitLabel}</SubmitButton>

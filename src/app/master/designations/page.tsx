@@ -32,6 +32,7 @@ type DesignationRow = {
   provider_ids: string[];
   location_ids: string[];
   onboarding_categories: string[];
+  profile_field_rules?: unknown;
   is_active: boolean;
 };
 
@@ -65,7 +66,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
   }
 
   const [designationsResult, providersResult, locationsResult] = await Promise.all([
-    supabaseAdmin.from("designations").select("id, code, name, provider_ids, location_ids, onboarding_categories, is_active").eq("company_id", companyId).order("code"),
+    supabaseAdmin.from("designations").select("id, code, name, provider_ids, location_ids, onboarding_categories, profile_field_rules, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("providers").select("id, code, name, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("stations").select("id, station_code, station_name, hide_from_location_list").eq("company_id", companyId).eq("is_active", true).order("station_code")
   ]);
@@ -74,7 +75,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
   if (isMissingColumnError(designationsResult.error)) {
     let fallbackRows: unknown[] = [];
     let fallbackError: { message?: string } | null = null;
-    const fallbackResult = await supabaseAdmin.from("designations").select("id, code, name, provider_ids, location_ids, is_active").eq("company_id", companyId).order("code");
+    const fallbackResult = await supabaseAdmin.from("designations").select("id, code, name, provider_ids, location_ids, onboarding_categories, is_active").eq("company_id", companyId).order("code");
     if (isMissingColumnError(fallbackResult.error)) {
       const legacyResult = await supabaseAdmin.from("designations").select("id, code, name, provider_ids, is_active").eq("company_id", companyId).order("code");
       fallbackRows = (legacyResult.data ?? []).map((row) => ({ ...row, location_ids: [] }));
@@ -86,7 +87,8 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
     designationRows = fallbackRows.map((row) => ({
       ...(row as Record<string, unknown>),
       location_ids: Array.isArray((row as { location_ids?: unknown }).location_ids) ? (row as { location_ids: string[] }).location_ids : [],
-      onboarding_categories: ["employees"]
+      onboarding_categories: Array.isArray((row as { onboarding_categories?: unknown }).onboarding_categories) ? (row as { onboarding_categories: string[] }).onboarding_categories : ["employees"],
+      profile_field_rules: {}
     }));
     designationError = fallbackError;
   }

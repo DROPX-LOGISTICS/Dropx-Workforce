@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { connectSessionCookieName, findConnectAccounts } from "../../../../src/lib/connect-auth";
+import { normalizeProfileFieldRules } from "../../../../src/lib/profile-field-rules";
 import { supabaseAdmin } from "../../../../src/lib/supabase-admin";
 
 type EmployeeProfileRow = {
@@ -39,7 +40,7 @@ type EmployeeProfileRow = {
   pan_upload_path: string | null;
   profile_completion_status: string | null;
   stations?: { station_code: string | null; station_name: string | null } | { station_code: string | null; station_name: string | null }[] | null;
-  designations?: { code: string | null; name: string | null } | { code: string | null; name: string | null }[] | null;
+  designations?: { code: string | null; name: string | null; profile_field_rules?: unknown } | { code: string | null; name: string | null; profile_field_rules?: unknown }[] | null;
 };
 
 function firstRelation<T>(value: T | T[] | null | undefined) {
@@ -134,7 +135,7 @@ async function loadEmployee(employeeId: string, companyId: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const result = await supabaseAdmin
     .from("employees")
-    .select("id, company_id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, gender, date_of_birth, aadhaar_number, pan_number, address, state, pincode, landmark, state_code, father_name, blood_group, bank_account_no, ifsc, statutory_applicability, pf_uan, esi_no, emergency_contact_name, emergency_contact_number, emergency_contact_relation, profile_photo_path, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_completion_status, stations (station_code, station_name), designations (code, name)")
+    .select("id, company_id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, gender, date_of_birth, aadhaar_number, pan_number, address, state, pincode, landmark, state_code, father_name, blood_group, bank_account_no, ifsc, statutory_applicability, pf_uan, esi_no, emergency_contact_name, emergency_contact_number, emergency_contact_relation, profile_photo_path, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_completion_status, stations (station_code, station_name), designations (code, name, profile_field_rules)")
     .eq("id", employeeId)
     .eq("company_id", companyId)
     .maybeSingle();
@@ -165,6 +166,7 @@ async function signedProfileUrl(path: string | null) {
 async function serializeEmployee(row: EmployeeProfileRow) {
   const station = firstRelation(row.stations);
   const designation = firstRelation(row.designations);
+  const fieldRules = normalizeProfileFieldRules(designation?.profile_field_rules).employees;
   return {
     id: row.id,
     readOnly: {
@@ -198,6 +200,7 @@ async function serializeEmployee(row: EmployeeProfileRow) {
       emergencyContactRelation: row.emergency_contact_relation ?? ""
     },
     statutoryApplicability: row.statutory_applicability ?? [],
+    fieldRules,
     uploads: {
       aadhaarFront: Boolean(row.aadhaar_front_path),
       aadhaarBack: Boolean(row.aadhaar_back_path),

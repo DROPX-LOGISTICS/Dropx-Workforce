@@ -25,6 +25,7 @@ create table if not exists public.designations (
   name text not null,
   provider_ids uuid[] not null default '{}',
   onboarding_categories text[] not null default array['employees']::text[],
+  profile_field_rules jsonb not null default '{}'::jsonb,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -35,6 +36,9 @@ create index if not exists designations_provider_ids_idx
 
 create index if not exists designations_onboarding_categories_idx
   on public.designations using gin(onboarding_categories);
+
+alter table public.designations
+  add column if not exists profile_field_rules jsonb not null default '{}'::jsonb;
 
 alter table public.designations enable row level security;
 

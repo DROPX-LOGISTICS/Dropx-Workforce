@@ -58,7 +58,7 @@ export const fieldExecutiveProfileFields: ProfileFieldRule[] = [
   { key: "driving_license_exp_date", label: "DL expiry date", group: "Driving and vehicle", kind: "date" },
   { key: "vehicle_reg_no", label: "Vehicle reg no", group: "Driving and vehicle", kind: "text" },
   { key: "vehicle_reg_exp_date", label: "Vehicle reg expiry", group: "Driving and vehicle", kind: "date" },
-  { key: "vehicle_insurance_exp_date", label: "Insurance expiry", group: "Driving and vehicle", kind: "date" },
+  { key: "vehicle_insurance_exp_date", label: "Vehicle Insurance expiry", group: "Driving and vehicle", kind: "date" },
   { key: "vehicle_pollution_exp_date", label: "Pollution expiry", group: "Driving and vehicle", kind: "date" },
   { key: "emergency_contact_number", label: "Emergency contact number", group: "Emergency contact", kind: "number" },
   { key: "emergency_contact_name", label: "Emergency contact name", group: "Emergency contact", kind: "text" },

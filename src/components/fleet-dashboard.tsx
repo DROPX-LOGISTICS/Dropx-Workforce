@@ -1142,7 +1142,7 @@ function VehicleModal({
                     <input className="field compact-file" onChange={(event) => updateRenewalFile("FLEET_REGISTRATION", event.target.files?.[0] ?? null)} type="file" />
                   </div>
                   <div className="fleet-renewal-card">
-                    <span>Insurance expiry</span>
+                    <span>Vehicle Insurance expiry</span>
                     <input className="field" onChange={(event) => updateRenewalDocument("FLEET_INSURANCE", event.target.value)} type="date" value={dateInputValue(form.insurance_expiry)} />
                     <input className="field compact-file" onChange={(event) => updateRenewalFile("FLEET_INSURANCE", event.target.files?.[0] ?? null)} type="file" />
                   </div>

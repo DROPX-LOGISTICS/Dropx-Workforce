@@ -279,7 +279,7 @@ function FieldExecutiveDetails({ executive }: { executive: ExecutiveRow }) {
           <ExecutiveDetail label="Driving license expiry" value={executive.driving_license_exp_date} />
           <ExecutiveDetail label="Vehicle registration number" value={executive.vehicle_reg_no} />
           <ExecutiveDetail label="Vehicle registration expiry" value={executive.vehicle_reg_exp_date} />
-          <ExecutiveDetail label="Insurance expiry" value={executive.vehicle_insurance_exp_date} />
+          <ExecutiveDetail label="Vehicle Insurance expiry" value={executive.vehicle_insurance_exp_date} />
           <ExecutiveDetail label="Pollution expiry" value={executive.vehicle_pollution_exp_date} />
         </dl>
       </section>
@@ -378,7 +378,7 @@ function FieldExecutiveForm({
       <label>Vehicle reg no.<input className="field" name="vehicle_reg_no" placeholder="Enter vehicle number" defaultValue={textValue(executive?.vehicle_reg_no)} /></label>
 
       <label>Vehicle reg expiry<input className="field" name="vehicle_reg_exp_date" type="date" defaultValue={textValue(executive?.vehicle_reg_exp_date)} /></label>
-      <label>Insurance expiry<input className="field" name="vehicle_insurance_exp_date" type="date" defaultValue={textValue(executive?.vehicle_insurance_exp_date)} /></label>
+      <label>Vehicle Insurance expiry<input className="field" name="vehicle_insurance_exp_date" type="date" defaultValue={textValue(executive?.vehicle_insurance_exp_date)} /></label>
       <label>Pollution expiry<input className="field" name="vehicle_pollution_exp_date" type="date" defaultValue={textValue(executive?.vehicle_pollution_exp_date)} /></label>
 
       {mode === "edit" ? (

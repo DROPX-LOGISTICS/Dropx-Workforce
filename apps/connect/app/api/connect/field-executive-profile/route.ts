@@ -317,7 +317,7 @@ export async function POST(request: Request) {
       driving_license_exp_date: dateValue("driving_license_exp_date", "DL expiry date"),
       vehicle_reg_no: textValue("vehicle_reg_no", "Vehicle reg no")?.toUpperCase() ?? null,
       vehicle_reg_exp_date: dateValue("vehicle_reg_exp_date", "Reg expiry date"),
-      vehicle_insurance_exp_date: dateValue("vehicle_insurance_exp_date", "Insurance expiry date"),
+      vehicle_insurance_exp_date: dateValue("vehicle_insurance_exp_date", "Vehicle Insurance expiry"),
       vehicle_pollution_exp_date: dateValue("vehicle_pollution_exp_date", "Pollution expiry date"),
       onboarding_status: "active",
       is_active: true,

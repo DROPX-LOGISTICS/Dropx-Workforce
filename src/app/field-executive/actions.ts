@@ -113,7 +113,7 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
     ["Date of birth", dateOfBirth],
     ["Driving license expiry date", drivingLicenseExpDate],
     ["Vehicle registration expiry date", vehicleRegExpDate],
-    ["Vehicle insurance expiry date", vehicleInsuranceExpDate],
+    ["Vehicle Insurance expiry", vehicleInsuranceExpDate],
     ["Vehicle pollution expiry date", vehiclePollutionExpDate]
   ].forEach(([label, value]) => {
     if (value && Number.isNaN(Date.parse(value))) throw new Error(`Enter a valid ${String(label).toLowerCase()}.`);

@@ -9,6 +9,7 @@ import { syncBiometricEnrolment } from "@/lib/biometric/enrolments";
 import { generateBiometricEnrolmentId } from "@/lib/biometric/ids";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
+import { generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { sendFieldExecutiveOnboardingWhatsApp } from "@/lib/whatsapp";
@@ -189,7 +190,13 @@ export async function createFieldExecutive(formData: FormData) {
     if (locationError) throw new Error(locationError.message);
     if (!location) throw new Error("Selected location is not available for this company.");
 
-    const dropxId = generatedDropxId();
+    const dropxId = await generateConfiguredWorkerId({
+      category: "field_executive",
+      companyId,
+      designationName: designation,
+      fallback: generatedDropxId,
+      locationId
+    });
     const registrationToken = randomBytes(32).toString("base64url");
     const registrationTokenHash = createHash("sha256").update(registrationToken).digest("hex");
     const basePayload = withCompany({

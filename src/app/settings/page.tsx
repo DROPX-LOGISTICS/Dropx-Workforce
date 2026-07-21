@@ -192,6 +192,12 @@ export default async function SettingsPage() {
               <p className="subtle">Approval flow for location expense payment requests.</p>
             </div>
           </PendingLink>
+          <PendingLink className="settings-tile actionable" href="/settings/dropx-id-generation">
+            <div>
+              <h3>DropX ID Generation</h3>
+              <p className="subtle">Configure employee and field executive ID structures by category, model, location, or designation.</p>
+            </div>
+          </PendingLink>
           <div className="settings-tile">
             <div>
               <h3>System Defaults</h3>

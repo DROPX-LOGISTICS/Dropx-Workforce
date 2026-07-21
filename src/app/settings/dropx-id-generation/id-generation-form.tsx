@@ -150,6 +150,7 @@ function ConfigRows({
 export function IdGenerationForm({
   canEdit,
   categories,
+  companyLabel,
   defaultPrefix,
   designations,
   locations,
@@ -161,6 +162,7 @@ export function IdGenerationForm({
 }: {
   canEdit: boolean;
   categories: OptionRow[];
+  companyLabel: string;
   defaultPrefix: string;
   designations: OptionRow[];
   locations: OptionRow[];
@@ -174,7 +176,7 @@ export function IdGenerationForm({
   const locked = Boolean(setting?.is_locked);
   const disabled = !canEdit || locked;
   const optionsByScope = {
-    company: [{ id: "company", code: null, name: "Company" }],
+    company: [{ id: "company", code: null, name: companyLabel }],
     category: categories,
     model: models,
     location: locations,
@@ -188,10 +190,7 @@ export function IdGenerationForm({
           <h2>{title}</h2>
           <p className="subtle">{subtitle}</p>
         </div>
-        <div className="status-stack">
-          <StatusPill status={setting?.is_active === false ? "Inactive" : "Active"} />
-          {locked ? <StatusPill status="Locked" /> : <StatusPill status="Editable" />}
-        </div>
+        <div className="status-stack">{locked ? <StatusPill status="Locked" /> : <StatusPill status="Editable" />}</div>
       </div>
       <div className="panel-body">
         <form action={saveIdGenerationSetting}>
@@ -208,12 +207,6 @@ export function IdGenerationForm({
               >
                 <option value="">Select generation method</option>
                 {scopeTypes.map((scope) => <option key={scope.value} value={scope.value}>{scope.label}</option>)}
-              </select>
-            </label>
-            <label>Status
-              <select className="select" defaultValue={setting?.is_active === false ? "false" : "true"} disabled={disabled} name="is_active">
-                <option value="true">Active</option>
-                <option value="false">Inactive</option>
               </select>
             </label>
           </div>

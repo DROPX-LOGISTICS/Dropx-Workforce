@@ -118,7 +118,7 @@ export async function saveIdGenerationSetting(formData: FormData) {
       setting_type: selectedSetting,
       scope_type: selectedScope,
       configs,
-      is_active: clean(formData.get("is_active")) !== "false",
+      is_active: true,
       updated_at: new Date().toISOString(),
       created_by: authorization.userId
     }, companyId);

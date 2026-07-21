@@ -78,24 +78,28 @@ async function loadData(companyId: string) {
     return {
       designations: [] as OptionRow[],
       error: "Supabase service role key is not configured.",
+      companyLabel: "Company",
       locations: [] as OptionRow[],
       models: [] as OptionRow[],
       settings: [] as SettingRow[]
     };
   }
-  const [settingsResult, locationsResult, modelsResult, designationsResult] = await Promise.all([
+  const [settingsResult, companyResult, locationsResult, modelsResult, designationsResult] = await Promise.all([
     (supabaseAdmin.from("dropx_id_generation_settings") as any)
       .select("id, setting_type, scope_type, configs, is_active, is_locked")
       .eq("company_id", companyId)
       .order("setting_type"),
+    supabaseAdmin.from("companies").select("name, code").eq("id", companyId).maybeSingle(),
     supabaseAdmin.from("stations").select("id, station_code, station_name").eq("company_id", companyId).eq("is_active", true).order("station_code"),
     supabaseAdmin.from("location_models").select("id, code, name").eq("company_id", companyId).eq("is_active", true).order("code"),
     supabaseAdmin.from("designations").select("id, code, name").eq("company_id", companyId).eq("is_active", true).order("code")
   ]);
-  const error = settingsResult.error?.message || locationsResult.error?.message || modelsResult.error?.message || designationsResult.error?.message || null;
+  const error = settingsResult.error?.message || companyResult.error?.message || locationsResult.error?.message || modelsResult.error?.message || designationsResult.error?.message || null;
+  const companyRow = companyResult.data as { name?: string | null; code?: string | null } | null;
   return {
     designations: (designationsResult.data ?? []) as OptionRow[],
     error,
+    companyLabel: companyRow?.name || companyRow?.code || "Company",
     locations: (locationsResult.data ?? []) as OptionRow[],
     models: (modelsResult.data ?? []) as OptionRow[],
     settings: (settingsResult.data ?? []) as SettingRow[]
@@ -143,6 +147,7 @@ export default async function DropxIdGenerationSettingsPage({ searchParams }: { 
       <IdGenerationForm
         canEdit={permission.canAdd || permission.canEdit}
         categories={categories}
+        companyLabel={data.companyLabel}
         defaultPrefix={currentCard.defaultPrefix}
         designations={data.designations}
         key={currentCard.type}

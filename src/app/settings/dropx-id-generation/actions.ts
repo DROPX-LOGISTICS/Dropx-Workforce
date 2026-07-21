@@ -24,14 +24,14 @@ function required(value: FormDataEntryValue | null, field: string) {
   return text;
 }
 
-function flash(params: { error?: string; notice?: string }): never {
+function flash(params: { error?: string; notice?: string }, type: SettingType = "dropx_id"): never {
   cookies().set("dropx_id_generation_flash", JSON.stringify(params), {
     httpOnly: true,
     maxAge: 30,
     path: "/settings/dropx-id-generation",
     sameSite: "lax"
   });
-  redirect("/settings/dropx-id-generation");
+  redirect(`/settings/dropx-id-generation?type=${type}`);
 }
 
 function isNextRedirectError(error: unknown) {
@@ -97,9 +97,10 @@ function buildConfigs(formData: FormData, selectedScope: ScopeType) {
 export async function saveIdGenerationSetting(formData: FormData) {
   const authorization = await requirePagePermission("app_settings", "edit");
   const companyId = requireCompanyId(authorization);
+  let selectedSetting: SettingType = "dropx_id";
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
-    const selectedSetting = settingType(formData.get("setting_type"));
+    selectedSetting = settingType(formData.get("setting_type"));
     const selectedScope = scopeType(formData.get("scope_type"));
     const configs = buildConfigs(formData, selectedScope);
 
@@ -129,9 +130,9 @@ export async function saveIdGenerationSetting(formData: FormData) {
     if (result.error) throw new Error(result.error.message);
 
     revalidatePath("/settings/dropx-id-generation");
-    flash({ notice: "ID generation setting saved." });
+    flash({ notice: "ID generation setting saved." }, selectedSetting);
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
-    flash({ error: friendlyError(error) });
+    flash({ error: friendlyError(error) }, selectedSetting);
   }
 }

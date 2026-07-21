@@ -1108,6 +1108,13 @@ h3 {
   font-size: 15px;
 }
 
+.settings-tile-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
 .id-generation-note {
   margin: 10px 0 14px;
   border: 1px solid #fed7aa;
@@ -1116,6 +1123,13 @@ h3 {
   color: #9a3412;
   padding: 10px 12px;
   font-size: 13px;
+}
+
+.id-generation-switch {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: -8px 0 14px;
 }
 
 .id-generation-scope-block {
@@ -1168,6 +1182,16 @@ h3 {
   color: #9a3412;
   padding: 7px 8px;
   font-size: 12px;
+}
+
+.id-generation-empty {
+  border: 1px dashed #d8dee8;
+  border-radius: 8px;
+  background: #fbfcfe;
+  color: var(--muted);
+  padding: 18px;
+  font-size: 13px;
+  text-align: center;
 }
 
 .whatsapp-settings-stack {

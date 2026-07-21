@@ -192,11 +192,25 @@ export default async function SettingsPage() {
               <p className="subtle">Approval flow for location expense payment requests.</p>
             </div>
           </PendingLink>
-          <PendingLink className="settings-tile actionable" href="/settings/dropx-id-generation">
+          <PendingLink className="settings-tile actionable" href="/settings/dropx-id-generation?type=dropx_id">
             <div>
-              <h3>ID Generation</h3>
-              <p className="subtle">Configure DropX ID and Biometric ID structures by one selected method.</p>
+              <h3>DropX ID Generation</h3>
+              <p className="subtle">Configure the Employee ID and Field Executive ID series.</p>
             </div>
+            <span className="settings-tile-actions">
+              <span className="status-pill good">Enabled</span>
+              <span className="button secondary compact">Configure</span>
+            </span>
+          </PendingLink>
+          <PendingLink className="settings-tile actionable" href="/settings/dropx-id-generation?type=biometric_id">
+            <div>
+              <h3>Biometric ID Generation</h3>
+              <p className="subtle">Configure the biometric enrolment ID series.</p>
+            </div>
+            <span className="settings-tile-actions">
+              <span className="status-pill good">Enabled</span>
+              <span className="button secondary compact">Configure</span>
+            </span>
           </PendingLink>
           <div className="settings-tile">
             <div>

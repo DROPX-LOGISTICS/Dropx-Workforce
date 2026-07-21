@@ -9,7 +9,7 @@ import { syncBiometricEnrolment } from "@/lib/biometric/enrolments";
 import { generateBiometricEnrolmentId } from "@/lib/biometric/ids";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
-import { generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
+import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { sendEmployeeOnboardingWhatsApp } from "@/lib/whatsapp";
@@ -70,7 +70,7 @@ export async function createEmployee(formData: FormData) {
       : required(formData.get("employee_code"), "Employee ID").toUpperCase();
     const fullName = required(formData.get("full_name"), "Full name");
     const submittedBiometricId = optional(formData.get("biometric_id"))?.replace(/\D/g, "") ?? null;
-    const biometricId = submittedBiometricId ?? await generateBiometricEnrolmentId(companyId);
+    let biometricId = submittedBiometricId;
     const mobileCountryCode = cleanCountryCode(formData.get("mobile_country_code"));
     const mobile = required(formData.get("mobile"), "Mobile number").replace(/\D/g, "");
     const email = optional(formData.get("email"))?.toLowerCase() ?? null;
@@ -94,6 +94,16 @@ export async function createEmployee(formData: FormData) {
     if (designationResult.error) throw new Error(designationResult.error.message);
     if (!locationResult.data) throw new Error("Selected location is not available for this company.");
     if (!designationResult.data) throw new Error("Selected designation is not available.");
+    if (!biometricId) {
+      biometricId = await generateConfiguredBiometricId({
+        category: "employee",
+        companyId,
+        designationId,
+        fallback: () => generateBiometricEnrolmentId(companyId),
+        locationId
+      });
+    }
+    if (biometricId && !/^\d{1,20}$/.test(biometricId)) throw new Error("Biometric enrolment ID must be numeric.");
     if (autoGenerateEmployeeCode) {
       employeeCode = await generateConfiguredWorkerId({
         category: "employee",

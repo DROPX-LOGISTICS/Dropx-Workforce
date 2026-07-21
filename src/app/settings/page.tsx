@@ -194,8 +194,8 @@ export default async function SettingsPage() {
           </PendingLink>
           <PendingLink className="settings-tile actionable" href="/settings/dropx-id-generation">
             <div>
-              <h3>DropX ID Generation</h3>
-              <p className="subtle">Configure employee and field executive ID structures by category, model, location, or designation.</p>
+              <h3>ID Generation</h3>
+              <p className="subtle">Configure DropX ID and Biometric ID structures by one selected method.</p>
             </div>
           </PendingLink>
           <div className="settings-tile">

@@ -147,7 +147,7 @@ export const navItems: NavItem[] = [
     icon: "S",
     children: [
       { code: "app_settings", label: "General", href: "/settings" },
-      { code: "app_settings", label: "DropX ID Generation", href: "/settings/dropx-id-generation" },
+      { code: "app_settings", label: "ID Generation", href: "/settings/dropx-id-generation" },
       { code: "app_settings", label: "Biometric Config", href: "/settings/biometric" },
       { code: "app_settings", label: "Biometric Monitor", href: "/biometric" },
       { code: "ai_connector", label: "AI Connector", href: "/settings/ai" },

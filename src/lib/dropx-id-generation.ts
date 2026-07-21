@@ -1,11 +1,12 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export type WorkerIdCategory = "employee" | "field_executive";
+type IdSettingType = "dropx_id" | "biometric_id";
 
 type GenerateWorkerIdInput = {
   category: WorkerIdCategory;
   companyId: string;
-  fallback: () => string;
+  fallback: () => string | Promise<string>;
   locationId?: string | null;
   designationId?: string | null;
   designationName?: string | null;
@@ -14,20 +15,23 @@ type GenerateWorkerIdInput = {
 function isMissingGenerationSetup(error: unknown) {
   const message = String((error as { message?: unknown })?.message ?? "").toLowerCase();
   return message.includes("generate_dropx_worker_id") ||
+    message.includes("generate_biometric_worker_id") ||
+    message.includes("generate_configured_worker_id") ||
     message.includes("dropx_id_generation_settings") ||
     message.includes("schema cache") ||
     (message.includes("function") && message.includes("not found"));
 }
 
-export async function generateConfiguredWorkerId({
+async function generateConfiguredId({
   category,
   companyId,
   designationId,
   designationName,
   fallback,
-  locationId
-}: GenerateWorkerIdInput) {
-  if (!supabaseAdmin) return fallback();
+  locationId,
+  settingType
+}: GenerateWorkerIdInput & { settingType: IdSettingType }) {
+  if (!supabaseAdmin) return await fallback();
 
   let modelId: string | null = null;
   if (locationId) {
@@ -66,7 +70,7 @@ export async function generateConfiguredWorkerId({
     }
   }
 
-  const result = await supabaseAdmin.rpc("generate_dropx_worker_id", {
+  const result = await supabaseAdmin.rpc(settingType === "dropx_id" ? "generate_dropx_worker_id" : "generate_biometric_worker_id", {
     p_category: category,
     p_company_id: companyId,
     p_designation_id: resolvedDesignationId,
@@ -75,10 +79,18 @@ export async function generateConfiguredWorkerId({
   });
 
   if (result.error) {
-    if (isMissingGenerationSetup(result.error)) return fallback();
+    if (isMissingGenerationSetup(result.error)) return await fallback();
     throw new Error(result.error.message);
   }
 
   const generatedId = String(result.data ?? "").trim();
-  return generatedId || fallback();
+  return generatedId || await fallback();
+}
+
+export async function generateConfiguredWorkerId(input: GenerateWorkerIdInput) {
+  return generateConfiguredId({ ...input, settingType: "dropx_id" });
+}
+
+export async function generateConfiguredBiometricId(input: GenerateWorkerIdInput) {
+  return generateConfiguredId({ ...input, settingType: "biometric_id" });
 }

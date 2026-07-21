@@ -7,6 +7,12 @@ import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
+const settingTypes = ["dropx_id", "biometric_id"] as const;
+const scopeTypes = ["category", "model", "location", "designation"] as const;
+
+type SettingType = typeof settingTypes[number];
+type ScopeType = typeof scopeTypes[number];
+
 function clean(value: FormDataEntryValue | null) {
   const text = String(value ?? "").trim();
   return text || null;
@@ -34,103 +40,96 @@ function isNextRedirectError(error: unknown) {
 }
 
 function friendlyError(error: unknown) {
-  const message = error instanceof Error ? error.message : "Unable to save DropX ID generation settings.";
+  const message = error instanceof Error ? error.message : "Unable to save ID generation settings.";
   if (message.toLowerCase().includes("dropx_id_generation_settings")) {
     return `${message} Run scripts/dropx_id_generation_settings_v1.sql in Supabase SQL Editor.`;
   }
   return message;
 }
 
-function category(value: FormDataEntryValue | null) {
-  const text = required(value, "Category");
-  if (!["employee", "field_executive", "vendor", "contractor", "worker"].includes(text)) {
-    throw new Error("Select a valid category.");
-  }
-  return text;
+function settingType(value: FormDataEntryValue | null): SettingType {
+  const text = required(value, "Setting type");
+  if (!settingTypes.includes(text as SettingType)) throw new Error("Select a valid setting.");
+  return text as SettingType;
 }
 
-function scope(formData: FormData, selectedCategory: string) {
-  const scopeType = required(formData.get("scope_type"), "Generation basis");
-  if (!["category", "model", "location", "designation"].includes(scopeType)) {
-    throw new Error("Select a valid generation basis.");
-  }
-  if (scopeType === "category") return { scopeType, scopeKey: selectedCategory, scopeLabel: selectedCategory };
-  const key = required(formData.get(`${scopeType}_id`), `${scopeType} scope`);
-  const label = clean(formData.get(`${scopeType}_label`));
-  return { scopeType, scopeKey: key, scopeLabel: label };
+function scopeType(value: FormDataEntryValue | null): ScopeType {
+  const text = required(value, "Generation method");
+  if (!scopeTypes.includes(text as ScopeType)) throw new Error("Select a valid generation method.");
+  return text as ScopeType;
 }
 
-function structure(formData: FormData) {
-  const nextSerialNo = Number.parseInt(String(formData.get("next_serial_no") ?? "1"), 10);
-  const serialDigits = Number.parseInt(String(formData.get("serial_digits") ?? "3"), 10);
-  if (!Number.isInteger(nextSerialNo) || nextSerialNo < 1) throw new Error("Starting serial number must be 1 or above.");
-  if (!Number.isInteger(serialDigits) || serialDigits < 1 || serialDigits > 12) throw new Error("Decimal places must be between 1 and 12.");
-  return {
-    prefix: clean(formData.get("prefix"))?.toUpperCase() ?? null,
-    separator: String(formData.get("separator") ?? "").trim(),
-    suffix: clean(formData.get("suffix"))?.toUpperCase() ?? null,
-    next_serial_no: nextSerialNo,
-    serial_digits: serialDigits,
-    is_active: clean(formData.get("is_active")) !== "false"
-  };
+function buildConfigs(formData: FormData, selectedScope: ScopeType) {
+  const keys = formData.getAll("row_key").map((value) => String(value));
+  const scopes = formData.getAll("row_scope").map((value) => String(value));
+  const labels = formData.getAll("row_label").map((value) => String(value));
+  const prefixes = formData.getAll("row_prefix").map((value) => String(value).trim().toUpperCase());
+  const separators = formData.getAll("row_separator").map((value) => String(value).trim());
+  const suffixes = formData.getAll("row_suffix").map((value) => String(value).trim().toUpperCase());
+  const serials = formData.getAll("row_next_serial_no").map((value) => String(value));
+  const digits = formData.getAll("row_serial_digits").map((value) => String(value));
+  const configs: Record<string, Record<string, unknown>> = {};
+
+  keys.forEach((key, index) => {
+    if (!key || scopes[index] !== selectedScope) return;
+    const nextSerialNo = Number.parseInt(serials[index] || "1", 10);
+    const serialDigits = Number.parseInt(digits[index] || "3", 10);
+    if (!Number.isInteger(nextSerialNo) || nextSerialNo < 1) {
+      throw new Error("Starting serial number must be 1 or above.");
+    }
+    if (!Number.isInteger(serialDigits) || serialDigits < 1 || serialDigits > 12) {
+      throw new Error("Decimal places must be between 1 and 12.");
+    }
+    configs[key] = {
+      label: labels[index] || key,
+      prefix: prefixes[index] || null,
+      separator: separators[index] ?? "",
+      suffix: suffixes[index] || null,
+      next_serial_no: nextSerialNo,
+      serial_digits: serialDigits
+    };
+  });
+
+  if (!Object.keys(configs).length) throw new Error("Add at least one structure for the selected method.");
+  return configs;
 }
 
-export async function createDropxIdGenerationSetting(formData: FormData) {
-  const authorization = await requirePagePermission("app_settings", "add");
-  const companyId = requireCompanyId(authorization);
-  try {
-    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
-    const selectedCategory = category(formData.get("category"));
-    const selectedScope = scope(formData, selectedCategory);
-    const payload = withCompany({
-      category: selectedCategory,
-      scope_type: selectedScope.scopeType,
-      scope_key: selectedScope.scopeKey,
-      scope_label: selectedScope.scopeLabel,
-      ...structure(formData),
-      created_by: authorization.userId
-    }, companyId);
-    const { error } = await (supabaseAdmin.from("dropx_id_generation_settings") as any).insert(payload);
-    if (error) throw new Error(error.message);
-    revalidatePath("/settings/dropx-id-generation");
-    flash({ notice: "DropX ID generation rule saved." });
-  } catch (error) {
-    if (isNextRedirectError(error)) throw error;
-    flash({ error: friendlyError(error) });
-  }
-}
-
-export async function updateDropxIdGenerationSetting(formData: FormData) {
+export async function saveIdGenerationSetting(formData: FormData) {
   const authorization = await requirePagePermission("app_settings", "edit");
   const companyId = requireCompanyId(authorization);
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
-    const id = required(formData.get("id"), "Rule");
+    const selectedSetting = settingType(formData.get("setting_type"));
+    const selectedScope = scopeType(formData.get("scope_type"));
+    const configs = buildConfigs(formData, selectedScope);
+
     const existing = await (supabaseAdmin.from("dropx_id_generation_settings") as any)
-      .select("is_locked")
+      .select("id, is_locked")
       .eq("company_id", companyId)
-      .eq("id", id)
+      .eq("setting_type", selectedSetting)
       .maybeSingle();
     if (existing.error) throw new Error(existing.error.message);
-    if (existing.data?.is_locked) throw new Error("This rule has already generated a DropX ID and cannot be edited.");
+    if (existing.data?.is_locked) {
+      throw new Error(`${selectedSetting === "dropx_id" ? "DropX ID" : "Biometric ID"} generation is locked because an ID was already generated.`);
+    }
 
-    const selectedCategory = category(formData.get("category"));
-    const selectedScope = scope(formData, selectedCategory);
-    const { error } = await (supabaseAdmin.from("dropx_id_generation_settings") as any)
-      .update({
-        category: selectedCategory,
-        scope_type: selectedScope.scopeType,
-        scope_key: selectedScope.scopeKey,
-        scope_label: selectedScope.scopeLabel,
-        ...structure(formData),
-        updated_at: new Date().toISOString()
-      })
-      .eq("company_id", companyId)
-      .eq("id", id)
-      .eq("is_locked", false);
-    if (error) throw new Error(error.message);
+    const payload = withCompany({
+      setting_type: selectedSetting,
+      scope_type: selectedScope,
+      configs,
+      is_active: clean(formData.get("is_active")) !== "false",
+      updated_at: new Date().toISOString(),
+      created_by: authorization.userId
+    }, companyId);
+
+    const query = (supabaseAdmin.from("dropx_id_generation_settings") as any);
+    const result = existing.data?.id
+      ? await query.update(payload).eq("id", existing.data.id).eq("company_id", companyId).eq("is_locked", false)
+      : await query.insert(payload);
+    if (result.error) throw new Error(result.error.message);
+
     revalidatePath("/settings/dropx-id-generation");
-    flash({ notice: "DropX ID generation rule updated." });
+    flash({ notice: "ID generation setting saved." });
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     flash({ error: friendlyError(error) });

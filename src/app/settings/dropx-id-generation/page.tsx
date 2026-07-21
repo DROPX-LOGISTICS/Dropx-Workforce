@@ -1,27 +1,32 @@
 import { cookies } from "next/headers";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
-import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { createDropxIdGenerationSetting, updateDropxIdGenerationSetting } from "./actions";
+import { saveIdGenerationSetting } from "./actions";
 
-type RuleRow = {
+type SettingType = "dropx_id" | "biometric_id";
+type ScopeType = "category" | "model" | "location" | "designation";
+
+type SettingRow = {
   id: string;
-  category: string;
-  scope_type: string;
-  scope_key: string;
-  scope_label: string | null;
-  prefix: string | null;
-  separator: string;
-  suffix: string | null;
-  next_serial_no: number;
-  serial_digits: number;
+  setting_type: SettingType;
+  scope_type: ScopeType;
+  configs: Record<string, GenerationConfig> | null;
   is_active: boolean;
   is_locked: boolean;
+};
+
+type GenerationConfig = {
+  label?: string | null;
+  prefix?: string | null;
+  separator?: string | null;
+  suffix?: string | null;
+  next_serial_no?: number | null;
+  serial_digits?: number | null;
 };
 
 type OptionRow = {
@@ -33,18 +38,33 @@ type OptionRow = {
 };
 
 const categories = [
-  { value: "employee", label: "Employees" },
-  { value: "field_executive", label: "Field executives" },
-  { value: "vendor", label: "Vendors" },
-  { value: "contractor", label: "Contractors" },
-  { value: "worker", label: "Workers" }
+  { id: "employee", code: "EMP", name: "Employees" },
+  { id: "field_executive", code: "FE", name: "Field executives" },
+  { id: "vendor", code: "VEN", name: "Vendors" },
+  { id: "contractor", code: "CON", name: "Contractors" },
+  { id: "worker", code: "WRK", name: "Workers" }
 ];
 
-const scopeTypes = [
+const scopeTypes: Array<{ value: ScopeType; label: string }> = [
   { value: "category", label: "Category wise" },
   { value: "model", label: "Model wise" },
   { value: "location", label: "Location wise" },
   { value: "designation", label: "Designation wise" }
+];
+
+const settingCards: Array<{ type: SettingType; title: string; subtitle: string; defaultPrefix: string }> = [
+  {
+    type: "dropx_id",
+    title: "DropX ID",
+    subtitle: "Configure the worker code used as Employee ID or Field Executive ID.",
+    defaultPrefix: "DROPX"
+  },
+  {
+    type: "biometric_id",
+    title: "Biometric ID",
+    subtitle: "Configure the biometric enrolment ID series.",
+    defaultPrefix: ""
+  }
 ];
 
 function loadFlash() {
@@ -65,26 +85,23 @@ function optionLabel(row: OptionRow) {
   return [row.code ?? row.station_code, row.name ?? row.station_name].filter(Boolean).join(" - ") || row.id;
 }
 
-function categoryLabel(value: string) {
-  return categories.find((category) => category.value === value)?.label ?? value;
+function defaultConfig(label: string, defaultPrefix: string): GenerationConfig {
+  return {
+    label,
+    prefix: defaultPrefix,
+    separator: defaultPrefix ? "" : "",
+    suffix: null,
+    next_serial_no: 1,
+    serial_digits: defaultPrefix ? 3 : 1
+  };
 }
 
-function scopeTypeLabel(value: string) {
-  return scopeTypes.find((scope) => scope.value === value)?.label ?? value;
-}
-
-function formatSample(rule: Pick<RuleRow, "prefix" | "separator" | "suffix" | "next_serial_no" | "serial_digits">) {
-  const serial = String(rule.next_serial_no).padStart(rule.serial_digits, "0");
-  return `${rule.prefix ?? ""}${rule.prefix ? rule.separator ?? "" : ""}${serial}${rule.suffix ? `${rule.separator ?? ""}${rule.suffix}` : ""}`;
-}
-
-function scopeLabel(rule: RuleRow, maps: { designations: Map<string, string>; locations: Map<string, string>; models: Map<string, string> }) {
-  if (rule.scope_type === "category") return categoryLabel(rule.scope_key);
-  if (rule.scope_label) return rule.scope_label;
-  if (rule.scope_type === "designation") return maps.designations.get(rule.scope_key) ?? rule.scope_key;
-  if (rule.scope_type === "location") return maps.locations.get(rule.scope_key) ?? rule.scope_key;
-  if (rule.scope_type === "model") return maps.models.get(rule.scope_key) ?? rule.scope_key;
-  return rule.scope_key;
+function formatSample(config: GenerationConfig) {
+  const prefix = config.prefix ?? "";
+  const separator = config.separator ?? "";
+  const suffix = config.suffix ?? "";
+  const serial = String(config.next_serial_no ?? 1).padStart(config.serial_digits ?? 3, "0");
+  return `${prefix}${prefix ? separator : ""}${serial}${suffix ? `${separator}${suffix}` : ""}`;
 }
 
 async function loadData(companyId: string) {
@@ -94,121 +111,160 @@ async function loadData(companyId: string) {
       error: "Supabase service role key is not configured.",
       locations: [] as OptionRow[],
       models: [] as OptionRow[],
-      rules: [] as RuleRow[]
+      settings: [] as SettingRow[]
     };
   }
-  const [rulesResult, locationsResult, modelsResult, designationsResult] = await Promise.all([
+  const [settingsResult, locationsResult, modelsResult, designationsResult] = await Promise.all([
     (supabaseAdmin.from("dropx_id_generation_settings") as any)
-      .select("id, category, scope_type, scope_key, scope_label, prefix, separator, suffix, next_serial_no, serial_digits, is_active, is_locked")
+      .select("id, setting_type, scope_type, configs, is_active, is_locked")
       .eq("company_id", companyId)
-      .order("category")
-      .order("scope_type"),
+      .order("setting_type"),
     supabaseAdmin.from("stations").select("id, station_code, station_name").eq("company_id", companyId).eq("is_active", true).order("station_code"),
     supabaseAdmin.from("location_models").select("id, code, name").eq("company_id", companyId).eq("is_active", true).order("code"),
     supabaseAdmin.from("designations").select("id, code, name").eq("company_id", companyId).eq("is_active", true).order("code")
   ]);
-  const error = rulesResult.error?.message || locationsResult.error?.message || modelsResult.error?.message || designationsResult.error?.message || null;
+  const error = settingsResult.error?.message || locationsResult.error?.message || modelsResult.error?.message || designationsResult.error?.message || null;
   return {
     designations: (designationsResult.data ?? []) as OptionRow[],
     error,
     locations: (locationsResult.data ?? []) as OptionRow[],
     models: (modelsResult.data ?? []) as OptionRow[],
-    rules: (rulesResult.data ?? []) as RuleRow[]
+    settings: (settingsResult.data ?? []) as SettingRow[]
   };
 }
 
-function RuleForm({
+function ConfigRows({
+  defaultPrefix,
+  options,
+  scope,
+  setting
+}: {
+  defaultPrefix: string;
+  options: OptionRow[];
+  scope: ScopeType;
+  setting?: SettingRow;
+}) {
+  return (
+    <div className="id-generation-scope-block">
+      <h4>{scopeTypes.find((item) => item.value === scope)?.label}</h4>
+      <div className="id-generation-row-head">
+        <span>Item</span>
+        <span>Prefix</span>
+        <span>Separator</span>
+        <span>Serial</span>
+        <span>Digits</span>
+        <span>Suffix</span>
+        <span>Sample</span>
+      </div>
+      {options.map((option) => {
+        const label = optionLabel(option);
+        const config = setting?.configs?.[option.id] ?? defaultConfig(label, defaultPrefix);
+        return (
+          <div className="id-generation-row" key={`${scope}-${option.id}`}>
+            <input name="row_scope" type="hidden" value={scope} />
+            <input name="row_key" type="hidden" value={option.id} />
+            <input name="row_label" type="hidden" value={label} />
+            <strong>{label}</strong>
+            <input className="field" defaultValue={config.prefix ?? ""} name="row_prefix" placeholder="Prefix" />
+            <input className="field" defaultValue={config.separator ?? ""} name="row_separator" placeholder="-" />
+            <input className="field" defaultValue={config.next_serial_no ?? 1} min={1} name="row_next_serial_no" type="number" />
+            <input className="field" defaultValue={config.serial_digits ?? 3} max={12} min={1} name="row_serial_digits" type="number" />
+            <input className="field" defaultValue={config.suffix ?? ""} name="row_suffix" placeholder="Optional" />
+            <code>{formatSample(config)}</code>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SettingCard({
   canEdit,
+  defaultPrefix,
   designations,
   locations,
   models,
-  rule
+  setting,
+  subtitle,
+  title,
+  type
 }: {
   canEdit: boolean;
+  defaultPrefix: string;
   designations: OptionRow[];
   locations: OptionRow[];
   models: OptionRow[];
-  rule?: RuleRow | null;
+  setting?: SettingRow;
+  subtitle: string;
+  title: string;
+  type: SettingType;
 }) {
-  const action = rule ? updateDropxIdGenerationSetting : createDropxIdGenerationSetting;
-  const locked = Boolean(rule?.is_locked);
+  const locked = Boolean(setting?.is_locked);
   const disabled = !canEdit || locked;
   return (
-    <form action={action} className="form-grid three">
-      {rule ? <input name="id" type="hidden" value={rule.id} /> : null}
-      <label>Category
-        <select className="select" defaultValue={rule?.category ?? "employee"} disabled={disabled} name="category" required>
-          {categories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
-        </select>
-      </label>
-      <label>Generation basis
-        <select className="select" defaultValue={rule?.scope_type ?? "category"} disabled={disabled} name="scope_type" required>
-          {scopeTypes.map((scope) => <option key={scope.value} value={scope.value}>{scope.label}</option>)}
-        </select>
-      </label>
-      <label>Status
-        <select className="select" defaultValue={rule?.is_active === false ? "false" : "true"} disabled={disabled} name="is_active">
-          <option value="true">Active</option>
-          <option value="false">Inactive</option>
-        </select>
-      </label>
-      <label>Model scope
-        <select className="select" defaultValue={rule?.scope_type === "model" ? rule.scope_key : ""} disabled={disabled} name="model_id">
-          <option value="">Select only for model wise</option>
-          {models.map((model) => <option key={model.id} value={model.id}>{optionLabel(model)}</option>)}
-        </select>
-      </label>
-      <label>Location scope
-        <select className="select" defaultValue={rule?.scope_type === "location" ? rule.scope_key : ""} disabled={disabled} name="location_id">
-          <option value="">Select only for location wise</option>
-          {locations.map((location) => <option key={location.id} value={location.id}>{optionLabel(location)}</option>)}
-        </select>
-      </label>
-      <label>Designation scope
-        <select className="select" defaultValue={rule?.scope_type === "designation" ? rule.scope_key : ""} disabled={disabled} name="designation_id">
-          <option value="">Select only for designation wise</option>
-          {designations.map((designation) => <option key={designation.id} value={designation.id}>{optionLabel(designation)}</option>)}
-        </select>
-      </label>
-      <label>Prefix<input className="field" defaultValue={rule?.prefix ?? ""} disabled={disabled} name="prefix" placeholder="DROPX" /></label>
-      <label>Separator<input className="field" defaultValue={rule?.separator ?? ""} disabled={disabled} name="separator" placeholder="- or blank" /></label>
-      <label>Suffix<input className="field" defaultValue={rule?.suffix ?? ""} disabled={disabled} name="suffix" placeholder="Optional" /></label>
-      <label>Starting serial no.<input className="field" defaultValue={rule?.next_serial_no ?? 1} disabled={disabled} min={1} name="next_serial_no" required type="number" /></label>
-      <label>Decimal places<input className="field" defaultValue={rule?.serial_digits ?? 3} disabled={disabled} max={12} min={1} name="serial_digits" required type="number" /></label>
-      <div className="id-generation-preview">
-        <span>Sample</span>
-        <strong>{formatSample(rule ?? { prefix: "DROPX", separator: "", suffix: null, next_serial_no: 1, serial_digits: 3 })}</strong>
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2>{title}</h2>
+          <p className="subtle">{subtitle}</p>
+        </div>
+        <div className="status-stack">
+          <StatusPill status={setting?.is_active === false ? "Inactive" : "Active"} />
+          {locked ? <StatusPill status="Locked" /> : <StatusPill status="Editable" />}
+        </div>
       </div>
-      {locked ? <p className="inline-error span-3">This rule is locked because it has already generated a DropX ID.</p> : null}
-      <div className="form-actions span-3 align-right">
-        {rule ? <PendingLink className="button secondary" href="/settings/dropx-id-generation">Cancel</PendingLink> : null}
-        <SubmitButton disabled={disabled}>{rule ? "Save changes" : "Save rule"}</SubmitButton>
+      <div className="panel-body">
+        <form action={saveIdGenerationSetting}>
+          <input name="setting_type" type="hidden" value={type} />
+          <div className="form-grid three">
+            <label>Generation method
+              <select className="select" defaultValue={setting?.scope_type ?? "category"} disabled={disabled} name="scope_type" required>
+                {scopeTypes.map((scope) => <option key={scope.value} value={scope.value}>{scope.label}</option>)}
+              </select>
+            </label>
+            <label>Status
+              <select className="select" defaultValue={setting?.is_active === false ? "false" : "true"} disabled={disabled} name="is_active">
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="id-generation-note">
+            Only the selected generation method will be saved. Existing generated IDs lock this setting from further editing.
+          </div>
+
+          <ConfigRows defaultPrefix={defaultPrefix} options={categories} scope="category" setting={setting} />
+          <ConfigRows defaultPrefix={defaultPrefix} options={models} scope="model" setting={setting} />
+          <ConfigRows defaultPrefix={defaultPrefix} options={locations} scope="location" setting={setting} />
+          <ConfigRows defaultPrefix={defaultPrefix} options={designations} scope="designation" setting={setting} />
+
+          {locked ? <p className="inline-error">This setting is locked because it has already generated an ID.</p> : null}
+          <div className="form-actions align-right">
+            <SubmitButton disabled={disabled}>Save {title}</SubmitButton>
+          </div>
+        </form>
       </div>
-    </form>
+    </section>
   );
 }
 
 export const dynamic = "force-dynamic";
 
-export default async function DropxIdGenerationSettingsPage({ searchParams }: { searchParams?: { edit?: string } }) {
+export default async function DropxIdGenerationSettingsPage() {
   const authorization = await requirePagePermission("app_settings", "access");
   const companyId = requireCompanyId(authorization);
   const permission = authorization.permissions.app_settings;
   const { error: flashError, notice } = loadFlash();
   const data = await loadData(companyId);
-  const editRule = searchParams?.edit ? data.rules.find((rule) => rule.id === searchParams.edit) ?? null : null;
-  const maps = {
-    designations: new Map(data.designations.map((row) => [row.id, optionLabel(row)])),
-    locations: new Map(data.locations.map((row) => [row.id, optionLabel(row)])),
-    models: new Map(data.models.map((row) => [row.id, optionLabel(row)]))
-  };
+  const settingByType = new Map(data.settings.map((setting) => [setting.setting_type, setting]));
 
   return (
     <AppShell active="Settings" pageCode="app_settings">
       <PageHead
         eyebrow="Settings"
-        title="DropX ID Generation"
-        subtitle="Configure automatic DropX ID formats by category, model, location, or designation."
+        title="ID Generation"
+        subtitle="Configure one method for DropX ID and one method for Biometric ID."
       />
 
       {data.error || flashError || notice ? (
@@ -220,58 +276,20 @@ export default async function DropxIdGenerationSettingsPage({ searchParams }: { 
         </section>
       ) : null}
 
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>{editRule ? "Edit generation rule" : "Add generation rule"}</h2>
-            <p className="subtle">Rules are checked as designation, location, model, then category. Once used, a rule is locked.</p>
-          </div>
-        </div>
-        <div className="panel-body">
-          <RuleForm canEdit={permission.canAdd || permission.canEdit} designations={data.designations} locations={data.locations} models={data.models} rule={editRule} />
-        </div>
-      </section>
-
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>Generation rules</h2>
-            <p className="subtle">{data.rules.length} configured rules</p>
-          </div>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th>Basis</th>
-                <th>Scope</th>
-                <th>Structure</th>
-                <th>Next serial</th>
-                <th>Status</th>
-                <th>Lock</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.rules.length ? data.rules.map((rule) => (
-                <tr key={rule.id}>
-                  <td>{categoryLabel(rule.category)}</td>
-                  <td>{scopeTypeLabel(rule.scope_type)}</td>
-                  <td>{scopeLabel(rule, maps)}</td>
-                  <td><strong>{formatSample(rule)}</strong></td>
-                  <td>{rule.next_serial_no}</td>
-                  <td><StatusPill status={rule.is_active ? "Active" : "Inactive"} /></td>
-                  <td>{rule.is_locked ? <StatusPill status="Locked" /> : <StatusPill status="Draft" />}</td>
-                  <td>{!rule.is_locked && permission.canEdit ? <PendingLink className="button secondary compact" href={`/settings/dropx-id-generation?edit=${rule.id}`}>Edit</PendingLink> : "-"}</td>
-                </tr>
-              )) : (
-                <tr><td className="empty-cell" colSpan={8}>No DropX ID generation rules added yet.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      {settingCards.map((card) => (
+        <SettingCard
+          canEdit={permission.canAdd || permission.canEdit}
+          defaultPrefix={card.defaultPrefix}
+          designations={data.designations}
+          key={card.type}
+          locations={data.locations}
+          models={data.models}
+          setting={settingByType.get(card.type)}
+          subtitle={card.subtitle}
+          title={card.title}
+          type={card.type}
+        />
+      ))}
     </AppShell>
   );
 }

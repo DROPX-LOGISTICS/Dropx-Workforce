@@ -9,7 +9,7 @@ import { syncBiometricEnrolment } from "@/lib/biometric/enrolments";
 import { generateBiometricEnrolmentId } from "@/lib/biometric/ids";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
-import { generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
+import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { sendFieldExecutiveOnboardingWhatsApp } from "@/lib/whatsapp";
@@ -167,7 +167,7 @@ export async function createFieldExecutive(formData: FormData) {
   try {
     const fullName = required(formData.get("full_name"), "Full name");
     const submittedBiometricId = optional(formData.get("biometric_id"))?.replace(/\D/g, "") ?? null;
-    const biometricId = submittedBiometricId ?? await generateBiometricEnrolmentId(companyId);
+    let biometricId = submittedBiometricId;
     const mobileCountryCode = cleanCountryCode(formData.get("mobile_country_code"));
     const mobile = required(formData.get("mobile"), "Mobile number").replace(/\D/g, "");
     const email = required(formData.get("email"), "Email").toLowerCase();
@@ -189,6 +189,17 @@ export async function createFieldExecutive(formData: FormData) {
       .maybeSingle();
     if (locationError) throw new Error(locationError.message);
     if (!location) throw new Error("Selected location is not available for this company.");
+
+    if (!biometricId) {
+      biometricId = await generateConfiguredBiometricId({
+        category: "field_executive",
+        companyId,
+        designationName: designation,
+        fallback: () => generateBiometricEnrolmentId(companyId),
+        locationId
+      });
+    }
+    if (biometricId && !/^\d{1,20}$/.test(biometricId)) throw new Error("Biometric enrolment ID must be numeric.");
 
     const dropxId = await generateConfiguredWorkerId({
       category: "field_executive",

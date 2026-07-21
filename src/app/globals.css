@@ -1108,27 +1108,66 @@ h3 {
   font-size: 15px;
 }
 
-.id-generation-preview {
-  align-self: end;
-  border: 1px solid var(--line);
+.id-generation-note {
+  margin: 10px 0 14px;
+  border: 1px solid #fed7aa;
   border-radius: 8px;
-  background: #fffaf3;
+  background: #fff7ed;
+  color: #9a3412;
   padding: 10px 12px;
-  min-height: 44px;
+  font-size: 13px;
 }
 
-.id-generation-preview span {
-  display: block;
+.id-generation-scope-block {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.id-generation-scope-block h4 {
+  margin: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fafc;
+  font-size: 13px;
+}
+
+.id-generation-row-head,
+.id-generation-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) repeat(5, minmax(86px, 0.7fr)) minmax(110px, 0.8fr);
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+}
+
+.id-generation-row-head {
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
-.id-generation-preview strong {
-  display: block;
-  margin-top: 2px;
-  font-size: 14px;
+.id-generation-row {
+  border-top: 1px solid var(--line);
+}
+
+.id-generation-row strong {
+  font-size: 13px;
+}
+
+.id-generation-row .field {
+  min-height: 36px;
+  padding: 7px 9px;
+}
+
+.id-generation-row code {
+  border-radius: 7px;
+  background: #fff7ed;
+  color: #9a3412;
+  padding: 7px 8px;
+  font-size: 12px;
 }
 
 .whatsapp-settings-stack {
@@ -4190,6 +4229,19 @@ tr:last-child td {
   .employee-form .field-executive-submit-slot,
   .field-executive-add-form .field-executive-submit-slot {
     justify-content: flex-end;
+  }
+
+  .id-generation-row-head {
+    display: none;
+  }
+
+  .id-generation-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .id-generation-row strong,
+  .id-generation-row code {
+    grid-column: 1 / -1;
   }
 
   .add-user-actions {

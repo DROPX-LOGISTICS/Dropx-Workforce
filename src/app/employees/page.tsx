@@ -411,15 +411,15 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
                   const designation = firstRelation(employee.designations);
                   return (
                     <tr key={employee.id}>
-                      <td><strong>{employee.employee_code ?? "-"}</strong></td>
                       <td>
                         <div className="executive-name-cell">
                           <span className="executive-avatar" aria-hidden="true">
                             {employee.upload_urls?.profilePhoto ? <img alt="" src={employee.upload_urls.profilePhoto} /> : <UserRound size={17} />}
                           </span>
-                          <strong>{employee.full_name}</strong>
+                          <strong>{employee.employee_code ?? "-"}</strong>
                         </div>
                       </td>
+                      <td><strong>{employee.full_name}</strong></td>
                       <td>{employee.biometric_id ?? "-"}</td>
                       <td>+{employee.mobile_country_code ?? "91"} {employee.mobile}</td>
                       <td>{employee.email || "-"}</td>

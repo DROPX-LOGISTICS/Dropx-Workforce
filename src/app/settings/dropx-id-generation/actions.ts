@@ -8,7 +8,7 @@ import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const settingTypes = ["dropx_id", "biometric_id"] as const;
-const scopeTypes = ["category", "model", "location", "designation"] as const;
+const scopeTypes = ["company", "category", "model", "location", "designation"] as const;
 
 type SettingType = typeof settingTypes[number];
 type ScopeType = typeof scopeTypes[number];
@@ -75,10 +75,10 @@ function buildConfigs(formData: FormData, selectedScope: ScopeType) {
     const nextSerialNo = Number.parseInt(serials[index] || "1", 10);
     const serialDigits = Number.parseInt(digits[index] || "3", 10);
     if (!Number.isInteger(nextSerialNo) || nextSerialNo < 1) {
-      throw new Error("Starting serial number must be 1 or above.");
+      throw new Error("Starting number must be 1 or above.");
     }
     if (!Number.isInteger(serialDigits) || serialDigits < 1 || serialDigits > 12) {
-      throw new Error("Decimal places must be between 1 and 12.");
+      throw new Error("Minimum digit must be between 1 and 12.");
     }
     configs[key] = {
       label: labels[index] || key,

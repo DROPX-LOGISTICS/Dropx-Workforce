@@ -6,7 +6,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { saveIdGenerationSetting } from "./actions";
 
 type SettingType = "dropx_id" | "biometric_id";
-type ScopeType = "category" | "model" | "location" | "designation";
+type ScopeType = "company" | "category" | "model" | "location" | "designation";
 
 type GenerationConfig = {
   label?: string | null;
@@ -35,6 +35,7 @@ type OptionRow = {
 };
 
 const scopeTypes: Array<{ value: ScopeType; label: string }> = [
+  { value: "company", label: "Company wise" },
   { value: "category", label: "Category wise" },
   { value: "model", label: "Model wise" },
   { value: "location", label: "Location wise" },
@@ -130,8 +131,8 @@ function ConfigRows({
         <span>Item</span>
         <span>Prefix</span>
         <span>Separator</span>
-        <span>Serial</span>
-        <span>Digits</span>
+        <span>Starting number</span>
+        <span>Minimum digit</span>
         <span>Suffix</span>
         <span>Sample</span>
       </div>
@@ -173,6 +174,7 @@ export function IdGenerationForm({
   const locked = Boolean(setting?.is_locked);
   const disabled = !canEdit || locked;
   const optionsByScope = {
+    company: [{ id: "company", code: null, name: "Company" }],
     category: categories,
     model: models,
     location: locations,

@@ -123,13 +123,12 @@ export async function saveIdGenerationSetting(formData: FormData) {
       created_by: authorization.userId
     }, companyId);
 
-    const query = (supabaseAdmin.from("dropx_id_generation_settings") as any);
-    const result = existing.data?.id
-      ? await query.update(payload).eq("id", existing.data.id).eq("company_id", companyId).eq("is_locked", false)
-      : await query.insert(payload);
+    const result = await (supabaseAdmin.from("dropx_id_generation_settings") as any)
+      .upsert(payload, { onConflict: "company_id,setting_type" });
     if (result.error) throw new Error(result.error.message);
 
     revalidatePath("/settings/dropx-id-generation");
+    revalidatePath("/settings");
     flash({ notice: "ID generation setting saved." }, selectedSetting);
   } catch (error) {
     if (isNextRedirectError(error)) throw error;

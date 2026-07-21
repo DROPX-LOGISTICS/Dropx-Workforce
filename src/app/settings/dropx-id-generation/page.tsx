@@ -145,6 +145,7 @@ export default async function DropxIdGenerationSettingsPage({ searchParams }: { 
         categories={categories}
         defaultPrefix={currentCard.defaultPrefix}
         designations={data.designations}
+        key={currentCard.type}
         locations={data.locations}
         models={data.models}
         setting={settingByType.get(currentCard.type)}

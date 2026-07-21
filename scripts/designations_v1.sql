@@ -24,6 +24,7 @@ create table if not exists public.designations (
   code text not null unique,
   name text not null,
   provider_ids uuid[] not null default '{}',
+  model_ids uuid[] not null default '{}',
   onboarding_categories text[] not null default array['employees']::text[],
   profile_field_rules jsonb not null default '{}'::jsonb,
   is_active boolean not null default true,
@@ -34,8 +35,14 @@ create table if not exists public.designations (
 create index if not exists designations_provider_ids_idx
   on public.designations using gin(provider_ids);
 
+create index if not exists designations_model_ids_idx
+  on public.designations using gin(model_ids);
+
 create index if not exists designations_onboarding_categories_idx
   on public.designations using gin(onboarding_categories);
+
+alter table public.designations
+  add column if not exists model_ids uuid[] not null default '{}';
 
 alter table public.designations
   add column if not exists profile_field_rules jsonb not null default '{}'::jsonb;

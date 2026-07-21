@@ -25,12 +25,22 @@ type LocationRow = {
   hide_from_location_list?: boolean | null;
 };
 
+type ModelRow = {
+  id: string;
+  provider_id: string | null;
+  code: string;
+  name: string;
+  is_active: boolean;
+  providers?: { code: string; name: string } | { code: string; name: string }[] | null;
+};
+
 type DesignationRow = {
   id: string;
   code: string;
   name: string;
   provider_ids: string[];
-  location_ids: string[];
+  location_ids?: string[];
+  model_ids?: string[] | null;
   onboarding_categories: string[];
   profile_field_rules?: unknown;
   is_active: boolean;
@@ -61,14 +71,16 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
       designations: [] as DesignationRow[],
       providers: [] as ProviderRow[],
       locations: [] as LocationRow[],
+      models: [] as ModelRow[],
       error: "Supabase service role key is not configured."
     };
   }
 
-  const [designationsResult, providersResult, locationsResult] = await Promise.all([
-    supabaseAdmin.from("designations").select("id, code, name, provider_ids, location_ids, onboarding_categories, profile_field_rules, is_active").eq("company_id", companyId).order("code"),
+  const [designationsResult, providersResult, locationsResult, modelsResult] = await Promise.all([
+    supabaseAdmin.from("designations").select("id, code, name, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("providers").select("id, code, name, is_active").eq("company_id", companyId).order("code"),
-    supabaseAdmin.from("stations").select("id, station_code, station_name, hide_from_location_list").eq("company_id", companyId).eq("is_active", true).order("station_code")
+    supabaseAdmin.from("stations").select("id, station_code, station_name, hide_from_location_list").eq("company_id", companyId).eq("is_active", true).order("station_code"),
+    supabaseAdmin.from("location_models").select("id, provider_id, code, name, is_active, providers (code, name)").eq("company_id", companyId).eq("is_active", true).order("code")
   ]);
   let designationRows: unknown[] = designationsResult.data ?? [];
   let designationError: { message?: string } | null = designationsResult.error;
@@ -78,7 +90,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
     const fallbackResult = await supabaseAdmin.from("designations").select("id, code, name, provider_ids, location_ids, onboarding_categories, is_active").eq("company_id", companyId).order("code");
     if (isMissingColumnError(fallbackResult.error)) {
       const legacyResult = await supabaseAdmin.from("designations").select("id, code, name, provider_ids, is_active").eq("company_id", companyId).order("code");
-      fallbackRows = (legacyResult.data ?? []).map((row) => ({ ...row, location_ids: [] }));
+      fallbackRows = (legacyResult.data ?? []).map((row) => ({ ...row, location_ids: [], model_ids: [] }));
       fallbackError = legacyResult.error;
     } else {
       fallbackRows = fallbackResult.data ?? [];
@@ -87,6 +99,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
     designationRows = fallbackRows.map((row) => ({
       ...(row as Record<string, unknown>),
       location_ids: Array.isArray((row as { location_ids?: unknown }).location_ids) ? (row as { location_ids: string[] }).location_ids : [],
+      model_ids: Array.isArray((row as { model_ids?: unknown }).model_ids) ? (row as { model_ids: string[] }).model_ids : [],
       onboarding_categories: Array.isArray((row as { onboarding_categories?: unknown }).onboarding_categories) ? (row as { onboarding_categories: string[] }).onboarding_categories : ["employees"],
       profile_field_rules: {}
     }));
@@ -98,6 +111,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
       designations: [] as DesignationRow[],
       providers: [] as ProviderRow[],
       locations: [] as LocationRow[],
+      models: [] as ModelRow[],
       error: designationError.message
     };
   }
@@ -106,6 +120,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
       designations: [] as DesignationRow[],
       providers: [] as ProviderRow[],
       locations: [] as LocationRow[],
+      models: [] as ModelRow[],
       error: providersResult.error.message
     };
   }
@@ -114,7 +129,17 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
       designations: [] as DesignationRow[],
       providers: [] as ProviderRow[],
       locations: [] as LocationRow[],
+      models: [] as ModelRow[],
       error: locationsResult.error.message
+    };
+  }
+  if (modelsResult.error) {
+    return {
+      designations: [] as DesignationRow[],
+      providers: [] as ProviderRow[],
+      locations: [] as LocationRow[],
+      models: [] as ModelRow[],
+      error: modelsResult.error.message
     };
   }
 
@@ -129,6 +154,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
     })),
     providers: (providersResult.data ?? []) as ProviderRow[],
     locations: locations as LocationRow[],
+    models: (modelsResult.data ?? []) as ModelRow[],
     error: null
   };
 }
@@ -143,24 +169,24 @@ export default async function DesignationsPage({
   const authorization = await requirePagePermission("designations", "access");
   const companyId = requireCompanyId(authorization);
   const pagePermission = authorization.permissions.designations;
-  const { designations, providers, locations, error } = await loadDesignations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
+  const { designations, providers, models, error } = await loadDesignations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const flash = loadFlash();
   const query = String(searchParams?.q ?? "").trim().toLowerCase();
   const providerById = new Map(providers.map((provider) => [provider.id, provider]));
-  const locationById = new Map(locations.map((location) => [location.id, location]));
+  const modelById = new Map(models.map((model) => [model.id, model]));
   const filteredDesignations = designations.filter((designation) => {
     const providerText = designation.provider_ids
       .map((providerId) => providerById.get(providerId))
       .filter(Boolean)
       .map((provider) => `${provider?.code} ${provider?.name}`)
       .join(" ");
-    const locationText = designation.location_ids
-      .map((locationId) => locationById.get(locationId))
+    const modelText = (designation.model_ids ?? [])
+      .map((modelId) => modelById.get(modelId))
       .filter(Boolean)
-      .map((location) => `${location?.station_code} ${location?.station_name ?? ""}`)
+      .map((model) => `${model?.code} ${model?.name}`)
       .join(" ");
     const categoryText = normalizeDesignationCategories(designation.onboarding_categories).map(designationCategoryLabel).join(" ");
-    return `${designation.code} ${designation.name} ${providerText} ${locationText} ${categoryText}`.toLowerCase().includes(query);
+    return `${designation.code} ${designation.name} ${providerText} ${modelText} ${categoryText}`.toLowerCase().includes(query);
   });
   const editDesignation = designations.find((designation) => designation.id === searchParams?.edit) ?? null;
 
@@ -202,7 +228,7 @@ export default async function DesignationsPage({
             </div>
             <div className="master-toolbar">
               <form className="inline-search" action="/master/designations">
-                <input className="field" defaultValue={searchParams?.q ?? ""} name="q" placeholder="Search designation or location" />
+                <input className="field" defaultValue={searchParams?.q ?? ""} name="q" placeholder="Search designation or model" />
                 <button className="button secondary compact" type="submit">Search</button>
                 {query ? <PendingLink className="button secondary compact" href="/master/designations">Clear</PendingLink> : null}
               </form>
@@ -216,16 +242,16 @@ export default async function DesignationsPage({
                   <th>Code</th>
                   <th>Designation</th>
                   <th>Categories</th>
-                  <th>Locations</th>
+                  <th>Models</th>
                   <th>Status</th>
                   {pagePermission.canEdit ? <th>Action</th> : null}
                 </tr>
               </thead>
               <tbody>
                 {filteredDesignations.length ? filteredDesignations.map((designation) => {
-                  const designationLocations = designation.location_ids
-                    .map((locationId) => locationById.get(locationId))
-                    .filter(Boolean) as LocationRow[];
+                  const designationModels = (designation.model_ids ?? [])
+                    .map((modelId) => modelById.get(modelId))
+                    .filter(Boolean) as ModelRow[];
                   return (
                     <tr key={designation.id}>
                       <td><strong>{designation.code}</strong></td>
@@ -238,10 +264,10 @@ export default async function DesignationsPage({
                         </div>
                       </td>
                       <td>
-                        {designationLocations.length ? (
+                        {designationModels.length ? (
                           <div className="mini-chip-list">
-                            {designationLocations.slice(0, 3).map((location) => <span className="mini-tag" key={location.id}>{location.station_code}</span>)}
-                            {designationLocations.length > 3 ? <span className="mini-tag">+{designationLocations.length - 3}</span> : null}
+                            {designationModels.slice(0, 3).map((model) => <span className="mini-tag" key={model.id}>{model.code}</span>)}
+                            {designationModels.length > 3 ? <span className="mini-tag">+{designationModels.length - 3}</span> : null}
                           </div>
                         ) : <span className="subtle">-</span>}
                       </td>
@@ -264,11 +290,16 @@ export default async function DesignationsPage({
             <div className="panel-head">
               <div>
                 <h2>Add designation</h2>
-                <p className="subtle">Select one or more locations where this designation applies.</p>
+                <p className="subtle">Select one or more models where this designation applies.</p>
               </div>
               <PendingLink className="icon-button" href="/master/designations" scroll={false} aria-label="Close">x</PendingLink>
             </div>
-            <DesignationForm action={createDesignation} locations={locations} />
+            <DesignationForm action={createDesignation} models={models.map((model) => ({
+              id: model.id,
+              code: model.code,
+              name: model.name,
+              provider: (Array.isArray(model.providers) ? model.providers[0] : model.providers)?.name ?? null
+            }))} />
           </section>
         </div>
       ) : null}
@@ -279,11 +310,16 @@ export default async function DesignationsPage({
             <div className="panel-head">
               <div>
                 <h2>Edit designation</h2>
-                <p className="subtle">Code and location assignment can be changed without affecting old rows.</p>
+                <p className="subtle">Code and model assignment can be changed without affecting old rows.</p>
               </div>
               <PendingLink className="icon-button" href="/master/designations" scroll={false} aria-label="Close">x</PendingLink>
             </div>
-            <DesignationForm action={updateDesignation} initial={editDesignation} locations={locations} submitLabel="Save changes" />
+            <DesignationForm action={updateDesignation} initial={editDesignation} models={models.map((model) => ({
+              id: model.id,
+              code: model.code,
+              name: model.name,
+              provider: (Array.isArray(model.providers) ? model.providers[0] : model.providers)?.name ?? null
+            }))} submitLabel="Save changes" />
             <form action={deleteDesignation} className="danger-form">
               <input name="id" type="hidden" value={editDesignation.id} />
               <SubmitButton

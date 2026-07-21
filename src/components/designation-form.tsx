@@ -19,11 +19,11 @@ type ProviderOption = {
   is_active: boolean;
 };
 
-type LocationOption = {
+type ModelOption = {
   id: string;
-  station_code: string;
-  station_name: string | null;
-  hide_from_location_list?: boolean | null;
+  code: string;
+  name: string;
+  provider?: string | null;
 };
 
 type DesignationInitial = {
@@ -31,7 +31,7 @@ type DesignationInitial = {
   code: string;
   name: string;
   provider_ids: string[];
-  location_ids: string[];
+  model_ids?: string[] | null;
   onboarding_categories?: string[] | null;
   profile_field_rules?: unknown;
   is_active: boolean;
@@ -179,12 +179,12 @@ function FieldRuleMatrix({
   );
 }
 
-function LocationMultiSelect({
-  locations,
+function ModelMultiSelect({
+  models,
   selected,
   setSelected
 }: {
-  locations: LocationOption[];
+  models: ModelOption[];
   selected: string[];
   setSelected: (value: string[]) => void;
 }) {
@@ -192,17 +192,17 @@ function LocationMultiSelect({
   const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
-  const filtered = useMemo(() => locations.filter((location) => {
-    const haystack = `${location.station_code} ${location.station_name ?? ""}`.toLowerCase();
+  const filtered = useMemo(() => models.filter((model) => {
+    const haystack = `${model.code} ${model.name} ${model.provider ?? ""}`.toLowerCase();
     return haystack.includes(query.trim().toLowerCase());
-  }), [locations, query]);
-  const selectedLocations = locations.filter((location) => selectedSet.has(location.id));
-  const allFilteredSelected = filtered.length > 0 && filtered.every((location) => selectedSet.has(location.id));
-  const summary = selectedLocations.length
-    ? `${selectedLocations.length} selected`
-    : locations.length
-      ? "Select locations"
-      : "No locations added";
+  }), [models, query]);
+  const selectedModels = models.filter((model) => selectedSet.has(model.id));
+  const allFilteredSelected = filtered.length > 0 && filtered.every((model) => selectedSet.has(model.id));
+  const summary = selectedModels.length
+    ? `${selectedModels.length} selected`
+    : models.length
+      ? "Select models"
+      : "No models added";
 
   useEffect(() => {
     if (!open) return;
@@ -233,11 +233,11 @@ function LocationMultiSelect({
 
   function toggleAllFiltered() {
     if (allFilteredSelected) {
-      const filteredIds = new Set(filtered.map((location) => location.id));
+      const filteredIds = new Set(filtered.map((model) => model.id));
       setSelected(selected.filter((value) => !filteredIds.has(value)));
       return;
     }
-    setSelected(Array.from(new Set([...selected, ...filtered.map((location) => location.id)])));
+    setSelected(Array.from(new Set([...selected, ...filtered.map((model) => model.id)])));
   }
 
   return (
@@ -256,7 +256,7 @@ function LocationMultiSelect({
             <input
               className="field"
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search location"
+              placeholder="Search model"
               value={query}
             />
             <button className="button secondary" onClick={() => setQuery("")} type="button">Clear</button>
@@ -267,15 +267,15 @@ function LocationMultiSelect({
             <small>{filtered.length} shown</small>
           </label>
           <div className="multi-select-options">
-            {filtered.length ? filtered.map((location) => (
-              <label className="multi-select-option" key={location.id}>
-                <input checked={selectedSet.has(location.id)} className="matrix-checkbox" onChange={() => toggle(location.id)} type="checkbox" />
+            {filtered.length ? filtered.map((model) => (
+              <label className="multi-select-option" key={model.id}>
+                <input checked={selectedSet.has(model.id)} className="matrix-checkbox" onChange={() => toggle(model.id)} type="checkbox" />
                 <span>
-                  <strong>{location.station_code}</strong>
-                  <small>{[location.station_name, location.hide_from_location_list ? "Hidden" : ""].filter(Boolean).join(" - ")}</small>
+                  <strong>{model.code}</strong>
+                  <small>{[model.name, model.provider].filter(Boolean).join(" - ")}</small>
                 </span>
               </label>
-            )) : <div className="searchable-empty">No locations found</div>}
+            )) : <div className="searchable-empty">No models found</div>}
           </div>
         </div>
       ) : null}
@@ -286,16 +286,16 @@ function LocationMultiSelect({
 export function DesignationForm({
   action,
   initial,
-  locations,
+  models,
   submitLabel = "Add designation"
 }: {
   action: (formData: FormData) => void;
   initial?: DesignationInitial | null;
   providers?: ProviderOption[];
-  locations: LocationOption[];
+  models: ModelOption[];
   submitLabel?: string;
 }) {
-  const [selectedLocations, setSelectedLocations] = useState<string[]>(initial?.location_ids ?? []);
+  const [selectedModels, setSelectedModels] = useState<string[]>(initial?.model_ids ?? []);
   const [selectedCategories, setSelectedCategories] = useState<DesignationCategory[]>(
     normalizeDesignationCategories(initial?.onboarding_categories)
   );
@@ -308,8 +308,8 @@ export function DesignationForm({
   return (
     <form action={action} className="designation-form">
       {initial ? <input name="id" type="hidden" value={initial.id} /> : null}
-      {selectedLocations.map((locationId) => (
-        <input key={locationId} name="location_ids" type="hidden" value={locationId} />
+      {selectedModels.map((modelId) => (
+        <input key={modelId} name="model_ids" type="hidden" value={modelId} />
       ))}
       {selectedCategories.map((category) => (
         <input key={category} name="onboarding_categories" type="hidden" value={category} />
@@ -328,8 +328,8 @@ export function DesignationForm({
           <CategoryMultiSelect selected={selectedCategories} setSelected={setSelectedCategories} />
         </label>
         <label>
-          Locations
-          <LocationMultiSelect locations={locations} selected={selectedLocations} setSelected={setSelectedLocations} />
+          Models
+          <ModelMultiSelect models={models} selected={selectedModels} setSelected={setSelectedModels} />
         </label>
         {initial ? (
           <label>

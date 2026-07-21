@@ -43,9 +43,9 @@ function providerIds(formData: FormData) {
   ));
 }
 
-function locationIds(formData: FormData) {
+function modelIds(formData: FormData) {
   return Array.from(new Set(
-    formData.getAll("location_ids")
+    formData.getAll("model_ids")
       .map((value) => String(value ?? "").trim())
       .filter(Boolean)
   ));
@@ -80,7 +80,8 @@ export async function createDesignation(formData: FormData) {
       code,
       name,
       provider_ids: providerIds(formData),
-      location_ids: locationIds(formData),
+      model_ids: modelIds(formData),
+      location_ids: [],
       onboarding_categories: onboardingCategories(formData),
       profile_field_rules: profileFieldRules(formData),
       is_active: true
@@ -112,7 +113,8 @@ export async function updateDesignation(formData: FormData) {
         code,
         name,
         provider_ids: providerIds(formData),
-        location_ids: locationIds(formData),
+        model_ids: modelIds(formData),
+        location_ids: [],
         onboarding_categories: onboardingCategories(formData),
         profile_field_rules: profileFieldRules(formData),
         is_active: status,

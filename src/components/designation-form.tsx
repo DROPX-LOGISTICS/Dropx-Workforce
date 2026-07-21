@@ -300,6 +300,10 @@ export function DesignationForm({
     normalizeDesignationCategories(initial?.onboarding_categories)
   );
   const fieldRules = normalizeProfileFieldRules(initial?.profile_field_rules);
+  const showEmployeeFields = selectedCategories.includes("employees");
+  const showFieldExecutiveFields =
+    selectedCategories.includes("field_executives") || selectedCategories.includes("delivery_executives");
+  const hasVisibleFieldRules = showEmployeeFields || showFieldExecutiveFields;
 
   return (
     <form action={action} className="designation-form">
@@ -337,10 +341,18 @@ export function DesignationForm({
           </label>
         ) : null}
       </div>
-      <div className="designation-field-rule-grid">
-        <FieldRuleMatrix fields={employeeProfileFields} namePrefix="employees" rules={fieldRules.employees} title="Employee fields" />
-        <FieldRuleMatrix fields={fieldExecutiveProfileFields} namePrefix="field_executives" rules={fieldRules.field_executives} title="Delivery executive fields" />
-      </div>
+      {hasVisibleFieldRules ? (
+        <div className={`designation-field-rule-grid ${showEmployeeFields !== showFieldExecutiveFields ? "single" : ""}`}>
+          {showEmployeeFields ? (
+            <FieldRuleMatrix fields={employeeProfileFields} namePrefix="employees" rules={fieldRules.employees} title="Employee fields" />
+          ) : null}
+          {showFieldExecutiveFields ? (
+            <FieldRuleMatrix fields={fieldExecutiveProfileFields} namePrefix="field_executives" rules={fieldRules.field_executives} title="Delivery executive fields" />
+          ) : null}
+        </div>
+      ) : (
+        <div className="designation-field-rule-empty">Select Employees, Field executives, or Delivery executives to configure onboarding fields.</div>
+      )}
       <div className="form-actions right">
         <SubmitButton className="button" pendingText="Saving">{submitLabel}</SubmitButton>
       </div>

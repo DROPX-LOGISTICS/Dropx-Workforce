@@ -95,7 +95,7 @@ function ConfigRow({
       <input name="row_label" type="hidden" value={label} />
       <strong>{label}</strong>
       <input className="field id-generation-soft-placeholder" name="row_prefix" onChange={(event) => setPrefix(event.target.value)} placeholder="Optional" value={prefix} />
-      <input className="field" name="row_separator" onChange={(event) => setSeparator(event.target.value)} placeholder="-" value={separator} />
+      <input className="field id-generation-soft-placeholder" name="row_separator" onChange={(event) => setSeparator(event.target.value)} placeholder="Optional" value={separator} />
       <input className="field" min={1} name="row_next_serial_no" onChange={(event) => setSerial(event.target.value)} type="number" value={serial} />
       <input className="field" max={12} min={1} name="row_serial_digits" onChange={(event) => setDigits(event.target.value)} type="number" value={digits} />
       <input className="field id-generation-soft-placeholder" name="row_suffix" onChange={(event) => setSuffix(event.target.value)} placeholder="Optional" value={suffix} />

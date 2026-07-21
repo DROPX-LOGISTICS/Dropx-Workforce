@@ -13,6 +13,7 @@ export type ConnectAccount = {
   role: string | null;
   status: string | null;
   biometricId: string | null;
+  profilePhotoUrl: string | null;
   companyName: string;
   label: string;
 };
@@ -25,6 +26,7 @@ type AccountRow = {
   employee_id?: string | null;
   dropx_id?: string | null;
   biometric_id?: string | null;
+  profile_photo_path?: string | null;
   role?: string | null;
   status?: string | null;
   profile_type: "user" | "field_executive" | "employee";
@@ -37,6 +39,7 @@ type EmployeeAccountRow = {
   email?: string | null;
   employee_code?: string | null;
   biometric_id?: string | null;
+  profile_photo_path?: string | null;
   profile_completion_status?: string | null;
   is_active?: boolean | null;
 };
@@ -74,12 +77,20 @@ function accountLabel(account: AccountRow, companyNameById: Map<string, string>)
   return [companyName, account.full_name, id].filter(Boolean).join(" - ");
 }
 
+async function signedProfilePhotoUrl(path?: string | null) {
+  if (!supabaseAdmin || !path) return "";
+  const result = await supabaseAdmin.storage
+    .from("employee-profile-documents")
+    .createSignedUrl(path, 60 * 60);
+  return result.data?.signedUrl ?? "";
+}
+
 export async function findConnectAccounts(countryCode: string, mobile: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const localMobile = mobile.startsWith(countryCode) ? mobile.slice(countryCode.length) : mobile;
   let [profilesResult, executivesResult, employeesResult]: [
     MatchResult<{ id: string; company_id: string; full_name: string | null; email?: string | null; employee_id?: string | null; role?: string | null }>,
-    MatchResult<{ id: string; company_id: string; full_name: string | null; email?: string | null; dropx_id?: string | null; biometric_id?: string | null; designation?: string | null; onboarding_status?: string | null }>,
+    MatchResult<{ id: string; company_id: string; full_name: string | null; email?: string | null; dropx_id?: string | null; biometric_id?: string | null; designation?: string | null; onboarding_status?: string | null; profile_photo_path?: string | null }>,
     MatchResult<EmployeeAccountRow>
   ] = await Promise.all([
     supabaseAdmin
@@ -90,13 +101,13 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`),
     supabaseAdmin
       .from("field_executives")
-      .select("id, company_id, full_name, email, dropx_id, biometric_id, designation, onboarding_status, is_active, mobile_country_code")
+      .select("id, company_id, full_name, email, dropx_id, biometric_id, designation, onboarding_status, profile_photo_path, is_active, mobile_country_code")
       .eq("is_active", true)
       .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
       .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`),
     supabaseAdmin
       .from("employees")
-      .select("id, company_id, full_name, email, employee_code, biometric_id, profile_completion_status, is_active, mobile_country_code")
+      .select("id, company_id, full_name, email, employee_code, biometric_id, profile_completion_status, profile_photo_path, is_active, mobile_country_code")
       .eq("is_active", true)
       .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
       .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`)
@@ -133,7 +144,8 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
     biometric_id: employee.biometric_id ?? null,
     role: "Employee",
     status: employee.profile_completion_status === "active" ? "Active" : employee.profile_completion_status === "submitted" ? "Submitted" : "Pending",
-    profile_type: "employee" as const
+    profile_type: "employee" as const,
+    profile_photo_path: employee.profile_photo_path ?? null,
   }));
   const accounts: AccountRow[] = [
     ...((profilesResult.data ?? []).map((profile) => ({
@@ -154,6 +166,7 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       biometric_id: executive.biometric_id,
       role: executive.designation,
       status: executive.onboarding_status === "active" ? "Active" : "Pending",
+      profile_photo_path: executive.profile_photo_path ?? null,
       profile_type: "field_executive" as const
     }))),
     ...employeeAccounts
@@ -166,9 +179,9 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
   if (companiesResult.error) throw new Error(companiesResult.error.message);
   const companyNameById = new Map((companiesResult.data ?? []).map((company) => [company.id, company.name || company.code || "Company"]));
 
-  return accounts
+  return Promise.all(accounts
     .filter((account) => companyNameById.has(account.company_id))
-    .map((account): ConnectAccount => ({
+    .map(async (account): Promise<ConnectAccount> => ({
       id: account.id,
       companyId: account.company_id,
       profileType: account.profile_type,
@@ -178,9 +191,10 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       role: account.role ?? null,
       status: account.status ?? null,
       biometricId: account.biometric_id ?? null,
+      profilePhotoUrl: await signedProfilePhotoUrl(account.profile_photo_path),
       companyName: companyNameById.get(account.company_id) ?? "Company",
       label: accountLabel(account, companyNameById)
-    }));
+    })));
 }
 
 export function createSecretHash(value: string) {

@@ -76,7 +76,7 @@ export async function POST(request: Request) {
     }
 
     const localMobile = to.startsWith(countryCode) ? to.slice(countryCode.length) : to;
-    let [profileMatches, executiveMatches]: [AccountMatchResult, AccountMatchResult] = await Promise.all([
+    let [profileMatches, executiveMatches, employeeMatches]: [AccountMatchResult, AccountMatchResult, AccountMatchResult] = await Promise.all([
       supabaseAdmin
         .from("profiles")
         .select("id, company_id, is_active, mobile_country_code")
@@ -88,10 +88,16 @@ export async function POST(request: Request) {
         .select("id, company_id, is_active, mobile_country_code")
         .eq("is_active", true)
         .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
+        .or(`mobile.eq.${to},mobile.eq.${localMobile}`),
+      supabaseAdmin
+        .from("employees")
+        .select("id, company_id, is_active, mobile_country_code")
+        .eq("is_active", true)
+        .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
         .or(`mobile.eq.${to},mobile.eq.${localMobile}`)
     ]);
-    if (isMissingColumnError(profileMatches.error) || isMissingColumnError(executiveMatches.error)) {
-      [profileMatches, executiveMatches] = await Promise.all([
+    if (isMissingColumnError(profileMatches.error) || isMissingColumnError(executiveMatches.error) || isMissingColumnError(employeeMatches.error)) {
+      [profileMatches, executiveMatches, employeeMatches] = await Promise.all([
         supabaseAdmin
           .from("profiles")
           .select("id, company_id, is_active")
@@ -101,14 +107,21 @@ export async function POST(request: Request) {
           .from("field_executives")
           .select("id, company_id, is_active")
           .eq("is_active", true)
+          .or(`mobile.eq.${to},mobile.eq.${localMobile}`),
+        supabaseAdmin
+          .from("employees")
+          .select("id, company_id, is_active")
+          .eq("is_active", true)
           .or(`mobile.eq.${to},mobile.eq.${localMobile}`)
       ]);
     }
     if (profileMatches.error) throw new Error(profileMatches.error.message);
     if (executiveMatches.error) throw new Error(executiveMatches.error.message);
+    if (employeeMatches.error) throw new Error(employeeMatches.error.message);
     const companyIds = Array.from(new Set([
       ...(profileMatches.data ?? []).map((profile) => profile.company_id),
-      ...(executiveMatches.data ?? []).map((executive) => executive.company_id)
+      ...(executiveMatches.data ?? []).map((executive) => executive.company_id),
+      ...(employeeMatches.data ?? []).map((employee) => employee.company_id)
     ].filter(Boolean)));
     if (!companyIds.length) {
       return NextResponse.json({ error: "No active account found for this mobile number." }, { status: 404 });

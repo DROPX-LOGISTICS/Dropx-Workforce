@@ -64,6 +64,46 @@ function formatSample(config: GenerationConfig) {
   return `${prefix}${prefix ? separator : ""}${serial}${suffix ? `${separator}${suffix}` : ""}`;
 }
 
+function ConfigRow({
+  config,
+  label,
+  optionId,
+  scope
+}: {
+  config: GenerationConfig;
+  label: string;
+  optionId: string;
+  scope: ScopeType;
+}) {
+  const [prefix, setPrefix] = useState(config.prefix ?? "");
+  const [separator, setSeparator] = useState(config.separator ?? "");
+  const [serial, setSerial] = useState(String(config.next_serial_no ?? 1));
+  const [digits, setDigits] = useState(String(config.serial_digits ?? 3));
+  const [suffix, setSuffix] = useState(config.suffix ?? "");
+  const sample = formatSample({
+    prefix,
+    separator,
+    suffix,
+    next_serial_no: Number.parseInt(serial || "1", 10) || 1,
+    serial_digits: Number.parseInt(digits || "1", 10) || 1
+  });
+
+  return (
+    <div className="id-generation-row">
+      <input name="row_scope" type="hidden" value={scope} />
+      <input name="row_key" type="hidden" value={optionId} />
+      <input name="row_label" type="hidden" value={label} />
+      <strong>{label}</strong>
+      <input className="field id-generation-soft-placeholder" name="row_prefix" onChange={(event) => setPrefix(event.target.value)} placeholder="Optional" value={prefix} />
+      <input className="field" name="row_separator" onChange={(event) => setSeparator(event.target.value)} placeholder="-" value={separator} />
+      <input className="field" min={1} name="row_next_serial_no" onChange={(event) => setSerial(event.target.value)} type="number" value={serial} />
+      <input className="field" max={12} min={1} name="row_serial_digits" onChange={(event) => setDigits(event.target.value)} type="number" value={digits} />
+      <input className="field id-generation-soft-placeholder" name="row_suffix" onChange={(event) => setSuffix(event.target.value)} placeholder="Optional" value={suffix} />
+      <code>{sample}</code>
+    </div>
+  );
+}
+
 function ConfigRows({
   defaultPrefix,
   options,
@@ -99,18 +139,7 @@ function ConfigRows({
         const label = optionLabel(option);
         const config = setting?.configs?.[option.id] ?? defaultConfig(label, defaultPrefix);
         return (
-          <div className="id-generation-row" key={`${scope}-${option.id}`}>
-            <input name="row_scope" type="hidden" value={scope} />
-            <input name="row_key" type="hidden" value={option.id} />
-            <input name="row_label" type="hidden" value={label} />
-            <strong>{label}</strong>
-            <input className="field" defaultValue={config.prefix ?? ""} name="row_prefix" placeholder="Prefix" />
-            <input className="field" defaultValue={config.separator ?? ""} name="row_separator" placeholder="-" />
-            <input className="field" defaultValue={config.next_serial_no ?? 1} min={1} name="row_next_serial_no" type="number" />
-            <input className="field" defaultValue={config.serial_digits ?? 3} max={12} min={1} name="row_serial_digits" type="number" />
-            <input className="field" defaultValue={config.suffix ?? ""} name="row_suffix" placeholder="Optional" />
-            <code>{formatSample(config)}</code>
-          </div>
+          <ConfigRow config={config} key={`${scope}-${option.id}`} label={label} optionId={option.id} scope={scope} />
         );
       })}
     </div>

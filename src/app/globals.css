@@ -1176,6 +1176,11 @@ h3 {
   padding: 7px 9px;
 }
 
+.id-generation-soft-placeholder::placeholder {
+  color: #aab3c2;
+  font-weight: 400;
+}
+
 .id-generation-row code {
   border-radius: 7px;
   background: #fff7ed;

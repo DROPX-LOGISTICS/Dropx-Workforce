@@ -3525,6 +3525,30 @@ h3 {
   object-fit: cover;
 }
 
+.employee-table-wrap table {
+  min-width: 1220px;
+}
+
+.employee-table-wrap th,
+.employee-table-wrap td {
+  white-space: nowrap;
+}
+
+.employee-table-wrap .executive-name-cell {
+  min-width: 0;
+  gap: 8px;
+}
+
+.employee-table-wrap th:nth-child(1),
+.employee-table-wrap td:nth-child(1) {
+  width: 140px;
+}
+
+.employee-table-wrap th:nth-child(2),
+.employee-table-wrap td:nth-child(2) {
+  min-width: 210px;
+}
+
 .row-action-menu {
   position: relative;
   display: inline-flex;

@@ -40,6 +40,10 @@ function statusLabel(request: PaymentProcessRequest) {
   return "Approved";
 }
 
+function statusKey(request: PaymentProcessRequest) {
+  return statusLabel(request).toLowerCase();
+}
+
 function dateOnly(value: string) {
   return new Date(value).toISOString().slice(0, 10);
 }
@@ -265,11 +269,9 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
                   <td><StatusPill status={statusLabel(request)} /></td>
                   <td>{displayDate(request.created_at)}</td>
                   <td>
-                    {statusLabel(request).toLowerCase() === "processed" ? "-" : (
-                      <button className="button secondary compact" onClick={() => setProcessRequest(request)} type="button">
-                        Action
-                      </button>
-                    )}
+                    <button className="button secondary compact" onClick={() => setProcessRequest(request)} type="button">
+                      Action
+                    </button>
                   </td>
                 </tr>
               )) : (
@@ -321,6 +323,12 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
             </div>
             <form action={processAction} className="panel-body">
               <input name="request_id" type="hidden" value={processRequest.id} />
+              {statusKey(processRequest) === "processed" ? (
+                <div className="modal-inline-message warn">
+                  <strong>Return processed payment</strong>
+                  <span>Use this only when the payment is completed but the requester must submit the original invoice or corrected documents.</span>
+                </div>
+              ) : null}
               <div className="form-grid two">
                 <label>Payment Head
                   <input className="field" readOnly value={processRequest.payment_head_name ?? "-"} />
@@ -332,16 +340,24 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
                   <input className="field" readOnly value={statusLabel(processRequest)} />
                 </label>
                 <label>Remarks
-                  <input className="field" name="process_remarks" placeholder="UTR No / error remarks" />
+                  <input
+                    className="field"
+                    name="process_remarks"
+                    placeholder={statusKey(processRequest) === "processed" ? "Reason for return" : "UTR No / error remarks"}
+                  />
                 </label>
               </div>
               <div className="form-actions modal-actions">
                 <button className="button secondary" onClick={() => setProcessRequest(null)} type="button">Cancel</button>
-                {statusLabel(processRequest).toLowerCase() !== "processing" ? (
+                {statusKey(processRequest) !== "processing" && statusKey(processRequest) !== "processed" ? (
                   <ProcessActionButton className="secondary" value="processing">Processing</ProcessActionButton>
                 ) : null}
-                <ProcessActionButton className="payment-approve-button" value="processed">Processed</ProcessActionButton>
-                <ProcessActionButton className="payment-return-button" value="returned">Return</ProcessActionButton>
+                {statusKey(processRequest) !== "processed" ? (
+                  <ProcessActionButton className="payment-approve-button" value="processed">Processed</ProcessActionButton>
+                ) : null}
+                <ProcessActionButton className="payment-return-button" value="returned">
+                  {statusKey(processRequest) === "processed" ? "Return processed" : "Return"}
+                </ProcessActionButton>
               </div>
             </form>
           </section>

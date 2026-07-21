@@ -8330,6 +8330,17 @@ tr:last-child td {
   color: #7f1d1d;
 }
 
+.modal-inline-message.warn {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #7c2d12;
+}
+
+.modal-inline-message.warn strong,
+.modal-inline-message.warn span {
+  color: #9a3412;
+}
+
 .connect-page {
   min-height: 100vh;
   background:

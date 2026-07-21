@@ -144,7 +144,7 @@ async function nextApprovalSequence(companyId: string, requestId: string) {
   return Math.max(0, ...(data ?? []).map((row) => Number((row as { sequence_no?: unknown }).sequence_no) || 0)) + 1;
 }
 
-async function insertBankReturnLog(companyId: string, request: PaymentRequestFinalizeRow, comments: string) {
+async function insertBankReturnLog(companyId: string, request: Pick<PaymentRequestFinalizeRow, "id" | "current_approver_role_id">, comments: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
   const payload: Record<string, unknown> = {
     company_id: companyId,
@@ -202,7 +202,7 @@ export async function updatePaymentProcessStatus(formData: FormData) {
 
     const { data: request, error } = await supabaseAdmin
       .from("payment_requests")
-      .select("id, request_no")
+      .select("id, request_no, current_approver_role_id")
       .eq("company_id", companyId)
       .eq("id", requestId)
       .single();
@@ -244,6 +244,7 @@ export async function updatePaymentProcessStatus(formData: FormData) {
       current_approver_role_id: null,
       updated_at: now
     });
+    await insertBankReturnLog(companyId, request, `returned: ${remarks}`);
     await sendPaymentNotification({
       actorUserId: authorization.userId,
       companyId,

@@ -19,6 +19,7 @@ type FieldExecutiveRow = {
   date_of_birth: string | null;
   aadhaar_number: string | null;
   pan_number: string | null;
+  eshram_uan?: string | null;
   address: string | null;
   postal_pin: string | null;
   landmark: string | null;
@@ -82,6 +83,12 @@ function requiredPan(value: FormDataEntryValue | null) {
   return text;
 }
 
+function requiredTwelveDigits(value: FormDataEntryValue | null, label: string) {
+  const text = requiredDigits(value, label);
+  if (!/^\d{12}$/.test(text)) throw new Error(`${label} must contain exactly 12 digits.`);
+  return text;
+}
+
 function formatDisplayDate(value: string | null) {
   const match = String(value ?? "").match(/^(\d{4})-(\d{2})-(\d{2})/);
   return match ? `${match[3]}/${match[2]}/${match[1]}` : value ?? "-";
@@ -137,10 +144,21 @@ async function loadExecutive(executiveId: string, companyId: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const result = await supabaseAdmin
     .from("field_executives")
-    .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, stations (station_code, station_name)")
+    .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, eshram_uan, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, stations (station_code, station_name)")
     .eq("id", executiveId)
     .eq("company_id", companyId)
     .maybeSingle();
+  if (result.error && /eshram_uan|column/i.test(result.error.message)) {
+    const fallbackResult = await supabaseAdmin
+      .from("field_executives")
+      .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, stations (station_code, station_name)")
+      .eq("id", executiveId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (fallbackResult.error) throw new Error(fallbackResult.error.message);
+    if (!fallbackResult.data) throw new Error("Field executive profile was not found.");
+    return { ...fallbackResult.data, eshram_uan: null } as FieldExecutiveRow;
+  }
   if (result.error) throw new Error(result.error.message);
   if (!result.data) throw new Error("Field executive profile was not found.");
   return result.data as FieldExecutiveRow;
@@ -173,6 +191,7 @@ async function serializeExecutive(row: FieldExecutiveRow) {
       dateOfBirth: formatDisplayDate(row.date_of_birth) === "-" ? "" : formatDisplayDate(row.date_of_birth),
       aadhaarNumber: row.aadhaar_number ?? "",
       panNumber: row.pan_number ?? "",
+      eshramUan: row.eshram_uan ?? "",
       fatherName: row.father_name ?? "",
       bloodGroup: row.blood_group ?? "",
       isHandicapped: typeof row.is_handicapped === "boolean" ? String(row.is_handicapped) : "",
@@ -253,6 +272,7 @@ export async function POST(request: Request) {
       date_of_birth: normalizeDate(requiredText(formData.get("date_of_birth"), "Date of birth")),
       aadhaar_number: requiredDigits(formData.get("aadhaar_number"), "Aadhaar number"),
       pan_number: requiredPan(formData.get("pan_number")),
+      eshram_uan: requiredTwelveDigits(formData.get("eshram_uan"), "eShram UAN"),
       father_name: requiredText(formData.get("father_name"), "Father name"),
       blood_group: requiredText(formData.get("blood_group"), "Blood group"),
       is_handicapped: requiredText(formData.get("is_handicapped"), "Handicapped") === "true",

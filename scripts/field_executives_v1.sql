@@ -13,6 +13,7 @@ create table if not exists public.field_executives (
   date_of_birth date,
   aadhaar_number text,
   pan_number text,
+  eshram_uan text,
   address text,
   postal_pin text,
   landmark text,
@@ -55,6 +56,7 @@ alter table public.field_executives
   add column if not exists date_of_birth date,
   add column if not exists aadhaar_number text,
   add column if not exists pan_number text,
+  add column if not exists eshram_uan text,
   add column if not exists address text,
   add column if not exists postal_pin text,
   add column if not exists landmark text,
@@ -85,6 +87,13 @@ alter table public.field_executives
   add column if not exists onboarding_token_hash text,
   add column if not exists onboarding_token_expires_at timestamptz,
   add column if not exists onboarding_status text not null default 'pending';
+
+alter table public.field_executives
+  drop constraint if exists field_executives_eshram_uan_digits_check;
+
+alter table public.field_executives
+  add constraint field_executives_eshram_uan_digits_check
+  check (eshram_uan is null or eshram_uan ~ '^[0-9]{12}$');
 
 drop table if exists public.operation_modes;
 

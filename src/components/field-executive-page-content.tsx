@@ -44,6 +44,7 @@ type ExecutiveRow = {
   date_of_birth: string | null;
   aadhaar_number: string | null;
   pan_number: string | null;
+  eshram_uan: string | null;
   address: string | null;
   postal_pin: string | null;
   landmark: string | null;
@@ -257,6 +258,7 @@ function FieldExecutiveDetails({ executive }: { executive: ExecutiveRow }) {
         <dl className="executive-detail-grid">
           <ExecutiveDetail label="Aadhaar number" value={executive.aadhaar_number} />
           <ExecutiveDetail label="PAN number" value={executive.pan_number} />
+          <ExecutiveDetail label="eShram UAN" value={executive.eshram_uan} />
           <ExecutiveDetail label="Address" value={executive.address} />
           <ExecutiveDetail label="Landmark" value={executive.landmark} />
           <ExecutiveDetail label="State" value={executive.state_code} />
@@ -344,6 +346,7 @@ function FieldExecutiveForm({
 
       <label>Aadhaar number<input className="field" inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" defaultValue={textValue(executive?.aadhaar_number)} /></label>
       <label>PAN number<input className="field" name="pan_number" placeholder="Enter PAN number" defaultValue={textValue(executive?.pan_number)} /></label>
+      <label>eShram UAN<input className="field" inputMode="numeric" maxLength={12} name="eshram_uan" pattern="[0-9]{12}" placeholder="Enter eShram UAN" defaultValue={textValue(executive?.eshram_uan)} /></label>
       <label>Biometric enrolment ID<input className="field" inputMode="numeric" name="biometric_id" pattern="[0-9]{1,20}" placeholder="Numeric ID from device" defaultValue={textValue(executive?.biometric_id)} /></label>
 
       <label className="span-3">Address<input className="field" name="address" placeholder="Enter complete address" defaultValue={textValue(executive?.address)} /></label>
@@ -513,6 +516,7 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
         date_of_birth,
         aadhaar_number,
         pan_number,
+        eshram_uan,
         address,
         postal_pin,
         landmark,

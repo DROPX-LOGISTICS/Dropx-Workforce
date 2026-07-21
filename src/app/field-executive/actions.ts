@@ -76,6 +76,7 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
   const dateOfBirth = optional(formData.get("date_of_birth"));
   const aadhaarNumber = optional(formData.get("aadhaar_number"))?.replace(/\D/g, "") ?? null;
   const panNumber = optional(formData.get("pan_number"))?.toUpperCase() ?? null;
+  const eshramUan = optional(formData.get("eshram_uan"))?.replace(/\D/g, "") ?? null;
   const address = optional(formData.get("address"));
   const postalPin = optional(formData.get("postal_pin"))?.replace(/\D/g, "") ?? null;
   const landmark = optional(formData.get("landmark"));
@@ -103,6 +104,7 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
   if (emergencyContactNumber && !/^\d{10}$/.test(emergencyContactNumber)) throw new Error("Emergency contact number must contain exactly 10 digits.");
   if (aadhaarNumber && !/^\d{12}$/.test(aadhaarNumber)) throw new Error("Aadhaar number must contain exactly 12 digits.");
   if (postalPin && !/^\d{6}$/.test(postalPin)) throw new Error("Postal PIN must contain exactly 6 digits.");
+  if (eshramUan && !/^\d{12}$/.test(eshramUan)) throw new Error("eShram UAN must contain exactly 12 digits.");
   if (panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panNumber)) throw new Error("PAN number format is invalid.");
   if (ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode)) throw new Error("IFSC format is invalid.");
 
@@ -131,6 +133,7 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
       date_of_birth: dateOfBirth,
       aadhaar_number: aadhaarNumber,
       pan_number: panNumber,
+      eshram_uan: eshramUan,
       address,
       postal_pin: postalPin,
       landmark,

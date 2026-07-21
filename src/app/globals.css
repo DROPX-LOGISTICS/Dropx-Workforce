@@ -8050,11 +8050,19 @@ tr:last-child td {
   width: min(440px, calc(100vw - 48px));
 }
 
+.designation-model-menu {
+  left: 0;
+  right: auto;
+  min-width: 100%;
+  width: min(440px, calc(100vw - 48px));
+}
+
 .designation-category-menu {
   min-width: min(280px, calc(100vw - 48px));
 }
 
-.designation-location-menu .multi-select-options {
+.designation-location-menu .multi-select-options,
+.designation-model-menu .multi-select-options {
   max-height: min(320px, calc(100vh - 330px));
 }
 
@@ -8072,6 +8080,8 @@ tr:last-child td {
 
 .form-grid .designation-location-menu .multi-select-all,
 .form-grid .designation-location-menu .multi-select-option,
+.form-grid .designation-model-menu .multi-select-all,
+.form-grid .designation-model-menu .multi-select-option,
 .form-grid .designation-category-menu .multi-select-option {
   display: flex;
   align-items: center;
@@ -8084,12 +8094,24 @@ tr:last-child td {
 
 .form-grid .designation-location-menu .multi-select-all span,
 .form-grid .designation-location-menu .multi-select-option > span,
+.form-grid .designation-model-menu .multi-select-all span,
+.form-grid .designation-model-menu .multi-select-option > span,
 .form-grid .designation-category-menu .multi-select-option > span {
+  display: grid;
+  gap: 2px;
   min-width: 0;
+  overflow: visible;
+  text-align: left;
 }
 
-.form-grid .designation-location-menu .multi-select-all span {
+.form-grid .designation-location-menu .multi-select-all span,
+.form-grid .designation-model-menu .multi-select-all span {
   white-space: nowrap;
+}
+
+.form-grid .designation-model-menu .multi-select-option strong,
+.form-grid .designation-model-menu .multi-select-option small {
+  display: block;
 }
 
 .designation-field-rule-grid {

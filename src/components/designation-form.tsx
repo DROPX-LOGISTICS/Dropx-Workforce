@@ -251,7 +251,7 @@ function ModelMultiSelect({
         <ChevronDown aria-hidden="true" className="multi-select-chevron" size={16} strokeWidth={2.4} />
       </button>
       {open ? (
-        <div className="multi-select-menu designation-location-menu">
+        <div className="multi-select-menu designation-model-menu">
           <div className="multi-select-search">
             <input
               className="field"

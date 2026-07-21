@@ -65,6 +65,36 @@ function cleanEnrolmentId(value: unknown) {
   return enrolmentIdCandidates(value)[0] ?? "";
 }
 
+function enrolmentPriority(row: Pick<EnrolmentRow, "status" | "worker_type"> | Pick<WorkerMatch, "isActive" | "workerType">) {
+  const workerType = "worker_type" in row ? row.worker_type : row.workerType;
+  const active = "status" in row ? row.status === "Active" : row.isActive;
+  return [
+    workerType === "employee" ? 0 : 1,
+    active ? 0 : 1
+  ];
+}
+
+function hasSameCategoryDuplicate<T extends { worker_type?: string; workerType?: string }>(rows: T[]) {
+  const categories = rows.map((row) => row.worker_type ?? row.workerType ?? "");
+  return new Set(categories).size !== categories.length;
+}
+
+function pickPreferredEnrolment(rows: EnrolmentRow[]) {
+  return rows.slice().sort((a, b) => {
+    const [aType, aActive] = enrolmentPriority(a);
+    const [bType, bActive] = enrolmentPriority(b);
+    return aType - bType || aActive - bActive;
+  })[0] ?? null;
+}
+
+function pickPreferredWorker(rows: WorkerMatch[]) {
+  return rows.slice().sort((a, b) => {
+    const [aType, aActive] = enrolmentPriority(a);
+    const [bType, bActive] = enrolmentPriority(b);
+    return aType - bType || aActive - bActive;
+  })[0] ?? null;
+}
+
 function jsonError(message: string, status = 400) {
   return Response.json({ error: message }, { status });
 }
@@ -327,12 +357,12 @@ export async function POST(request: NextRequest) {
     }
 
     const enrolmentRows = await findCurrentEnrolments(device.company_id, enrolmentId);
-    if (enrolmentRows.length > 1) {
+    if (enrolmentRows.length > 1 && hasSameCategoryDuplicate(enrolmentRows)) {
       await createAlert({
         alertType: "duplicate_enrolment_id",
         companyId: device.company_id,
         device,
-        message: `Biometric enrolment ${enrolmentId} is mapped to more than one active worker. Punch kept raw until mapping is corrected.`,
+        message: `Biometric enrolment ${enrolmentId} is mapped to more than one active worker in the same category. Punch kept raw until mapping is corrected.`,
         payload: normalizedBody,
         rawEventId,
         severity: "high"
@@ -340,23 +370,25 @@ export async function POST(request: NextRequest) {
       return Response.json({ ok: true, stored: "raw_event", alert: "duplicate_enrolment_id" });
     }
 
-    let enrolment = enrolmentRows[0] ?? null;
+    let enrolment = pickPreferredEnrolment(enrolmentRows);
 
     if (!enrolment) {
       const workers = await findWorkerMatches(device.company_id, enrolmentId);
-      if (workers.length === 1) {
+      if (workers.length && !hasSameCategoryDuplicate(workers)) {
+        const worker = pickPreferredWorker(workers);
+        if (!worker) return jsonError("Unable to resolve worker for biometric punch.", 500);
         enrolment = await createEnrolmentFromWorker({
           companyId: device.company_id,
           device,
           enrolmentId,
-          worker: workers[0]
+          worker
         });
       } else if (workers.length > 1) {
         await createAlert({
           alertType: "duplicate_enrolment_id",
           companyId: device.company_id,
           device,
-          message: `Biometric enrolment ${enrolmentId} exists on multiple workforce records. Punch kept raw until the duplicate is fixed.`,
+          message: `Biometric enrolment ${enrolmentId} exists on multiple workforce records in the same category. Punch kept raw until the duplicate is fixed.`,
           payload: normalizedBody,
           rawEventId,
           severity: "high"

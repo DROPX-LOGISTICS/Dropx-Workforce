@@ -22,6 +22,12 @@ function monthRange(month: string | null) {
   };
 }
 
+function cleanEnrolmentId(value: unknown) {
+  const digits = String(value ?? "").trim().replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.replace(/^0+/, "") || "0";
+}
+
 async function activeSession() {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const token = cookies().get(connectSessionCookieName)?.value;
@@ -64,10 +70,10 @@ async function resolveWorker({
     if (rowCountryCode !== countryCode || (rowMobile !== mobile && rowMobile !== localMobile)) {
       throw new Error("This attendance is not available for the signed-in account.");
     }
-    const enrolmentId = String(row.biometric_id ?? "");
+    const enrolmentId = cleanEnrolmentId(row.biometric_id);
     return {
       companyId: row.company_id as string,
-      filter: (item: Awaited<ReturnType<typeof loadAttendanceReportRows>>[number]) => Boolean(enrolmentId) && item.enrolmentId === enrolmentId
+      filter: (item: Awaited<ReturnType<typeof loadAttendanceReportRows>>[number]) => Boolean(enrolmentId) && cleanEnrolmentId(item.enrolmentId) === enrolmentId
     };
   }
   if (profileType === "field_executive") {
@@ -84,10 +90,10 @@ async function resolveWorker({
     if (rowCountryCode !== countryCode || (rowMobile !== mobile && rowMobile !== localMobile)) {
       throw new Error("This attendance is not available for the signed-in account.");
     }
-    const enrolmentId = String(row.biometric_id ?? "");
+    const enrolmentId = cleanEnrolmentId(row.biometric_id);
     return {
       companyId: row.company_id as string,
-      filter: (item: Awaited<ReturnType<typeof loadAttendanceReportRows>>[number]) => Boolean(enrolmentId) && item.enrolmentId === enrolmentId
+      filter: (item: Awaited<ReturnType<typeof loadAttendanceReportRows>>[number]) => Boolean(enrolmentId) && cleanEnrolmentId(item.enrolmentId) === enrolmentId
     };
   }
   throw new Error("Attendance is available for employees and field executives only.");

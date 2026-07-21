@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { UserRound } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { EmployeeActionMenu } from "@/components/employee-action-menu";
 import { EmployeeForm } from "@/components/employee-form";
@@ -411,7 +412,14 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
                   return (
                     <tr key={employee.id}>
                       <td><strong>{employee.employee_code ?? "-"}</strong></td>
-                      <td><strong>{employee.full_name}</strong></td>
+                      <td>
+                        <div className="executive-name-cell">
+                          <span className="executive-avatar" aria-hidden="true">
+                            {employee.upload_urls?.profilePhoto ? <img alt="" src={employee.upload_urls.profilePhoto} /> : <UserRound size={17} />}
+                          </span>
+                          <strong>{employee.full_name}</strong>
+                        </div>
+                      </td>
                       <td>{employee.biometric_id ?? "-"}</td>
                       <td>+{employee.mobile_country_code ?? "91"} {employee.mobile}</td>
                       <td>{employee.email || "-"}</td>

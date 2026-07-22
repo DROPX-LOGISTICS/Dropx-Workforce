@@ -12,6 +12,7 @@ import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
 import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
+import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { sendFieldExecutiveOnboardingWhatsApp } from "@/lib/whatsapp";
 
@@ -53,6 +54,30 @@ function friendlyFieldExecutiveError(message: string) {
 
 function generatedDropxId() {
   return `FE-${Date.now().toString(36).toUpperCase()}`;
+}
+
+type FieldExecutiveWorkerCategory = "field_executive" | "contractor";
+
+function workerCategoryFromDesignationCategories(value: unknown): FieldExecutiveWorkerCategory {
+  const categories = normalizeDesignationCategories(value);
+  const isContractorOnly = categories.includes("contractors") &&
+    !categories.includes("field_executives") &&
+    !categories.includes("delivery_executives");
+  return isContractorOnly ? "contractor" : "field_executive";
+}
+
+async function loadWorkerCategoryForDesignation(companyId: string, designationName: string): Promise<FieldExecutiveWorkerCategory> {
+  if (!supabaseAdmin) return "field_executive";
+  const result = await supabaseAdmin
+    .from("designations")
+    .select("onboarding_categories")
+    .eq("company_id", companyId)
+    .eq("name", designationName)
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle();
+  if (result.error || !result.data) return "field_executive";
+  return workerCategoryFromDesignationCategories((result.data as { onboarding_categories?: unknown }).onboarding_categories);
 }
 
 const fieldExecutiveDocumentFields = [
@@ -187,8 +212,9 @@ export async function createFieldExecutive(formData: FormData) {
     if (locationError) throw new Error(locationError.message);
     if (!location) throw new Error("Selected location is not available for this company.");
 
+    const workerCategory = await loadWorkerCategoryForDesignation(companyId, designation);
     const biometricId = await generateConfiguredBiometricId({
-      category: "field_executive",
+      category: workerCategory,
       companyId,
       designationName: designation,
       fallback: () => generateBiometricEnrolmentId(companyId),
@@ -197,7 +223,7 @@ export async function createFieldExecutive(formData: FormData) {
     if (biometricId && !/^\d{1,20}$/.test(biometricId)) throw new Error("Biometric enrolment ID must be numeric.");
 
     const dropxId = await generateConfiguredWorkerId({
-      category: "field_executive",
+      category: workerCategory,
       companyId,
       designationName: designation,
       fallback: generatedDropxId,
@@ -469,7 +495,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
     const designationCodes = Array.from(new Set(rows.map((row) => row.designationCode)));
     const [locationsResult, designationsResult] = await Promise.all([
       supabaseAdmin.from("stations").select("id, station_code").eq("company_id", companyId).in("station_code", locationCodes),
-      supabaseAdmin.from("designations").select("id, code, name").eq("company_id", companyId).eq("is_active", true).in("code", designationCodes)
+      supabaseAdmin.from("designations").select("id, code, name, onboarding_categories").eq("company_id", companyId).eq("is_active", true).in("code", designationCodes)
     ]);
     if (locationsResult.error) throw new Error(locationsResult.error.message);
     if (designationsResult.error) throw new Error(designationsResult.error.message);
@@ -477,7 +503,8 @@ export async function bulkImportFieldExecutives(formData: FormData) {
     const locations = new Map((locationsResult.data ?? []).map((location) => [String(location.station_code).toUpperCase(), String(location.id)]));
     const designations = new Map((designationsResult.data ?? []).map((designation) => [String(designation.code).toUpperCase(), {
       id: String(designation.id),
-      name: String(designation.name)
+      name: String(designation.name),
+      workerCategory: workerCategoryFromDesignationCategories((designation as { onboarding_categories?: unknown }).onboarding_categories)
     }]));
     const inserted: { id: string; locationId: string; biometricId: string | null; dateOfJoin: string }[] = [];
 
@@ -492,14 +519,14 @@ export async function bulkImportFieldExecutives(formData: FormData) {
       }
 
       const dropxId = row.dropxId || await generateConfiguredWorkerId({
-        category: "field_executive",
+        category: designation.workerCategory,
         companyId,
         designationId: designation.id,
         fallback: generatedDropxId,
         locationId
       });
       const biometricId = row.biometricId || await generateConfiguredBiometricId({
-        category: "field_executive",
+        category: designation.workerCategory,
         companyId,
         designationId: designation.id,
         fallback: () => generateBiometricEnrolmentId(companyId),

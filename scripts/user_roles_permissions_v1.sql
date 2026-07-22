@@ -35,7 +35,7 @@ values
   ('dashboard', 'Command Center', 10),
   ('delivery_associates', 'Field Executive', 20),
   ('employees', 'Employees', 21),
-  ('contractors', 'Contractors', 22),
+  ('contractors', 'Independent Contractor', 22),
   ('vendors', 'Vendors', 23),
   ('workers', 'Workers', 24),
   ('provider_mapping', 'ID Mapping', 40),

@@ -12,7 +12,7 @@ export const accessPages = [
   { code: "leads_sop", name: "Ad SOP", sort_order: 37 },
   { code: "delivery_associates", name: "Field Executive", sort_order: 20 },
   { code: "employees", name: "Employees", sort_order: 21 },
-  { code: "contractors", name: "Contractors", sort_order: 22 },
+  { code: "contractors", name: "Independent Contractor", sort_order: 22 },
   { code: "vendors", name: "Vendors", sort_order: 23 },
   { code: "workers", name: "Workers", sort_order: 24 },
   { code: "provider_mapping", name: "ID Mapping", sort_order: 40 },

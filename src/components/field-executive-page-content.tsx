@@ -593,7 +593,7 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
   })) as LocationRow[];
   const designations = ((designationsResult.data ?? []) as unknown as DesignationRow[]).filter((designation) => {
     const categories = normalizeDesignationCategories(designation.onboarding_categories);
-    return categories.includes("field_executives") || categories.includes("delivery_executives");
+    return categories.includes("field_executives") || categories.includes("delivery_executives") || categories.includes("contractors");
   });
   const allowedLocationIds = new Set(locations.map((location) => location.id));
   const executives = ((executivesResult.data ?? []) as unknown as ExecutiveRow[])

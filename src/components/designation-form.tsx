@@ -302,7 +302,16 @@ export function DesignationForm({
   const fieldRules = normalizeProfileFieldRules(initial?.profile_field_rules);
   const showEmployeeFields = selectedCategories.includes("employees");
   const showFieldExecutiveFields =
-    selectedCategories.includes("field_executives") || selectedCategories.includes("delivery_executives");
+    selectedCategories.includes("field_executives") ||
+    selectedCategories.includes("delivery_executives") ||
+    selectedCategories.includes("contractors");
+  const fieldExecutiveFieldTitle = selectedCategories.includes("contractors") &&
+    !selectedCategories.includes("field_executives") &&
+    !selectedCategories.includes("delivery_executives")
+      ? "Independent Contractor fields"
+      : selectedCategories.includes("contractors")
+        ? "Delivery executive / Independent Contractor fields"
+        : "Delivery executive fields";
   const hasVisibleFieldRules = showEmployeeFields || showFieldExecutiveFields;
 
   return (
@@ -347,11 +356,11 @@ export function DesignationForm({
             <FieldRuleMatrix fields={employeeProfileFields} namePrefix="employees" rules={fieldRules.employees} title="Employee fields" />
           ) : null}
           {showFieldExecutiveFields ? (
-            <FieldRuleMatrix fields={fieldExecutiveProfileFields} namePrefix="field_executives" rules={fieldRules.field_executives} title="Delivery executive fields" />
+            <FieldRuleMatrix fields={fieldExecutiveProfileFields} namePrefix="field_executives" rules={fieldRules.field_executives} title={fieldExecutiveFieldTitle} />
           ) : null}
         </div>
       ) : (
-        <div className="designation-field-rule-empty">Select Employees, Field executives, or Delivery executives to configure onboarding fields.</div>
+        <div className="designation-field-rule-empty">Select Employees, Field executives, Delivery executives, or Independent Contractor to configure onboarding fields.</div>
       )}
       <div className="form-actions right">
         <SubmitButton className="button" pendingText="Saving">{submitLabel}</SubmitButton>

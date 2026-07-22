@@ -40,7 +40,7 @@ const categories = [
   { id: "employee", code: "EMP", name: "Employees" },
   { id: "field_executive", code: "FE", name: "Field executives" },
   { id: "vendor", code: "VEN", name: "Vendors" },
-  { id: "contractor", code: "CON", name: "Contractors" },
+  { id: "contractor", code: "IC", name: "Independent Contractor" },
   { id: "worker", code: "WRK", name: "Workers" }
 ];
 

@@ -6,11 +6,12 @@ import { EmployeeForm } from "@/components/employee-form";
 import { PageHead } from "@/components/page-head";
 import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
+import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
-import { createEmployee, updateEmployee } from "./actions";
+import { bulkImportEmployees, createEmployee, updateEmployee } from "./actions";
 
 type LocationRow = {
   id: string;
@@ -218,6 +219,35 @@ function EmployeeDetails({ employee }: { employee: EmployeeRow }) {
   );
 }
 
+function EmployeeBulkImportPanel() {
+  return (
+    <section className="panel workforce-bulk-panel">
+      <div className="panel-head">
+        <div>
+          <h2>Bulk upload employees</h2>
+          <p className="subtle">Upload existing employee rows and keep the profile completion pending for the app.</p>
+        </div>
+      </div>
+      <form action={bulkImportEmployees} className="workforce-bulk-form">
+        <div className="workforce-template-note">
+          <strong>Excel columns</strong>
+          <span>DropX ID, Biometric ID, Full name, Mob country code, Mob no, Email, Date of join (DD/MM/YYYY), Location, Designation code</span>
+        </div>
+        <input accept=".xlsx,.xls,.csv" className="field" name="bulk_file" required type="file" />
+        <SubmitButton
+          confirmCancelText="No"
+          confirmDescription="This will create pending employee profiles from the uploaded file."
+          confirmMessage="Import employees from this file?"
+          confirmSubmitText="Yes"
+          confirmTitle="Confirm bulk upload"
+        >
+          Upload employees
+        </SubmitButton>
+      </form>
+    </section>
+  );
+}
+
 async function signedDocumentUrl(path: string | null | undefined) {
   if (!supabaseAdmin || !path) return "";
   const result = await supabaseAdmin.storage
@@ -379,6 +409,8 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
           <EmployeeForm action={createEmployee} designationOptions={designationOptions} locationOptions={locationOptions} />
         </section>
       ) : null}
+
+      {!error && pagePermission.canAdd ? <EmployeeBulkImportPanel /> : null}
 
       {!error && pagePermission.canView ? (
         <section className="panel">

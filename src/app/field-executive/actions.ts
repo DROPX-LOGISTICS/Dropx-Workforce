@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createHash, randomBytes } from "node:crypto";
 import { waitUntil } from "@vercel/functions";
+import * as XLSX from "xlsx";
 import { requirePagePermission } from "@/lib/authorization";
 import { syncBiometricEnrolment } from "@/lib/biometric/enrolments";
 import { generateBiometricEnrolmentId } from "@/lib/biometric/ids";
@@ -38,8 +39,7 @@ function addFormParams(formData: FormData) {
     email: String(formData.get("email") ?? "").trim().toLowerCase(),
     date_of_join: String(formData.get("date_of_join") ?? ""),
     location_id: String(formData.get("location_id") ?? ""),
-    designation: String(formData.get("designation") ?? ""),
-    biometric_id: String(formData.get("biometric_id") ?? "").replace(/\D/g, "")
+    designation: String(formData.get("designation") ?? "")
   };
 }
 
@@ -166,8 +166,6 @@ export async function createFieldExecutive(formData: FormData) {
 
   try {
     const fullName = required(formData.get("full_name"), "Full name");
-    const submittedBiometricId = optional(formData.get("biometric_id"))?.replace(/\D/g, "") ?? null;
-    let biometricId = submittedBiometricId;
     const mobileCountryCode = cleanCountryCode(formData.get("mobile_country_code"));
     const mobile = required(formData.get("mobile"), "Mobile number").replace(/\D/g, "");
     const email = required(formData.get("email"), "Email").toLowerCase();
@@ -176,7 +174,6 @@ export async function createFieldExecutive(formData: FormData) {
     const designation = required(formData.get("designation"), "Designation");
 
     if (!/^\d{6,15}$/.test(mobile)) throw new Error("Mobile number must contain 6 to 15 digits.");
-    if (biometricId && !/^\d{1,20}$/.test(biometricId)) throw new Error("Biometric enrolment ID must be numeric.");
     if (Number.isNaN(Date.parse(dateOfJoin))) throw new Error("Enter a valid date of join.");
     if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
       throw new Error("You do not have access to the selected location.");
@@ -190,15 +187,13 @@ export async function createFieldExecutive(formData: FormData) {
     if (locationError) throw new Error(locationError.message);
     if (!location) throw new Error("Selected location is not available for this company.");
 
-    if (!biometricId) {
-      biometricId = await generateConfiguredBiometricId({
-        category: "field_executive",
-        companyId,
-        designationName: designation,
-        fallback: () => generateBiometricEnrolmentId(companyId),
-        locationId
-      });
-    }
+    const biometricId = await generateConfiguredBiometricId({
+      category: "field_executive",
+      companyId,
+      designationName: designation,
+      fallback: () => generateBiometricEnrolmentId(companyId),
+      locationId
+    });
     if (biometricId && !/^\d{1,20}$/.test(biometricId)) throw new Error("Biometric enrolment ID must be numeric.");
 
     const dropxId = await generateConfiguredWorkerId({
@@ -296,11 +291,12 @@ export async function updateFieldExecutive(formData: FormData) {
     const executiveId = id;
     const existingResult = await supabaseAdmin
       .from("field_executives")
-      .select("aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path")
+      .select("biometric_id, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path")
       .eq("id", executiveId)
       .eq("company_id", companyId)
       .maybeSingle();
     if (existingResult.error) throw new Error(existingResult.error.message);
+    payload.biometric_id = String((existingResult.data as { biometric_id?: string | null } | null)?.biometric_id ?? "").replace(/\D/g, "") || null;
 
     if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(payload.location_id)) {
       throw new Error("You do not have access to the selected location.");
@@ -375,4 +371,175 @@ export async function updateFieldExecutive(formData: FormData) {
   }
 
   fieldExecutiveRedirect({ notice: "Field executive updated successfully." });
+}
+
+type BulkImportRow = {
+  dropxId: string | null;
+  biometricId: string | null;
+  fullName: string;
+  mobileCountryCode: string;
+  mobile: string;
+  email: string;
+  dateOfJoin: string;
+  locationCode: string;
+  designationCode: string;
+};
+
+function normalizeHeader(value: unknown) {
+  return String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function cellText(row: Record<string, unknown>, aliases: string[]) {
+  const value = cellValue(row, aliases);
+  return String(value ?? "").trim();
+}
+
+function cellValue(row: Record<string, unknown>, aliases: string[]) {
+  const normalizedAliases = new Set(aliases.map(normalizeHeader));
+  const entry = Object.entries(row).find(([key]) => normalizedAliases.has(normalizeHeader(key)));
+  return entry?.[1] ?? "";
+}
+
+function parseExcelDate(value: unknown, rowNumber: number) {
+  if (typeof value === "number") {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (parsed) {
+      const date = new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
+      return date.toISOString().slice(0, 10);
+    }
+  }
+  const text = String(value ?? "").trim();
+  const match = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (!match) throw new Error(`Row ${rowNumber}: Date of join must be DD/MM/YYYY.`);
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3].length === 2 ? `20${match[3]}` : match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    throw new Error(`Row ${rowNumber}: Date of join is invalid.`);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+async function parseBulkWorkbook(fileValue: FormDataEntryValue | null) {
+  if (!(fileValue instanceof File) || fileValue.size === 0) throw new Error("Choose an Excel file to upload.");
+  const bytes = Buffer.from(await fileValue.arrayBuffer());
+  const workbook = XLSX.read(bytes, { type: "buffer", cellDates: false });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  if (!sheet) throw new Error("The Excel file does not contain a worksheet.");
+  const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+  if (!rawRows.length) throw new Error("The Excel file does not contain any rows.");
+
+  return rawRows.map((row, index) => {
+    const rowNumber = index + 2;
+    const fullName = cellText(row, ["Full name", "Full Name"]);
+    const mobile = cellText(row, ["Mob no", "Mobile", "Mobile number", "Mob number"]).replace(/\D/g, "");
+    const locationCode = cellText(row, ["Location", "Location code"]).toUpperCase();
+    const designationCode = cellText(row, ["Designation code", "Delisignation code", "Designation"]).toUpperCase();
+    if (!fullName) throw new Error(`Row ${rowNumber}: Full name is required.`);
+    if (!/^\d{6,15}$/.test(mobile)) throw new Error(`Row ${rowNumber}: Mobile number must contain 6 to 15 digits.`);
+    if (!locationCode) throw new Error(`Row ${rowNumber}: Location is required.`);
+    if (!designationCode) throw new Error(`Row ${rowNumber}: Designation code is required.`);
+
+    const biometricId = cellText(row, ["Biometric ID", "Biometric enrolment ID", "Bio ID"]).replace(/\D/g, "") || null;
+    if (biometricId && !/^\d{1,20}$/.test(biometricId)) throw new Error(`Row ${rowNumber}: Biometric ID must be numeric.`);
+
+    return {
+      dropxId: cellText(row, ["Dropx ID", "DropX ID", "Field executive ID", "ID"]).toUpperCase() || null,
+      biometricId,
+      fullName,
+      mobileCountryCode: cleanCountryCode(cellText(row, ["Mob country code", "Mobile country code", "Country code"]) || "91"),
+      mobile,
+      email: required(cellText(row, ["Email", "Email ID"]), `Row ${rowNumber}: Email`).toLowerCase(),
+      dateOfJoin: parseExcelDate(cellValue(row, ["Date of join", "Date of join (DD/MM/YYYY)", "Date of join (DD/MM/YYY)", "DOJ"]), rowNumber),
+      locationCode,
+      designationCode
+    } satisfies BulkImportRow;
+  });
+}
+
+export async function bulkImportFieldExecutives(formData: FormData) {
+  const authorization = await requirePagePermission("delivery_associates", "add");
+  const companyId = requireCompanyId(authorization);
+  if (!supabaseAdmin) fieldExecutiveRedirect({ error: "Supabase service role key is not configured." });
+
+  try {
+    const rows = await parseBulkWorkbook(formData.get("bulk_file"));
+    const locationCodes = Array.from(new Set(rows.map((row) => row.locationCode)));
+    const designationCodes = Array.from(new Set(rows.map((row) => row.designationCode)));
+    const [locationsResult, designationsResult] = await Promise.all([
+      supabaseAdmin.from("stations").select("id, station_code").eq("company_id", companyId).in("station_code", locationCodes),
+      supabaseAdmin.from("designations").select("id, code, name").eq("company_id", companyId).eq("is_active", true).in("code", designationCodes)
+    ]);
+    if (locationsResult.error) throw new Error(locationsResult.error.message);
+    if (designationsResult.error) throw new Error(designationsResult.error.message);
+
+    const locations = new Map((locationsResult.data ?? []).map((location) => [String(location.station_code).toUpperCase(), String(location.id)]));
+    const designations = new Map((designationsResult.data ?? []).map((designation) => [String(designation.code).toUpperCase(), {
+      id: String(designation.id),
+      name: String(designation.name)
+    }]));
+    const inserted: { id: string; locationId: string; biometricId: string | null; dateOfJoin: string }[] = [];
+
+    for (const [index, row] of rows.entries()) {
+      const rowNumber = index + 2;
+      const locationId = locations.get(row.locationCode);
+      const designation = designations.get(row.designationCode);
+      if (!locationId) throw new Error(`Row ${rowNumber}: Location ${row.locationCode} not found.`);
+      if (!designation) throw new Error(`Row ${rowNumber}: Designation code ${row.designationCode} not found.`);
+      if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
+        throw new Error(`Row ${rowNumber}: You do not have access to location ${row.locationCode}.`);
+      }
+
+      const dropxId = row.dropxId || await generateConfiguredWorkerId({
+        category: "field_executive",
+        companyId,
+        designationId: designation.id,
+        fallback: generatedDropxId,
+        locationId
+      });
+      const biometricId = row.biometricId || await generateConfiguredBiometricId({
+        category: "field_executive",
+        companyId,
+        designationId: designation.id,
+        fallback: () => generateBiometricEnrolmentId(companyId),
+        locationId
+      });
+
+      const insertResult = await supabaseAdmin.from("field_executives").insert(withCompany({
+        dropx_id: dropxId,
+        biometric_id: biometricId,
+        full_name: row.fullName,
+        mobile_country_code: row.mobileCountryCode,
+        mobile: row.mobile,
+        email: row.email,
+        date_of_join: row.dateOfJoin,
+        location_id: locationId,
+        designation: designation.name,
+        created_by: authorization.userId,
+        onboarding_status: "pending",
+        is_active: true
+      }, companyId)).select("id").single();
+      if (insertResult.error) throw new Error(`Row ${rowNumber}: ${friendlyFieldExecutiveError(insertResult.error.message)}`);
+      inserted.push({ id: insertResult.data.id, locationId, biometricId, dateOfJoin: row.dateOfJoin });
+    }
+
+    for (const row of inserted) {
+      await syncBiometricEnrolment({
+        companyId,
+        createdBy: authorization.userId,
+        effectiveFrom: row.dateOfJoin,
+        enrolmentId: row.biometricId,
+        fieldExecutiveId: row.id,
+        isActive: true,
+        locationId: row.locationId,
+        workerType: "individual_contract"
+      });
+    }
+
+    revalidatePath("/field-executive");
+    fieldExecutiveRedirect({ notice: `${inserted.length} field executives imported successfully.` });
+  } catch (error) {
+    fieldExecutiveRedirect({ error: error instanceof Error ? friendlyFieldExecutiveError(error.message) : "Unable to import field executives." });
+  }
 }

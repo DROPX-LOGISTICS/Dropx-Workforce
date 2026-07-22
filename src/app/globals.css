@@ -2616,6 +2616,41 @@ h3 {
   font-weight: 700;
 }
 
+.workforce-bulk-panel .panel-head {
+  padding-bottom: 10px;
+}
+
+.workforce-bulk-form {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(240px, 360px) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 18px 18px;
+}
+
+.workforce-template-note {
+  display: grid;
+  gap: 5px;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 7px;
+  background: #fff7ed;
+  color: #5f6670;
+  font-size: 12px;
+}
+
+.workforce-template-note strong {
+  color: #c2410c;
+  font-size: 12px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.workforce-template-note span {
+  line-height: 1.35;
+}
+
 .employee-id-field {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -4252,6 +4287,10 @@ tr:last-child td {
   .employee-id-field,
   .employee-form .field-executive-location-submit,
   .field-executive-add-form .field-executive-location-submit {
+    grid-template-columns: 1fr;
+  }
+
+  .workforce-bulk-form {
     grid-template-columns: 1fr;
   }
 

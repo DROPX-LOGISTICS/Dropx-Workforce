@@ -1,4 +1,4 @@
-import { createFieldExecutive, updateFieldExecutive } from "@/app/field-executive/actions";
+import { bulkImportFieldExecutives, createFieldExecutive, updateFieldExecutive } from "@/app/field-executive/actions";
 import { AppShell } from "@/components/app-shell";
 import { FieldExecutiveList, type FieldExecutiveListRow } from "@/components/field-executive-list";
 import { PageHead } from "@/components/page-head";
@@ -92,7 +92,6 @@ type FieldExecutiveAddFormValues = {
   email?: string;
   dateOfJoin?: string;
   locationId?: string;
-  biometricId?: string;
   designation?: string;
 };
 
@@ -318,7 +317,6 @@ function FieldExecutiveForm({
     <form action={action} className="form-grid three">
       {executive ? <input type="hidden" name="id" value={executive.id} /> : null}
 
-      <label>DropX ID<input className="field" value={textValue(executive?.dropx_id)} disabled readOnly /></label>
       <label>Full name<input className="field" name="full_name" placeholder="Enter full name" required defaultValue={textValue(executive?.full_name)} /></label>
       <label>Email<input className="field" name="email" placeholder="Enter email" required type="email" defaultValue={textValue(executive?.email)} /></label>
 
@@ -347,7 +345,6 @@ function FieldExecutiveForm({
       <label>Aadhaar number<input className="field" inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" defaultValue={textValue(executive?.aadhaar_number)} /></label>
       <label>PAN number<input className="field" name="pan_number" placeholder="Enter PAN number" defaultValue={textValue(executive?.pan_number)} /></label>
       <label>eShram UAN<input className="field" inputMode="numeric" maxLength={12} name="eshram_uan" pattern="[0-9]{12}" placeholder="Enter eShram UAN" defaultValue={textValue(executive?.eshram_uan)} /></label>
-      <label>Biometric enrolment ID<input className="field" inputMode="numeric" name="biometric_id" pattern="[0-9]{1,20}" placeholder="Numeric ID from device" defaultValue={textValue(executive?.biometric_id)} /></label>
 
       <label className="span-3">Address<input className="field" name="address" placeholder="Enter complete address" defaultValue={textValue(executive?.address)} /></label>
       <label>Postal PIN<input className="field" inputMode="numeric" maxLength={6} name="postal_pin" pattern="[0-9]{6}" placeholder="Enter PIN" defaultValue={textValue(executive?.postal_pin)} /></label>
@@ -429,7 +426,6 @@ function AddFieldExecutiveForm({
       </label>
       <label>Email<input className="field" name="email" placeholder="Enter email" required type="email" defaultValue={values?.email ?? ""} /></label>
       <label>Date of join<input className="field" name="date_of_join" required type="date" defaultValue={values?.dateOfJoin ?? ""} /></label>
-      <label>Biometric enrolment ID<input className="field" inputMode="numeric" name="biometric_id" pattern="[0-9]{1,20}" placeholder="Auto generated if blank" defaultValue={values?.biometricId ?? ""} /></label>
       <ScopedDesignationFields
         designationName="designation"
         designationOptions={designationOptions}
@@ -452,6 +448,35 @@ function AddFieldExecutiveForm({
         </div>
       </div>
     </form>
+  );
+}
+
+function FieldExecutiveBulkImportPanel() {
+  return (
+    <section className="panel workforce-bulk-panel">
+      <div className="panel-head">
+        <div>
+          <h2>Bulk upload field executives</h2>
+          <p className="subtle">Upload existing field executive rows and keep the profile completion pending for the app.</p>
+        </div>
+      </div>
+      <form action={bulkImportFieldExecutives} className="workforce-bulk-form">
+        <div className="workforce-template-note">
+          <strong>Excel columns</strong>
+          <span>DropX ID, Biometric ID, Full name, Mob country code, Mob no, Email, Date of join (DD/MM/YYYY), Location, Designation code</span>
+        </div>
+        <input accept=".xlsx,.xls,.csv" className="field" name="bulk_file" required type="file" />
+        <SubmitButton
+          confirmCancelText="No"
+          confirmDescription="This will create pending field executive profiles from the uploaded file."
+          confirmMessage="Import field executives from this file?"
+          confirmSubmitText="Yes"
+          confirmTitle="Confirm bulk upload"
+        >
+          Upload field executives
+        </SubmitButton>
+      </form>
+    </section>
   );
 }
 
@@ -683,6 +708,8 @@ export async function FieldExecutivePageContent({
           <AddFieldExecutiveForm designationOptions={designationOptions} locationOptions={locationOptions} values={addFormValues} />
         </section>
       ) : null}
+
+      {permission.canAdd ? <FieldExecutiveBulkImportPanel /> : null}
 
       {permission.canView || permission.canEdit ? <FieldExecutiveList canEdit={permission.canEdit} rows={executives} /> : null}
 

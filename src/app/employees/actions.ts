@@ -47,6 +47,7 @@ type BulkImportRow = {
   dateOfJoin: string;
   locationCode: string;
   designationCode: string;
+  statutoryApplicability: string[];
 };
 
 function isNextRedirectError(error: unknown) {
@@ -332,6 +333,23 @@ function parseExcelDate(value: unknown, rowNumber: number) {
   return date.toISOString().slice(0, 10);
 }
 
+function parseStatutoryApplicability(value: unknown, rowNumber: number) {
+  const text = String(value ?? "").trim();
+  if (!text) return ["not_applicable"];
+  const tokens = text
+    .split(/[,/|+&]+|\band\b/i)
+    .map((item) => item.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, ""))
+    .filter(Boolean);
+  const mapped = tokens.map((token) => {
+    if (["na", "n_a", "no", "none", "not_applicable", "notapplicable"].includes(token)) return "not_applicable";
+    if (token === "pf") return "pf";
+    if (token === "esi" || token === "esic") return "esi";
+    throw new Error(`Row ${rowNumber}: Statutory applicability must be PF, ESI, PF/ESI, or Not Applicable.`);
+  });
+  if (!mapped.length || mapped.includes("not_applicable")) return ["not_applicable"];
+  return Array.from(new Set(mapped));
+}
+
 async function parseBulkWorkbook(fileValue: FormDataEntryValue | null) {
   if (!(fileValue instanceof File) || fileValue.size === 0) throw new Error("Choose an Excel file to upload.");
   const bytes = Buffer.from(await fileValue.arrayBuffer());
@@ -364,7 +382,8 @@ async function parseBulkWorkbook(fileValue: FormDataEntryValue | null) {
       email: cellText(row, ["Email", "Email ID"]).toLowerCase() || null,
       dateOfJoin: parseExcelDate(cellValue(row, ["Date of join", "Date of join (DD/MM/YYYY)", "Date of join (DD/MM/YYY)", "DOJ"]), rowNumber),
       locationCode,
-      designationCode
+      designationCode,
+      statutoryApplicability: parseStatutoryApplicability(cellValue(row, ["Statutory applicability", "Statutory", "PF/ESI"]), rowNumber)
     } satisfies BulkImportRow;
   });
 }
@@ -424,7 +443,7 @@ export async function bulkImportEmployees(formData: FormData) {
         date_of_join: row.dateOfJoin,
         location_id: locationId,
         designation_id: designationId,
-        statutory_applicability: ["not_applicable"],
+        statutory_applicability: row.statutoryApplicability,
         created_by: authorization.userId,
         profile_completion_status: "pending",
         is_active: true

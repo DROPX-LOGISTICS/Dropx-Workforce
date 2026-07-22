@@ -17,14 +17,14 @@ drop policy if exists verification_api_settings_company_select on public.verific
 create policy verification_api_settings_company_select
 on public.verification_api_settings
 for select
-using (public.current_company_id() = company_id);
+using (auth.role() = 'service_role');
 
 drop policy if exists verification_api_settings_company_write on public.verification_api_settings;
 create policy verification_api_settings_company_write
 on public.verification_api_settings
 for all
-using (public.current_company_id() = company_id)
-with check (public.current_company_id() = company_id);
+using (auth.role() = 'service_role')
+with check (auth.role() = 'service_role');
 
 create or replace function public.set_verification_api_secret(
   company_uuid uuid,

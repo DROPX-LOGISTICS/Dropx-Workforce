@@ -1456,20 +1456,6 @@ h3 {
   accent-color: var(--brand-dark);
 }
 
-.verification-api-toggle {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 9px;
-  justify-content: flex-start;
-  width: max-content;
-}
-
-.verification-api-toggle span {
-  line-height: 1;
-  white-space: nowrap;
-}
-
 .whatsapp-template-summary {
   display: flex;
   align-items: center;
@@ -9651,6 +9637,30 @@ td strong,
 .modal-panel {
   max-height: calc(100vh - 42px);
   overflow: auto;
+}
+
+.form-grid label.verification-api-toggle {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  width: max-content;
+  min-height: 22px;
+  text-transform: uppercase;
+}
+
+.form-grid label.verification-api-toggle input {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.form-grid label.verification-api-toggle span {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 @media (max-width: 1080px) {

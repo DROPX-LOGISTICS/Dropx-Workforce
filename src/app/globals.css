@@ -1,19 +1,22 @@
 :root {
-  --bg: #f8f9fb;
+  --bg: #f6f7f9;
   --surface: #ffffff;
-  --surface-soft: #f4f5f7;
-  --ink: #232323;
-  --muted: #717171;
-  --line: #e6e7eb;
-  --brand: #f5a400;
-  --brand-dark: #de5a16;
-  --brand-red: #cf1f35;
+  --surface-soft: #f8fafc;
+  --ink: #181d27;
+  --muted: #697386;
+  --line: #e5e7eb;
+  --brand: #f79009;
+  --brand-dark: #e85d04;
+  --brand-red: #d92d20;
   --brand-pink: #c8406b;
   --sidebar: #ffffff;
   --amber: #b76a00;
   --red: #b42318;
   --green: #087443;
-  --shadow: 0 1px 3px rgba(24, 24, 27, 0.08);
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-soft: 0 8px 24px rgba(16, 24, 40, 0.06);
+  --control-height: 38px;
+  --radius: 7px;
 }
 
 * {
@@ -33,6 +36,8 @@ body {
   color: var(--ink);
   font-family: Arial, Helvetica, sans-serif;
   letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -4227,6 +4232,299 @@ tr:last-child td {
 .import-source-card.active {
   border-color: var(--brand-red);
   box-shadow: 0 10px 28px rgba(225, 76, 32, 0.12);
+}
+
+/* Dashboard refinement layer: keeps shared controls compact, calm, and consistent. */
+.content {
+  padding: 16px 24px 34px;
+  gap: 16px;
+}
+
+.page-head {
+  align-items: center;
+  min-height: 58px;
+  padding: 2px 2px 4px;
+}
+
+.eyebrow {
+  color: #e85d04;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+h1 {
+  color: #111827;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+h2 {
+  color: #111827;
+  font-size: 16px;
+  font-weight: 750;
+}
+
+h3 {
+  color: #202939;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.subtle {
+  color: #667085;
+  font-size: 12px;
+}
+
+.panel {
+  border-color: #e4e7ec;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  overflow: visible;
+}
+
+.panel-head {
+  min-height: 52px;
+  padding: 12px 16px;
+  background: #ffffff;
+}
+
+.panel-body {
+  padding: 14px 16px;
+}
+
+.form-grid {
+  gap: 12px 14px;
+  padding: 15px 16px 16px;
+}
+
+.form-grid label,
+.business-doc-manager-form label {
+  gap: 6px;
+  color: #606a78;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.field,
+.select,
+.form-grid .field,
+.form-grid .select,
+.listing-search .field,
+.filters .field,
+.filters .select {
+  height: var(--control-height);
+  min-height: var(--control-height);
+  border-color: #d9dee7;
+  border-radius: var(--radius);
+  color: #111827;
+  font-size: 13px;
+  font-weight: 400;
+  box-shadow: none;
+}
+
+.field,
+.form-grid .field {
+  padding-inline: 11px;
+}
+
+.select,
+.form-grid .select {
+  padding-inline: 10px;
+}
+
+.field::placeholder,
+.searchable-input::placeholder {
+  color: #98a2b3;
+  font-weight: 400;
+}
+
+.field:focus,
+.select:focus {
+  border-color: #f79009;
+  box-shadow: 0 0 0 3px rgba(247, 144, 9, 0.14);
+  outline: 0;
+}
+
+.searchable-control,
+.multi-select-trigger {
+  height: var(--control-height);
+  min-height: var(--control-height);
+  border-color: #d9dee7;
+  border-radius: var(--radius);
+}
+
+.searchable-control.open,
+.searchable-control:focus-within,
+.multi-select-trigger.open,
+.multi-select-trigger:focus-visible {
+  border-color: #f79009;
+  box-shadow: 0 0 0 3px rgba(247, 144, 9, 0.14);
+}
+
+.searchable-input {
+  padding-inline: 11px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.searchable-clear,
+.searchable-toggle {
+  width: 28px;
+  height: 28px;
+}
+
+.searchable-menu,
+.multi-select-menu,
+.bulk-multi-filter-menu {
+  border-color: #d9dee7;
+  border-radius: 8px;
+  box-shadow: 0 16px 34px rgba(16, 24, 40, 0.14);
+}
+
+.searchable-option {
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.searchable-option span {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.button {
+  height: var(--control-height);
+  min-height: var(--control-height);
+  border-radius: var(--radius);
+  padding-inline: 14px;
+  background: #e34220;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.button:hover:not(:disabled),
+.button:focus-visible:not(:disabled) {
+  background: #cc3518;
+  box-shadow: 0 0 0 3px rgba(232, 93, 4, 0.14);
+  outline: 0;
+}
+
+.button.secondary {
+  border-color: #d9dee7;
+  background: #ffffff;
+  color: #344054;
+  box-shadow: none;
+}
+
+.button.secondary:hover:not(:disabled),
+.button.secondary:focus-visible:not(:disabled) {
+  border-color: #f79009;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.button.compact {
+  height: 30px;
+  min-height: 30px;
+  padding-inline: 10px;
+  font-size: 12px;
+}
+
+.status-pill,
+.role-pill,
+.tag {
+  height: 24px;
+  padding-inline: 9px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status-pill.good,
+.status-pill.active {
+  background: #e9f8ef;
+  color: #047647;
+}
+
+.status-pill.warn,
+.status-pill.pending {
+  background: #fff4df;
+  color: #b54708;
+}
+
+.status-pill.bad,
+.status-pill.rejected,
+.status-pill.inactive {
+  background: #feeceb;
+  color: #b42318;
+}
+
+.table-wrap {
+  border-color: #e4e7ec;
+  border-radius: 8px;
+}
+
+table {
+  color: #111827;
+}
+
+th,
+td {
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+th {
+  background: #f8fafc;
+  color: #667085;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+td strong,
+.bulk-whatsapp-page table td strong,
+.lead-ads-table td strong {
+  font-weight: 650;
+}
+
+tbody tr:hover td {
+  background: #fcfcfd;
+}
+
+.tag-select {
+  gap: 7px;
+}
+
+.tag-select-option {
+  min-height: 34px;
+  padding-inline: 13px;
+  border-color: #d9dee7;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.tag-select-option.selected {
+  border-color: #fb6514;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.modal-panel {
+  border-radius: 10px;
+  box-shadow: 0 22px 54px rgba(16, 24, 40, 0.2);
+}
+
+.metric-card,
+.fleet-date-summary-card,
+.queue-card,
+.import-source-card {
+  border-color: #e4e7ec;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
 }
 
 .import-source-card.active {
@@ -9010,4 +9308,349 @@ tr:last-child td {
 .payment-process-row-actions .button.compact {
   min-height: 34px;
   padding: 7px 10px;
+}
+
+/* Final dashboard polish overrides. Keep this near the end so older page rules cannot re-enlarge controls. */
+.shell {
+  grid-template-columns: 224px minmax(0, 1fr);
+}
+
+.sidebar {
+  padding: 14px 10px;
+  gap: 12px;
+}
+
+.brand {
+  padding: 0 7px 12px;
+}
+
+.nav {
+  gap: 3px;
+}
+
+.nav-item {
+  min-height: 36px;
+  padding: 8px 9px;
+  border-radius: 7px;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.nav-item:hover,
+.nav-item.current {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.nav-submenu {
+  border-color: #e4e7ec;
+  box-shadow: 0 16px 34px rgba(16, 24, 40, 0.14);
+}
+
+.nav-subitem {
+  min-height: 32px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sidebar-footer {
+  border-radius: 8px;
+  background: #f8fafc;
+  font-size: 11px;
+}
+
+.topbar {
+  height: 54px;
+  padding: 0 18px;
+  box-shadow: 0 1px 0 rgba(16, 24, 40, 0.02);
+}
+
+.content {
+  padding: 16px 22px 32px;
+}
+
+.payment-notification-trigger,
+.user-menu-trigger {
+  border-color: #e4e7ec;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.user-menu-trigger {
+  min-height: 32px;
+  padding-right: 9px;
+  font-weight: 650;
+}
+
+.user-avatar {
+  width: 25px;
+  height: 25px;
+  font-weight: 700;
+}
+
+.user-menu-name {
+  font-size: 12px;
+}
+
+.page-head {
+  margin-bottom: 2px;
+}
+
+.page-head > div {
+  min-width: 0;
+}
+
+.panel,
+.table-wrap,
+.settings-tile,
+.metric,
+.metric-card,
+.fleet-date-summary-card,
+.queue-card,
+.import-source-card,
+.connect-account-button {
+  border-color: #e4e7ec;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.panel-head {
+  min-height: 50px;
+  padding: 11px 14px;
+}
+
+.panel-head h2,
+.panel-head h3 {
+  margin: 0;
+}
+
+.panel-body,
+.panel-foot {
+  padding: 12px 14px;
+}
+
+.form-grid,
+.employee-form,
+.field-executive-add-form {
+  gap: 11px 14px;
+  padding: 14px 16px 16px;
+}
+
+.form-grid label,
+.employee-form label,
+.field-executive-add-form label,
+.business-doc-manager-form label,
+.payment-method-fields label,
+.payment-component-row label {
+  color: #667085;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.field,
+.select,
+.compact-field,
+.form-grid .field,
+.form-grid .select,
+.employee-form .field,
+.employee-form .select,
+.field-executive-add-form .field,
+.field-executive-add-form .select,
+.listing-search .field,
+.filters .field,
+.filters .select,
+.fleet-filter-button,
+.multi-select-trigger,
+.searchable-control,
+.employee-form .searchable-control,
+.field-executive-add-form .searchable-control,
+.bulk-multi-filter-trigger,
+.bulk-whatsapp-page .select,
+.bulk-whatsapp-page .field {
+  height: var(--control-height);
+  min-height: var(--control-height);
+  border-color: #d9dee7;
+  border-radius: var(--radius);
+  color: #111827;
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+.field,
+.select,
+.compact-field {
+  min-width: 128px;
+}
+
+.listing-search .field {
+  width: 200px;
+  min-width: 170px;
+}
+
+.filters {
+  gap: 7px;
+}
+
+.filters .select,
+.filters .field {
+  min-width: 132px;
+}
+
+.listing-head-actions .compact-filter,
+.listing-head-actions .location-master-filter {
+  width: 142px;
+  min-width: 128px;
+}
+
+.searchable-input,
+.employee-form .searchable-input,
+.field-executive-add-form .searchable-input {
+  color: #111827;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.searchable-option span,
+.field-executive-country-code .searchable-option span {
+  font-weight: 650;
+}
+
+.searchable-option small,
+.searchable-empty,
+.multi-select-option small {
+  color: #667085;
+}
+
+.button,
+.employee-form .field-executive-submit-slot .button,
+.field-executive-add-form .field-executive-submit-slot .button,
+.multi-select-search .button {
+  height: var(--control-height);
+  min-height: var(--control-height);
+  border-radius: var(--radius);
+  background: #e34220;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.button:hover:not(:disabled),
+.button:focus-visible:not(:disabled) {
+  background: #cc3518;
+}
+
+.button.secondary,
+.pager-button,
+.icon-button {
+  border-color: #d9dee7;
+  background: #ffffff;
+  color: #344054;
+}
+
+.button.secondary:hover:not(:disabled),
+.pager-button:hover,
+.icon-button:hover {
+  border-color: #f79009;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.button.compact,
+.icon-button,
+.business-doc-file-actions .icon-button,
+.fleet-pagination button {
+  height: 30px;
+  min-height: 30px;
+  border-radius: 7px;
+}
+
+.field-executive-mobile-row,
+.employee-form .field-executive-mobile-row,
+.field-executive-add-form .field-executive-mobile-row {
+  grid-template-columns: 118px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.employee-form .field-executive-submit-slot,
+.field-executive-add-form .field-executive-submit-slot,
+.employee-form label.employee-code-auto-check,
+.employee-form .tag-select {
+  min-height: var(--control-height);
+}
+
+.employee-form .tag-select-option,
+.tag-select-option {
+  min-height: 34px;
+  padding-inline: 13px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.workforce-bulk-form {
+  grid-template-columns: minmax(260px, 1fr) minmax(220px, 320px) auto;
+  padding: 12px 16px 16px;
+}
+
+.workforce-template-note {
+  min-height: 42px;
+  padding: 9px 11px;
+}
+
+.table-wrap {
+  overflow: auto;
+}
+
+th,
+td {
+  padding: 9px 11px;
+  vertical-align: middle;
+}
+
+tbody td {
+  font-weight: 400;
+}
+
+td strong,
+.mobile-user-card-title strong,
+.payment-requestor-remarks strong {
+  font-weight: 650;
+}
+
+.metric {
+  padding: 11px 12px;
+}
+
+.metric-value {
+  font-size: 20px;
+  font-weight: 750;
+}
+
+.settings-tile {
+  min-height: 58px;
+  padding: 13px 16px;
+}
+
+.settings-tile strong {
+  font-weight: 700;
+}
+
+.modal-panel {
+  max-height: calc(100vh - 42px);
+  overflow: auto;
+}
+
+@media (max-width: 1080px) {
+  .content {
+    padding: 10px 10px 24px;
+  }
+
+  .employee-form-create > .field-executive-submit-slot,
+  .employee-form-edit > .field-executive-submit-slot {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+
+  .workforce-bulk-form {
+    grid-template-columns: 1fr;
+  }
 }

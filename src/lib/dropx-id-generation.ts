@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
-export type WorkerIdCategory = "employee" | "field_executive";
+export type WorkerIdCategory = "employee" | "field_executive" | "vendor" | "contractor" | "worker";
 type IdSettingType = "dropx_id" | "biometric_id";
 
 type GenerateWorkerIdInput = {

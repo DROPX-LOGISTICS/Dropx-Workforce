@@ -92,7 +92,19 @@ function MultiCheckFilter({
   );
 }
 
-export function FieldExecutiveList({ canEdit, rows }: { canEdit: boolean; rows: FieldExecutiveListRow[] }) {
+export function FieldExecutiveList({
+  basePath = "/field-executive",
+  canEdit,
+  emptyLabel = "No field executives added yet.",
+  rows,
+  title = "Field Executive register"
+}: {
+  basePath?: string;
+  canEdit: boolean;
+  emptyLabel?: string;
+  rows: FieldExecutiveListRow[];
+  title?: string;
+}) {
   const [search, setSearch] = useState("");
   const [providerFilter, setProviderFilter] = useState<string[]>([]);
   const [locationFilter, setLocationFilter] = useState<string[]>([]);
@@ -160,7 +172,7 @@ export function FieldExecutiveList({ canEdit, rows }: { canEdit: boolean; rows: 
     <section className="panel">
       <div className="panel-head toolbar">
         <div>
-          <h2>Field Executive register</h2>
+          <h2>{title}</h2>
           <p className="subtle">{filteredRows.length} of {rows.length} records</p>
         </div>
         <div className="field-executive-filters">
@@ -250,11 +262,11 @@ export function FieldExecutiveList({ canEdit, rows }: { canEdit: boolean; rows: 
                     </button>
                     {openMenuId === row.id ? (
                       <div className="row-action-popover">
-                        <PendingLink className="row-action-item" href={`/field-executive?view=${row.id}`} scroll={false}>
+                        <PendingLink className="row-action-item" href={`${basePath}?view=${row.id}`} scroll={false}>
                           <Eye size={15} aria-hidden="true" /> View
                         </PendingLink>
                         {canEdit ? (
-                          <PendingLink className="row-action-item" href={`/field-executive?edit=${row.id}`} scroll={false}>
+                          <PendingLink className="row-action-item" href={`${basePath}?edit=${row.id}`} scroll={false}>
                             <Pencil size={15} aria-hidden="true" /> Edit
                           </PendingLink>
                         ) : null}
@@ -264,7 +276,7 @@ export function FieldExecutiveList({ canEdit, rows }: { canEdit: boolean; rows: 
                 </td>
               </tr>
             )) : (
-              <tr><td className="empty-cell" colSpan={8}>No field executives added yet.</td></tr>
+              <tr><td className="empty-cell" colSpan={8}>{emptyLabel}</td></tr>
             )}
           </tbody>
         </table>

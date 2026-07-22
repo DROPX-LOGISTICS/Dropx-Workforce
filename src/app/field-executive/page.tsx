@@ -19,9 +19,23 @@ export default function FieldExecutivePage({
 }) {
   return (
     <FieldExecutivePageContent
+      activeLabel="Field Executive"
+      addTitle="Add field executive"
+      bulkImportDescription="Upload existing field executive rows and keep the profile completion pending for the app."
+      bulkImportTitle="Bulk upload field executives"
+      designationCategoryFilter={["field_executives", "delivery_executives"]}
+      detailSubtitle="Complete Field Executive profile"
       editId={searchParams?.edit}
+      editTitle="Edit field executive"
+      emptyListLabel="No field executives added yet."
+      entityLabel="Field Executive"
       errorMessage={searchParams?.error}
+      listTitle="Field Executive register"
       notice={searchParams?.notice}
+      pageCode="delivery_associates"
+      pageSubtitle="Register and maintain field executives by location."
+      pageTitle="Field Executive"
+      returnPath="/field-executive"
       viewId={searchParams?.view}
       addFormValues={{
         fullName: searchParams?.full_name,

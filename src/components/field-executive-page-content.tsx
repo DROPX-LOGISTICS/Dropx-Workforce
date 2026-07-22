@@ -31,6 +31,10 @@ type DesignationRow = {
   is_active: boolean;
 };
 
+type FieldExecutivePageCode = "delivery_associates" | "contractors";
+type FieldExecutiveRoute = "/field-executive" | "/contractors";
+type DesignationCategoryFilter = "field_executives" | "delivery_executives" | "contractors";
+
 type ExecutiveRow = {
   id: string;
   dropx_id: string | null;
@@ -305,16 +309,21 @@ function FieldExecutiveForm({
   executive,
   designationOptions,
   locationOptions,
-  mode
+  mode,
+  returnPath,
+  submitLabel
 }: {
   action: (formData: FormData) => Promise<void>;
   executive?: ExecutiveRow | null;
   designationOptions: ScopedDesignationOption[];
   locationOptions: ScopedLocationOption[];
   mode: "create" | "edit";
+  returnPath: FieldExecutiveRoute;
+  submitLabel?: string;
 }) {
   return (
     <form action={action} className="form-grid three">
+      <input type="hidden" name="return_path" value={returnPath} />
       {executive ? <input type="hidden" name="id" value={executive.id} /> : null}
 
       <label>Full name<input className="field" name="full_name" placeholder="Enter full name" required defaultValue={textValue(executive?.full_name)} /></label>
@@ -397,7 +406,7 @@ function FieldExecutiveForm({
 
       <div className="form-actions span-3 align-right">
         <SubmitButton disabled={!locationOptions.length || !designationOptions.length} disabledText={!locationOptions.length ? "Add location first" : "Add designation first"}>
-          {mode === "edit" ? "Save changes" : "Add field executive"}
+          {mode === "edit" ? "Save changes" : submitLabel ?? "Add field executive"}
         </SubmitButton>
       </div>
     </form>
@@ -407,14 +416,19 @@ function FieldExecutiveForm({
 function AddFieldExecutiveForm({
   designationOptions,
   locationOptions,
+  entityLabel,
+  returnPath,
   values
 }: {
   designationOptions: ScopedDesignationOption[];
+  entityLabel: string;
   locationOptions: ScopedLocationOption[];
+  returnPath: FieldExecutiveRoute;
   values?: FieldExecutiveAddFormValues;
 }) {
   return (
     <form action={createFieldExecutive} className="form-grid three field-executive-add-form">
+      <input type="hidden" name="return_path" value={returnPath} />
       <label>Full name<input className="field" name="full_name" placeholder="Enter full name" required defaultValue={values?.fullName ?? ""} /></label>
       <label className="field-executive-mobile-group">Mobile number
         <div className="field-executive-mobile-row">
@@ -438,8 +452,8 @@ function AddFieldExecutiveForm({
         <div className="form-actions align-right field-executive-submit-slot">
           <SubmitButton
             confirmCancelText="No"
-            confirmDescription="Please confirm before creating this Field Executive."
-            confirmMessage="Do you want to submit this Field Executive registration?"
+            confirmDescription={`Please confirm before creating this ${entityLabel}.`}
+            confirmMessage={`Do you want to submit this ${entityLabel} registration?`}
             confirmSubmitText="Yes"
             confirmTitle="Confirm submission"
             disabled={!locationOptions.length || !designationOptions.length}
@@ -451,16 +465,27 @@ function AddFieldExecutiveForm({
   );
 }
 
-function FieldExecutiveBulkImportPanel() {
+function FieldExecutiveBulkImportPanel({
+  description,
+  entityLabel,
+  returnPath,
+  title
+}: {
+  description: string;
+  entityLabel: string;
+  returnPath: FieldExecutiveRoute;
+  title: string;
+}) {
   return (
     <section className="panel workforce-bulk-panel">
       <div className="panel-head">
         <div>
-          <h2>Bulk upload field executives</h2>
-          <p className="subtle">Upload existing field executive rows and keep the profile completion pending for the app.</p>
+          <h2>{title}</h2>
+          <p className="subtle">{description}</p>
         </div>
       </div>
       <form action={bulkImportFieldExecutives} className="workforce-bulk-form">
+        <input type="hidden" name="return_path" value={returnPath} />
         <div className="workforce-template-note">
           <strong>Excel columns</strong>
           <span>DropX ID, Biometric ID, Full name, Mob country code, Mob no, Email, Date of join (DD/MM/YYYY), Location, Designation code</span>
@@ -468,19 +493,24 @@ function FieldExecutiveBulkImportPanel() {
         <input accept=".xlsx,.xls,.csv" className="field" name="bulk_file" required type="file" />
         <SubmitButton
           confirmCancelText="No"
-          confirmDescription="This will create pending field executive profiles from the uploaded file."
-          confirmMessage="Import field executives from this file?"
+          confirmDescription={`This will create pending ${entityLabel.toLowerCase()} profiles from the uploaded file.`}
+          confirmMessage={`Import ${entityLabel.toLowerCase()} records from this file?`}
           confirmSubmitText="Yes"
           confirmTitle="Confirm bulk upload"
         >
-          Upload field executives
+          Upload
         </SubmitButton>
       </form>
     </section>
   );
 }
 
-async function loadFieldExecutiveData(authorization: AuthorizationContext, editId?: string, viewId?: string) {
+async function loadFieldExecutiveData(
+  authorization: AuthorizationContext,
+  designationCategoryFilter: DesignationCategoryFilter[],
+  editId?: string,
+  viewId?: string
+) {
   if (!supabaseAdmin) {
     return {
       executives: [] as FieldExecutiveListRow[],
@@ -593,11 +623,14 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
   })) as LocationRow[];
   const designations = ((designationsResult.data ?? []) as unknown as DesignationRow[]).filter((designation) => {
     const categories = normalizeDesignationCategories(designation.onboarding_categories);
-    return categories.includes("field_executives") || categories.includes("delivery_executives") || categories.includes("contractors");
+    return designationCategoryFilter.some((category) => categories.includes(category));
   });
   const allowedLocationIds = new Set(locations.map((location) => location.id));
-  const executives = ((executivesResult.data ?? []) as unknown as ExecutiveRow[])
+  const allowedDesignationNames = new Set(designations.map((designation) => designation.name));
+  const visibleExecutiveRows = ((executivesResult.data ?? []) as unknown as ExecutiveRow[])
     .filter((executive) => authorization.hasAllLocationAccess || allowedLocationIds.has(executive.location_id))
+    .filter((executive) => allowedDesignationNames.has(String(executive.designation ?? "")));
+  const executives = visibleExecutiveRows
     .map((executive) => {
     const location = firstRelation(executive.stations);
     return {
@@ -613,7 +646,7 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
       status: fieldExecutiveStatus(executive)
     };
   });
-  const uploadUrlRows = await Promise.all(((executivesResult.data ?? []) as unknown as ExecutiveRow[]).map(async (executive) => ({
+  const uploadUrlRows = await Promise.all(visibleExecutiveRows.map(async (executive) => ({
     ...executive,
     upload_urls: {
       aadhaarFront: await signedDocumentUrl(executive.aadhaar_front_path),
@@ -645,21 +678,49 @@ async function loadFieldExecutiveData(authorization: AuthorizationContext, editI
 }
 
 export async function FieldExecutivePageContent({
+  activeLabel = "Field Executive",
+  addTitle = "Add field executive",
+  bulkImportDescription = "Upload existing field executive rows and keep the profile completion pending for the app.",
+  bulkImportTitle = "Bulk upload field executives",
+  designationCategoryFilter = ["field_executives", "delivery_executives"],
+  detailSubtitle = "Complete Field Executive profile",
   errorMessage,
   editId,
+  editTitle = "Edit field executive",
+  emptyListLabel = "No field executives added yet.",
+  entityLabel = "Field Executive",
   addFormValues,
+  listTitle = "Field Executive register",
   notice,
+  pageCode = "delivery_associates",
+  pageSubtitle = "Register and maintain field executives by location.",
+  pageTitle = "Field Executive",
+  returnPath = "/field-executive",
   viewId
 }: {
+  activeLabel?: string;
+  addTitle?: string;
+  bulkImportDescription?: string;
+  bulkImportTitle?: string;
+  designationCategoryFilter?: DesignationCategoryFilter[];
+  detailSubtitle?: string;
   errorMessage?: string;
   editId?: string;
+  editTitle?: string;
+  emptyListLabel?: string;
+  entityLabel?: string;
   addFormValues?: FieldExecutiveAddFormValues;
+  listTitle?: string;
   notice?: string;
+  pageCode?: FieldExecutivePageCode;
+  pageSubtitle?: string;
+  pageTitle?: string;
+  returnPath?: FieldExecutiveRoute;
   viewId?: string;
 }) {
-  const authorization = await requirePagePermission("delivery_associates", "access");
-  const permission = authorization.permissions.delivery_associates;
-  const { executives, locations, designations, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, editId, viewId);
+  const authorization = await requirePagePermission(pageCode, "access");
+  const permission = authorization.permissions[pageCode];
+  const { executives, locations, designations, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, designationCategoryFilter, editId, viewId);
   const activeMessage = error ?? errorMessage ?? notice;
   const needsOperationModeMigration = Boolean(activeMessage?.toLowerCase().includes("operation_mode_id"));
   const locationOptions = locations.map((location) => ({
@@ -678,11 +739,11 @@ export async function FieldExecutivePageContent({
   }));
 
   return (
-    <AppShell active="Field Executive" pageCode="delivery_associates">
+    <AppShell active={activeLabel} pageCode={pageCode}>
       <PageHead
         eyebrow="Workforce master"
-        title="Field Executive"
-        subtitle="Register and maintain field executives by location."
+        title={pageTitle}
+        subtitle={pageSubtitle}
       />
 
       {error || errorMessage || notice ? (
@@ -704,14 +765,14 @@ export async function FieldExecutivePageContent({
 
       {permission.canAdd ? (
         <section className="panel">
-          <div className="panel-head"><h2>Add field executive</h2></div>
-          <AddFieldExecutiveForm designationOptions={designationOptions} locationOptions={locationOptions} values={addFormValues} />
+          <div className="panel-head"><h2>{addTitle}</h2></div>
+          <AddFieldExecutiveForm designationOptions={designationOptions} entityLabel={entityLabel} locationOptions={locationOptions} returnPath={returnPath} values={addFormValues} />
         </section>
       ) : null}
 
-      {permission.canAdd ? <FieldExecutiveBulkImportPanel /> : null}
+      {permission.canAdd ? <FieldExecutiveBulkImportPanel description={bulkImportDescription} entityLabel={entityLabel} returnPath={returnPath} title={bulkImportTitle} /> : null}
 
-      {permission.canView || permission.canEdit ? <FieldExecutiveList canEdit={permission.canEdit} rows={executives} /> : null}
+      {permission.canView || permission.canEdit ? <FieldExecutiveList basePath={returnPath} canEdit={permission.canEdit} emptyLabel={emptyListLabel} rows={executives} title={listTitle} /> : null}
 
       {(permission.canView || permission.canEdit) && viewExecutive ? (
         <div className="modal-backdrop">
@@ -719,9 +780,9 @@ export async function FieldExecutivePageContent({
             <div className="panel-head">
               <div>
                 <h2>{viewExecutive.full_name}</h2>
-                <p className="subtle">Complete Field Executive profile</p>
+                <p className="subtle">{detailSubtitle}</p>
               </div>
-              <PendingLink className="icon-button" href="/field-executive" scroll={false} aria-label="Close field executive details">x</PendingLink>
+              <PendingLink className="icon-button" href={returnPath} scroll={false} aria-label={`Close ${entityLabel.toLowerCase()} details`}>x</PendingLink>
             </div>
             <FieldExecutiveDetails executive={viewExecutive} />
           </section>
@@ -733,12 +794,12 @@ export async function FieldExecutivePageContent({
           <section className="modal-panel wide" aria-label="Edit field executive">
             <div className="panel-head">
               <div>
-                <h2>Edit field executive</h2>
+                <h2>{editTitle}</h2>
                 <p className="subtle">Maintain the full registration profile from the Team DropX sample.</p>
               </div>
-              <PendingLink className="icon-button" href="/field-executive" scroll={false} aria-label="Close edit field executive">x</PendingLink>
+              <PendingLink className="icon-button" href={returnPath} scroll={false} aria-label={`Close edit ${entityLabel.toLowerCase()}`}>x</PendingLink>
             </div>
-            <FieldExecutiveForm action={updateFieldExecutive} designationOptions={designationOptions} executive={editExecutive} locationOptions={locationOptions} mode="edit" />
+            <FieldExecutiveForm action={updateFieldExecutive} designationOptions={designationOptions} executive={editExecutive} locationOptions={locationOptions} mode="edit" returnPath={returnPath} />
           </section>
         </div>
       ) : null}

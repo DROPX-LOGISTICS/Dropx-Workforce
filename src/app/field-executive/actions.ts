@@ -27,9 +27,24 @@ function optional(value: FormDataEntryValue | null) {
   return text || null;
 }
 
-function fieldExecutiveRedirect(params?: Record<string, string>): never {
+type FieldExecutiveReturnPath = "/field-executive" | "/contractors";
+type FieldExecutivePageCode = "delivery_associates" | "contractors";
+
+function safeReturnPath(formData?: FormData): FieldExecutiveReturnPath {
+  return String(formData?.get("return_path") ?? "") === "/contractors" ? "/contractors" : "/field-executive";
+}
+
+function pageCodeForReturnPath(returnPath: FieldExecutiveReturnPath): FieldExecutivePageCode {
+  return returnPath === "/contractors" ? "contractors" : "delivery_associates";
+}
+
+function entityLabelForReturnPath(returnPath: FieldExecutiveReturnPath) {
+  return returnPath === "/contractors" ? "Independent contractor" : "Field executive";
+}
+
+function fieldExecutiveRedirect(params?: Record<string, string>, returnPath: FieldExecutiveReturnPath = "/field-executive"): never {
   const query = params ? `?${new URLSearchParams(params).toString()}` : "";
-  redirect(`/field-executive${query}`);
+  redirect(`${returnPath}${query}`);
 }
 
 function addFormParams(formData: FormData) {
@@ -185,9 +200,11 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
 }
 
 export async function createFieldExecutive(formData: FormData) {
-  const authorization = await requirePagePermission("delivery_associates", "add");
+  const returnPath = safeReturnPath(formData);
+  const entityLabel = entityLabelForReturnPath(returnPath);
+  const authorization = await requirePagePermission(pageCodeForReturnPath(returnPath), "add");
   const companyId = requireCompanyId(authorization);
-  if (!supabaseAdmin) fieldExecutiveRedirect({ error: "Supabase service role key is not configured." });
+  if (!supabaseAdmin) fieldExecutiveRedirect({ error: "Supabase service role key is not configured." }, returnPath);
 
   try {
     const fullName = required(formData.get("full_name"), "Full name");
@@ -296,20 +313,23 @@ export async function createFieldExecutive(formData: FormData) {
     }
 
     revalidatePath("/field-executive");
+    revalidatePath("/contractors");
   } catch (error) {
     fieldExecutiveRedirect({
       ...addFormParams(formData),
       error: error instanceof Error ? friendlyFieldExecutiveError(error.message) : "Unable to add field executive."
-    });
+    }, returnPath);
   }
 
-  fieldExecutiveRedirect({ notice: "Field executive added successfully." });
+  fieldExecutiveRedirect({ notice: `${entityLabel} added successfully.` }, returnPath);
 }
 
 export async function updateFieldExecutive(formData: FormData) {
-  const authorization = await requirePagePermission("delivery_associates", "edit");
+  const returnPath = safeReturnPath(formData);
+  const entityLabel = entityLabelForReturnPath(returnPath);
+  const authorization = await requirePagePermission(pageCodeForReturnPath(returnPath), "edit");
   const companyId = requireCompanyId(authorization);
-  if (!supabaseAdmin) fieldExecutiveRedirect({ error: "Supabase service role key is not configured." });
+  if (!supabaseAdmin) fieldExecutiveRedirect({ error: "Supabase service role key is not configured." }, returnPath);
 
   try {
     const { id, payload } = normalizeFieldExecutivePayload(formData, true);
@@ -392,11 +412,12 @@ export async function updateFieldExecutive(formData: FormData) {
     });
 
     revalidatePath("/field-executive");
+    revalidatePath("/contractors");
   } catch (error) {
-    fieldExecutiveRedirect({ edit: String(formData.get("id") ?? ""), error: error instanceof Error ? friendlyFieldExecutiveError(error.message) : "Unable to update field executive." });
+    fieldExecutiveRedirect({ edit: String(formData.get("id") ?? ""), error: error instanceof Error ? friendlyFieldExecutiveError(error.message) : "Unable to update field executive." }, returnPath);
   }
 
-  fieldExecutiveRedirect({ notice: "Field executive updated successfully." });
+  fieldExecutiveRedirect({ notice: `${entityLabel} updated successfully.` }, returnPath);
 }
 
 type BulkImportRow = {
@@ -485,9 +506,11 @@ async function parseBulkWorkbook(fileValue: FormDataEntryValue | null) {
 }
 
 export async function bulkImportFieldExecutives(formData: FormData) {
-  const authorization = await requirePagePermission("delivery_associates", "add");
+  const returnPath = safeReturnPath(formData);
+  const entityLabel = entityLabelForReturnPath(returnPath);
+  const authorization = await requirePagePermission(pageCodeForReturnPath(returnPath), "add");
   const companyId = requireCompanyId(authorization);
-  if (!supabaseAdmin) fieldExecutiveRedirect({ error: "Supabase service role key is not configured." });
+  if (!supabaseAdmin) fieldExecutiveRedirect({ error: "Supabase service role key is not configured." }, returnPath);
 
   try {
     const rows = await parseBulkWorkbook(formData.get("bulk_file"));
@@ -565,8 +588,9 @@ export async function bulkImportFieldExecutives(formData: FormData) {
     }
 
     revalidatePath("/field-executive");
-    fieldExecutiveRedirect({ notice: `${inserted.length} field executives imported successfully.` });
+    revalidatePath("/contractors");
+    fieldExecutiveRedirect({ notice: `${inserted.length} ${entityLabel.toLowerCase()} records imported successfully.` }, returnPath);
   } catch (error) {
-    fieldExecutiveRedirect({ error: error instanceof Error ? friendlyFieldExecutiveError(error.message) : "Unable to import field executives." });
+    fieldExecutiveRedirect({ error: error instanceof Error ? friendlyFieldExecutiveError(error.message) : "Unable to import field executives." }, returnPath);
   }
 }

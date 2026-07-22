@@ -2576,7 +2576,7 @@ h3 {
 
 .employee-form .field-executive-mobile-row,
 .field-executive-add-form .field-executive-mobile-row {
-  grid-template-columns: 188px minmax(0, 1fr);
+  grid-template-columns: 128px minmax(0, 1fr);
   gap: 10px;
 }
 
@@ -2590,6 +2590,10 @@ h3 {
   min-height: 42px;
 }
 
+.employee-form > .field-executive-submit-slot {
+  grid-column: 1 / -1;
+}
+
 .employee-form .field-executive-submit-slot .button,
 .field-executive-add-form .field-executive-submit-slot .button {
   min-width: 108px;
@@ -2599,8 +2603,13 @@ h3 {
 
 .employee-form .field-executive-location-submit,
 .field-executive-add-form .field-executive-location-submit {
+  grid-column: 1 / -1;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
+}
+
+.field-executive-location-submit .field-executive-submit-slot {
+  grid-column: 2;
 }
 
 .employee-form .tag-select {

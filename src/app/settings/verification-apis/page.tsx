@@ -35,6 +35,8 @@ async function loadVerificationApiSettings(companyId: string) {
     api_id: "",
     api_key_configured: false,
     api_key_mask: "",
+    has_settings: false,
+    is_enabled: false,
     provider_code: "idspay",
     token_id_configured: false,
     token_id_mask: ""
@@ -43,7 +45,7 @@ async function loadVerificationApiSettings(companyId: string) {
 
   const settings = await supabaseAdmin
     .from("verification_api_settings")
-    .select("provider_code, api_id, api_key_secret_id, token_id_secret_id")
+    .select("provider_code, is_enabled, api_id, api_key_secret_id, token_id_secret_id")
     .eq("company_id", companyId)
     .eq("provider_code", "idspay")
     .maybeSingle();
@@ -60,6 +62,8 @@ async function loadVerificationApiSettings(companyId: string) {
       api_id: settings.data?.api_id ?? "",
       api_key_configured: Boolean(settings.data?.api_key_secret_id),
       api_key_mask: apiKeyMask,
+      has_settings: Boolean(settings.data),
+      is_enabled: Boolean(settings.data?.is_enabled),
       provider_code: providerCode,
       token_id_configured: Boolean(settings.data?.token_id_secret_id),
       token_id_mask: tokenIdMask

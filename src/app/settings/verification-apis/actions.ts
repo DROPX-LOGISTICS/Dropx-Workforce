@@ -37,6 +37,7 @@ export async function saveVerificationApiSettings(formData: FormData) {
     const providerCode = clean(formData.get("provider_code"))?.toLowerCase();
     if (providerCode !== "idspay") throw new Error("Select a valid verification API.");
 
+    const isEnabled = formData.get("is_enabled") === "on";
     const apiId = clean(formData.get("api_id"));
     const apiKey = secretInput(formData.get("api_key"));
     const tokenId = secretInput(formData.get("token_id"));
@@ -49,13 +50,14 @@ export async function saveVerificationApiSettings(formData: FormData) {
       .maybeSingle();
     if (current.error) throw new Error(current.error.message);
 
-    if (!apiId) throw new Error("API ID is required.");
-    if (!apiKey && !current.data?.api_key_secret_id) throw new Error("API key is required.");
-    if (!tokenId && !current.data?.token_id_secret_id) throw new Error("Token ID is required.");
+    if (isEnabled && !apiId) throw new Error("API ID is required before enabling IDSPAY.");
+    if (isEnabled && !apiKey && !current.data?.api_key_secret_id) throw new Error("API key is required before enabling IDSPAY.");
+    if (isEnabled && !tokenId && !current.data?.token_id_secret_id) throw new Error("Token ID is required before enabling IDSPAY.");
 
     const saved = await supabaseAdmin.from("verification_api_settings").upsert({
       company_id: companyId,
       provider_code: providerCode,
+      is_enabled: isEnabled,
       api_id: apiId,
       updated_by: authorization.userId,
       updated_at: new Date().toISOString()

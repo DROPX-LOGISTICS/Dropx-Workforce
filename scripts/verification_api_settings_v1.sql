@@ -2,6 +2,7 @@ create table if not exists public.verification_api_settings (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete cascade,
   provider_code text not null check (provider_code in ('idspay')),
+  is_enabled boolean not null default false,
   api_id text,
   api_key_secret_id uuid,
   token_id_secret_id uuid,
@@ -10,6 +11,9 @@ create table if not exists public.verification_api_settings (
   updated_by uuid references auth.users(id),
   unique (company_id, provider_code)
 );
+
+alter table public.verification_api_settings
+  add column if not exists is_enabled boolean not null default false;
 
 alter table public.verification_api_settings enable row level security;
 

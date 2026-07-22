@@ -88,6 +88,18 @@ async function loadWebhookStatus(companyId: string) {
   };
 }
 
+async function loadVerificationApiStatus(companyId: string) {
+  if (!supabaseAdmin) return { isConfigured: false };
+  const { data, error } = await supabaseAdmin
+    .from("verification_api_settings")
+    .select("api_id, api_key_secret_id, token_id_secret_id")
+    .eq("company_id", companyId)
+    .eq("provider_code", "idspay")
+    .maybeSingle();
+  if (error) return { isConfigured: false };
+  return { isConfigured: Boolean(data?.api_id && data?.api_key_secret_id && data?.token_id_secret_id) };
+}
+
 async function loadDomainStatus(companyId: string) {
   if (!supabaseAdmin) return { isEnabled: false };
   const { data, error } = await supabaseAdmin
@@ -104,12 +116,13 @@ export default async function SettingsPage() {
   const authorization = await requirePagePermission("app_settings", "access");
   const companyId = requireCompanyId(authorization);
   const canManageAmazonConnectors = isCompanyOwner(authorization);
-  const [whatsAppStatus, wheelseyeStatus, metaStatus, metaLeadsStatus, domainStatus] = await Promise.all([
+  const [whatsAppStatus, wheelseyeStatus, metaStatus, metaLeadsStatus, domainStatus, verificationApiStatus] = await Promise.all([
     loadWhatsAppStatus(companyId),
     loadWheelseyeStatus(companyId),
     loadMetaMessagingStatus(companyId),
     loadMetaLeadsStatus(companyId),
-    loadDomainStatus(companyId)
+    loadDomainStatus(companyId),
+    loadVerificationApiStatus(companyId)
   ]);
   const metaMessagingStatus = {
     isEnabled: whatsAppStatus.isEnabled || metaStatus.isEnabled,
@@ -209,6 +222,16 @@ export default async function SettingsPage() {
             </div>
             <span className="settings-tile-actions">
               <span className="status-pill good">Enabled</span>
+              <span className="button secondary compact">Configure</span>
+            </span>
+          </PendingLink>
+          <PendingLink className="settings-tile actionable" href="/settings/verification-apis">
+            <div>
+              <h3>Verification APIs</h3>
+              <p className="subtle">Provider credentials for identity and document verification services.</p>
+            </div>
+            <span className="settings-tile-actions">
+              {verificationApiStatus.isConfigured ? <span className="status-pill good">Configured</span> : null}
               <span className="button secondary compact">Configure</span>
             </span>
           </PendingLink>

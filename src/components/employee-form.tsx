@@ -126,7 +126,7 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
   const designationDisabled = !selectedLocationId || !effectiveDesignationOptions.length;
 
   return (
-    <form action={action} className="form-grid three employee-form">
+    <form action={action} className={`form-grid three employee-form ${isEdit ? "employee-form-edit" : "employee-form-create"}`}>
       {employee ? <input name="id" type="hidden" value={employee.id} /> : null}
       <label>
         Full name

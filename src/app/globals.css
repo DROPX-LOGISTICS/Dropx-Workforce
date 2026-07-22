@@ -2590,7 +2590,13 @@ h3 {
   min-height: 42px;
 }
 
-.employee-form > .field-executive-submit-slot {
+.employee-form-create > .field-executive-submit-slot {
+  grid-column: 3;
+  grid-row: 3;
+  align-self: end;
+}
+
+.employee-form-edit > .field-executive-submit-slot {
   grid-column: 1 / -1;
 }
 

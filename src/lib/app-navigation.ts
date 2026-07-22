@@ -31,7 +31,7 @@ export const navItems: NavItem[] = [
     children: [
       { code: "delivery_associates", label: "Field Executive", href: "/field-executive" },
       { code: "employees", label: "Employees", href: "/employees" },
-      { code: "contractors", label: "Independent Contractor" },
+      { code: "contractors", label: "Independent Contractor", href: "/field-executive" },
       { code: "vendors", label: "Vendors" },
       { code: "workers", label: "Workers" }
     ]

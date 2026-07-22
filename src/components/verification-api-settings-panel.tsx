@@ -49,7 +49,7 @@ export function VerificationApiSettingsPanel({ canEdit, settings }: Verification
       <form action={saveVerificationApiSettings} className="form-grid three">
         <input name="provider_code" type="hidden" value={provider} />
         {!fieldsEnabled ? <input name="api_id" type="hidden" value={settings.api_id} /> : null}
-        <label className="toggle-field span-3">
+        <label className="toggle-field verification-api-toggle span-3">
           <input
             checked={enabled}
             disabled={!canEdit || !editing}

@@ -1456,6 +1456,20 @@ h3 {
   accent-color: var(--brand-dark);
 }
 
+.verification-api-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 9px;
+  justify-content: flex-start;
+  width: max-content;
+}
+
+.verification-api-toggle span {
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .whatsapp-template-summary {
   display: flex;
   align-items: center;

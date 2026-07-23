@@ -1041,6 +1041,21 @@ async function setAllDrivers(page) {
   return { changed: false, message: "All Drivers option was not found." };
 }
 
+async function waitForReportFrame(page) {
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    for (const frame of page.frames()) {
+      if (frame === page.mainFrame()) continue;
+      const hasReportControls = await frame.locator(
+        "table, select[name*='driver' i], select[id*='driver' i], input[name*='date' i], input[id*='date' i]"
+      ).count().catch(() => 0);
+      if (hasReportControls) return frame;
+    }
+    await page.waitForTimeout(500);
+  }
+  return page;
+}
+
 async function applyFilters(page) {
   await clickFirst(page, [
     { role: "button", name: /search|apply|filter|show|submit|go/i },
@@ -1271,9 +1286,12 @@ async function runSccCheck(payload) {
     await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
 
     const stationResult = await setStation(page, stationCode);
-    const dateResult = await setDate(page, checkDate);
+    const reportFrame = checkType === "driver_reconciliation"
+      ? await waitForReportFrame(page)
+      : page;
+    const dateResult = await setDate(reportFrame, checkDate);
     const driverResult = checkType === "driver_reconciliation"
-      ? await setAllDrivers(page)
+      ? await setAllDrivers(reportFrame)
       : { changed: false, message: "Driver selection is not used for this check." };
 
     if (checkType === "prepared_deposit") {
@@ -1282,7 +1300,7 @@ async function runSccCheck(payload) {
         "button[type='submit']"
       ]).catch(() => null);
     } else {
-      await applyFilters(page);
+      await applyFilters(reportFrame);
     }
 
     await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);

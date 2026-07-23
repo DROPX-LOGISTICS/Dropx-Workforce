@@ -14,6 +14,7 @@ if [[ "$enable_vnc" == "true" || "$enable_vnc" == "1" || "$enable_vnc" == "yes" 
   export VNC_PORT="${VNC_PORT:-5900}"
   export NOVNC_PORT="${NOVNC_PORT:-6080}"
 
+  rm -f "/tmp/.X${DISPLAY#:}-lock" "/tmp/.X11-unix/X${DISPLAY#:}"
   Xvfb "$DISPLAY" -screen 0 "${SCREEN_WIDTH}x${SCREEN_HEIGHT}x${SCREEN_DEPTH}" -nolisten tcp &
   openbox >/tmp/dropx-openbox.log 2>&1 &
 

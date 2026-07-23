@@ -25,6 +25,7 @@ import {
   refreshExecutiveReconciliationRoster,
   saveExecutiveReconciliation
 } from "./actions";
+import { LiveCacheRefresh } from "./live-cache-refresh";
 
 type SearchParams = {
   date?: string;
@@ -250,6 +251,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
 
       {!setupError ? (
         <>
+          <LiveCacheRefresh />
           <section className="panel">
             <div className="panel-body">
               <form action="/ops-pulse/cod/executive-reconciliation" className="form-grid cod-reconciliation-filter-grid">

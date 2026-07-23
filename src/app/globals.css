@@ -9703,7 +9703,7 @@ td strong,
 
 .profile-verification-row {
   display: grid;
-  grid-template-columns: 24px 1fr;
+  grid-template-columns: 24px 1fr auto;
   align-items: start;
   gap: 8px;
   border: 1px solid #e5e7eb;
@@ -9732,6 +9732,12 @@ td strong,
 .profile-verification-row strong {
   color: #111827;
   font-size: 13px;
+}
+
+.profile-verification-button {
+  min-height: 30px;
+  padding: 0 12px;
+  white-space: nowrap;
 }
 
 .profile-verification-row.ok > span {

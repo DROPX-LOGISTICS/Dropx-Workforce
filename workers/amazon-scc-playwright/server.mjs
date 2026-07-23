@@ -408,6 +408,27 @@ function extractDriverReconciliationAssociates(evidence, stationCode = "") {
     for (const row of tableRows) {
       const cells = (row || []).map(normalizeText);
       if (cells.length < 2 || isLikelyHeaderOrTotal(cells)) continue;
+      const isSccPaymentLayout = cells.length >= 10
+        && /^[A-Z0-9][A-Z0-9_-]{5,30}$/i.test(compactIdentifier(cells[1]))
+        && /^(DSP|DA|DRIVER|ASSOCIATE)$/i.test(cells[3] || "");
+      if (isSccPaymentLayout) {
+        const associateName = cells[0];
+        const normalizedAssociateName = normalizeName(associateName);
+        const providerEmployeeId = stableRosterId(stationCode, associateName, cells[1]);
+        rowsById.set(providerEmployeeId, {
+          provider_employee_id: providerEmployeeId,
+          associate_name: associateName,
+          normalized_associate_name: normalizedAssociateName,
+          route_code: null,
+          reconciliation_state: "SCC Driver Reconciliation",
+          pending_amount: safeNumber(cells[9]),
+          raw_row: {
+            headers: ["name", "id", "provider", "type", "expected", "undebriefed mpos", "undebriefed cash", "variance", "running balance", "pending recon"],
+            cells
+          }
+        });
+        continue;
+      }
       const associateName = nameFromRow(headers, cells);
       if (!associateName) continue;
       const normalizedAssociateName = normalizeName(associateName);
@@ -1031,9 +1052,21 @@ async function applyFilters(page) {
 
 async function collectPageEvidence(page) {
   return page.evaluate(() => {
-    const bodyText = document.body?.innerText || "";
+    const documents = [document, ...Array.from(document.querySelectorAll("iframe"))
+      .map((frame) => {
+        try {
+          return frame.contentDocument;
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean)];
+    const queryAll = (selector) => documents.flatMap((currentDocument) =>
+      Array.from(currentDocument.querySelectorAll(selector))
+    );
+    const bodyText = documents.map((currentDocument) => currentDocument.body?.innerText || "").join("\n");
     const cleanCell = (value) => (value || "").replace(/\s+/g, " ").trim();
-    const tables = Array.from(document.querySelectorAll("table")).map((table) => {
+    const tables = queryAll("table").map((table) => {
       const headers = Array.from(table.querySelectorAll("thead th, tr:first-child th, tr:first-child td"))
         .map((cell) => cleanCell(cell.textContent || ""))
         .filter(Boolean);
@@ -1042,7 +1075,7 @@ async function collectPageEvidence(page) {
       ).filter((row) => row.some(Boolean));
       return { headers, rows };
     });
-    const rowGroups = Array.from(document.querySelectorAll("[role='table'], [role='grid'], .table, .grid, .driver-reconciliation, .driverReconciliation"))
+    const rowGroups = queryAll("[role='table'], [role='grid'], .table, .grid, .driver-reconciliation, .driverReconciliation")
       .slice(0, 20)
       .map((group) => {
         const headerNodes = Array.from(group.querySelectorAll("[role='columnheader'], th"));
@@ -1059,7 +1092,7 @@ async function collectPageEvidence(page) {
         return { headers, rows };
       })
       .filter((group) => group.rows.length);
-    const textRows = Array.from(document.querySelectorAll("tr, [role='row']"))
+    const textRows = queryAll("tr, [role='row']")
       .slice(0, 250)
       .map((row) => cleanCell(row.textContent || ""))
       .filter(Boolean);

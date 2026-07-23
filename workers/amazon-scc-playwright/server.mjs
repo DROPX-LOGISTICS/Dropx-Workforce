@@ -951,7 +951,7 @@ async function setStation(page, stationCode) {
       if (matchingValue) await locator.selectOption(matchingValue);
     } else {
       await locator.fill(station);
-      await page.keyboard.press("Enter").catch(() => null);
+      await input.press("Enter").catch(() => null);
     }
     await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => null);
     return { changed: true, message: `Station set to ${station}.` };
@@ -997,7 +997,7 @@ async function setDate(page, checkDate) {
         element.dispatchEvent(new Event("input", { bubbles: true }));
         element.dispatchEvent(new Event("change", { bubbles: true }));
       }, value).catch(() => null);
-      await page.keyboard.press("Enter").catch(() => null);
+      await input.press("Enter").catch(() => null);
       await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => null);
       return { changed: true, message: `Date set to ${displayDate}.` };
     }

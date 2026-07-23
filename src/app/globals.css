@@ -9663,91 +9663,39 @@ td strong,
   white-space: nowrap;
 }
 
-.profile-verification-panel {
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #fffaf6;
-  padding: 14px;
-}
-
-.profile-verification-head {
-  display: flex;
+.profile-verification-inline {
+  display: grid;
+  grid-template-columns: auto 1fr;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 10px;
-}
-
-.profile-verification-head div {
-  display: grid;
-  gap: 3px;
-}
-
-.profile-verification-head strong {
-  font-size: 14px;
-  color: #111827;
-}
-
-.profile-verification-head span,
-.profile-verification-row small {
-  color: #6b7280;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.profile-verification-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.profile-verification-row {
-  display: grid;
-  grid-template-columns: 24px 1fr auto;
-  align-items: start;
-  gap: 8px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
-  padding: 9px 10px;
-}
-
-.profile-verification-row > span {
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: #eef0f4;
-  color: #6b7280;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.profile-verification-row > div {
-  display: grid;
-  gap: 2px;
-}
-
-.profile-verification-row strong {
-  color: #111827;
-  font-size: 13px;
+  gap: 7px;
+  margin-top: 6px;
+  min-height: 30px;
 }
 
 .profile-verification-button {
-  min-height: 30px;
-  padding: 0 12px;
+  min-height: 28px;
+  padding: 0 10px;
   white-space: nowrap;
 }
 
-.profile-verification-row.ok > span {
-  background: #dcfce7;
+.profile-verification-inline > span {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.profile-verification-inline.ok > span {
   color: #15803d;
 }
 
-.profile-verification-row.warn > span {
-  background: #fee2e2;
+.profile-verification-inline.warn > span,
+.profile-verification-error {
   color: #b91c1c;
+}
+
+.profile-verification-error {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 1080px) {

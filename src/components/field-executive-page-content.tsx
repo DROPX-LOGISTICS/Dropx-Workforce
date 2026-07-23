@@ -350,18 +350,10 @@ function FieldExecutiveForm({
       <label>Gender
         <SearchableSelect name="gender" options={genderOptions} defaultValue={executive?.gender} placeholder="Select gender" />
       </label>
-      {mode === "edit" && executive ? (
-        <ProfileVerificationPanel
-          accountId={executive.id}
-          pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"}
-          profileType="field_executive"
-          showDrivingAndVehicle
-        />
-      ) : null}
       <label>Date of birth<input className="field" name="date_of_birth" type="date" defaultValue={textValue(executive?.date_of_birth)} /></label>
 
-      <label>Aadhaar number<input className="field" inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" defaultValue={textValue(executive?.aadhaar_number)} /></label>
-      <label>PAN number<input className="field" name="pan_number" placeholder="Enter PAN number" defaultValue={textValue(executive?.pan_number)} /></label>
+      <label>Aadhaar number<input className="field" inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" defaultValue={textValue(executive?.aadhaar_number)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="pan_aadhaar" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
+      <label>PAN number<input className="field" name="pan_number" placeholder="Enter PAN number" defaultValue={textValue(executive?.pan_number)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="pan" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
       <label>eShram UAN<input className="field" inputMode="numeric" maxLength={12} name="eshram_uan" pattern="[0-9]{12}" placeholder="Enter eShram UAN" defaultValue={textValue(executive?.eshram_uan)} /></label>
 
       <label className="span-3">Address<input className="field" name="address" placeholder="Enter complete address" defaultValue={textValue(executive?.address)} /></label>
@@ -383,14 +375,14 @@ function FieldExecutiveForm({
       </label>
 
       <label>Bank A/c No.<input className="field" inputMode="numeric" name="bank_account_no" placeholder="Enter bank account number" defaultValue={textValue(executive?.bank_account_no)} /></label>
-      <label>IFSC<input className="field" name="ifsc_code" placeholder="Enter IFSC" defaultValue={textValue(executive?.ifsc_code)} /></label>
+      <label>IFSC<input className="field" name="ifsc_code" placeholder="Enter IFSC" defaultValue={textValue(executive?.ifsc_code)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="bank" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
       <label>Emergency contact number<input className="field" inputMode="numeric" maxLength={10} name="emergency_contact_number" pattern="[0-9]{10}" placeholder="Enter emergency contact number" defaultValue={textValue(executive?.emergency_contact_number)} /></label>
       <label>Emergency contact name<input className="field" name="emergency_contact_name" placeholder="Enter contact person name" defaultValue={textValue(executive?.emergency_contact_name)} /></label>
       <label>Emergency relation<input className="field" name="emergency_contact_relation" placeholder="Enter relation" defaultValue={textValue(executive?.emergency_contact_relation)} /></label>
 
-      <label>Driving license no.<input className="field" name="driving_license_no" placeholder="Enter DL number" defaultValue={textValue(executive?.driving_license_no)} /></label>
+      <label>Driving license no.<input className="field" name="driving_license_no" placeholder="Enter DL number" defaultValue={textValue(executive?.driving_license_no)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="dl" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
       <label>DL expiry date<input className="field" name="driving_license_exp_date" type="date" defaultValue={textValue(executive?.driving_license_exp_date)} /></label>
-      <label>Vehicle reg no.<input className="field" name="vehicle_reg_no" placeholder="Enter vehicle number" defaultValue={textValue(executive?.vehicle_reg_no)} /></label>
+      <label>Vehicle reg no.<input className="field" name="vehicle_reg_no" placeholder="Enter vehicle number" defaultValue={textValue(executive?.vehicle_reg_no)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="vehicle" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
 
       <label>Vehicle reg expiry<input className="field" name="vehicle_reg_exp_date" type="date" defaultValue={textValue(executive?.vehicle_reg_exp_date)} /></label>
       <label>Vehicle Insurance expiry<input className="field" name="vehicle_insurance_exp_date" type="date" defaultValue={textValue(executive?.vehicle_insurance_exp_date)} /></label>

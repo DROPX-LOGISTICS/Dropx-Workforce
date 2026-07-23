@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-type VerificationKind = "pan" | "pan_aadhaar" | "dl" | "vehicle" | "bank";
+export type VerificationKind = "pan" | "pan_aadhaar" | "dl" | "vehicle" | "bank";
 
 type VerificationResult = {
   kind: VerificationKind;
   inputKey?: string;
   verified?: boolean;
-  manualReview?: boolean;
-  blockSubmit?: boolean;
   name?: string;
   accountName?: string;
   ownerName?: string;
@@ -24,17 +22,17 @@ type VerificationResult = {
 
 type ProfileVerificationPanelProps = {
   accountId: string;
+  kind: VerificationKind;
   profileType: "employee" | "field_executive";
   pageCode?: "employees" | "delivery_associates" | "contractors";
-  showDrivingAndVehicle?: boolean;
 };
 
 const labels: Record<VerificationKind, string> = {
   pan: "PAN",
-  pan_aadhaar: "PAN Aadhaar link",
-  dl: "Driving license",
-  vehicle: "Vehicle RC",
-  bank: "Bank account"
+  pan_aadhaar: "PAN Aadhaar",
+  dl: "DL",
+  vehicle: "Vehicle",
+  bank: "Bank"
 };
 
 function text(value: FormDataEntryValue | null) {
@@ -52,7 +50,8 @@ function displayDateToInput(value?: string) {
   return `${match[3]}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`;
 }
 
-function resultMessage(result: VerificationResult) {
+function resultMessage(result?: VerificationResult) {
+  if (!result) return "";
   const parts = [];
   if (result.kind === "pan" && result.name) parts.push(`PAN name: ${result.name}`);
   if (result.kind === "dl" && result.name) parts.push(`DL name: ${result.name}`);
@@ -64,7 +63,7 @@ function resultMessage(result: VerificationResult) {
     const normalized = message.toLowerCase();
     if (normalized.includes("pan verified") && normalized.includes("pan name")) message = "";
   }
-  if (message && !parts.some((part) => part.includes(message))) parts.push(message);
+  if (message) parts.push(message);
   return parts.join(" | ");
 }
 
@@ -73,22 +72,11 @@ function isElectric(result?: VerificationResult) {
   return fuel.includes("electric") || fuel === "ev";
 }
 
-export function ProfileVerificationPanel({
-  accountId,
-  profileType,
-  pageCode = "employees",
-  showDrivingAndVehicle = false
-}: ProfileVerificationPanelProps) {
+export function ProfileVerificationPanel({ accountId, kind, profileType, pageCode = "employees" }: ProfileVerificationPanelProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [results, setResults] = useState<Partial<Record<VerificationKind, VerificationResult>>>({});
-  const [running, setRunning] = useState<VerificationKind | null>(null);
+  const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
-
-  const supportedKinds = useMemo<VerificationKind[]>(() => {
-    const items: VerificationKind[] = ["pan", "pan_aadhaar", "bank"];
-    if (showDrivingAndVehicle) items.splice(2, 0, "dl", "vehicle");
-    return items;
-  }, [showDrivingAndVehicle]);
 
   function form() {
     return hostRef.current?.closest("form") ?? null;
@@ -109,11 +97,11 @@ export function ProfileVerificationPanel({
     };
   }
 
-  function keyFor(kind: VerificationKind, fields = currentFields()) {
-    if (kind === "pan") return inputKey([fields.panNumber]);
-    if (kind === "pan_aadhaar") return inputKey([fields.panNumber, fields.aadhaarNumber]);
-    if (kind === "dl") return inputKey([fields.drivingLicenseNo, fields.dateOfBirth.replace(/\//g, "-")]);
-    if (kind === "vehicle") return inputKey([fields.vehicleRegNo]);
+  function keyFor(target: VerificationKind, fields = currentFields()) {
+    if (target === "pan") return inputKey([fields.panNumber]);
+    if (target === "pan_aadhaar") return inputKey([fields.panNumber, fields.aadhaarNumber]);
+    if (target === "dl") return inputKey([fields.drivingLicenseNo, fields.dateOfBirth.replace(/\//g, "-")]);
+    if (target === "vehicle") return inputKey([fields.vehicleRegNo]);
     return inputKey([fields.bankAccountNo, fields.ifsc]);
   }
 
@@ -127,51 +115,48 @@ export function ProfileVerificationPanel({
     }
   }
 
-  async function request(kind: VerificationKind, fields = currentFields()) {
-    const response = await fetch("/api/profile-verification", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountId, profileType, pageCode, kind, ...fields })
-    });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.error || "Unable to verify.");
-    const result = { ...body, kind } as VerificationResult;
-    if (kind === "dl") setFieldValue("driving_license_exp_date", result.expiryDate);
-    if (kind === "vehicle") {
-      setFieldValue("vehicle_reg_exp_date", result.registrationExpiryDate);
-      setFieldValue("vehicle_insurance_exp_date", result.insuranceExpiryDate);
-      setFieldValue("vehicle_pollution_exp_date", isElectric(result) ? "" : result.pollutionExpiryDate);
-    }
-    return result;
-  }
-
-  function missingMessage(kind: VerificationKind, fields = currentFields()) {
+  function missingMessage(fields = currentFields()) {
     if (kind === "pan" && !fields.panNumber) return "PAN number is required.";
-    if (kind === "pan_aadhaar" && (!fields.panNumber || !fields.aadhaarNumber)) return "PAN and Aadhaar number are required.";
+    if (kind === "pan_aadhaar" && (!fields.panNumber || !fields.aadhaarNumber)) return "PAN and Aadhaar are required.";
     if (kind === "pan_aadhaar" && !results.pan?.verified) return "Verify PAN first.";
-    if (kind === "dl" && (!fields.drivingLicenseNo || !fields.dateOfBirth)) return "DL number and date of birth are required.";
-    if (kind === "vehicle" && !fields.vehicleRegNo) return "Vehicle registration number is required.";
-    if (kind === "bank" && (!fields.bankAccountNo || !fields.ifsc)) return "Bank account number and IFSC are required.";
+    if (kind === "dl" && (!fields.drivingLicenseNo || !fields.dateOfBirth)) return "DL and DOB are required.";
+    if (kind === "vehicle" && !fields.vehicleRegNo) return "Vehicle number is required.";
+    if (kind === "bank" && (!fields.bankAccountNo || !fields.ifsc)) return "Bank account and IFSC are required.";
     return "";
   }
 
-  async function verifyOne(kind: VerificationKind) {
+  async function verify() {
     const fields = currentFields();
-    const missing = missingMessage(kind, fields);
+    const missing = missingMessage(fields);
     if (missing) {
       setError(missing);
       return;
     }
     setError("");
-    setRunning(kind);
+    setRunning(true);
     try {
-      const next = { ...results, [kind]: await request(kind, fields) };
+      const response = await fetch("/api/profile-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId, profileType, pageCode, kind, ...fields })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Unable to verify.");
+      const result = { ...body, kind } as VerificationResult;
+      if (kind === "dl") setFieldValue("driving_license_exp_date", result.expiryDate);
+      if (kind === "vehicle") {
+        setFieldValue("vehicle_reg_exp_date", result.registrationExpiryDate);
+        setFieldValue("vehicle_insurance_exp_date", result.insuranceExpiryDate);
+        setFieldValue("vehicle_pollution_exp_date", isElectric(result) ? "" : result.pollutionExpiryDate);
+      }
+      const next = { ...results, [kind]: result };
       if (kind === "pan") delete next.pan_aadhaar;
       setResults(next);
+      window.dispatchEvent(new CustomEvent("dropx-profile-verification", { detail: { kind, result } }));
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : "Unable to verify.");
     } finally {
-      setRunning(null);
+      setRunning(false);
     }
   }
 
@@ -207,53 +192,35 @@ export function ProfileVerificationPanel({
       setResults((current) => {
         const fields = currentFields();
         const next = { ...current };
-        for (const kind of supportedKinds) {
-          if (next[kind]?.inputKey && next[kind]?.inputKey !== keyFor(kind, fields)) delete next[kind];
-        }
+        if (next[kind]?.inputKey && next[kind]?.inputKey !== keyFor(kind, fields)) delete next[kind];
+        if (kind === "pan_aadhaar" && next.pan?.inputKey && next.pan.inputKey !== keyFor("pan", fields)) delete next.pan;
         return next;
       });
     };
     currentForm.addEventListener("input", reconcile);
     currentForm.addEventListener("change", reconcile);
+    const receive = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { kind?: VerificationKind; result?: VerificationResult };
+      if (!detail?.kind || !detail.result) return;
+      setResults((current) => ({ ...current, [detail.kind as VerificationKind]: detail.result }));
+    };
+    window.addEventListener("dropx-profile-verification", receive);
     return () => {
       currentForm.removeEventListener("input", reconcile);
       currentForm.removeEventListener("change", reconcile);
+      window.removeEventListener("dropx-profile-verification", receive);
     };
-  }, [supportedKinds]);
+  }, [kind]);
 
+  const result = results[kind];
+  const missing = missingMessage();
   return (
-    <div className="profile-verification-panel span-3" ref={hostRef}>
-      <div className="profile-verification-head">
-        <div>
-          <strong>Verification</strong>
-          <span>Verify each item and review the status before saving.</span>
-        </div>
-      </div>
-      {error ? <div className="inline-error">{error}</div> : null}
-      <div className="profile-verification-list">
-        {supportedKinds.map((kind) => {
-          const result = results[kind];
-          const isRunning = running === kind;
-          const missing = missingMessage(kind);
-          return (
-            <div className={`profile-verification-row ${result?.verified ? "ok" : result ? "warn" : ""}`} key={kind}>
-              <span>{isRunning ? "..." : result?.verified ? "OK" : result ? "!" : "-"}</span>
-              <div>
-                <strong>{labels[kind]}</strong>
-                <small>{isRunning ? "Verifying..." : result ? resultMessage(result) || "Checked." : "Not verified"}</small>
-              </div>
-              <button
-                className="button secondary profile-verification-button"
-                disabled={running !== null || Boolean(missing)}
-                onClick={() => verifyOne(kind)}
-                type="button"
-              >
-                {isRunning ? "Verifying" : result?.verified ? "Verified" : "Verify"}
-              </button>
-            </div>
-          );
-        })}
-      </div>
+    <div className={`profile-verification-inline ${result?.verified ? "ok" : result ? "warn" : ""}`} ref={hostRef}>
+      <button className="button secondary profile-verification-button" disabled={running || Boolean(missing)} onClick={verify} type="button">
+        {running ? "Verifying" : result?.verified ? "Verified" : `Verify ${labels[kind]}`}
+      </button>
+      <span>{running ? "Verifying..." : result ? resultMessage(result) || "Checked." : missing || "Not verified"}</span>
+      {error ? <span className="profile-verification-error">{error}</span> : null}
     </div>
   );
 }

@@ -77,6 +77,20 @@ function parseDate(value: string) {
   return new Date(Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1])));
 }
 
+function idspayDob(value: unknown) {
+  const raw = text(value);
+  const localMatch = raw.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/);
+  if (localMatch) return `${localMatch[1]}-${localMatch[2]}-${localMatch[3]}`;
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) return `${isoMatch[3]}-${isoMatch[2]}-${isoMatch[1]}`;
+  return raw.replace(/\//g, "-");
+}
+
+function isElectricFuel(value: unknown) {
+  const fuel = text(value).toLowerCase();
+  return fuel.includes("electric") || fuel === "ev";
+}
+
 function nameScore(left: string, right: string) {
   const a = compact(left).toUpperCase().replace(/[^A-Z0-9 ]/g, "").split(" ").filter(Boolean);
   const b = compact(right).toUpperCase().replace(/[^A-Z0-9 ]/g, "").split(" ").filter(Boolean);
@@ -318,7 +332,7 @@ export async function POST(request: NextRequest) {
 
     if (kind === "dl") {
       const dlNumber = text(payload.drivingLicenseNo).toUpperCase();
-      const dob = text(payload.dateOfBirth).replace(/\//g, "-");
+      const dob = idspayDob(payload.dateOfBirth);
       if (!dlNumber || !dob) throw new Error("DL number and date of birth are required.");
       const { body } = await callIdspay("/srv2/validation/dl", { ...credentials, dlNumber, dob });
       const details = body?.data?.details_of_driving_licence ?? {};
@@ -350,14 +364,16 @@ export async function POST(request: NextRequest) {
       const { body } = await callIdspay("/srv2/validation/rc", { ...credentials, reg_no: regNo });
       const data = body?.data ?? {};
       const verified = body?.status?.type === "success" || body?.success === true;
+      const fuelType = compact(data?.type ?? data?.fuel_type ?? data?.fuelType);
       const result = {
         verified,
         inputKey: inputKey([regNo]),
         ownerName: compact(data?.owner_name),
+        fuelType,
         warning: verified ? "" : text(body?.message) || "Vehicle details could not be verified.",
         registrationExpiryDate: normalizeDate(data?.rc_expiry_date),
         insuranceExpiryDate: normalizeDate(data?.vehicle_insurance_upto ?? data?.insurance_upto),
-        pollutionExpiryDate: normalizeDate(data?.pucc_upto)
+        pollutionExpiryDate: isElectricFuel(fuelType) ? "" : normalizeDate(data?.pucc_upto)
       };
       return verifiedResponse({ account, profileType, accountId, kind, result });
     }

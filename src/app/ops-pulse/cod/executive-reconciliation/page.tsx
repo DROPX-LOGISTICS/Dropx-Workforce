@@ -27,6 +27,8 @@ import {
 } from "./actions";
 import { LiveCacheRefresh } from "./live-cache-refresh";
 
+export const maxDuration = 300;
+
 type SearchParams = {
   date?: string;
   location?: string;

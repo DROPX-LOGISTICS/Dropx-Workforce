@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { connectSessionCookieName, findConnectAccounts } from "../../../../src/lib/connect-auth";
 import { normalizeProfileFieldRules } from "../../../../src/lib/profile-field-rules";
+import { saveProfileVerifications } from "../../../../src/lib/profile-verifications";
 import { supabaseAdmin } from "../../../../src/lib/supabase-admin";
 
 type FieldExecutiveRow = {
@@ -330,6 +331,13 @@ export async function POST(request: Request) {
       .eq("id", account.id)
       .eq("company_id", account.companyId);
     if (profileUpdateResult.error) throw new Error(profileUpdateResult.error.message);
+
+    await saveProfileVerifications({
+      accountId: account.id,
+      companyId: account.companyId,
+      profileType: "field_executive",
+      values: formData.getAll("profile_verification_results")
+    });
 
     const uploads = await Promise.all([
       uploadExecutiveFile(formData.get("aadhaar_front"), account.companyId, account.id, "aadhaar-front"),

@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { connectSessionCookieName, normalizeConnectMobile } from "@/lib/connect-auth";
+import { isMissingVerificationTable } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const IDSPAY_BASE_URL = "https://javabackend.idspay.in/api/v1/prod";
@@ -183,59 +184,7 @@ async function callIdspay(path: string, payload: Record<string, unknown>) {
   return { response, body };
 }
 
-function isMissingVerificationTable(error: unknown) {
-  const message = String((error as { message?: unknown })?.message ?? "").toLowerCase();
-  return message.includes("connect_profile_verifications") || message.includes("schema cache") || message.includes("does not exist");
-}
-
-async function saveVerification({
-  account,
-  profileType,
-  accountId,
-  kind,
-  result
-}: {
-  account: { companyId: string };
-  profileType: string;
-  accountId: string;
-  kind: VerificationKind;
-  result: Record<string, unknown>;
-}) {
-  if (!supabaseAdmin) return;
-  const saveResult = await supabaseAdmin.from("connect_profile_verifications").upsert({
-    company_id: account.companyId,
-    profile_type: profileType === "field_executive" ? "field_executive" : "employee",
-    account_id: accountId,
-    kind,
-    input_key: text(result.inputKey),
-    verified: result.verified === true,
-    manual_review: result.manualReview === true,
-    block_submit: result.blockSubmit === true,
-    display_name: text(result.name || result.accountName || result.ownerName),
-    message: text(result.message || result.warning),
-    details: result,
-    verified_at: result.verified === true ? new Date().toISOString() : null,
-    updated_at: new Date().toISOString()
-  }, { onConflict: "company_id,profile_type,account_id,kind" });
-  if (saveResult.error && !isMissingVerificationTable(saveResult.error)) {
-    throw new Error(saveResult.error.message);
-  }
-}
-
-async function verifiedResponse({
-  account,
-  profileType,
-  accountId,
-  kind,
-  result
-}: {
-  account: { companyId: string };
-  profileType: string;
-  accountId: string;
-  kind: VerificationKind;
-  result: Record<string, unknown>;
-}) {
-  await saveVerification({ account, profileType, accountId, kind, result });
+function verifiedResponse(result: Record<string, unknown>) {
   return ok(result);
 }
 
@@ -304,7 +253,7 @@ export async function POST(request: NextRequest) {
         message: verified ? `PAN verified. PAN name: ${apiName || "-"}` : (mismatch ? `PAN name mismatch. PAN name: ${apiName || "-"}` : text(body?.message) || "PAN verification failed."),
         rawStatus: body?.status ?? null
       };
-      return verifiedResponse({ account, profileType, accountId, kind, result });
+      return verifiedResponse(result);
     }
 
     if (kind === "pan_aadhaar") {
@@ -329,7 +278,7 @@ export async function POST(request: NextRequest) {
           text(body?.result?.message) ||
           (verified ? "PAN Aadhaar link verified." : "PAN Aadhaar link verification failed.")
       };
-      return verifiedResponse({ account, profileType, accountId, kind, result });
+      return verifiedResponse(result);
     }
 
     if (kind === "dl") {
@@ -357,7 +306,7 @@ export async function POST(request: NextRequest) {
         expiryDate,
         message: expired ? "DL is expired." : nameMatched ? "DL verified." : (apiSuccess ? "DL name needs manual review." : text(body?.message) || "DL verification failed.")
       };
-      return verifiedResponse({ account, profileType, accountId, kind, result });
+      return verifiedResponse(result);
     }
 
     if (kind === "vehicle") {
@@ -377,7 +326,7 @@ export async function POST(request: NextRequest) {
         insuranceExpiryDate: normalizeDate(data?.vehicle_insurance_upto ?? data?.insurance_upto),
         pollutionExpiryDate: isElectricFuel(fuelType) ? "" : normalizeDate(data?.pucc_upto)
       };
-      return verifiedResponse({ account, profileType, accountId, kind, result });
+      return verifiedResponse(result);
     }
 
     if (kind === "bank") {
@@ -393,7 +342,7 @@ export async function POST(request: NextRequest) {
         accountName: compact(resource?.creditorName),
         message: text(body?.message) || (verified ? "Bank account checked." : "Bank verification failed.")
       };
-      return verifiedResponse({ account, profileType, accountId, kind, result });
+      return verifiedResponse(result);
     }
 
     throw new Error("Unsupported verification type.");

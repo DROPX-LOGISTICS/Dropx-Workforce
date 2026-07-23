@@ -246,8 +246,12 @@ export function ProfileVerificationPanel({ accountId, kind, profileType, pageCod
   const isVerified = kind === "pan" ? Boolean(result?.verified && panAadhaarResult?.verified) : Boolean(result?.verified);
   const missing = missingMessage(kind, fields);
   const message = kind === "pan" ? panGroupMessage(result, panAadhaarResult) : resultMessage(result);
+  const hiddenResults = kind === "pan" ? [result, panAadhaarResult].filter(Boolean) : [result].filter(Boolean);
   return (
     <div className={`profile-verification-inline ${isVerified ? "ok" : result ? "warn" : ""} ${isVerified ? "" : "needs-button"}`} ref={hostRef}>
+      {hiddenResults.length ? (
+        <input name="profile_verification_results" type="hidden" value={JSON.stringify(hiddenResults)} />
+      ) : null}
       {!isVerified ? (
         <button className="button secondary profile-verification-button" disabled={running || Boolean(missing)} onClick={verify} type="button">
           {running ? "Verifying" : "Verify"}

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { connectSessionCookieName, findConnectAccounts } from "../../../../src/lib/connect-auth";
 import { normalizeProfileFieldRules } from "../../../../src/lib/profile-field-rules";
+import { saveProfileVerifications } from "../../../../src/lib/profile-verifications";
 import { supabaseAdmin } from "../../../../src/lib/supabase-admin";
 
 type EmployeeProfileRow = {
@@ -296,6 +297,13 @@ export async function POST(request: Request) {
       .eq("id", account.id)
       .eq("company_id", account.companyId);
     if (updateResult.error) throw new Error(updateResult.error.message);
+
+    await saveProfileVerifications({
+      accountId: account.id,
+      companyId: account.companyId,
+      profileType: "employee",
+      values: formData.getAll("profile_verification_results")
+    });
 
     const employee = await loadEmployee(account.id, account.companyId);
     return NextResponse.json({ ok: true, profile: await serializeEmployee(employee), notice: "Profile saved successfully." });

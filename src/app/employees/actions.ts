@@ -12,6 +12,7 @@ import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
 import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
+import { saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { sendEmployeeOnboardingWhatsApp } from "@/lib/whatsapp";
 
@@ -277,6 +278,13 @@ export async function updateEmployee(formData: FormData) {
       updated_at: new Date().toISOString()
     }).eq("id", id).eq("company_id", companyId);
     if (error) throw new Error(error.message);
+
+    await saveProfileVerifications({
+      accountId: id,
+      companyId,
+      profileType: "employee",
+      values: formData.getAll("profile_verification_results")
+    });
 
     await syncBiometricEnrolment({
       companyId,

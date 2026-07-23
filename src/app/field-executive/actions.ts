@@ -13,6 +13,7 @@ import { cleanCountryCode } from "@/lib/country-codes";
 import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
+import { saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { sendFieldExecutiveOnboardingWhatsApp } from "@/lib/whatsapp";
 
@@ -399,6 +400,13 @@ export async function updateFieldExecutive(formData: FormData) {
       }
       throw new Error(friendlyFieldExecutiveError(error.message));
     }
+
+    await saveProfileVerifications({
+      accountId: executiveId,
+      companyId,
+      profileType: "field_executive",
+      values: formData.getAll("profile_verification_results")
+    });
 
     await syncBiometricEnrolment({
       companyId,

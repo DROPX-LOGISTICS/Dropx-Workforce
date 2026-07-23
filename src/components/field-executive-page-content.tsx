@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { FieldExecutiveList, type FieldExecutiveListRow } from "@/components/field-executive-list";
 import { PageHead } from "@/components/page-head";
 import { PendingLink } from "@/components/pending-link";
+import { ProfileVerificationPanel } from "@/components/profile-verification-panel";
 import { ScopedDesignationFields, type ScopedDesignationOption, type ScopedLocationOption } from "@/components/scoped-designation-fields";
 import { SearchableSelect } from "@/components/searchable-select";
 import { SubmitButton } from "@/components/submit-button";
@@ -349,6 +350,14 @@ function FieldExecutiveForm({
       <label>Gender
         <SearchableSelect name="gender" options={genderOptions} defaultValue={executive?.gender} placeholder="Select gender" />
       </label>
+      {mode === "edit" && executive ? (
+        <ProfileVerificationPanel
+          accountId={executive.id}
+          pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"}
+          profileType="field_executive"
+          showDrivingAndVehicle
+        />
+      ) : null}
       <label>Date of birth<input className="field" name="date_of_birth" type="date" defaultValue={textValue(executive?.date_of_birth)} /></label>
 
       <label>Aadhaar number<input className="field" inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" defaultValue={textValue(executive?.aadhaar_number)} /></label>

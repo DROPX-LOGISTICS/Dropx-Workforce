@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/searchable-select";
+import { ProfileVerificationPanel } from "@/components/profile-verification-panel";
 import { SubmitButton } from "@/components/submit-button";
 import { countryCodeOptions } from "@/lib/country-codes";
 
@@ -181,6 +182,7 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
       </label>
       {isEdit ? (
         <>
+          {employee ? <ProfileVerificationPanel accountId={employee.id} pageCode="employees" profileType="employee" /> : null}
           <label>Gender
             <SearchableSelect name="gender" options={genderOptions} defaultValue={employee?.gender ?? undefined} placeholder="Select gender" />
           </label>

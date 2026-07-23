@@ -842,11 +842,11 @@ async function clickFirst(page, candidates) {
   return false;
 }
 
-async function maybeLogin(page, payload) {
+async function maybeLogin(page, payload, initialUrl = "") {
   payload = normalizePortalPayload(payload);
   const loginUrl = payload.login_url || portalDefinition(payload).loginUrl;
-  await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
-  await page.waitForTimeout(1500);
+  await page.goto(initialUrl || loginUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+  await page.waitForTimeout(750);
 
   let text = await page.locator("body").innerText({ timeout: 10000 }).catch(() => "");
   if (!isLoginVisible(text, page.url())) return { loggedIn: true, message: "Session already active." };
@@ -948,12 +948,13 @@ async function setStation(page, stationCode) {
         });
         return match?.value || "";
       }, station).catch(() => "");
-      if (matchingValue) await locator.selectOption(matchingValue);
+      if (!matchingValue) continue;
+      await locator.selectOption(matchingValue);
     } else {
       await locator.fill(station);
       await locator.press("Enter").catch(() => null);
     }
-    await page.waitForTimeout(750);
+    await page.waitForTimeout(500);
     return { changed: true, message: `Station set to ${station}.` };
   }
 
@@ -1239,6 +1240,10 @@ async function runSccCheck(payload) {
   const stationCode = requiredString(payload.portal_station_code || payload.station_code, "station_code");
   const checkDate = requiredString(payload.check_date, "check_date");
   const checkType = requiredString(payload.check_type, "check_type");
+  const targetUrl = checkType === "prepared_deposit"
+    ? payload.urls?.bank_deposits || BANK_DEPOSITS_URL
+    : payload.urls?.driver_reconciliation || DRIVER_RECON_URL;
+  const stationTargetUrl = withStationParam(targetUrl, stationCode);
 
   const browser = await chromium.launch({
     headless: HEADLESS,
@@ -1259,7 +1264,7 @@ async function runSccCheck(payload) {
     page.setDefaultTimeout(30000);
     page.setDefaultNavigationTimeout(45000);
 
-    const loginResult = await maybeLogin(page, payload);
+    const loginResult = await maybeLogin(page, payload, stationTargetUrl);
     if (!loginResult.loggedIn) {
       const debugScreenshot = await captureDebug(page, payload.run_id, "login-blocked");
       return {
@@ -1278,12 +1283,10 @@ async function runSccCheck(payload) {
 
     await context.storageState({ path: statePath }).catch(() => null);
 
-    const targetUrl = checkType === "prepared_deposit"
-      ? payload.urls?.bank_deposits || BANK_DEPOSITS_URL
-      : payload.urls?.driver_reconciliation || DRIVER_RECON_URL;
-
-    await page.goto(withStationParam(targetUrl, stationCode), { waitUntil: "domcontentloaded", timeout: 45000 });
-    await page.waitForTimeout(2000);
+    if (!page.url().startsWith(targetUrl)) {
+      await page.goto(stationTargetUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+    }
+    await page.waitForTimeout(750);
 
     const stationResult = await setStation(page, stationCode);
     const reportFrame = checkType === "driver_reconciliation"

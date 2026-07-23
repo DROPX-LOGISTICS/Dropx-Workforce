@@ -24,6 +24,46 @@ function inputKey(parts: unknown[]) {
   return parts.map((part) => text(part).toUpperCase()).join("|");
 }
 
+function deepText(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(deepText).join(" ");
+  }
+  if (typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).map(deepText).join(" ");
+  }
+  return "";
+}
+
+function findFirstString(value: unknown, keys: string[]): string {
+  if (value == null) return "";
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findFirstString(item, keys);
+      if (found) return found;
+    }
+    return "";
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of keys) {
+      const direct = record[key];
+      if (typeof direct === "string" || typeof direct === "number") {
+        const found = text(direct);
+        if (found) return found;
+      }
+    }
+    for (const item of Object.values(record)) {
+      const found = findFirstString(item, keys);
+      if (found) return found;
+    }
+  }
+  return "";
+}
+
 function normalizeDate(value: unknown) {
   const raw = text(value);
   const match = raw.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
@@ -236,17 +276,18 @@ export async function POST(request: NextRequest) {
       const panNumber = text(payload.panNumber).toUpperCase();
       if (!panNumber) throw new Error("PAN number is required.");
       const { body } = await callIdspay("/pan/verification", { ...credentials, pan_number: panNumber });
-      const apiName = compact(body?.data?.data?.full_name);
+      const apiName = compact(findFirstString(body, ["full_name", "fullName", "name", "pan_name", "panName"]));
       const apiSuccess = body?.data?.success === true || body?.status?.type === "success";
       const score = nameScore(registeredName, apiName);
       const verified = Boolean(apiSuccess && score >= 0.5);
+      const mismatch = Boolean(apiSuccess && !verified);
       const result = {
         verified,
         manualReview: !verified,
         inputKey: inputKey([panNumber]),
         name: apiName,
         nameMatchPercent: Math.round(score * 100),
-        message: verified ? "PAN verified." : (apiSuccess ? "PAN name needs manual review." : text(body?.message) || "PAN verification failed."),
+        message: verified ? `PAN verified. PAN name: ${apiName || "-"}` : (mismatch ? `PAN name mismatch. PAN name: ${apiName || "-"}` : text(body?.message) || "PAN verification failed."),
         rawStatus: body?.status ?? null
       };
       return verifiedResponse({ account, profileType, accountId, kind, result });
@@ -256,11 +297,16 @@ export async function POST(request: NextRequest) {
       const pan = text(payload.panNumber).toUpperCase();
       const aadhar = onlyDigits(payload.aadhaarNumber);
       if (!pan || !aadhar) throw new Error("PAN and Aadhaar number are required.");
-      const { body } = await callIdspay("/srv2/validation/pan-aadhaar-link", { ...credentials, pan, aadhar });
+      const { body } = await callIdspay("/srv2/validation/pan-aadhaar-link", { ...credentials, pan, aadhar, aadhaar: aadhar });
       const code = Number(body?.result_code);
       const resultCode = text(body?.result?.code).toUpperCase();
       const resultMessage = text(body?.result?.message).toLowerCase();
-      const verified = code === 101 || resultCode === "LINK-001" || resultMessage.includes("already linked");
+      const responseText = deepText(body).toLowerCase();
+      const verified = code === 101 ||
+        resultCode === "LINK-001" ||
+        resultMessage.includes("already linked") ||
+        responseText.includes("already linked to given aadhaar") ||
+        responseText.includes("is already linked");
       const result = {
         verified,
         manualReview: !verified,
@@ -272,11 +318,11 @@ export async function POST(request: NextRequest) {
 
     if (kind === "dl") {
       const dlNumber = text(payload.drivingLicenseNo).toUpperCase();
-      const dob = text(payload.dateOfBirth);
+      const dob = text(payload.dateOfBirth).replace(/\//g, "-");
       if (!dlNumber || !dob) throw new Error("DL number and date of birth are required.");
       const { body } = await callIdspay("/srv2/validation/dl", { ...credentials, dlNumber, dob });
       const details = body?.data?.details_of_driving_licence ?? {};
-      const apiName = compact(details?.name);
+      const apiName = compact(details?.name || findFirstString(body, ["name", "full_name", "fullName"]));
       const score = nameScore(registeredName, apiName);
       const transportExpiry = normalizeDate(body?.data?.dl_validity?.transport?.to);
       const nonTransportExpiry = normalizeDate(body?.data?.dl_validity?.non_transport?.to);

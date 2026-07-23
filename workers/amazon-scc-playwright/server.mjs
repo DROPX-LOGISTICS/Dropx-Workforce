@@ -985,6 +985,41 @@ async function setDate(page, checkDate) {
   return { changed: false, message: "Date input was not found; inspected the default date shown by SCC." };
 }
 
+async function setAllDrivers(page) {
+  const selectors = [
+    "select[name*='driver' i]",
+    "select[id*='driver' i]",
+    "select[aria-label*='driver' i]"
+  ];
+
+  for (const selector of selectors) {
+    const locator = page.locator(selector).first();
+    if (!(await locator.count().catch(() => 0))) continue;
+    if (!(await locator.isVisible().catch(() => false))) continue;
+    const matchingValue = await locator.evaluate((select) => {
+      const options = Array.from(select.options || []);
+      const match = options.find((option) =>
+        /all\s*drivers?/i.test(`${option.textContent || ""} ${option.value || ""}`)
+      );
+      return match?.value ?? "";
+    }).catch(() => "");
+    if (matchingValue !== "") {
+      await locator.selectOption(matchingValue);
+      await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => null);
+      return { changed: true, message: "Driver set to All Drivers." };
+    }
+  }
+
+  const allDriversControl = page.getByText(/^\s*all\s*drivers?\s*$/i).first();
+  if (await allDriversControl.count().catch(() => 0)) {
+    await allDriversControl.click().catch(() => null);
+    await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => null);
+    return { changed: true, message: "All Drivers option selected." };
+  }
+
+  return { changed: false, message: "All Drivers option was not found." };
+}
+
 async function applyFilters(page) {
   await clickFirst(page, [
     { role: "button", name: /search|apply|filter|show|submit|go/i },
@@ -1204,6 +1239,9 @@ async function runSccCheck(payload) {
 
     const stationResult = await setStation(page, stationCode);
     const dateResult = await setDate(page, checkDate);
+    const driverResult = checkType === "driver_reconciliation"
+      ? await setAllDrivers(page)
+      : { changed: false, message: "Driver selection is not used for this check." };
 
     if (checkType === "prepared_deposit") {
       await clickFirst(page, [
@@ -1232,12 +1270,14 @@ async function runSccCheck(payload) {
         ...summary.evidence,
         debug_screenshot: debugScreenshot,
         station_selector: stationResult,
-        date_selector: dateResult
+        date_selector: dateResult,
+        driver_selector: driverResult
       },
       raw_result: {
         login: { ...loginResult, session_reused: hasStoredSession, session_saved: true },
         station_selector: stationResult,
         date_selector: dateResult,
+        driver_selector: driverResult,
         inspected_url: evidence.url,
         page_title: evidence.title
       }

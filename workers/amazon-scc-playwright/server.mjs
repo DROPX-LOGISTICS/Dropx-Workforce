@@ -886,7 +886,18 @@ async function maybeLogin(page, payload) {
     }
     return { loggedIn: false, manualReview: true, message: challenge.message, mfaAttempt: challenge.mfaAttempt };
   }
-  if (isLoginVisible(text, page.url())) return { loggedIn: false, manualReview: true, message: `Login did not complete. Check ${portalShortName(payload)} credentials or Amazon login challenge.` };
+  if (isLoginVisible(text, page.url())) {
+    const challenge = await resolveMfaOrManualBlocker(page, payload);
+    if (challenge.resolved) {
+      return { loggedIn: true, message: challenge.message, mfaAttempt: challenge.mfaAttempt };
+    }
+    return {
+      loggedIn: false,
+      manualReview: true,
+      message: challenge.message || `Login did not complete. Check ${portalShortName(payload)} credentials or Amazon login challenge.`,
+      mfaAttempt: challenge.mfaAttempt
+    };
+  }
   return { loggedIn: true, message: "Login completed." };
 }
 

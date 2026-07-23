@@ -252,6 +252,7 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const employeeId = String(formData.get("employee_id") ?? "");
     const account = await requireEmployeeAccess(employeeId);
+    const manualReviewRequired = String(formData.get("manual_review_required") ?? "") === "true";
 
     const uploads = await Promise.all([
       uploadProfileFile(formData.get("aadhaar_front"), account.companyId, account.id, "aadhaar-front"),
@@ -277,7 +278,7 @@ export async function POST(request: Request) {
       emergency_contact_name: cleanText(formData.get("emergency_contact_name")),
       emergency_contact_number: cleanDigits(formData.get("emergency_contact_number")),
       emergency_contact_relation: cleanText(formData.get("emergency_contact_relation")),
-      profile_completion_status: "active",
+      profile_completion_status: manualReviewRequired ? "under_review" : "active",
       profile_completed_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };

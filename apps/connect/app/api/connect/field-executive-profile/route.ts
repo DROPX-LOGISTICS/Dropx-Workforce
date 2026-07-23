@@ -278,6 +278,7 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const executiveId = String(formData.get("executive_id") ?? "");
     const account = await requireExecutiveAccess(executiveId);
+    const manualReviewRequired = String(formData.get("manual_review_required") ?? "") === "true";
     const currentExecutive = await loadExecutive(account.id, account.companyId);
     const designationResult = currentExecutive.designation
       ? await supabaseAdmin
@@ -320,7 +321,7 @@ export async function POST(request: Request) {
       vehicle_reg_exp_date: dateValue("vehicle_reg_exp_date", "Reg expiry date"),
       vehicle_insurance_exp_date: dateValue("vehicle_insurance_exp_date", "Vehicle Insurance expiry"),
       vehicle_pollution_exp_date: dateValue("vehicle_pollution_exp_date", "Pollution expiry date"),
-      onboarding_status: "active",
+      onboarding_status: manualReviewRequired ? "under_review" : "active",
       is_active: true,
       updated_at: new Date().toISOString()
     };

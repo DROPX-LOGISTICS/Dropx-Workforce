@@ -69,7 +69,7 @@ type DriverReconciliationAssociate = {
 };
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const PORTAL_RUN_SELECT = "id, company_id, location_id, cod_master_id, station_code, portal_station_code, check_date, check_type, attempt_count, cod_station_settings (amazon_driver_recon_url, amazon_bank_deposit_url, portal_login_url, portal_username, portal_secret_name, portal_check_interval_minutes)";
 

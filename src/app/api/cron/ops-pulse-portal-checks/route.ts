@@ -197,6 +197,15 @@ async function upsertDriverReconciliationRoster(run: PortalRun, result: Record<s
     return { imported: 0, skipped: associates.length, error: error.message };
   }
 
+  await supabaseAdmin
+    .from("cod_driver_reconciliation_roster")
+    .delete()
+    .eq("company_id", run.company_id)
+    .eq("business_date", run.check_date)
+    .eq("station_code", run.station_code)
+    .eq("source", "scc_driver_reconciliation")
+    .in("provider_employee_id", ["DRIVER", "ID"]);
+
   await logRun(run, "roster_upsert", `Saved ${rows.length} SCC driver reconciliation associates.`, { imported: rows.length });
   return { imported: rows.length, skipped: associates.length - rows.length };
 }

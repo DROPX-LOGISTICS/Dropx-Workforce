@@ -846,7 +846,7 @@ async function maybeLogin(page, payload) {
   payload = normalizePortalPayload(payload);
   const loginUrl = payload.login_url || portalDefinition(payload).loginUrl;
   await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
-  await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
+  await page.waitForTimeout(1500);
 
   let text = await page.locator("body").innerText({ timeout: 10000 }).catch(() => "");
   if (!isLoginVisible(text, page.url())) return { loggedIn: true, message: "Session already active." };
@@ -951,9 +951,9 @@ async function setStation(page, stationCode) {
       if (matchingValue) await locator.selectOption(matchingValue);
     } else {
       await locator.fill(station);
-      await input.press("Enter").catch(() => null);
+      await locator.press("Enter").catch(() => null);
     }
-    await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => null);
+    await page.waitForTimeout(750);
     return { changed: true, message: `Station set to ${station}.` };
   }
 
@@ -966,7 +966,7 @@ async function setStation(page, stationCode) {
   const option = page.getByText(new RegExp(`\\b${station}\\b`, "i")).first();
   if (await option.count().catch(() => 0)) {
     await option.click().catch(() => null);
-    await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => null);
+    await page.waitForTimeout(750);
     return { changed: true, message: `Station selected from visible option ${station}.` };
   }
 
@@ -998,7 +998,7 @@ async function setDate(page, checkDate) {
         element.dispatchEvent(new Event("change", { bubbles: true }));
       }, value).catch(() => null);
       await input.press("Enter").catch(() => null);
-      await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => null);
+      await page.waitForTimeout(500);
       return { changed: true, message: `Date set to ${displayDate}.` };
     }
   }
@@ -1026,7 +1026,7 @@ async function setAllDrivers(page) {
     }).catch(() => "");
     if (matchingValue !== "") {
       await locator.selectOption(matchingValue);
-      await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => null);
+      await page.waitForTimeout(500);
       return { changed: true, message: "Driver set to All Drivers." };
     }
   }
@@ -1034,7 +1034,7 @@ async function setAllDrivers(page) {
   const allDriversControl = page.getByText(/^\s*all\s*drivers?\s*$/i).first();
   if (await allDriversControl.count().catch(() => 0)) {
     await allDriversControl.click().catch(() => null);
-    await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => null);
+    await page.waitForTimeout(500);
     return { changed: true, message: "All Drivers option selected." };
   }
 
@@ -1062,7 +1062,7 @@ async function applyFilters(page) {
     "button[type='submit']",
     "input[type='submit']"
   ]).catch(() => null);
-  await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
+  await page.waitForTimeout(1500);
 }
 
 async function collectPageEvidence(page) {
@@ -1283,7 +1283,7 @@ async function runSccCheck(payload) {
       : payload.urls?.driver_reconciliation || DRIVER_RECON_URL;
 
     await page.goto(withStationParam(targetUrl, stationCode), { waitUntil: "domcontentloaded", timeout: 45000 });
-    await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
+    await page.waitForTimeout(2000);
 
     const stationResult = await setStation(page, stationCode);
     const reportFrame = checkType === "driver_reconciliation"
@@ -1303,7 +1303,7 @@ async function runSccCheck(payload) {
       await applyFilters(reportFrame);
     }
 
-    await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
+    await page.waitForTimeout(1500);
     const evidence = await collectPageEvidence(page);
     const debugScreenshot = await captureDebug(page, payload.run_id, checkType);
     let summary;

@@ -15,7 +15,7 @@
     },
     {
       "path": "/api/cron/ops-pulse-portal-checks",
-      "schedule": "*/15 * * * *"
+      "schedule": "* * * * *"
     },
     {
       "path": "/api/whatsapp/process-campaigns",

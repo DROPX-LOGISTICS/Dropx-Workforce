@@ -618,7 +618,7 @@ async function closePendingDetail(page, beforeUrl) {
 }
 
 async function collectPendingDetailsForAssociates(page, associates) {
-  const limit = Math.max(0, Number(process.env.SCC_PENDING_DETAIL_LIMIT || 25));
+  const limit = Math.max(0, Number(process.env.SCC_PENDING_DETAIL_LIMIT || 0));
   const enriched = [];
   let checked = 0;
   for (const associate of associates) {

@@ -30,12 +30,6 @@ function safeReturnHref(value: FormDataEntryValue | null) {
   return href;
 }
 
-function appBaseUrl() {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || process.env.VERCEL_URL;
-  if (!appUrl) return "";
-  return appUrl.startsWith("http") ? appUrl : `https://${appUrl}`;
-}
-
 function isNextRedirectError(error: unknown) {
   return typeof (error as { digest?: unknown })?.digest === "string" &&
     String((error as { digest: string }).digest).startsWith("NEXT_REDIRECT");
@@ -549,54 +543,10 @@ export async function refreshExecutiveReconciliationRoster(formData: FormData) {
 
     if (!runId) throw new Error("Could not create SCC refresh run.");
 
-    const baseUrl = appBaseUrl();
-    if (!baseUrl) {
-      throw new Error("Dashboard base URL is not configured for live SCC sync.");
-    }
-
-    const response = await fetch(`${baseUrl}/api/cron/ops-pulse-portal-checks`, {
-      method: "POST",
-      headers: {
-        ...(process.env.CRON_SECRET ? { Authorization: `Bearer ${process.env.CRON_SECRET}` } : {}),
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ run_id: runId }),
-      cache: "no-store"
-    });
-    const responseBody = await response.json().catch(() => ({} as Record<string, unknown>));
-    if (!response.ok) {
-      throw new Error(String(responseBody.error ?? `SCC worker returned HTTP ${response.status}`));
-    }
-
-    const run = responseBody.run && typeof responseBody.run === "object"
-      ? responseBody.run as Record<string, unknown>
-      : {};
-    const rawResult = run.raw_result && typeof run.raw_result === "object"
-      ? run.raw_result as Record<string, unknown>
-      : {};
-    const rosterSync = rawResult.roster_sync && typeof rawResult.roster_sync === "object"
-      ? rawResult.roster_sync as Record<string, unknown>
-      : {};
-    const imported = Number(rosterSync.imported ?? 0) || 0;
-    const status = String(run.status ?? "");
-    const summary = String(run.summary ?? "").trim();
-    const errorMessage = String(run.error_message ?? "").trim();
-    const workerApprovalHelp =
-      "Amazon SCC needs worker login approval. Your normal Chrome login is not shared with the worker. Open Settings > Amazon Connector, click Login worker once, approve Amazon/TOTP/captcha in the worker session, then come back and click Sync SCC now. Biometric attendance is separate and will not be affected.";
-
     revalidatePath(pagePath);
-    if (imported > 0) {
-      redirectWithFlash({ notice: `SCC sync completed. ${imported} associate${imported === 1 ? "" : "s"} imported for ${station.station_code}.` }, returnHref);
-    }
-    if (status === "Manual Review") {
-      redirectWithFlash({
-        error: summary || workerApprovalHelp
-      }, returnHref);
-    }
-    if (status === "Error") {
-      throw new Error(errorMessage || summary || "SCC worker could not complete the refresh.");
-    }
-    redirectWithFlash({ notice: summary || `SCC sync completed, but no associates were found for ${station.station_code} on ${businessDate}.` }, returnHref);
+    redirectWithFlash({
+      notice: `SCC refresh queued for ${station.station_code}. You can keep working; this sheet updates automatically.`
+    }, returnHref);
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     redirectWithFlash({ error: (error as Error).message }, safeReturnHref(formData.get("return_href")));

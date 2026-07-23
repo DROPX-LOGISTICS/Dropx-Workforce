@@ -189,7 +189,7 @@ export function ProfileVerificationPanel({
             kind: row.kind,
             inputKey: row.inputKey,
             verified: row.verified,
-            message: row.message || details.message
+            message: row.message ?? ""
           };
         }
         setResults(next);

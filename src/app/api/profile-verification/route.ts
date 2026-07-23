@@ -90,6 +90,17 @@ function isElectricFuel(value: unknown) {
   return fuel.includes("electric") || fuel === "ev";
 }
 
+function cleanPanMessage(message: unknown, panName: unknown) {
+  const raw = text(message);
+  const name = compact(panName);
+  if (!raw || !name) return raw;
+  const normalized = raw.toLowerCase();
+  if (normalized.includes("pan verified") && normalized.includes("pan name")) {
+    return "";
+  }
+  return raw;
+}
+
 function nameScore(left: string, right: string) {
   const a = compact(left).toUpperCase().replace(/[^A-Z0-9 ]/g, "").split(" ").filter(Boolean);
   const b = compact(right).toUpperCase().replace(/[^A-Z0-9 ]/g, "").split(" ").filter(Boolean);
@@ -251,7 +262,7 @@ export async function GET(request: NextRequest) {
         manualReview: row.manual_review,
         blockSubmit: row.block_submit,
         name: row.display_name,
-        message: row.message,
+        message: row.kind === "pan" ? cleanPanMessage(row.message, row.display_name) : row.message,
         details: row.details,
         verifiedAt: row.verified_at
       }))
@@ -289,7 +300,7 @@ export async function POST(request: NextRequest) {
         inputKey: inputKey([panNumber]),
         name: apiName,
         nameMatchPercent: Math.round(score * 100),
-        message: verified ? `PAN verified. PAN name: ${apiName || "-"}` : (mismatch ? `PAN name mismatch. PAN name: ${apiName || "-"}` : text(body?.message) || "PAN verification failed."),
+        message: verified ? "" : (mismatch ? `PAN name mismatch. PAN name: ${apiName || "-"}` : text(body?.message) || "PAN verification failed."),
         rawStatus: body?.status ?? null
       };
       return verifiedResponse({ account, profileType, accountId, kind, result });

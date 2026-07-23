@@ -450,7 +450,7 @@ function extractDriverReconciliationAssociates(evidence, stationCode = "") {
   }
   for (const row of evidence.text_rows || []) {
     const cells = String(row ?? "").split(/\s{2,}|\t+/).map(normalizeText).filter(Boolean);
-    if (cells.length >= 2) {
+    if (cells.length >= 2 && !isLikelyHeaderOrTotal(cells)) {
       const headers = ["name", "id", "provider", "type", "expected", "undebriefed mpos", "undebriefed cash", "variance", "running balance", "pending recon"];
       const associateName = nameFromRow(headers, cells);
       if (associateName) {

@@ -9665,16 +9665,31 @@ td strong,
 
 .profile-verification-inline {
   display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 7px;
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: 4px;
   margin-top: 6px;
-  min-height: 30px;
+  min-height: 18px;
+}
+
+.form-grid label:has(.profile-verification-inline.needs-button) {
+  position: relative;
+}
+
+.form-grid label:has(.profile-verification-inline.needs-button) > .field {
+  padding-right: 82px;
 }
 
 .profile-verification-button {
+  position: absolute;
+  top: 25px;
+  right: 8px;
+  height: 28px;
   min-height: 28px;
-  padding: 0 10px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  line-height: 1;
   white-space: nowrap;
 }
 

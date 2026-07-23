@@ -352,7 +352,7 @@ function FieldExecutiveForm({
       </label>
       <label>Date of birth<input className="field" name="date_of_birth" type="date" defaultValue={textValue(executive?.date_of_birth)} /></label>
 
-      <label>Aadhaar number<input className="field" inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" defaultValue={textValue(executive?.aadhaar_number)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="pan_aadhaar" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
+      <label>Aadhaar number<input className="field" inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" defaultValue={textValue(executive?.aadhaar_number)} /></label>
       <label>PAN number<input className="field" name="pan_number" placeholder="Enter PAN number" defaultValue={textValue(executive?.pan_number)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="pan" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
       <label>eShram UAN<input className="field" inputMode="numeric" maxLength={12} name="eshram_uan" pattern="[0-9]{12}" placeholder="Enter eShram UAN" defaultValue={textValue(executive?.eshram_uan)} /></label>
 

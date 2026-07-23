@@ -188,7 +188,7 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
           <label>Date of birth<input className="field" defaultValue={employee?.date_of_birth ?? ""} name="date_of_birth" type="date" /></label>
           <label>Blood group<input className="field" defaultValue={employee?.blood_group ?? ""} name="blood_group" placeholder="Enter blood group" /></label>
           <label>Father name<input className="field" defaultValue={employee?.father_name ?? ""} name="father_name" placeholder="Enter father name" /></label>
-          <label>Aadhaar number<input className="field" defaultValue={employee?.aadhaar_number ?? ""} inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" />{employee ? <ProfileVerificationPanel accountId={employee.id} kind="pan_aadhaar" pageCode="employees" profileType="employee" /> : null}</label>
+          <label>Aadhaar number<input className="field" defaultValue={employee?.aadhaar_number ?? ""} inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" /></label>
           <label>PAN number<input className="field" defaultValue={employee?.pan_number ?? ""} name="pan_number" placeholder="Enter PAN number" />{employee ? <ProfileVerificationPanel accountId={employee.id} kind="pan" pageCode="employees" profileType="employee" /> : null}</label>
           <label className="span-3">Address<input className="field" defaultValue={employee?.address ?? ""} name="address" placeholder="Enter complete address" /></label>
           <label>State

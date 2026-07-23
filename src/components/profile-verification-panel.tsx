@@ -67,6 +67,15 @@ function resultMessage(result?: VerificationResult) {
   return parts.join(" | ");
 }
 
+function panGroupMessage(pan?: VerificationResult, panAadhaar?: VerificationResult) {
+  const parts = [];
+  if (pan?.name) parts.push(`PAN name: ${pan.name}`);
+  if (panAadhaar?.message) parts.push(panAadhaar.message);
+  if (!panAadhaar?.message && panAadhaar?.verified) parts.push("PAN Aadhaar link verified.");
+  if (!parts.length && pan?.message) parts.push(pan.message);
+  return parts.join(" | ");
+}
+
 function isElectric(result?: VerificationResult) {
   const fuel = String(result?.fuelType ?? "").toLowerCase();
   return fuel.includes("electric") || fuel === "ev";
@@ -115,19 +124,30 @@ export function ProfileVerificationPanel({ accountId, kind, profileType, pageCod
     }
   }
 
-  function missingMessage(fields = currentFields()) {
-    if (kind === "pan" && !fields.panNumber) return "PAN number is required.";
-    if (kind === "pan_aadhaar" && (!fields.panNumber || !fields.aadhaarNumber)) return "PAN and Aadhaar are required.";
-    if (kind === "pan_aadhaar" && !results.pan?.verified) return "Verify PAN first.";
-    if (kind === "dl" && (!fields.drivingLicenseNo || !fields.dateOfBirth)) return "DL and DOB are required.";
-    if (kind === "vehicle" && !fields.vehicleRegNo) return "Vehicle number is required.";
-    if (kind === "bank" && (!fields.bankAccountNo || !fields.ifsc)) return "Bank account and IFSC are required.";
+  function missingMessage(target = kind, fields = currentFields()) {
+    if (target === "pan" && (!fields.panNumber || !fields.aadhaarNumber)) return "PAN and Aadhaar are required.";
+    if (target === "pan_aadhaar" && (!fields.panNumber || !fields.aadhaarNumber)) return "PAN and Aadhaar are required.";
+    if (target === "pan_aadhaar" && !results.pan?.verified) return "Verify PAN first.";
+    if (target === "dl" && (!fields.drivingLicenseNo || !fields.dateOfBirth)) return "DL and DOB are required.";
+    if (target === "vehicle" && !fields.vehicleRegNo) return "Vehicle number is required.";
+    if (target === "bank" && (!fields.bankAccountNo || !fields.ifsc)) return "Bank account and IFSC are required.";
     return "";
+  }
+
+  async function runVerification(target: VerificationKind, fields = currentFields()) {
+    const response = await fetch("/api/profile-verification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountId, profileType, pageCode, kind: target, ...fields })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || "Unable to verify.");
+    return { ...body, kind: target } as VerificationResult;
   }
 
   async function verify() {
     const fields = currentFields();
-    const missing = missingMessage(fields);
+    const missing = missingMessage(kind, fields);
     if (missing) {
       setError(missing);
       return;
@@ -135,14 +155,7 @@ export function ProfileVerificationPanel({ accountId, kind, profileType, pageCod
     setError("");
     setRunning(true);
     try {
-      const response = await fetch("/api/profile-verification", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountId, profileType, pageCode, kind, ...fields })
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || "Unable to verify.");
-      const result = { ...body, kind } as VerificationResult;
+      const result = await runVerification(kind, fields);
       if (kind === "dl") setFieldValue("driving_license_exp_date", result.expiryDate);
       if (kind === "vehicle") {
         setFieldValue("vehicle_reg_exp_date", result.registrationExpiryDate);
@@ -150,7 +163,19 @@ export function ProfileVerificationPanel({ accountId, kind, profileType, pageCod
         setFieldValue("vehicle_pollution_exp_date", isElectric(result) ? "" : result.pollutionExpiryDate);
       }
       const next = { ...results, [kind]: result };
-      if (kind === "pan") delete next.pan_aadhaar;
+      if (kind === "pan") {
+        delete next.pan_aadhaar;
+        if (result.verified) {
+          const aadhaarMissing = !fields.panNumber || !fields.aadhaarNumber ? "PAN and Aadhaar are required." : "";
+          if (aadhaarMissing) {
+            setError(aadhaarMissing);
+          } else {
+            const aadhaarResult = await runVerification("pan_aadhaar", fields);
+            next.pan_aadhaar = aadhaarResult;
+            window.dispatchEvent(new CustomEvent("dropx-profile-verification", { detail: { kind: "pan_aadhaar", result: aadhaarResult } }));
+          }
+        }
+      }
       setResults(next);
       window.dispatchEvent(new CustomEvent("dropx-profile-verification", { detail: { kind, result } }));
     } catch (exception) {
@@ -193,6 +218,7 @@ export function ProfileVerificationPanel({ accountId, kind, profileType, pageCod
         const fields = currentFields();
         const next = { ...current };
         if (next[kind]?.inputKey && next[kind]?.inputKey !== keyFor(kind, fields)) delete next[kind];
+        if (kind === "pan" && next.pan_aadhaar?.inputKey && next.pan_aadhaar.inputKey !== keyFor("pan_aadhaar", fields)) delete next.pan_aadhaar;
         if (kind === "pan_aadhaar" && next.pan?.inputKey && next.pan.inputKey !== keyFor("pan", fields)) delete next.pan;
         return next;
       });
@@ -213,13 +239,18 @@ export function ProfileVerificationPanel({ accountId, kind, profileType, pageCod
   }, [kind]);
 
   const result = results[kind];
+  const panAadhaarResult = results.pan_aadhaar;
+  const isVerified = kind === "pan" ? Boolean(result?.verified && panAadhaarResult?.verified) : Boolean(result?.verified);
   const missing = missingMessage();
+  const message = kind === "pan" ? panGroupMessage(result, panAadhaarResult) : resultMessage(result);
   return (
-    <div className={`profile-verification-inline ${result?.verified ? "ok" : result ? "warn" : ""}`} ref={hostRef}>
-      <button className="button secondary profile-verification-button" disabled={running || Boolean(missing)} onClick={verify} type="button">
-        {running ? "Verifying" : result?.verified ? "Verified" : `Verify ${labels[kind]}`}
-      </button>
-      <span>{running ? "Verifying..." : result ? resultMessage(result) || "Checked." : missing || "Not verified"}</span>
+    <div className={`profile-verification-inline ${isVerified ? "ok" : result ? "warn" : ""} ${isVerified ? "" : "needs-button"}`} ref={hostRef}>
+      {!isVerified ? (
+        <button className="button secondary profile-verification-button" disabled={running || Boolean(missing)} onClick={verify} type="button">
+          {running ? "Verifying" : "Verify"}
+        </button>
+      ) : null}
+      <span>{running ? `Verifying ${labels[kind]}...` : result ? message || "Checked." : missing || "Not verified"}</span>
       {error ? <span className="profile-verification-error">{error}</span> : null}
     </div>
   );

@@ -9677,6 +9677,7 @@ td strong,
   align-self: start;
 }
 
+.form-grid:has(.profile-verification-inline),
 .employee-form:has(.profile-verification-inline),
 .field-executive-add-form:has(.profile-verification-inline) {
   align-items: start;

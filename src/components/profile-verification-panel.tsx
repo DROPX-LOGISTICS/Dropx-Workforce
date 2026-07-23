@@ -238,10 +238,13 @@ export function ProfileVerificationPanel({ accountId, kind, profileType, pageCod
     };
   }, [kind]);
 
-  const result = results[kind];
-  const panAadhaarResult = results.pan_aadhaar;
+  const fields = currentFields();
+  const storedResult = results[kind];
+  const storedPanAadhaarResult = results.pan_aadhaar;
+  const result = storedResult?.inputKey === keyFor(kind, fields) ? storedResult : undefined;
+  const panAadhaarResult = storedPanAadhaarResult?.inputKey === keyFor("pan_aadhaar", fields) ? storedPanAadhaarResult : undefined;
   const isVerified = kind === "pan" ? Boolean(result?.verified && panAadhaarResult?.verified) : Boolean(result?.verified);
-  const missing = missingMessage();
+  const missing = missingMessage(kind, fields);
   const message = kind === "pan" ? panGroupMessage(result, panAadhaarResult) : resultMessage(result);
   return (
     <div className={`profile-verification-inline ${isVerified ? "ok" : result ? "warn" : ""} ${isVerified ? "" : "needs-button"}`} ref={hostRef}>

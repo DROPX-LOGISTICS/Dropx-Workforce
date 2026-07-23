@@ -1051,22 +1051,11 @@ async function applyFilters(page) {
 }
 
 async function collectPageEvidence(page) {
-  return page.evaluate(() => {
-    const documents = [document, ...Array.from(document.querySelectorAll("iframe"))
-      .map((frame) => {
-        try {
-          return frame.contentDocument;
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean)];
-    const queryAll = (selector) => documents.flatMap((currentDocument) =>
-      Array.from(currentDocument.querySelectorAll(selector))
-    );
-    const bodyText = documents.map((currentDocument) => currentDocument.body?.innerText || "").join("\n");
-    const cleanCell = (value) => (value || "").replace(/\s+/g, " ").trim();
-    const tables = queryAll("table").map((table) => {
+  const frameResults = await Promise.all(page.frames().map((frame) =>
+    frame.evaluate(() => {
+      const bodyText = document.body?.innerText || "";
+      const cleanCell = (value) => (value || "").replace(/\s+/g, " ").trim();
+      const tables = Array.from(document.querySelectorAll("table")).map((table) => {
       const headers = Array.from(table.querySelectorAll("thead th, tr:first-child th, tr:first-child td"))
         .map((cell) => cleanCell(cell.textContent || ""))
         .filter(Boolean);
@@ -1075,7 +1064,7 @@ async function collectPageEvidence(page) {
       ).filter((row) => row.some(Boolean));
       return { headers, rows };
     });
-    const rowGroups = queryAll("[role='table'], [role='grid'], .table, .grid, .driver-reconciliation, .driverReconciliation")
+      const rowGroups = Array.from(document.querySelectorAll("[role='table'], [role='grid'], .table, .grid, .driver-reconciliation, .driverReconciliation"))
       .slice(0, 20)
       .map((group) => {
         const headerNodes = Array.from(group.querySelectorAll("[role='columnheader'], th"));
@@ -1092,20 +1081,31 @@ async function collectPageEvidence(page) {
         return { headers, rows };
       })
       .filter((group) => group.rows.length);
-    const textRows = queryAll("tr, [role='row']")
+      const textRows = Array.from(document.querySelectorAll("tr, [role='row']"))
       .slice(0, 250)
       .map((row) => cleanCell(row.textContent || ""))
       .filter(Boolean);
-    return {
-      title: document.title,
-      url: location.href,
-      text: bodyText.replace(/\s+/g, " ").slice(0, 12000),
-      raw_text: bodyText.slice(0, 20000),
-      tables,
-      row_groups: rowGroups,
-      text_rows: textRows
-    };
-  });
+      return {
+        title: document.title,
+        url: location.href,
+        text: bodyText.replace(/\s+/g, " ").slice(0, 12000),
+        raw_text: bodyText.slice(0, 20000),
+        tables,
+        row_groups: rowGroups,
+        text_rows: textRows
+      };
+    }).catch(() => null)
+  ));
+  const available = frameResults.filter(Boolean);
+  return {
+    title: available.map((result) => result.title).find(Boolean) || "",
+    url: page.url(),
+    text: available.map((result) => result.text).join(" ").slice(0, 12000),
+    raw_text: available.map((result) => result.raw_text).join("\n").slice(0, 40000),
+    tables: available.flatMap((result) => result.tables || []),
+    row_groups: available.flatMap((result) => result.row_groups || []),
+    text_rows: available.flatMap((result) => result.text_rows || [])
+  };
 }
 
 function countPendingRows(tables) {

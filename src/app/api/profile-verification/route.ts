@@ -339,7 +339,7 @@ export async function POST(request: NextRequest) {
         verified,
         inputKey: inputKey([creditorAccountId, ifscCode]),
         accountName: compact(resource?.creditorName),
-        message: text(body?.message) || (verified ? "Bank account checked." : "Bank verification failed.")
+        message: verified ? text(body?.message) || "Bank account checked." : "Bank verification failed."
       };
       return verifiedResponse(result);
     }

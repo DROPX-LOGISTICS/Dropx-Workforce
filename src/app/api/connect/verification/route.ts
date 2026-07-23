@@ -67,12 +67,11 @@ async function resolveAccount(accountId: string, profileType: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const session = await activeSession();
   const { countryCode, mobile, localMobile } = normalizeConnectMobile(session.mobile_number, session.country_code);
-  const table = profileType === "field_executive" ? "field_executives" : "profiles";
-  const idColumn = profileType === "field_executive" ? "id" : "id";
+  const table = profileType === "field_executive" ? "field_executives" : "employees";
   const result = await supabaseAdmin
     .from(table)
     .select("id, company_id, full_name, mobile, mobile_country_code")
-    .eq(idColumn, accountId)
+    .eq("id", accountId)
     .maybeSingle();
   if (result.error) throw new Error(result.error.message);
   const row = result.data;

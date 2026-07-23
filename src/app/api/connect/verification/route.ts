@@ -325,7 +325,9 @@ export async function POST(request: NextRequest) {
         verified,
         manualReview: !verified,
         inputKey: inputKey([pan, aadhar]),
-        message: text(body?.result?.message) || (verified ? "PAN Aadhaar link verified." : "PAN Aadhaar link verification failed.")
+        message: text(body?.data?.message) ||
+          text(body?.result?.message) ||
+          (verified ? "PAN Aadhaar link verified." : "PAN Aadhaar link verification failed.")
       };
       return verifiedResponse({ account, profileType, accountId, kind, result });
     }

@@ -22,22 +22,31 @@ export default async function CpsPage() {
   const companyId = requireCompanyId(authorization);
   const locationsResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const context = resolveOperatingContext(locationsResult.locations);
-  const { data, error } = context.location && supabaseAdmin
-    ? await supabaseAdmin
+  const [shipmentResult, stationDailyResult] = context.location && supabaseAdmin
+    ? await Promise.all([supabaseAdmin
       .from("cps_shipment_daily")
-      .select("work_date,shipment_type,provider_employee_id,total_delivery,total_activity,updated_at")
+      .select("work_date,shipment_type,provider_employee_id,total_delivery,total_activity,mapping_status,da_total_pay,updated_at")
       .eq("company_id", companyId)
       .eq("station_code", context.location.station_code)
       .order("work_date", { ascending: false })
-      .limit(5000)
-    : { data: [], error: null };
-  const rows = data ?? [];
+      .limit(5000),
+    supabaseAdmin.from("cps_station_daily")
+      .select("work_date,total_cost,overall_cps,target_cps,target_gap,target_impact,da_pay_cost,staff_cost,fuel_cost,vehicle_cost,rent_cost,other_cost")
+      .eq("company_id", companyId)
+      .eq("station_code", context.location.station_code)
+      .order("work_date", { ascending: false })
+      .limit(1)])
+    : [{ data: [], error: null }, { data: [], error: null }];
+  const rows = shipmentResult.data ?? [];
+  const cost = stationDailyResult.data?.[0];
   const latestDate = rows.map((row) => row.work_date).filter(Boolean).sort().at(-1) ?? null;
   const latestRows = latestDate ? rows.filter((row) => row.work_date === latestDate) : [];
   const volume = latestRows.reduce((sum, row) => sum + number(row.total_delivery), 0);
   const activity = latestRows.reduce((sum, row) => sum + number(row.total_activity), 0);
   const associates = new Set(latestRows.map((row) => row.provider_employee_id).filter(Boolean)).size;
   const productivity = associates ? volume / associates : 0;
+  const unmapped = latestRows.filter((row) => row.mapping_status !== "Mapped").length;
+  const payout = latestRows.reduce((sum, row) => sum + number(row.da_total_pay), 0);
   const typeMap = new Map<string, { activity: number; volume: number }>();
   latestRows.forEach((row) => {
     const key = row.shipment_type || "Unspecified";
@@ -55,13 +64,20 @@ export default async function CpsPage() {
           title="CPS Performance"
           subtitle="Shipment, associate and productivity review using the selected workspace and existing Supabase facts."
         />
-        {locationsResult.error || error ? <section className="panel message-panel error"><div className="panel-body">{locationsResult.error ?? error?.message}</div></section> : null}
+        {locationsResult.error || shipmentResult.error || stationDailyResult.error ? <section className="panel message-panel error"><div className="panel-body">{locationsResult.error ?? shipmentResult.error?.message ?? stationDailyResult.error?.message}</div></section> : null}
         <section className="ops-kpi-grid">
           <article><div className="ops-kpi-icon">V</div><span>Latest volume</span><strong>{display(volume)}</strong><small>{latestDate ?? "No import"}</small></article>
           <article><div className="ops-kpi-icon">A</div><span>Associates</span><strong>{display(associates)}</strong><small>Provider IDs on latest date</small></article>
           <article><div className="ops-kpi-icon">P</div><span>Productivity</span><strong>{productivity.toFixed(1)}</strong><small>Shipments per associate</small></article>
           <article><div className="ops-kpi-icon">T</div><span>Total activity</span><strong>{display(activity)}</strong><small>Imported activity measure</small></article>
           <article><div className="ops-kpi-icon">R</div><span>Data rows</span><strong>{display(rows.length)}</strong><small>Current station history</small></article>
+        </section>
+        <section className="ops-kpi-grid">
+          <article><div className="ops-kpi-icon">₹</div><span>DA payout</span><strong>₹{display(payout)}</strong><small>Latest shipment date</small></article>
+          <article className={unmapped ? "attention" : "healthy"}><div className="ops-kpi-icon">!</div><span>Unmapped IDs</span><strong>{display(unmapped)}</strong><small>{unmapped ? "Requires ID mapping" : "Mapping complete"}</small></article>
+          <article><div className="ops-kpi-icon">C</div><span>Overall CPS</span><strong>{number(cost?.overall_cps).toFixed(2)}</strong><small>Target {number(cost?.target_cps).toFixed(2)}</small></article>
+          <article className={number(cost?.target_gap) > 0 ? "attention" : "healthy"}><div className="ops-kpi-icon">G</div><span>Target gap</span><strong>{number(cost?.target_gap).toFixed(2)}</strong><small>Impact ₹{display(number(cost?.target_impact))}</small></article>
+          <article><div className="ops-kpi-icon">Σ</div><span>Total cost</span><strong>₹{display(number(cost?.total_cost))}</strong><small>{cost?.work_date ?? "Awaiting CPS calculation"}</small></article>
         </section>
         <section className="ops-visual-grid">
           <article className="ops-visual-card wide">

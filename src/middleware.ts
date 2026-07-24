@@ -97,7 +97,6 @@ export async function middleware(request: NextRequest) {
   const supabase = createClient(supabaseUrl, supabaseAuthKey, {
     auth: {
       flowType: "pkce",
-      storageKey: undefined,
       autoRefreshToken: false,
       detectSessionInUrl: false,
       persistSession: true,

@@ -56,21 +56,6 @@ export const navItems: NavItem[] = [
   { code: "mapping", label: "Mapping", href: "/mapping", icon: "<>" },
   { code: "rate_cards", label: "Rate Cards", href: "/rate-cards", icon: "Rs" },
   { code: "imports", label: "Report Imports", href: "/imports", icon: "^" },
-  {
-    code: "cps",
-    label: "CPS",
-    icon: "C",
-    children: [
-      { code: "cps_overview", label: "Overview", href: "/cps" },
-      { code: "cps_stations", label: "Stations", href: "/cps?view=stations" },
-      { code: "cps_shipments", label: "Shipments", href: "/cps?view=shipments" },
-      { code: "cps_associates", label: "Associates", href: "/cps?view=associates" },
-      { code: "cps_reports", label: "Reports", href: "/cps?view=reports" },
-      { code: "imports", label: "Imports", href: "/imports" },
-      { code: "cps_unmapped", label: "Unmapped IDs", href: "/cps?view=unmapped" },
-      { code: "cps_inputs", label: "Inputs", href: "/cps?view=inputs" }
-    ]
-  },
   { code: "earnings", label: "Earnings Review", href: "/earnings", icon: "$" },
   { code: "exceptions", label: "Exceptions", href: "/exceptions", icon: "!" },
   { code: "inbox", label: "Inbox", href: "/inbox", icon: "I" },

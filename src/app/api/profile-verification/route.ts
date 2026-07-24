@@ -5,6 +5,7 @@ import { isMissingVerificationTable } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const IDSPAY_BASE_URL = "https://javabackend.idspay.in/api/v1/prod";
+const NAME_MATCH_THRESHOLD = 0.7;
 
 type VerificationKind = "pan" | "pan_aadhaar" | "dl" | "vehicle" | "bank" | "pf_uan";
 
@@ -257,7 +258,7 @@ export async function POST(request: NextRequest) {
       const apiName = compact(findFirstString(body, ["full_name", "fullName", "name", "pan_name", "panName"]));
       const apiSuccess = body?.data?.success === true || body?.status?.type === "success";
       const score = nameScore(registeredName, apiName);
-      const verified = Boolean(apiSuccess && score >= 0.5);
+      const verified = Boolean(apiSuccess && score >= NAME_MATCH_THRESHOLD);
       const mismatch = Boolean(apiSuccess && !verified);
       const result = {
         verified,
@@ -310,7 +311,7 @@ export async function POST(request: NextRequest) {
       const parsedExpiry = parseDate(expiryDate);
       const expired = parsedExpiry ? parsedExpiry.getTime() < Date.now() : false;
       const apiSuccess = body?.status?.type === "success" || text(body?.message).toLowerCase().includes("validated");
-      const nameMatched = Boolean(apiSuccess && score >= 0.5);
+      const nameMatched = Boolean(apiSuccess && score >= NAME_MATCH_THRESHOLD);
       const result = {
         verified: nameMatched && !expired,
         manualReview: apiSuccess && !nameMatched,
@@ -367,7 +368,7 @@ export async function POST(request: NextRequest) {
       const apiName = uanName(body);
       const apiSuccess = body?.status?.type === "success" || text(body?.message).toLowerCase() === "success";
       const score = nameScore(registeredName, apiName);
-      const verified = Boolean(apiSuccess && score >= 0.5);
+      const verified = Boolean(apiSuccess && score >= NAME_MATCH_THRESHOLD);
       const mismatch = Boolean(apiSuccess && !verified);
       const result = {
         verified,

@@ -317,7 +317,8 @@ async function processRun(run: PortalRun, workerUrl: string, workerSecret: strin
         "Authorization": `Bearer ${workerSecret}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(210000)
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(String(result.error ?? `Worker returned HTTP ${response.status}`));
@@ -392,6 +393,19 @@ export async function GET(request: Request) {
   const workerUrl = process.env.OPS_PORTAL_WORKER_URL?.trim();
   const workerSecret = process.env.OPS_PORTAL_WORKER_SECRET?.trim();
   const now = new Date().toISOString();
+  const staleRunningCutoff = new Date(Date.now() - 4 * 60 * 1000).toISOString();
+
+  await supabaseAdmin
+    .from("ops_portal_check_runs")
+    .update({
+      status: "Error",
+      error_message: "Previous worker request did not return before the processing deadline.",
+      summary: "Recovered a stale Running check; it will be retried.",
+      next_check_at: now,
+      updated_at: now
+    })
+    .eq("status", "Running")
+    .lt("updated_at", staleRunningCutoff);
 
   const runsResult = await supabaseAdmin
     .from("ops_portal_check_runs")

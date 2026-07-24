@@ -46,7 +46,12 @@ export function createServerSupabaseClient(response?: NextResponse, forceOpsStor
   const host = headers().get("x-forwarded-host")?.split(":")[0].toLowerCase() ??
     headers().get("host")?.split(":")[0].toLowerCase() ??
     "";
-  const useOpsStorage = forceOpsStorage ?? host === "ops.dropxlogistics.com";
+  const hasOpsSessionCookie = Boolean(
+    cookieStore.get("dropx-ops-auth-v3")?.value ||
+    cookieStore.get("dropx-ops-auth-v3.0")?.value
+  );
+  const useOpsStorage = forceOpsStorage ??
+    (host === "ops.dropxlogistics.com" || hasOpsSessionCookie);
   const cookieOptions = {
     ...(useOpsStorage ? {} : { domain: cookieDomain() }),
     httpOnly: true,

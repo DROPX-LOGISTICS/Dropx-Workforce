@@ -48,7 +48,7 @@ export default async function AmazonReportsPage() {
                 <div key={row.id}>
                   <i className={row.report_type === "weekly_sla" ? "sla" : ""}>{row.report_type === "weekly_sla" ? "W" : "D"}</i>
                   <div><strong>{row.report_type === "weekly_sla" ? "Weekly SLA scorecard" : "Day-level report"}</strong><span>{row.period_from} to {row.period_to}</span><small>{row.remarks || "No review note"}</small></div>
-                  <b>{row.overall_score == null ? "—" : Number(row.overall_score).toFixed(2)}</b>
+                  <div className="scorecard-actions"><b>{row.overall_score == null ? "—" : Number(row.overall_score).toFixed(2)}</b><a href={`/api/ops-pulse/reports/amazon/${row.id}/download`}>Download</a></div>
                 </div>
               ))}
               {!data?.length ? <div className="ops-empty-visual">Upload the first Amazon report for this station.</div> : null}

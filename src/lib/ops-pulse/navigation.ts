@@ -7,6 +7,21 @@ export const opsNavItems: NavItem[] = [
   { code: "daily_submission", label: "Daily Submission", href: "/ops-pulse/daily-submission", icon: "D" },
   { code: "cod_master", label: "COD Master", href: "/master/cod-master", icon: "M" },
   {
+    code: "cps",
+    label: "CPS",
+    icon: "C",
+    children: [
+      { code: "cps_overview", label: "Overview", href: "/cps" },
+      { code: "cps_stations", label: "Stations", href: "/cps?view=stations" },
+      { code: "cps_shipments", label: "Shipments", href: "/cps?view=shipments" },
+      { code: "cps_associates", label: "Associates", href: "/cps?view=associates" },
+      { code: "cps_reports", label: "Reports", href: "/cps?view=reports" },
+      { code: "imports", label: "Imports", href: "https://dashboard.dropxlogistics.com/imports" },
+      { code: "cps_unmapped", label: "Unmapped IDs", href: "/cps?view=unmapped" },
+      { code: "cps_inputs", label: "Inputs", href: "/cps?view=inputs" }
+    ]
+  },
+  {
     code: "cod",
     label: "Amazon Operations",
     icon: "A",

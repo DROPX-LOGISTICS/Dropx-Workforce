@@ -201,7 +201,8 @@ export async function GET(request: NextRequest) {
   const errorDescription = request.nextUrl.searchParams.get("error_description");
   const loginUrl = new URL("/login", request.url);
   const callbackResponse = NextResponse.redirect(new URL("/dashboard", request.url));
-  const supabase = createServerSupabaseClient(callbackResponse);
+  const returnToOps = request.cookies.get("dropx_ops_auth_return")?.value === "1";
+  const supabase = createServerSupabaseClient(callbackResponse, returnToOps);
 
   try {
     if (!code) {
@@ -389,7 +390,6 @@ export async function GET(request: NextRequest) {
   }
 
     const nextPath = safeNextPath(request.nextUrl.searchParams.get("next"));
-    const returnToOps = request.cookies.get("dropx_ops_auth_return")?.value === "1";
     const destinationPath = isPlatformAdminHost
       ? (nextPath.startsWith("/platform-admin") ? nextPath : "/platform-admin")
       : (returnToOps ? "/ops-pulse" : (nextPath || "/dashboard"));

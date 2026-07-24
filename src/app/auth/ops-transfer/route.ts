@@ -21,17 +21,6 @@ export async function GET(request: NextRequest) {
     if (error) throw error;
     if (!data.session) throw new Error("Ops session was not created.");
 
-    const storedSession = JSON.stringify(data.session);
-    const chunks = storedSession.match(/.{1,3000}/g) ?? [];
-    for (let index = 0; index < 8; index += 1) {
-      response.cookies.set(`dropx-ops-auth-v3.${index}`, chunks[index] ?? "", {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: true,
-        path: "/",
-        maxAge: chunks[index] ? 60 * 60 * 24 * 30 : 0
-      });
-    }
     response.cookies.set("dropx_ops_auth_return", "", {
       domain: ".dropxlogistics.com",
       httpOnly: true,

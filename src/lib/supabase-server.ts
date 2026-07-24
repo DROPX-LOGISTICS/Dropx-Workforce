@@ -66,7 +66,7 @@ export function createServerSupabaseClient(response?: NextResponse, forceOpsStor
   return createClient(supabaseUrl, supabaseAuthKey, {
     auth: {
       flowType: "pkce",
-      storageKey: useOpsStorage ? "dropx-ops-auth" : undefined,
+      storageKey: useOpsStorage ? "dropx-ops-auth-v2" : undefined,
       autoRefreshToken: false,
       detectSessionInUrl: false,
       persistSession: true,

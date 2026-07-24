@@ -8,7 +8,9 @@ const PORT = Number(process.env.PORT || 8080);
 const WORKER_SECRET = process.env.OPS_PORTAL_WORKER_SECRET || process.env.WORKER_SECRET || "";
 const HEADLESS = String(process.env.HEADLESS ?? "true").toLowerCase() !== "false";
 const SLOW_MO_MS = Number(process.env.SLOW_MO_MS || 0);
-const WORKER_TIMEOUT_MS = Number(process.env.WORKER_TIMEOUT_MS || 240000);
+// Keep the worker comfortably inside Vercel's request ceiling even if an older
+// deployment still supplies the previous six-minute environment value.
+const WORKER_TIMEOUT_MS = Math.min(Number(process.env.WORKER_TIMEOUT_MS || 180000), 180000);
 const DEBUG_ARTIFACT_DIR = process.env.DEBUG_ARTIFACT_DIR || "";
 const SESSION_STATE_DIR = process.env.SESSION_STATE_DIR || path.join(process.cwd(), ".amazon-portal-sessions");
 const MANUAL_APPROVAL_WAIT_MS = Number(process.env.MANUAL_APPROVAL_WAIT_MS || 180000);
@@ -17,6 +19,7 @@ const NOVNC_PORT = Number(process.env.NOVNC_PORT || 6080);
 
 const DRIVER_RECON_URL = "https://www.amazonlogistics.eu/station/dashboard/driverreconciliation";
 const BANK_DEPOSITS_URL = "https://www.amazonlogistics.eu/station/dashboard/bankdeposits";
+const BROWSER_CLOSE_TIMEOUT_MS = 3000;
 const PORTAL_DEFINITIONS = {
   scc: {
     baseUrl: "https://www.amazonlogistics.eu/",
@@ -44,6 +47,13 @@ const PORTAL_DEFINITIONS = {
 function portalDefinition(payload = {}) {
   const code = String(payload.portal_code || payload.portal || "scc").toLowerCase();
   return PORTAL_DEFINITIONS[code] || PORTAL_DEFINITIONS.scc;
+}
+
+async function closeBrowserSafely(browser) {
+  await Promise.race([
+    browser.close().catch(() => null),
+    new Promise((resolve) => setTimeout(resolve, BROWSER_CLOSE_TIMEOUT_MS))
+  ]);
 }
 
 function normalizePortalPayload(payload = {}) {
@@ -1369,7 +1379,7 @@ async function runSccCheck(payload) {
       }
     };
   } finally {
-    await browser.close().catch(() => null);
+    await closeBrowserSafely(browser);
   }
 }
 
@@ -1442,7 +1452,7 @@ async function runSccWarmup(payload) {
       }
     };
   } finally {
-    await browser.close().catch(() => null);
+    await closeBrowserSafely(browser);
   }
 }
 

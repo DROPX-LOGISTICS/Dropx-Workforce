@@ -15,15 +15,16 @@ function cookieDomain() {
   return host.endsWith("dropxlogistics.com") ? ".dropxlogistics.com" : undefined;
 }
 
-export function createServerSupabaseClient(response?: NextResponse, _forceOpsStorage = false) {
+export function createServerSupabaseClient(response?: NextResponse, forceOpsStorage?: boolean) {
   if (!supabaseUrl || !supabaseAuthKey) return null;
 
   const cookieStore = cookies();
   const host = headers().get("x-forwarded-host")?.split(":")[0].toLowerCase() ??
     headers().get("host")?.split(":")[0].toLowerCase() ??
     "";
+  const useOpsStorage = forceOpsStorage ?? host === "ops.dropxlogistics.com";
   const cookieOptions = {
-    domain: cookieDomain(),
+    domain: useOpsStorage ? undefined : cookieDomain(),
     httpOnly: true,
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
@@ -65,6 +66,7 @@ export function createServerSupabaseClient(response?: NextResponse, _forceOpsSto
   return createClient(supabaseUrl, supabaseAuthKey, {
     auth: {
       flowType: "pkce",
+      ...(useOpsStorage ? { storageKey: "dropx-ops-auth-v3" } : {}),
       autoRefreshToken: false,
       detectSessionInUrl: false,
       persistSession: true,

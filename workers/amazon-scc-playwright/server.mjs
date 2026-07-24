@@ -1204,22 +1204,54 @@ function summarizePreparedDeposit(evidence, stationCode, checkDate) {
     "deposit amount"
   ]);
   const pendingRows = countPendingRows(evidence.tables || []);
-  const noLiability = /no\s+(pending\s+)?liability|no\s+amount|nothing\s+to\s+generate|0\.00/i.test(text);
+  const noLiability = /you\s+don'?t\s+have\s+any\s+liability\s+to\s+prepare\s+deposit|no\s+(pending\s+)?liability|no\s+amount|nothing\s+to\s+generate/i.test(text);
   const pageLooksRelevant = /prepared deposit|bank deposit|liability|remittance/i.test(text);
-  const status = pendingAmount > 0 || pendingRows.pending > 0 ? "Fail" : (noLiability || pageLooksRelevant ? "Pass" : "Manual Review");
+  const openRemittances = [];
+  for (const table of evidence.tables || []) {
+    const headers = (table.headers || []).map((header) => normalizeText(header).toLowerCase());
+    const codeIndex = headers.findIndex((header) => header === "code" || /remittance.*code/.test(header));
+    const statusIndex = headers.findIndex((header) => header === "status");
+    const expectedIndex = headers.findIndex((header) => header === "expected" || /amount.*expected|expected.*amount/.test(header));
+    const creationIndex = headers.findIndex((header) => /creation date|created at|created on/.test(header));
+    if (statusIndex < 0 || expectedIndex < 0) continue;
+    for (const cells of table.rows || []) {
+      const statusText = normalizeText(cells[statusIndex]).toUpperCase();
+      const code = codeIndex >= 0 ? normalizeText(cells[codeIndex]) : "";
+      if (statusText !== "CREATED" || code) continue;
+      openRemittances.push({
+        code: null,
+        status: statusText,
+        creation_date: creationIndex >= 0 ? normalizeText(cells[creationIndex]) : null,
+        expected: safeNumber(cells[expectedIndex]),
+        raw_row: { headers: table.headers || [], cells }
+      });
+    }
+  }
+  const openExpected = Number(openRemittances.reduce((sum, row) => sum + row.expected, 0).toFixed(2));
+  const status = pendingAmount > 0 || pendingRows.pending > 0
+    ? "Fail"
+    : (noLiability && openRemittances.length ? "Pass" : "Manual Review");
 
   return {
     status,
     pending_count: pendingRows.pending,
     pending_amount: pendingAmount,
+    no_deposit_liability: noLiability,
+    open_remittances: openRemittances,
+    open_remittance_expected: openExpected,
     summary: status === "Pass"
-      ? `Prepared deposit is clear for ${stationCode} on ${checkDate}.`
+      ? `Prepared deposit is clear and ${openRemittances.length} open remittance(s) total ₹${openExpected.toFixed(2)} for ${stationCode} on ${checkDate}.`
       : status === "Fail"
         ? `Prepared deposit shows pending liability for ${stationCode} on ${checkDate}.`
-        : `Prepared deposit page loaded, but layout was not clear enough to confirm ${stationCode} on ${checkDate}.`,
+        : noLiability
+          ? `No deposit liability remains, but no open CREATED remittance without code was found for ${stationCode} on ${checkDate}.`
+          : `Prepared deposit page loaded, but no-liability status was not confirmed for ${stationCode} on ${checkDate}.`,
     evidence: {
       ...evidence,
-      pending_examples: pendingRows.examples
+      pending_examples: pendingRows.examples,
+      no_deposit_liability: noLiability,
+      open_remittances: openRemittances,
+      open_remittance_expected: openExpected
     }
   };
 }

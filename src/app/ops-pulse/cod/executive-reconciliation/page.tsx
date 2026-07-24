@@ -22,7 +22,11 @@ import {
 import { isSupabaseAdminConfigured } from "@/lib/supabase-admin";
 import {
   addManualExecutiveReconciliation,
+  deleteExecutiveReconciliation,
+  queueCodClosureCheck,
   refreshExecutiveReconciliationRoster,
+  requestCodGateException,
+  reviewCodGateException,
   saveExecutiveReconciliation,
   submitCodDayClosure
 } from "./actions";
@@ -225,6 +229,12 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
     loadCodManagerNotifications(companyId, result.locations.map((location) => location.id))
   ]);
   const selectedClosure = closures.find((closure) => closure.location_id === defaultLocationId) ?? null;
+  const driverCleared = selectedClosure?.driver_check_status === "Passed" ||
+    selectedClosure?.driver_check_status === "Exception approved";
+  const depositCleared = selectedClosure?.deposit_check_status === "Passed" ||
+    selectedClosure?.deposit_check_status === "Exception approved";
+  const canManagerReview = Boolean(authorization.isMasterOwner || authorization.isMasterCompany ||
+    `${authorization.roleCode ?? ""} ${authorization.roleName ?? ""}`.toLowerCase().match(/manager|admin|owner/));
   const closureTotals = closures.reduce((totals, closure) => ({
     collected: totals.collected + Number(closure.collected_cod ?? 0),
     expected: totals.expected + Number(closure.amazon_open_remittance_expected ?? 0),
@@ -328,37 +338,124 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
           <section className="panel">
             <div className="panel-head">
               <div>
-                <h2>Day closure summary</h2>
-                <p className="subtle">Amazon validation is stored separately from station cash. Mismatches may be submitted with a reason and are sent to the manager by email and portal notification.</p>
+                <h2>Station COD closure</h2>
+                <p className="subtle">Complete the gates in order. Driver Reconciliation must clear first, then Bank Deposit. A pending gate can continue only after manager approval.</p>
               </div>
-              <span className="count-badge">{closures.length} station closures</span>
+              <StatusPill status={selectedClosure?.is_final_submitted ? "Final submitted" : selectedClosure?.submission_status ?? "Draft"} />
             </div>
             <div className="panel-body">
               <div className="summary-grid">
-                <div className="metric-card"><span>Matched stations</span><strong>{closureTotals.matched}</strong><small>Validated for {result.businessDate}</small></div>
-                <div className="metric-card"><span>Mismatches</span><strong>{closureTotals.mismatch}</strong><small>{closureTotals.pendingManager} awaiting manager</small></div>
+                <div className="metric-card"><span>Driver Reconciliation</span><strong>{selectedClosure?.driver_check_status ?? "Not run"}</strong><small>Pending {formatAmount(selectedClosure?.driver_reconciliation_pending ?? 0)}</small></div>
+                <div className="metric-card"><span>Bank Deposit</span><strong>{selectedClosure?.deposit_check_status ?? "Locked"}</strong><small>{selectedClosure?.no_deposit_liability ? "No deposit liability" : "Liability clearance not confirmed"}</small></div>
                 <div className="metric-card"><span>Collected COD</span><strong>{formatAmount(closureTotals.collected)}</strong><small>Submitted station cash</small></div>
                 <div className="metric-card"><span>Amazon expected</span><strong>{formatAmount(closureTotals.expected)}</strong><small>Open remittances without code</small></div>
               </div>
               {defaultLocationId ? (
-                <form action={submitCodDayClosure} className="form-grid three" style={{ marginTop: 18 }}>
-                  <input type="hidden" name="return_href" value={returnHref} />
-                  <input type="hidden" name="business_date" value={result.businessDate} />
-                  <input type="hidden" name="location_id" value={defaultLocationId} />
-                  <label className="span-2">Mismatch reason
-                    <textarea className="field" name="override_reason" rows={3} placeholder="Required only when Amazon and DropX do not match. This is sent to the manager." />
-                  </label>
-                  <div>
-                    <div className="metric-card">
-                      <span>Selected station status</span>
-                      <strong>{selectedClosure?.submission_status ?? "Not submitted"}</strong>
-                      <small>{selectedClosure ? `Difference ${formatAmount(selectedClosure.difference_amount)}` : "Run DR and Bank Deposit validation first"}</small>
-                    </div>
-                    <div className="form-actions align-right" style={{ marginTop: 10 }}>
-                      <SubmitButton disabled={!permission.canEdit}>Submit day closure</SubmitButton>
-                    </div>
-                  </div>
-                </form>
+                <div style={{ display: "grid", gap: 16, marginTop: 18 }}>
+                  <section className="metric-card">
+                    <span>Step 1</span>
+                    <strong>Clear Driver Reconciliation</strong>
+                    <small>SCC checks all drivers for this station and date. Bank Deposit remains locked until this passes or a manager approves an exception.</small>
+                    <form action={queueCodClosureCheck} className="form-actions" style={{ marginTop: 12 }}>
+                      <input type="hidden" name="return_href" value={returnHref} />
+                      <input type="hidden" name="business_date" value={result.businessDate} />
+                      <input type="hidden" name="location_id" value={defaultLocationId} />
+                      <input type="hidden" name="check_type" value="driver_reconciliation" />
+                      <SubmitButton className="button secondary" disabled={!permission.canEdit || selectedClosure?.is_final_submitted}>
+                        Run Driver Reconciliation
+                      </SubmitButton>
+                    </form>
+                    {selectedClosure && ["Pending", "Error", "Exception rejected"].includes(selectedClosure.driver_check_status) ? (
+                      <form action={requestCodGateException} className="form-grid three" style={{ marginTop: 12 }}>
+                        <input type="hidden" name="return_href" value={returnHref} />
+                        <input type="hidden" name="business_date" value={result.businessDate} />
+                        <input type="hidden" name="location_id" value={defaultLocationId} />
+                        <input type="hidden" name="gate" value="driver" />
+                        <label className="span-2">Driver exception reason
+                          <textarea className="field" name="exception_reason" rows={2} required placeholder="Explain why the station must continue while Driver Reconciliation is pending." />
+                        </label>
+                        <div className="form-actions align-right"><SubmitButton>Request manager approval</SubmitButton></div>
+                      </form>
+                    ) : null}
+                    {selectedClosure?.driver_check_status === "Exception requested" ? (
+                      <div className="alert danger" style={{ marginTop: 12 }}>
+                        <strong>Manager approval pending</strong>
+                        <span>{selectedClosure.driver_exception_reason}</span>
+                      </div>
+                    ) : null}
+                    {selectedClosure?.driver_check_status === "Exception requested" && canManagerReview ? (
+                      <form action={reviewCodGateException} className="form-grid three" style={{ marginTop: 12 }}>
+                        <input type="hidden" name="return_href" value={returnHref} />
+                        <input type="hidden" name="closure_id" value={selectedClosure.id} />
+                        <input type="hidden" name="gate" value="driver" />
+                        <label className="span-2">Manager remarks<input className="field" name="manager_remarks" placeholder="Approval or rejection remarks" /></label>
+                        <div className="form-actions align-right">
+                          <button className="button secondary" name="decision" value="reject">Reject</button>
+                          <button className="button" name="decision" value="approve">Approve exception</button>
+                        </div>
+                      </form>
+                    ) : null}
+                  </section>
+
+                  <section className="metric-card">
+                    <span>Step 2</span>
+                    <strong>Validate Bank Deposit</strong>
+                    <small>Confirms no remaining liability and compares every open CREATED remittance without a code against collected COD.</small>
+                    <form action={queueCodClosureCheck} className="form-actions" style={{ marginTop: 12 }}>
+                      <input type="hidden" name="return_href" value={returnHref} />
+                      <input type="hidden" name="business_date" value={result.businessDate} />
+                      <input type="hidden" name="location_id" value={defaultLocationId} />
+                      <input type="hidden" name="check_type" value="prepared_deposit" />
+                      <SubmitButton className="button secondary" disabled={!permission.canEdit || !driverCleared || selectedClosure?.is_final_submitted}>
+                        {driverCleared ? "Run Bank Deposit check" : "Locked until Driver Recon clears"}
+                      </SubmitButton>
+                    </form>
+                    {selectedClosure && ["Pending", "Error", "Exception rejected"].includes(selectedClosure.deposit_check_status) ? (
+                      <form action={requestCodGateException} className="form-grid three" style={{ marginTop: 12 }}>
+                        <input type="hidden" name="return_href" value={returnHref} />
+                        <input type="hidden" name="business_date" value={result.businessDate} />
+                        <input type="hidden" name="location_id" value={defaultLocationId} />
+                        <input type="hidden" name="gate" value="deposit" />
+                        <label className="span-2">Bank Deposit exception reason
+                          <textarea className="field" name="exception_reason" rows={2} required placeholder="Explain the pending liability or remittance mismatch." />
+                        </label>
+                        <div className="form-actions align-right"><SubmitButton>Request manager approval</SubmitButton></div>
+                      </form>
+                    ) : null}
+                    {selectedClosure?.deposit_check_status === "Exception requested" ? (
+                      <div className="alert danger" style={{ marginTop: 12 }}>
+                        <strong>Manager approval pending</strong>
+                        <span>{selectedClosure.deposit_exception_reason}</span>
+                      </div>
+                    ) : null}
+                    {selectedClosure?.deposit_check_status === "Exception requested" && canManagerReview ? (
+                      <form action={reviewCodGateException} className="form-grid three" style={{ marginTop: 12 }}>
+                        <input type="hidden" name="return_href" value={returnHref} />
+                        <input type="hidden" name="closure_id" value={selectedClosure.id} />
+                        <input type="hidden" name="gate" value="deposit" />
+                        <label className="span-2">Manager remarks<input className="field" name="manager_remarks" placeholder="Approval or rejection remarks" /></label>
+                        <div className="form-actions align-right">
+                          <button className="button secondary" name="decision" value="reject">Reject</button>
+                          <button className="button" name="decision" value="approve">Approve exception</button>
+                        </div>
+                      </form>
+                    ) : null}
+                  </section>
+
+                  <section className="metric-card">
+                    <span>Step 3</span>
+                    <strong>Final station submission</strong>
+                    <small>Final submission locks associate entries. Delete or correct any row before submitting.</small>
+                    <form action={submitCodDayClosure} className="form-actions" style={{ marginTop: 12 }}>
+                      <input type="hidden" name="return_href" value={returnHref} />
+                      <input type="hidden" name="business_date" value={result.businessDate} />
+                      <input type="hidden" name="location_id" value={defaultLocationId} />
+                      <SubmitButton disabled={!permission.canEdit || !driverCleared || !depositCleared || selectedClosure?.is_final_submitted}>
+                        {selectedClosure?.is_final_submitted ? "Final submitted and locked" : "Submit final COD closure"}
+                      </SubmitButton>
+                    </form>
+                  </section>
+                </div>
               ) : <p className="subtle">Select one station to submit its day closure.</p>}
               {managerNotifications.length ? (
                 <div className="table-wrap" style={{ marginTop: 18 }}>
@@ -399,7 +496,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     pendingAmount: amountValue(row.pending_amount)
                   }))}
                 businessDate={result.businessDate}
-                canEdit={permission.canEdit}
+                canEdit={permission.canEdit && !selectedClosure?.is_final_submitted}
                 locationId={defaultLocationId}
                 returnHref={returnHref}
                 stationCode={selectedStation.station_code}
@@ -472,7 +569,17 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                             <input type="hidden" name="shipment_type" value={row.shipment_type ?? ""} />
                             <input type="hidden" name="total_delivery" value={String(row.total_delivery ?? 0)} />
                             <input type="hidden" name="total_activity" value={String(row.total_activity ?? 0)} />
-                            <SubmitButton className="button secondary small-button" disabled={!permission.canEdit}>Save</SubmitButton>
+                            <div className="form-actions" style={{ flexWrap: "nowrap" }}>
+                              <SubmitButton className="button secondary small-button" disabled={!permission.canEdit || selectedClosure?.is_final_submitted}>Save</SubmitButton>
+                              <button
+                                className="button ghost small-button"
+                                formAction={deleteExecutiveReconciliation}
+                                disabled={!permission.canEdit || selectedClosure?.is_final_submitted}
+                                type="submit"
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </form>
                         </td>
                       </tr>

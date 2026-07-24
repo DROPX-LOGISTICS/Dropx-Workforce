@@ -24,7 +24,7 @@ export function createServerSupabaseClient(response?: NextResponse, forceOpsStor
     "";
   const useOpsStorage = forceOpsStorage ?? host === "ops.dropxlogistics.com";
   const cookieOptions = {
-    domain: useOpsStorage ? undefined : cookieDomain(),
+    ...(useOpsStorage ? {} : { domain: cookieDomain() }),
     httpOnly: true,
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",

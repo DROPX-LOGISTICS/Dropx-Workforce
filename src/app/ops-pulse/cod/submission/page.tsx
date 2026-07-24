@@ -26,6 +26,7 @@ import { isSupabaseAdminConfigured } from "@/lib/supabase-admin";
 import { createCodSubmission } from "./actions";
 
 type SearchParams = {
+  client?: string;
   from?: string;
   location?: string;
   status?: string;
@@ -63,17 +64,20 @@ export default async function CodSubmissionPage({ searchParams }: { searchParams
   const permission = authorization.permissions.cod_submission;
   const flash = loadFlash();
   const today = todayKolkata();
+  const selectedClient = searchParams?.client === "amazon" || searchParams?.client === "flipkart" ? searchParams.client : "";
   const [{ locations, error: locationsError }, submissionsResult] = await Promise.all([
     loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess),
     loadCodSubmissions(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess, {
       fromDate: searchParams?.from ?? "",
+      formType: selectedClient,
       locationId: searchParams?.location ?? "",
       toDate: searchParams?.to ?? "",
       validationStatus: searchParams?.status ?? ""
     })
   ]);
   const setupError = submissionsResult.error && isMissingCodSetup({ message: submissionsResult.error }) ? submissionsResult.error : null;
-  const stationOptions = locations.map((location) => {
+  const clientLocations = selectedClient ? locations.filter((location) => inferFormTypeFromLocation(location) === selectedClient) : locations;
+  const stationOptions = clientLocations.map((location) => {
     const inferred = inferFormTypeFromLocation(location);
     return {
       value: location.id,
@@ -147,9 +151,10 @@ export default async function CodSubmissionPage({ searchParams }: { searchParams
                 <label>Station
                   <select className="field" name="location" defaultValue={searchParams?.location ?? ""}>
                     <option value="">All permitted stations</option>
-                    {locations.map((location) => <option key={location.id} value={location.id}>{locationLabel(location)}</option>)}
+                    {clientLocations.map((location) => <option key={location.id} value={location.id}>{locationLabel(location)}</option>)}
                   </select>
                 </label>
+                <input type="hidden" name="client" value={selectedClient} />
                 <label>Validation
                   <select className="field" name="status" defaultValue={searchParams?.status ?? ""}>
                     <option value="">All statuses</option>

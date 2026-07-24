@@ -59,11 +59,8 @@ export const navItems: NavItem[] = [
   {
     code: "ops_pulse",
     label: "Ops Pulse",
+    href: "https://ops.dropxlogistics.com/",
     icon: "O",
-    children: [
-      { code: "daily_submission", label: "Daily Submission", href: "/ops-pulse/daily-submission" },
-      { code: "cod", label: "COD", href: "/ops-pulse/cod" }
-    ]
   },
   {
     code: "cps",

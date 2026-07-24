@@ -59,7 +59,7 @@ export const navItems: NavItem[] = [
   {
     code: "ops_pulse",
     label: "Ops Pulse",
-    href: "https://ops.dropxlogistics.com/",
+    href: "/ops-pulse",
     icon: "O",
   },
   {

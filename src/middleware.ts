@@ -135,18 +135,7 @@ export async function middleware(request: NextRequest) {
     }
   });
 
-  const { data, error: authError } = await supabase.auth.getUser();
-  if (isOpsHost) {
-    const opsCookieNames = request.cookies.getAll()
-      .map((cookie) => cookie.name)
-      .filter((name) => name.startsWith("dropx-ops-auth-v3"));
-    console.info("Ops authentication middleware read", {
-      cookieCount: opsCookieNames.length,
-      cookieNames: opsCookieNames,
-      authenticated: Boolean(data.user),
-      error: authError?.message ?? null
-    });
-  }
+  const { data } = await supabase.auth.getUser();
   if (!data.user) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", request.nextUrl.pathname);

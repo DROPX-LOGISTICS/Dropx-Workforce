@@ -23,9 +23,11 @@ import { isSupabaseAdminConfigured } from "@/lib/supabase-admin";
 import {
   addManualExecutiveReconciliation,
   refreshExecutiveReconciliationRoster,
-  saveExecutiveReconciliation
+  saveExecutiveReconciliation,
+  submitCodDayClosure
 } from "./actions";
 import { LiveCacheRefresh } from "./live-cache-refresh";
+import { loadCodDayClosures, loadCodManagerNotifications } from "@/lib/ops-pulse/cod-day-closure";
 
 export const maxDuration = 300;
 
@@ -217,6 +219,18 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
   const hasSingleStationScope = result.locations.length === 1;
   const sccRows = rows.filter((row) => row.source === "scc_driver_reconciliation").length;
   const workerReady = Boolean(process.env.OPS_PORTAL_WORKER_URL?.trim() && process.env.OPS_PORTAL_WORKER_SECRET?.trim());
+  const [closures, managerNotifications] = await Promise.all([
+    loadCodDayClosures(companyId, result.businessDate, result.locations.map((location) => location.id)),
+    loadCodManagerNotifications(companyId, result.locations.map((location) => location.id))
+  ]);
+  const selectedClosure = closures.find((closure) => closure.location_id === defaultLocationId) ?? null;
+  const closureTotals = closures.reduce((totals, closure) => ({
+    collected: totals.collected + Number(closure.collected_cod ?? 0),
+    expected: totals.expected + Number(closure.amazon_open_remittance_expected ?? 0),
+    matched: totals.matched + (closure.validation_status === "Matched" ? 1 : 0),
+    mismatch: totals.mismatch + (closure.validation_status === "Mismatch" ? 1 : 0),
+    pendingManager: totals.pendingManager + (closure.manager_status === "Pending" ? 1 : 0)
+  }), { collected: 0, expected: 0, matched: 0, mismatch: 0, pendingManager: 0 });
 
   return (
     <AppShell active="COD" pageCode="cod_executive_reconciliation">
@@ -308,6 +322,61 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
             <div className="metric-card"><span>Balanced</span><strong>{completed}</strong><small>Cash equals expected COD</small></div>
             <div className="metric-card"><span>Expected COD</span><strong>{formatAmount(expectedTotal)}</strong><small>Amount entered by station</small></div>
             <div className="metric-card"><span>Net Cash Difference</span><strong className={moneyClass(netDifference)}>{differenceLabel(netDifference)}</strong><small>Collected {formatAmount(collectedTotal)}</small></div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-head">
+              <div>
+                <h2>Day closure summary</h2>
+                <p className="subtle">Amazon validation is stored separately from station cash. Mismatches may be submitted with a reason and are sent to the manager by email and portal notification.</p>
+              </div>
+              <span className="count-badge">{closures.length} station closures</span>
+            </div>
+            <div className="panel-body">
+              <div className="summary-grid">
+                <div className="metric-card"><span>Matched stations</span><strong>{closureTotals.matched}</strong><small>Validated for {result.businessDate}</small></div>
+                <div className="metric-card"><span>Mismatches</span><strong>{closureTotals.mismatch}</strong><small>{closureTotals.pendingManager} awaiting manager</small></div>
+                <div className="metric-card"><span>Collected COD</span><strong>{formatAmount(closureTotals.collected)}</strong><small>Submitted station cash</small></div>
+                <div className="metric-card"><span>Amazon expected</span><strong>{formatAmount(closureTotals.expected)}</strong><small>Open remittances without code</small></div>
+              </div>
+              {defaultLocationId ? (
+                <form action={submitCodDayClosure} className="form-grid three" style={{ marginTop: 18 }}>
+                  <input type="hidden" name="return_href" value={returnHref} />
+                  <input type="hidden" name="business_date" value={result.businessDate} />
+                  <input type="hidden" name="location_id" value={defaultLocationId} />
+                  <label className="span-2">Mismatch reason
+                    <textarea className="field" name="override_reason" rows={3} placeholder="Required only when Amazon and DropX do not match. This is sent to the manager." />
+                  </label>
+                  <div>
+                    <div className="metric-card">
+                      <span>Selected station status</span>
+                      <strong>{selectedClosure?.submission_status ?? "Not submitted"}</strong>
+                      <small>{selectedClosure ? `Difference ${formatAmount(selectedClosure.difference_amount)}` : "Run DR and Bank Deposit validation first"}</small>
+                    </div>
+                    <div className="form-actions align-right" style={{ marginTop: 10 }}>
+                      <SubmitButton disabled={!permission.canEdit}>Submit day closure</SubmitButton>
+                    </div>
+                  </div>
+                </form>
+              ) : <p className="subtle">Select one station to submit its day closure.</p>}
+              {managerNotifications.length ? (
+                <div className="table-wrap" style={{ marginTop: 18 }}>
+                  <table>
+                    <thead><tr><th>Created</th><th>Manager notification</th><th>Portal</th><th>Email</th></tr></thead>
+                    <tbody>
+                      {managerNotifications.map((notification) => (
+                        <tr key={notification.id}>
+                          <td>{formatDateTime(notification.created_at)}</td>
+                          <td><strong>{notification.title}</strong><br /><span className="subtle">{notification.message}</span></td>
+                          <td><StatusPill status={notification.status} /></td>
+                          <td><StatusPill status={notification.email_status} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </div>
           </section>
 
           <section className="panel">

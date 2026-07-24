@@ -36,6 +36,7 @@ import { AssociateEntryBuilder } from "./associate-entry-builder";
 import { loadCodDayClosures, loadCodManagerNotifications } from "@/lib/ops-pulse/cod-day-closure";
 import { canAccessCodAudit, loadCodAuditRows } from "@/lib/ops-pulse/cod-audit";
 import { PortalCheckProgress } from "./portal-check-progress";
+import { resolveOperatingContext } from "@/lib/ops-pulse/operating-context";
 
 export const maxDuration = 300;
 
@@ -203,7 +204,8 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
     }
   );
 
-  const defaultLocationId = searchParams?.location ?? (result.locations.length === 1 ? result.locations[0]?.id ?? "" : "");
+  const operatingContext = resolveOperatingContext(result.locations);
+  const defaultLocationId = operatingContext.location?.id ?? searchParams?.location ?? "";
   const returnHref = currentHref({
     date: searchParams?.date ?? result.businessDate,
     location: defaultLocationId,
@@ -225,7 +227,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
   const expectedTotal = savedRows.reduce((sum, row) => sum + amountValue(row.expected_amount), 0);
   const collectedTotal = savedRows.reduce((sum, row) => sum + amountValue(row.collected_amount), 0);
   const netDifference = savedRows.reduce((sum, row) => sum + amountValue(row.difference_amount), 0);
-  const hasSingleStationScope = result.locations.length === 1;
+  const hasSingleStationScope = true;
   const sccRows = rows.filter((row) => row.source === "scc_driver_reconciliation").length;
   const workerReady = Boolean(process.env.OPS_PORTAL_WORKER_URL?.trim() && process.env.OPS_PORTAL_WORKER_SECRET?.trim());
   const auditAllowed = canAccessCodAudit(authorization);
@@ -308,7 +310,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                 <label className="span-2">Station
                   <select className="field" name="location" defaultValue={defaultLocationId} disabled={hasSingleStationScope}>
                     {!hasSingleStationScope ? <option value="">All permitted stations</option> : null}
-                    {result.locations.map((location) => <option key={location.id} value={location.id}>{locationLabel(location)}</option>)}
+                    {selectedStation ? <option value={selectedStation.id}>{locationLabel(selectedStation)}</option> : null}
                   </select>
                   {hasSingleStationScope ? <input type="hidden" name="location" value={defaultLocationId} /> : null}
                 </label>

@@ -5,7 +5,7 @@ import path from "node:path";
 import { chromium } from "playwright";
 
 const PORT = Number(process.env.PORT || 8080);
-const WORKER_SECRET = process.env.OPS_PORTAL_WORKER_SECRET || "";
+const WORKER_SECRET = process.env.OPS_PORTAL_WORKER_SECRET || process.env.WORKER_SECRET || "";
 const HEADLESS = String(process.env.HEADLESS ?? "true").toLowerCase() !== "false";
 const SLOW_MO_MS = Number(process.env.SLOW_MO_MS || 0);
 const WORKER_TIMEOUT_MS = Number(process.env.WORKER_TIMEOUT_MS || 240000);

@@ -42,6 +42,8 @@ type LocationRow = {
   address_line2: string | null;
   city: string | null;
   state: string | null;
+  region: string | null;
+  cluster: string | null;
   postal_code: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -191,6 +193,8 @@ async function loadMasterData(companyId: string) {
     address_line2,
     city,
     state,
+    region,
+    cluster,
     postal_code,
     latitude,
     longitude,
@@ -393,7 +397,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               <label>Address line 1<input className="field" name="address_line1" placeholder="Enter address line 1" required /></label>
               <label>Address line 2<input className="field" name="address_line2" placeholder="Enter address line 2" /></label>
               <label>City<input className="field" name="city" placeholder="Enter city" /></label>
-              <label>State<SearchableSelect name="state" options={stateOptions} placeholder="Search state code" /></label>
+              <label>State<input className="field" name="state" placeholder="Enter full state name" required /></label>
+              <label>Region<input className="field" name="region" placeholder="Example: KL, AP, ODCG" required /></label>
+              <label>Cluster<input className="field" name="cluster" placeholder="Enter cluster" required /></label>
               <label>Postal code<input className="field" name="postal_code" placeholder="Enter postal code" /></label>
               <label>Latitude<input className="field" name="latitude" placeholder="Enter latitude" step="any" type="number" min="-90" max="90" /></label>
               <label>Longitude<input className="field" name="longitude" placeholder="Enter longitude" step="any" type="number" min="-180" max="180" /></label>
@@ -430,9 +436,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               <label>Address line 1<input className="field" name="address_line1" defaultValue={editLocation.address_line1 || editLocation.address || ""} required /></label>
               <label>Address line 2<input className="field" name="address_line2" defaultValue={editLocation.address_line2 ?? ""} /></label>
               <label>City<input className="field" name="city" defaultValue={editLocation.city ?? ""} /></label>
-              <label>State
-                <SearchableSelect name="state" options={stateOptions} defaultValue={editLocation.state} placeholder="Search state code" />
-              </label>
+              <label>State<input className="field" name="state" defaultValue={editLocation.state ?? ""} required /></label>
+              <label>Region<input className="field" name="region" defaultValue={editLocation.region ?? ""} required /></label>
+              <label>Cluster<input className="field" name="cluster" defaultValue={editLocation.cluster ?? ""} required /></label>
               <label>Postal code<input className="field" name="postal_code" defaultValue={editLocation.postal_code ?? ""} /></label>
               <label>Latitude<input className="field" name="latitude" defaultValue={editLocation.latitude ?? ""} step="any" type="number" min="-90" max="90" /></label>
               <label>Longitude<input className="field" name="longitude" defaultValue={editLocation.longitude ?? ""} step="any" type="number" min="-180" max="180" /></label>

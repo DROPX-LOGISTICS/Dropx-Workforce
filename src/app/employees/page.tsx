@@ -59,6 +59,7 @@ type EmployeeRow = {
   pan_number?: string | null;
   bank_account_no?: string | null;
   ifsc?: string | null;
+  pf_uan?: string | null;
   aadhaar_front_path?: string | null;
   aadhaar_back_path?: string | null;
   pan_upload_path?: string | null;
@@ -269,7 +270,7 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
   const [initialEmployeesResult, locationsResult, designationsResult] = await Promise.all([
     supabaseAdmin
       .from("employees")
-      .select("id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, location_id, designation_id, statutory_applicability, profile_completion_status, profile_completed_at, gender, date_of_birth, aadhaar_number, pan_number, father_name, blood_group, address, state_code, pincode, landmark, emergency_contact_name, emergency_contact_number, emergency_contact_relation, bank_account_no, ifsc, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_photo_path, is_active, stations (station_code, station_name), designations (code, name)")
+      .select("id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, location_id, designation_id, statutory_applicability, profile_completion_status, profile_completed_at, gender, date_of_birth, aadhaar_number, pan_number, father_name, blood_group, address, state_code, pincode, landmark, emergency_contact_name, emergency_contact_number, emergency_contact_relation, bank_account_no, ifsc, pf_uan, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_photo_path, is_active, stations (station_code, station_name), designations (code, name)")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false }),
     supabaseAdmin

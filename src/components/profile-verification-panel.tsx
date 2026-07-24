@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-export type VerificationKind = "pan" | "pan_aadhaar" | "dl" | "vehicle" | "bank";
+export type VerificationKind = "pan" | "pan_aadhaar" | "dl" | "vehicle" | "bank" | "pf_uan";
 
 type VerificationResult = {
   kind: VerificationKind;
@@ -32,7 +32,8 @@ const labels: Record<VerificationKind, string> = {
   pan_aadhaar: "PAN Aadhaar",
   dl: "DL",
   vehicle: "Vehicle",
-  bank: "Bank"
+  bank: "Bank",
+  pf_uan: "PF UAN"
 };
 
 function text(value: FormDataEntryValue | null) {
@@ -58,6 +59,7 @@ function resultMessage(result?: VerificationResult) {
   if (result.kind === "vehicle" && result.ownerName) parts.push(`RC owner: ${result.ownerName}`);
   if (result.kind === "vehicle" && result.fuelType) parts.push(`Fuel type: ${result.fuelType}`);
   if (result.kind === "bank" && result.accountName) parts.push(`Bank name: ${result.accountName}`);
+  if (result.kind === "pf_uan" && result.name) parts.push(`PF UAN name: ${result.name}`);
   let message = result.warning || result.message || "";
   if (result.kind === "pan" && result.name) {
     const normalized = message.toLowerCase();
@@ -102,7 +104,8 @@ export function ProfileVerificationPanel({ accountId, kind, profileType, pageCod
       drivingLicenseNo: text(data.get("driving_license_no")).toUpperCase(),
       vehicleRegNo: text(data.get("vehicle_reg_no")).toUpperCase(),
       bankAccountNo: text(data.get("bank_account_no")).replace(/\D/g, ""),
-      ifsc: text(data.get("ifsc") ?? data.get("ifsc_code")).toUpperCase()
+      ifsc: text(data.get("ifsc") ?? data.get("ifsc_code")).toUpperCase(),
+      pfUan: text(data.get("pf_uan")).replace(/\D/g, "")
     };
   }
 
@@ -111,6 +114,7 @@ export function ProfileVerificationPanel({ accountId, kind, profileType, pageCod
     if (target === "pan_aadhaar") return inputKey([fields.panNumber, fields.aadhaarNumber]);
     if (target === "dl") return inputKey([fields.drivingLicenseNo, fields.dateOfBirth.replace(/\//g, "-")]);
     if (target === "vehicle") return inputKey([fields.vehicleRegNo]);
+    if (target === "pf_uan") return inputKey([fields.pfUan]);
     return inputKey([fields.bankAccountNo, fields.ifsc]);
   }
 
@@ -131,6 +135,7 @@ export function ProfileVerificationPanel({ accountId, kind, profileType, pageCod
     if (target === "dl" && (!fields.drivingLicenseNo || !fields.dateOfBirth)) return "DL and DOB are required.";
     if (target === "vehicle" && !fields.vehicleRegNo) return "Vehicle number is required.";
     if (target === "bank" && (!fields.bankAccountNo || !fields.ifsc)) return "Bank account and IFSC are required.";
+    if (target === "pf_uan" && !fields.pfUan) return "PF UAN is required.";
     return "";
   }
 

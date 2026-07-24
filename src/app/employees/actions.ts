@@ -204,7 +204,8 @@ export async function updateEmployee(formData: FormData) {
       emergency_contact_number: optional(formData.get("emergency_contact_number"))?.replace(/\D/g, "") ?? null,
       emergency_contact_relation: optional(formData.get("emergency_contact_relation")),
       bank_account_no: optional(formData.get("bank_account_no"))?.replace(/\D/g, "") ?? null,
-      ifsc: optional(formData.get("ifsc"))?.toUpperCase() ?? null
+      ifsc: optional(formData.get("ifsc"))?.toUpperCase() ?? null,
+      pf_uan: optional(formData.get("pf_uan"))?.replace(/\D/g, "") ?? null
     };
 
     if (!/^\d{6,15}$/.test(mobile)) throw new Error("Mobile number must contain 6 to 15 digits.");
@@ -213,6 +214,7 @@ export async function updateEmployee(formData: FormData) {
     if (extraPayload.pincode && !/^\d{6}$/.test(extraPayload.pincode)) throw new Error("Postal PIN must contain exactly 6 digits.");
     if (extraPayload.emergency_contact_number && !/^\d{10}$/.test(extraPayload.emergency_contact_number)) throw new Error("Emergency contact number must contain exactly 10 digits.");
     if (extraPayload.ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(extraPayload.ifsc)) throw new Error("IFSC format is invalid.");
+    if (extraPayload.pf_uan && !/^\d{12}$/.test(extraPayload.pf_uan)) throw new Error("PF UAN must contain exactly 12 digits.");
     if (Number.isNaN(Date.parse(dateOfJoin))) throw new Error("Enter a valid date of join.");
     if (extraPayload.date_of_birth && Number.isNaN(Date.parse(extraPayload.date_of_birth))) throw new Error("Enter a valid date of birth.");
     if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {

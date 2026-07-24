@@ -6,7 +6,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const IDSPAY_BASE_URL = "https://javabackend.idspay.in/api/v1/prod";
 
-type VerificationKind = "pan" | "pan_aadhaar" | "dl" | "vehicle" | "bank";
+type VerificationKind = "pan" | "pan_aadhaar" | "dl" | "vehicle" | "bank" | "pf_uan";
 
 function text(value: unknown) {
   return String(value ?? "").trim();
@@ -62,6 +62,19 @@ function findFirstString(value: unknown, keys: string[]): string {
     }
   }
   return "";
+}
+
+function uanName(body: unknown) {
+  const data = (body as { data?: unknown })?.data as Record<string, unknown> | undefined;
+  const details = data?.uan_details;
+  if (details && typeof details === "object") {
+    for (const row of Object.values(details as Record<string, unknown>)) {
+      const basic = (row as { basic_details?: unknown })?.basic_details as Record<string, unknown> | undefined;
+      const found = compact(basic?.name);
+      if (found) return found;
+    }
+  }
+  return compact(findFirstString(body, ["employee_name", "employeeName", "name", "full_name", "fullName"]));
 }
 
 function normalizeDate(value: unknown) {
@@ -130,14 +143,17 @@ async function dashboardAccount(accountId: string, profileType: string, pageCode
   const table = profileType === "field_executive" ? "field_executives" : "employees";
   const result = await supabaseAdmin
     .from(table)
-    .select("id, company_id, full_name")
+    .select(profileType === "field_executive" ? "id, company_id, dropx_id, full_name" : "id, company_id, employee_code, full_name")
     .eq("id", accountId)
     .eq("company_id", companyId)
     .maybeSingle();
   if (result.error) throw new Error(result.error.message);
   const row = result.data;
   if (!row) throw new Error("Account not found.");
-  return { companyId: row.company_id as string, fullName: compact(row.full_name) };
+  const accountCode = profileType === "field_executive"
+    ? compact((row as { dropx_id?: unknown }).dropx_id)
+    : compact((row as { employee_code?: unknown }).employee_code);
+  return { companyId: row.company_id as string, fullName: compact(row.full_name), accountCode };
 }
 
 async function idspayCredentials(companyId: string) {
@@ -237,7 +253,7 @@ export async function POST(request: NextRequest) {
     if (kind === "pan") {
       const panNumber = text(payload.panNumber).toUpperCase();
       if (!panNumber) throw new Error("PAN number is required.");
-      const { body } = await callIdspay("/pan/verification", { ...credentials, pan_number: panNumber });
+      const { body } = await callIdspay("/pan/verification", { ...credentials, pan_number: panNumber, remarks: account.accountCode });
       const apiName = compact(findFirstString(body, ["full_name", "fullName", "name", "pan_name", "panName"]));
       const apiSuccess = body?.data?.success === true || body?.status?.type === "success";
       const score = nameScore(registeredName, apiName);
@@ -259,7 +275,7 @@ export async function POST(request: NextRequest) {
       const pan = text(payload.panNumber).toUpperCase();
       const aadhar = onlyDigits(payload.aadhaarNumber);
       if (!pan || !aadhar) throw new Error("PAN and Aadhaar number are required.");
-      const { body } = await callIdspay("/srv2/validation/pan-aadhaar-link", { ...credentials, pan, aadhar, aadhaar: aadhar });
+      const { body } = await callIdspay("/srv2/validation/pan-aadhaar-link", { ...credentials, pan, aadhar, aadhaar: aadhar, remarks: account.accountCode });
       const code = Number(body?.result_code);
       const resultCode = text(body?.result?.code).toUpperCase();
       const resultMessage = text(body?.result?.message).toLowerCase();
@@ -284,7 +300,7 @@ export async function POST(request: NextRequest) {
       const dlNumber = text(payload.drivingLicenseNo).toUpperCase();
       const dob = idspayDob(payload.dateOfBirth);
       if (!dlNumber || !dob) throw new Error("DL number and date of birth are required.");
-      const { body } = await callIdspay("/srv2/validation/dl", { ...credentials, dlNumber, dob });
+      const { body } = await callIdspay("/srv2/validation/dl", { ...credentials, dlNumber, dob, remarks: account.accountCode });
       const details = body?.data?.details_of_driving_licence ?? {};
       const apiName = compact(details?.name || findFirstString(body, ["name", "full_name", "fullName"]));
       const score = nameScore(registeredName, apiName);
@@ -311,7 +327,7 @@ export async function POST(request: NextRequest) {
     if (kind === "vehicle") {
       const regNo = text(payload.vehicleRegNo).toUpperCase();
       if (!regNo) throw new Error("Vehicle registration number is required.");
-      const { body } = await callIdspay("/srv2/validation/rc", { ...credentials, reg_no: regNo });
+      const { body } = await callIdspay("/srv2/validation/rc", { ...credentials, reg_no: regNo, remarks: account.accountCode });
       const data = body?.data ?? {};
       const verified = body?.status?.type === "success" || body?.success === true;
       const fuelType = compact(data?.type ?? data?.fuel_type ?? data?.fuelType);
@@ -332,7 +348,7 @@ export async function POST(request: NextRequest) {
       const creditorAccountId = text(payload.bankAccountNo);
       const ifscCode = text(payload.ifsc).toUpperCase();
       if (!creditorAccountId || !ifscCode) throw new Error("Bank account number and IFSC are required.");
-      const { body } = await callIdspay("/idfc/beneficiary", { ...credentials, creditorAccountId, ifscCode });
+      const { body } = await callIdspay("/idfc/beneficiary", { ...credentials, creditorAccountId, ifscCode, remarks: account.accountCode });
       const resource = body?.data?.beneValidationResp?.resourceData ?? {};
       const verified = text(body?.data?.beneValidationResp?.metaData?.status).toUpperCase() === "SUCCESS";
       const result = {
@@ -340,6 +356,27 @@ export async function POST(request: NextRequest) {
         inputKey: inputKey([creditorAccountId, ifscCode]),
         accountName: compact(resource?.creditorName),
         message: verified ? text(body?.message) || "Bank account checked." : "Bank verification failed."
+      };
+      return verifiedResponse(result);
+    }
+
+    if (kind === "pf_uan") {
+      const uan = onlyDigits(payload.pfUan ?? payload.uan);
+      if (!uan) throw new Error("PF UAN is required.");
+      const { body } = await callIdspay("/srv3/uan-direct", { ...credentials, uan, remarks: account.accountCode });
+      const apiName = uanName(body);
+      const apiSuccess = body?.status?.type === "success" || text(body?.message).toLowerCase() === "success";
+      const score = nameScore(registeredName, apiName);
+      const verified = Boolean(apiSuccess && score >= 0.5);
+      const mismatch = Boolean(apiSuccess && !verified);
+      const result = {
+        verified,
+        manualReview: !verified,
+        inputKey: inputKey([uan]),
+        name: apiName,
+        nameMatchPercent: Math.round(score * 100),
+        message: verified ? "PF UAN verified." : (mismatch ? `PF UAN name mismatch. PF UAN name: ${apiName || "-"}` : text(body?.message) || "PF UAN verification failed."),
+        rawStatus: body?.status ?? null
       };
       return verifiedResponse(result);
     }

@@ -43,6 +43,7 @@ type EmployeeFormProps = {
     emergency_contact_relation?: string | null;
     bank_account_no?: string | null;
     ifsc?: string | null;
+    pf_uan?: string | null;
     statutory_applicability: string[] | null;
     is_active?: boolean;
   } | null;
@@ -198,6 +199,7 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
           <label>Landmark<input className="field" defaultValue={employee?.landmark ?? ""} name="landmark" placeholder="Enter landmark" /></label>
           <label>Bank account number<input className="field" defaultValue={employee?.bank_account_no ?? ""} inputMode="numeric" name="bank_account_no" placeholder="Enter bank account number" /></label>
           <label>IFSC<input className="field" defaultValue={employee?.ifsc ?? ""} name="ifsc" placeholder="Enter IFSC" />{employee ? <ProfileVerificationPanel accountId={employee.id} kind="bank" pageCode="employees" profileType="employee" /> : null}</label>
+          <label>PF UAN<input className="field" defaultValue={employee?.pf_uan ?? ""} inputMode="numeric" name="pf_uan" placeholder="Enter PF UAN" />{employee ? <ProfileVerificationPanel accountId={employee.id} kind="pf_uan" pageCode="employees" profileType="employee" /> : null}</label>
           <label>Emergency contact number<input className="field" defaultValue={employee?.emergency_contact_number ?? ""} inputMode="numeric" maxLength={10} name="emergency_contact_number" pattern="[0-9]{10}" placeholder="Enter emergency contact number" /></label>
           <label>Emergency contact name<input className="field" defaultValue={employee?.emergency_contact_name ?? ""} name="emergency_contact_name" placeholder="Enter contact person name" /></label>
           <label>Emergency relation<input className="field" defaultValue={employee?.emergency_contact_relation ?? ""} name="emergency_contact_relation" placeholder="Enter relation" /></label>

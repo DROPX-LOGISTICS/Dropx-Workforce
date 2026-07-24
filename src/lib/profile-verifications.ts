@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
-type VerificationKind = "pan" | "pan_aadhaar" | "dl" | "vehicle" | "bank";
+type VerificationKind = "pan" | "pan_aadhaar" | "dl" | "vehicle" | "bank" | "pf_uan";
 
 type ProfileType = "employee" | "field_executive";
 
@@ -73,7 +73,7 @@ export async function saveProfileVerifications({
       if (!row || typeof row !== "object") continue;
       const record = row as Record<string, unknown>;
       const kind = text(record.kind) as VerificationKind;
-      if (!["pan", "pan_aadhaar", "dl", "vehicle", "bank"].includes(kind)) continue;
+      if (!["pan", "pan_aadhaar", "dl", "vehicle", "bank", "pf_uan"].includes(kind)) continue;
       const key = `${kind}:${text(record.inputKey)}`;
       if (seen.has(key)) continue;
       seen.add(key);

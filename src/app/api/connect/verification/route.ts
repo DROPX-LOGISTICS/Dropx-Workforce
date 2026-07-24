@@ -26,12 +26,6 @@ function inputKey(parts: unknown[]) {
   return parts.map((part) => text(part).toUpperCase()).join("|");
 }
 
-function transactionReference(accountCode: string) {
-  const reference = compact(accountCode);
-  if (!reference) throw new Error("DropX ID is required before verification.");
-  return { remarks: reference, narration: reference };
-}
-
 function deepText(value: unknown): string {
   if (value == null) return "";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
@@ -257,12 +251,11 @@ export async function POST(request: NextRequest) {
     const account = await resolveAccount(accountId, profileType);
     const credentials = await idspayCredentials(account.companyId);
     const registeredName = compact(payload.fullName) || account.fullName;
-    const reference = transactionReference(account.accountCode);
 
     if (kind === "pan") {
       const panNumber = text(payload.panNumber).toUpperCase();
       if (!panNumber) throw new Error("PAN number is required.");
-      const { body } = await callIdspay("/pan/verification", { ...credentials, pan_number: panNumber, ...reference });
+      const { body } = await callIdspay("/pan/verification", { ...credentials, pan_number: panNumber });
       const apiName = compact(findFirstString(body, ["full_name", "fullName", "name", "pan_name", "panName"]));
       const apiSuccess = body?.data?.success === true || body?.status?.type === "success";
       const score = nameScore(registeredName, apiName);
@@ -284,7 +277,7 @@ export async function POST(request: NextRequest) {
       const pan = text(payload.panNumber).toUpperCase();
       const aadhar = onlyDigits(payload.aadhaarNumber);
       if (!pan || !aadhar) throw new Error("PAN and Aadhaar number are required.");
-      const { body } = await callIdspay("/srv2/validation/pan-aadhaar-link", { ...credentials, pan, aadhar, aadhaar: aadhar, ...reference });
+      const { body } = await callIdspay("/srv2/validation/pan-aadhaar-link", { ...credentials, pan, aadhar, aadhaar: aadhar });
       const code = Number(body?.result_code);
       const resultCode = text(body?.result?.code).toUpperCase();
       const resultMessage = text(body?.result?.message).toLowerCase();
@@ -309,7 +302,7 @@ export async function POST(request: NextRequest) {
       const dlNumber = text(payload.drivingLicenseNo).toUpperCase();
       const dob = idspayDob(payload.dateOfBirth);
       if (!dlNumber || !dob) throw new Error("DL number and date of birth are required.");
-      const { body } = await callIdspay("/srv2/validation/dl", { ...credentials, dlNumber, dob, ...reference });
+      const { body } = await callIdspay("/srv2/validation/dl", { ...credentials, dlNumber, dob });
       const details = body?.data?.details_of_driving_licence ?? {};
       const apiName = compact(details?.name || findFirstString(body, ["name", "full_name", "fullName"]));
       const score = nameScore(registeredName, apiName);
@@ -336,7 +329,7 @@ export async function POST(request: NextRequest) {
     if (kind === "vehicle") {
       const regNo = text(payload.vehicleRegNo).toUpperCase();
       if (!regNo) throw new Error("Vehicle registration number is required.");
-      const { body } = await callIdspay("/srv2/validation/rc", { ...credentials, reg_no: regNo, ...reference });
+      const { body } = await callIdspay("/srv2/validation/rc", { ...credentials, reg_no: regNo });
       const data = body?.data ?? {};
       const verified = body?.status?.type === "success" || body?.success === true;
       const fuelType = compact(data?.type ?? data?.fuel_type ?? data?.fuelType);
@@ -357,7 +350,7 @@ export async function POST(request: NextRequest) {
       const creditorAccountId = text(payload.bankAccountNo);
       const ifscCode = text(payload.ifsc).toUpperCase();
       if (!creditorAccountId || !ifscCode) throw new Error("Bank account number and IFSC are required.");
-      const { body } = await callIdspay("/idfc/beneficiary", { ...credentials, creditorAccountId, ifscCode, ...reference });
+      const { body } = await callIdspay("/idfc/beneficiary", { ...credentials, creditorAccountId, ifscCode });
       const resource = body?.data?.beneValidationResp?.resourceData ?? {};
       const verified = text(body?.data?.beneValidationResp?.metaData?.status).toUpperCase() === "SUCCESS";
       const result = {
@@ -372,7 +365,7 @@ export async function POST(request: NextRequest) {
     if (kind === "pf_uan") {
       const uan = onlyDigits(payload.pfUan ?? payload.uan);
       if (!uan) throw new Error("PF UAN is required.");
-      const { body } = await callIdspay("/srv3/uan-direct", { ...credentials, uan, ...reference });
+      const { body } = await callIdspay("/srv3/uan-direct", { ...credentials, uan });
       const apiName = uanName(body);
       const apiSuccess = body?.status?.type === "success" || text(body?.message).toLowerCase() === "success";
       const score = nameScore(registeredName, apiName);

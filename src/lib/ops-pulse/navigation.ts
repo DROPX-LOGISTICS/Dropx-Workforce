@@ -55,7 +55,8 @@ function modelOperations(mode: OperatingMode): NavItem {
         { code: "ops_pulse", label: "Shift Control", href: "/ops-pulse?view=shift" },
         { code: "ops_pulse", label: "Hourly Performance", href: "/ops-pulse?view=hourly" },
         { code: "daily_submission", label: "Attendance & Reporting", href: "/ops-pulse/daily-submission" },
-        { code: "cod_reports", label: "Exceptions", href: "/ops-pulse/cod/reports?client=amazon" }
+        { code: "cod_reports", label: "Exceptions", href: "/ops-pulse/cod/reports?client=amazon" },
+        { code: "cod_reports", label: "Performance Reports", href: "/ops-pulse/reports/amazon" }
       ]
     };
   }
@@ -81,6 +82,7 @@ function modelOperations(mode: OperatingMode): NavItem {
       { code: "cod_validation", label: "Validation & Closure", href: "/ops-pulse/cod/validation?client=amazon" },
       { code: "cod_portal_checks", label: "SCC Portal Checks", href: "/ops-pulse/cod/portal-checks" },
       { code: "cod_reports", label: "COD Reports", href: "/ops-pulse/cod/reports?client=amazon" }
+      ,{ code: "cod_reports", label: "Performance Reports", href: "/ops-pulse/reports/amazon" }
     ]
   };
 }

@@ -12,12 +12,16 @@ type LoginPageProps = {
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const host = headers().get("x-forwarded-host")?.split(":")[0].toLowerCase() ??
+    headers().get("host")?.split(":")[0].toLowerCase() ??
+    "";
+  const isOpsHost = host === "ops.dropxlogistics.com";
   const supabase = createServerSupabaseClient();
-  const { data } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
+  const { data } = !isOpsHost && supabase
+    ? await supabase.auth.getUser()
+    : { data: { user: null } };
   if (data.user) {
-    const host = headers().get("x-forwarded-host")?.split(":")[0].toLowerCase() ?? "";
     if (host === "admin-panel.dropxlogistics.com") redirect("/");
-    if (host === "ops.dropxlogistics.com") redirect("/ops-pulse");
     const authorization = await getAuthorization();
     redirect(authorization ? firstAllowedHref(authorization) ?? "/unauthorized" : "/dashboard");
   }

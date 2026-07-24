@@ -29,11 +29,6 @@ export async function GET(request: NextRequest) {
       path: "/",
       maxAge: 0
     });
-    console.info("Ops authentication transfer wrote session cookies", {
-      cookies: response.cookies.getAll()
-        .filter((cookie) => cookie.name.startsWith("dropx-ops-auth-v3"))
-        .map((cookie) => ({ name: cookie.name, length: cookie.value.length }))
-    });
     return response;
   } catch (error) {
     loginUrl.searchParams.set(

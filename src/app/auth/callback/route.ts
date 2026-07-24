@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureAccessPages } from "@/lib/access-pages";
-import { createOpsAuthTransfer } from "@/lib/ops-auth-transfer";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
@@ -202,7 +201,7 @@ export async function GET(request: NextRequest) {
   const loginUrl = new URL("/login", request.url);
   const callbackResponse = NextResponse.redirect(new URL("/dashboard", request.url));
   const returnToOps = request.cookies.get("dropx_ops_auth_return")?.value === "1";
-  const supabase = createServerSupabaseClient(callbackResponse, returnToOps);
+  const supabase = createServerSupabaseClient(callbackResponse);
 
   try {
     if (!code) {
@@ -394,12 +393,10 @@ export async function GET(request: NextRequest) {
       ? (nextPath.startsWith("/platform-admin") ? nextPath : "/platform-admin")
       : (returnToOps ? "/ops-pulse" : (nextPath || "/dashboard"));
     if (returnToOps && data.session) {
-      const opsUrl = new URL("/auth/ops-transfer", process.env.OPS_APP_URL?.trim() || "https://ops.dropxlogistics.com");
-      opsUrl.searchParams.set(
-        "token",
-        createOpsAuthTransfer(data.session.access_token, data.session.refresh_token)
+      callbackResponse.headers.set(
+        "location",
+        new URL("/ops-pulse", process.env.OPS_APP_URL?.trim() || "https://ops.dropxlogistics.com").toString()
       );
-      callbackResponse.headers.set("location", opsUrl.toString());
     } else {
       callbackResponse.headers.set("location", new URL(destinationPath, request.url).toString());
     }

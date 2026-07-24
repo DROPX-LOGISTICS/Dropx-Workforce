@@ -16,6 +16,7 @@ import {
   formatDateTime,
   isMissingCodSetup,
   loadExecutiveReconciliationRows,
+  loadPortalCheckRuns,
   locationLabel,
   type ExecutiveReconciliationViewRow
 } from "@/lib/ops-pulse/cod";
@@ -34,6 +35,7 @@ import { LiveCacheRefresh } from "./live-cache-refresh";
 import { AssociateEntryBuilder } from "./associate-entry-builder";
 import { loadCodDayClosures, loadCodManagerNotifications } from "@/lib/ops-pulse/cod-day-closure";
 import { canAccessCodAudit, loadCodAuditRows } from "@/lib/ops-pulse/cod-audit";
+import { PortalCheckProgress } from "./portal-check-progress";
 
 export const maxDuration = 300;
 
@@ -227,13 +229,19 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
   const sccRows = rows.filter((row) => row.source === "scc_driver_reconciliation").length;
   const workerReady = Boolean(process.env.OPS_PORTAL_WORKER_URL?.trim() && process.env.OPS_PORTAL_WORKER_SECRET?.trim());
   const auditAllowed = canAccessCodAudit(authorization);
-  const [closures, managerNotifications, auditRows] = await Promise.all([
+  const [closures, managerNotifications, auditRows, portalRunsResult] = await Promise.all([
     loadCodDayClosures(companyId, result.businessDate, result.locations.map((location) => location.id)),
     loadCodManagerNotifications(companyId, result.locations.map((location) => location.id)),
     auditAllowed
       ? loadCodAuditRows(companyId, result.locations.map((location) => location.id), result.businessDate, defaultLocationId)
-      : Promise.resolve([])
+      : Promise.resolve([]),
+    loadPortalCheckRuns(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess, {
+      checkDate: result.businessDate,
+      locationId: defaultLocationId
+    })
   ]);
+  const driverRun = portalRunsResult.rows.find((run) => run.check_type === "driver_reconciliation");
+  const depositRun = portalRunsResult.rows.find((run) => run.check_type === "prepared_deposit");
   const selectedClosure = closures.find((closure) => closure.location_id === defaultLocationId) ?? null;
   const driverCleared = selectedClosure?.driver_check_status === "Passed" ||
     selectedClosure?.driver_check_status === "Exception approved";
@@ -370,6 +378,12 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     <span>Step 1</span>
                     <strong>Clear Driver Reconciliation</strong>
                     <small>SCC checks all drivers for this station and date. Bank Deposit remains locked until this passes or a manager approves an exception.</small>
+                    <PortalCheckProgress
+                      attemptCount={Number(driverRun?.attempt_count ?? 0)}
+                      checkLabel="SCC Driver Reconciliation"
+                      nextCheckAt={driverRun?.next_check_at ?? null}
+                      status={driverRun?.status ?? "Not run"}
+                    />
                     <form action={queueCodClosureCheck} className="form-actions" style={{ marginTop: 12 }}>
                       <input type="hidden" name="return_href" value={returnHref} />
                       <input type="hidden" name="business_date" value={result.businessDate} />
@@ -415,6 +429,12 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     <span>Step 2</span>
                     <strong>Validate Bank Deposit</strong>
                     <small>Confirms no remaining liability and compares every open CREATED remittance without a code against collected COD.</small>
+                    <PortalCheckProgress
+                      attemptCount={Number(depositRun?.attempt_count ?? 0)}
+                      checkLabel="SCC Bank Deposit"
+                      nextCheckAt={depositRun?.next_check_at ?? null}
+                      status={driverCleared ? depositRun?.status ?? "Not run" : "Locked"}
+                    />
                     <form action={queueCodClosureCheck} className="form-actions" style={{ marginTop: 12 }}>
                       <input type="hidden" name="return_href" value={returnHref} />
                       <input type="hidden" name="business_date" value={result.businessDate} />

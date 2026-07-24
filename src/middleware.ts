@@ -28,6 +28,7 @@ export async function middleware(request: NextRequest) {
     isOpsHost &&
     path !== "/login" &&
     !path.startsWith("/ops-pulse") &&
+    path !== "/master/cod-master" &&
     !path.startsWith("/api/") &&
     !path.startsWith("/auth/") &&
     !path.startsWith("/_next/") &&
@@ -96,6 +97,9 @@ export async function middleware(request: NextRequest) {
   const supabase = createClient(supabaseUrl, supabaseAuthKey, {
     auth: {
       flowType: "pkce",
+      storageKey: isOpsHost || request.cookies.get("dropx_ops_auth_return")?.value === "1"
+        ? "dropx-ops-auth"
+        : undefined,
       autoRefreshToken: false,
       detectSessionInUrl: false,
       persistSession: true,

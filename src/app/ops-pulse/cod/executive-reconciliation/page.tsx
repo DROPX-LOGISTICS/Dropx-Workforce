@@ -27,6 +27,7 @@ import {
   submitCodDayClosure
 } from "./actions";
 import { LiveCacheRefresh } from "./live-cache-refresh";
+import { AssociateEntryBuilder } from "./associate-entry-builder";
 import { loadCodDayClosures, loadCodManagerNotifications } from "@/lib/ops-pulse/cod-day-closure";
 
 export const maxDuration = 300;
@@ -382,8 +383,38 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
           <section className="panel">
             <div className="panel-head">
               <div>
-                <h2>Executive reconciliation sheet</h2>
-                <p className="subtle">Associate names are pulled from Amazon SCC Driver Reconciliation for the selected date and station. Save rows after counting cash.</p>
+                <h2>Add executive reconciliation</h2>
+                <p className="subtle">Select an associate mapped to this station from Amazon data. Use + Add associate to enter another person on the next row.</p>
+              </div>
+              <span className="count-badge">{rows.length} Amazon associates</span>
+            </div>
+            {defaultLocationId && selectedStation ? (
+              <AssociateEntryBuilder
+                associates={rows
+                  .filter((row) => row.source_associate_name)
+                  .map((row) => ({
+                    name: row.source_associate_name ?? "",
+                    providerEmployeeId: row.provider_employee_id,
+                    shipmentType: row.shipment_type ?? "SCC Driver Reconciliation",
+                    pendingAmount: amountValue(row.pending_amount)
+                  }))}
+                businessDate={result.businessDate}
+                canEdit={permission.canEdit}
+                locationId={defaultLocationId}
+                returnHref={returnHref}
+                stationCode={selectedStation.station_code}
+                stationLabel={selectedStation.station_name ?? selectedStation.state ?? ""}
+              />
+            ) : (
+              <div className="panel-body"><p className="subtle">Select one station to load its Amazon associates.</p></div>
+            )}
+          </section>
+
+          <section className="panel">
+            <div className="panel-head">
+              <div>
+                <h2>Saved reconciliation entries</h2>
+                <p className="subtle">Saved amounts and denomination counts remain available for review and correction.</p>
               </div>
               <span className="count-badge">{rows.length} records</span>
             </div>

@@ -82,6 +82,15 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
     ? await shipmentFacts(companyId, context.location.station_code, yearStart, monthEnd)
     : { error: null, rows: [] as ShipmentFact[] };
   const facts = factsResult.rows;
+  const attendanceResult = isNaN(Date.parse(`${date}T00:00:00Z`)) || !context.location || !supabaseAdmin
+    ? { data: [], error: null }
+    : await supabaseAdmin.from("attendance_daily")
+      .select("enrolment_id,worker_name,employee_code,in_time,out_time,punch_count,work_minutes,status,remark")
+      .eq("company_id", companyId)
+      .eq("location_id", context.location.id)
+      .eq("punch_date", date)
+      .order("in_time", { ascending: true });
+  const attendance = attendanceResult.data ?? [];
   const dayVolume = sum(facts, date, date);
   const dayActivity = sum(facts, date, date, "total_activity");
   const monthVolume = sum(facts, monthStart, monthEnd);
@@ -97,6 +106,16 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
   const accent = modelAccent(context.mode);
   const isNow = context.mode === "amazon_now";
   const selectedShift = searchParams?.shift || "current";
+  const shiftStartHour = selectedShift === "night" ? 21 : 9;
+  const reported = attendance.length;
+  const singlePunch = attendance.filter((row) => Number(row.punch_count ?? 0) < 2).length;
+  const late = attendance.filter((row) => {
+    if (!row.in_time) return false;
+    const time = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hour12: false, minute: "2-digit", timeZone: "Asia/Kolkata" }).format(new Date(row.in_time));
+    const [hour, minute] = time.split(":").map(Number);
+    return hour * 60 + minute > shiftStartHour * 60 + 15;
+  }).length;
+  const completedShift = attendance.filter((row) => row.out_time && Number(row.work_minutes ?? 0) >= 600).length;
 
   return (
     <AppShell active="Dashboard" pageCode="ops_pulse">
@@ -110,8 +129,8 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
           action={<span className="ops-live-badge"><i /> {isNow ? "LIVE MODE" : "OPERATIONAL"}</span>}
         />
 
-        {locationsResult.error || factsResult.error ? (
-          <section className="panel message-panel error"><div className="panel-body"><strong>Data connection issue</strong><p className="subtle">{locationsResult.error ?? factsResult.error}</p></div></section>
+        {locationsResult.error || factsResult.error || attendanceResult.error ? (
+          <section className="panel message-panel error"><div className="panel-body"><strong>Data connection issue</strong><p className="subtle">{locationsResult.error ?? factsResult.error ?? attendanceResult.error?.message}</p></div></section>
         ) : null}
 
         <section className="ops-control-strip">
@@ -163,16 +182,25 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
           <section className="ops-visual-grid">
             <article className="ops-visual-card wide">
               <header><div><span>SHIFT CONTROL</span><h2>Store reporting timeline</h2></div><Link href="/ops-pulse/daily-submission">Open attendance</Link></header>
-              <div className="ops-shift-timeline">
-                {["09:00 Shift opens", "Associate reporting", "Hourly performance", "21:00 Handover"].map((label, index) => (
-                  <div key={label}><i className={index === 0 ? "complete" : index === 1 ? "current" : ""}>{index + 1}</i><span>{label}</span></div>
-                ))}
+              <div className="ops-kpi-grid compact">
+                <article><div className="ops-kpi-icon">R</div><span>Reported</span><strong>{reported}</strong><small>Real attendance rows</small></article>
+                <article className={late ? "attention" : "healthy"}><div className="ops-kpi-icon">L</div><span>Late</span><strong>{late}</strong><small>After shift + 15 min</small></article>
+                <article className={singlePunch ? "attention" : "healthy"}><div className="ops-kpi-icon">1</div><span>Single punch</span><strong>{singlePunch}</strong><small>Needs correction</small></article>
+                <article><div className="ops-kpi-icon">✓</div><span>Completed shift</span><strong>{completedShift}</strong><small>10+ working hours</small></article>
               </div>
-              <p className="ops-data-note">Shift tiles use configured attendance and hourly-performance feeds only. Missing feeds are shown as pending—never fabricated.</p>
+              <div className="now-attendance-list">
+                {attendance.slice(0, 12).map((row) => <div key={row.enrolment_id}><strong>{row.worker_name || row.employee_code || row.enrolment_id}</strong><span>{row.in_time ? new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(new Date(row.in_time)) : "No in-punch"}</span><b>{Number(row.work_minutes ?? 0)} min</b></div>)}
+                {!attendance.length ? <div className="ops-empty-visual">No attendance records received for this store and date.</div> : null}
+              </div>
             </article>
             <article className="ops-visual-card">
               <header><div><span>ACTION CENTER</span><h2>Live attention</h2></div></header>
-              <div className="ops-action-empty"><strong>No live attendance feed yet</strong><span>Connect store reporting data to activate late, absent and manpower-gap alerts.</span></div>
+              <div className="ops-health-list">
+                <div><i className={reported ? "good" : "warn"} /><span>Attendance feed</span><strong>{reported ? `${reported} reported` : "No data"}</strong></div>
+                <div><i className={late ? "warn" : "good"} /><span>Late reporting</span><strong>{late}</strong></div>
+                <div><i className={singlePunch ? "warn" : "good"} /><span>Punch exceptions</span><strong>{singlePunch}</strong></div>
+                <div><i className={dayActivity ? "good" : "warn"} /><span>Shipment activity</span><strong>{count(dayActivity)}</strong></div>
+              </div>
             </article>
           </section>
         ) : (

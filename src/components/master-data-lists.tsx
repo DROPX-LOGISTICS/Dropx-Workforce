@@ -30,6 +30,8 @@ type LocationRow = {
   address_line2: string | null;
   city: string | null;
   state: string | null;
+  region: string | null;
+  cluster: string | null;
   postal_code: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -370,8 +372,8 @@ export function MasterDataLists({
   );
   const locationRegionOptions = useMemo(
     () => uniqueOptions(locations.map((location) => ({
-      label: location.state || "",
-      value: location.state || ""
+      label: location.region || "",
+      value: location.region || ""
     }))),
     [locations]
   );
@@ -391,7 +393,7 @@ export function MasterDataLists({
     () => locations.filter((location) => {
       const matchesProvider = !locationProviders.length || locationProviders.some((provider) => sameText(location.providers?.code || location.providers?.name, provider));
       const matchesModel = !locationModels.length || locationModels.some((model) => sameText(location.location_models?.code || location.location_models?.name, model));
-      const matchesRegion = !locationRegions.length || locationRegions.some((region) => sameText(location.state, region));
+      const matchesRegion = !locationRegions.length || locationRegions.some((region) => sameText(location.region, region));
       const managerScopes = locationManagers.flatMap((manager) => {
         const option = locationManagerOptions.find((item) => sameText(item.value, manager));
         return option?.scopeValues?.length ? option.scopeValues : [manager];
@@ -405,6 +407,8 @@ export function MasterDataLists({
         location.address_line2,
         location.city,
         location.state,
+        location.region,
+        location.cluster,
         location.postal_code,
         location.latitude?.toString(),
         location.longitude?.toString(),
@@ -481,6 +485,8 @@ export function MasterDataLists({
               <tr>
                 <th>Code</th>
                 <th>Location</th>
+                <th>Region</th>
+                <th>Cluster</th>
                 <th>Provider</th>
                 <th>Model</th>
                 <th>Address</th>
@@ -494,6 +500,8 @@ export function MasterDataLists({
                 <tr key={row.id}>
                   <td><strong>{row.station_code}</strong></td>
                   <td>{row.station_name && !sameText(row.station_name, row.station_code) ? row.station_name : "-"}</td>
+                  <td>{row.region || "-"}</td>
+                  <td>{row.cluster || "-"}</td>
                   <td>{row.providers?.name || "-"}</td>
                   <td>{row.location_models?.code || "-"}</td>
                   <td>
@@ -528,7 +536,7 @@ export function MasterDataLists({
                   {canEdit ? <td className="action-cell"><EditButton href={editHref("location", row.id)} label={`Edit ${row.station_code}`} /></td> : null}
                 </tr>
               )) : (
-                <tr><td colSpan={canEdit ? 8 : 7} className="empty-cell">No locations found.</td></tr>
+                <tr><td colSpan={canEdit ? 10 : 9} className="empty-cell">No locations found.</td></tr>
               )}
             </tbody>
           </table>

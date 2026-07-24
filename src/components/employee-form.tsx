@@ -46,6 +46,7 @@ type EmployeeFormProps = {
     ifsc?: string | null;
     pf_uan?: string | null;
     pf_account_no?: string | null;
+    esi_no?: string | null;
     statutory_applicability: string[] | null;
     is_active?: boolean;
   } | null;
@@ -75,20 +76,25 @@ const stateOptions = [
   "AP", "AR", "AS", "BR", "CG", "GA", "GJ", "HR", "HP", "JH", "KA", "KL", "MP", "MH", "MN", "ML", "MZ", "NL", "OD", "PB", "RJ", "SK", "TN", "TS", "TR", "UP", "UK", "WB", "AN", "CH", "DN", "DL", "JK", "LA", "LD", "PY"
 ].map((value) => ({ value, label: value }));
 
-function StatutoryMultiSelect({ defaultValue }: { defaultValue?: string[] | null }) {
-  const [selected, setSelected] = useState<string[]>(defaultValue?.length ? defaultValue : ["not_applicable"]);
+function StatutoryMultiSelect({
+  selected,
+  onChange
+}: {
+  selected: string[];
+  onChange: (value: string[]) => void;
+}) {
   const selectedSet = useMemo(() => new Set(selected), [selected]);
 
   function toggle(value: string) {
     if (value === "not_applicable") {
-      setSelected(["not_applicable"]);
+      onChange(["not_applicable"]);
       return;
     }
     const withoutNotApplicable = selected.filter((item) => item !== "not_applicable");
     const next = selectedSet.has(value)
       ? withoutNotApplicable.filter((item) => item !== value)
       : [...withoutNotApplicable, value];
-    setSelected(next.length ? next : ["not_applicable"]);
+    onChange(next.length ? next : ["not_applicable"]);
   }
 
   return (
@@ -112,6 +118,9 @@ function StatutoryMultiSelect({ defaultValue }: { defaultValue?: string[] | null
 export function EmployeeForm({ action, designationOptions, employee, locationOptions, mode = "create" }: EmployeeFormProps) {
   const [selectedLocationId, setSelectedLocationId] = useState(employee?.location_id ?? "");
   const [selectedDesignationId, setSelectedDesignationId] = useState(employee?.designation_id ?? "");
+  const [selectedStatutory, setSelectedStatutory] = useState<string[]>(
+    employee?.statutory_applicability?.length ? employee.statutory_applicability : ["not_applicable"]
+  );
   const isEdit = mode === "edit";
   const selectedLocation = locationOptions.find((option) => option.value === selectedLocationId);
   const selectedModelId = selectedLocation?.modelId ?? "";
@@ -131,6 +140,8 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
   const selectedRules = designationOptions.find((option) => option.value === selectedDesignationId)?.dashboardRules;
   const fieldEnabled = (key: string) => !selectedRules || selectedRules.enabled.includes(key);
   const fieldRequired = (key: string) => Boolean(selectedRules?.required.includes(key));
+  const hasPf = selectedStatutory.includes("pf");
+  const hasEsi = selectedStatutory.includes("esi");
 
   return (
     <form action={action} className={`form-grid three employee-form ${isEdit ? "employee-form-edit" : "employee-form-create"}`}>
@@ -184,7 +195,7 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
       </label>
       <label className="span-2">
         Statutory applicability
-        <StatutoryMultiSelect defaultValue={employee?.statutory_applicability} />
+        <StatutoryMultiSelect selected={selectedStatutory} onChange={setSelectedStatutory} />
       </label>
       {isEdit ? (
         <>
@@ -204,8 +215,9 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
           {fieldEnabled("landmark") ? <label>Landmark<input className="field" defaultValue={employee?.landmark ?? ""} name="landmark" placeholder="Enter landmark" required={fieldRequired("landmark")} /></label> : null}
           {fieldEnabled("bank_account_no") ? <label>Bank account number<input className="field" defaultValue={employee?.bank_account_no ?? ""} name="bank_account_no" pattern="[A-Za-z0-9]*" placeholder="Enter bank account number" required={fieldRequired("bank_account_no")} /></label> : null}
           {fieldEnabled("ifsc") ? <label>IFSC<input className="field" defaultValue={employee?.ifsc ?? ""} name="ifsc" placeholder="Enter IFSC" required={fieldRequired("ifsc")} />{employee ? <ProfileVerificationPanel accountId={employee.id} kind="bank" pageCode="employees" profileType="employee" /> : null}</label> : null}
-          {fieldEnabled("pf_uan") ? <label>PF UAN<input className="field" defaultValue={employee?.pf_uan ?? ""} inputMode="numeric" name="pf_uan" placeholder="Enter PF UAN" required={fieldRequired("pf_uan")} />{employee ? <ProfileVerificationPanel accountId={employee.id} kind="pf_uan" pageCode="employees" profileType="employee" /> : null}</label> : null}
-          {fieldEnabled("pf_account_no") ? <label>PF Account No<input className="field" defaultValue={employee?.pf_account_no ?? ""} name="pf_account_no" pattern="[A-Za-z0-9]*" placeholder="Enter PF Account No" required={fieldRequired("pf_account_no")} /></label> : null}
+          {hasPf && fieldEnabled("pf_uan") ? <label>PF UAN<input className="field" defaultValue={employee?.pf_uan ?? ""} inputMode="numeric" name="pf_uan" placeholder="Enter PF UAN" required={fieldRequired("pf_uan")} />{employee ? <ProfileVerificationPanel accountId={employee.id} kind="pf_uan" pageCode="employees" profileType="employee" /> : null}</label> : null}
+          {hasPf && fieldEnabled("pf_account_no") ? <label>PF Account No<input className="field" defaultValue={employee?.pf_account_no ?? ""} name="pf_account_no" pattern="[A-Za-z0-9]*" placeholder="Enter PF Account No" required={fieldRequired("pf_account_no")} /></label> : null}
+          {hasEsi && fieldEnabled("esi_no") ? <label>ESI No<input className="field" defaultValue={employee?.esi_no ?? ""} name="esi_no" pattern="[A-Za-z0-9]*" placeholder="Enter ESI No" required={fieldRequired("esi_no")} /></label> : null}
           {fieldEnabled("emergency_contact_number") ? <label>Emergency contact number<input className="field" defaultValue={employee?.emergency_contact_number ?? ""} inputMode="numeric" maxLength={10} name="emergency_contact_number" pattern="[0-9]{10}" placeholder="Enter emergency contact number" required={fieldRequired("emergency_contact_number")} /></label> : null}
           {fieldEnabled("emergency_contact_name") ? <label>Emergency contact name<input className="field" defaultValue={employee?.emergency_contact_name ?? ""} name="emergency_contact_name" placeholder="Enter contact person name" required={fieldRequired("emergency_contact_name")} /></label> : null}
           {fieldEnabled("emergency_contact_relation") ? <label>Emergency relation<input className="field" defaultValue={employee?.emergency_contact_relation ?? ""} name="emergency_contact_relation" placeholder="Enter relation" required={fieldRequired("emergency_contact_relation")} /></label> : null}

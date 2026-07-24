@@ -63,6 +63,7 @@ type EmployeeRow = {
   ifsc?: string | null;
   pf_uan?: string | null;
   pf_account_no?: string | null;
+  esi_no?: string | null;
   aadhaar_front_path?: string | null;
   aadhaar_back_path?: string | null;
   pan_upload_path?: string | null;
@@ -172,6 +173,7 @@ function EmployeeDetails({ employee }: { employee: EmployeeRow }) {
           <EmployeeDetail label="Statutory" value={statutoryLabel(employee.statutory_applicability)} />
           <EmployeeDetail label="PF UAN" value={employee.pf_uan} />
           <EmployeeDetail label="PF Account No" value={employee.pf_account_no} />
+          <EmployeeDetail label="ESI No" value={employee.esi_no} />
           <EmployeeDetail label="Status" value={employeeStatus(employee)} />
         </dl>
       </section>
@@ -275,7 +277,7 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
   const [initialEmployeesResult, locationsResult, designationsResult] = await Promise.all([
     supabaseAdmin
       .from("employees")
-      .select("id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, location_id, designation_id, statutory_applicability, profile_completion_status, profile_completed_at, gender, date_of_birth, aadhaar_number, pan_number, father_name, blood_group, address, state_code, pincode, landmark, emergency_contact_name, emergency_contact_number, emergency_contact_relation, bank_account_no, ifsc, pf_uan, pf_account_no, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_photo_path, is_active, stations (station_code, station_name), designations (code, name)")
+      .select("id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, location_id, designation_id, statutory_applicability, profile_completion_status, profile_completed_at, gender, date_of_birth, aadhaar_number, pan_number, father_name, blood_group, address, state_code, pincode, landmark, emergency_contact_name, emergency_contact_number, emergency_contact_relation, bank_account_no, ifsc, pf_uan, pf_account_no, esi_no, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_photo_path, is_active, stations (station_code, station_name), designations (code, name)")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false }),
     supabaseAdmin

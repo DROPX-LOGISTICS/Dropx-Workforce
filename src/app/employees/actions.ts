@@ -207,7 +207,8 @@ export async function updateEmployee(formData: FormData) {
       bank_account_no: optional(formData.get("bank_account_no"))?.toUpperCase() ?? null,
       ifsc: optional(formData.get("ifsc"))?.toUpperCase() ?? null,
       pf_uan: optional(formData.get("pf_uan"))?.replace(/\D/g, "") ?? null,
-      pf_account_no: optional(formData.get("pf_account_no"))?.toUpperCase() ?? null
+      pf_account_no: optional(formData.get("pf_account_no"))?.toUpperCase() ?? null,
+      esi_no: optional(formData.get("esi_no"))?.toUpperCase() ?? null
     };
 
     if (!/^\d{6,15}$/.test(mobile)) throw new Error("Mobile number must contain 6 to 15 digits.");
@@ -219,6 +220,7 @@ export async function updateEmployee(formData: FormData) {
     if (extraPayload.bank_account_no && !/^[A-Z0-9]+$/.test(extraPayload.bank_account_no)) throw new Error("Bank account number can contain only letters and numbers.");
     if (extraPayload.pf_uan && !/^\d{12}$/.test(extraPayload.pf_uan)) throw new Error("PF UAN must contain exactly 12 digits.");
     if (extraPayload.pf_account_no && !/^[A-Z0-9]+$/.test(extraPayload.pf_account_no)) throw new Error("PF Account No can contain only letters and numbers.");
+    if (extraPayload.esi_no && !/^[A-Z0-9]+$/.test(extraPayload.esi_no)) throw new Error("ESI No can contain only letters and numbers.");
     if (Number.isNaN(Date.parse(dateOfJoin))) throw new Error("Enter a valid date of join.");
     if (extraPayload.date_of_birth && Number.isNaN(Date.parse(extraPayload.date_of_birth))) throw new Error("Enter a valid date of birth.");
     if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
@@ -255,9 +257,12 @@ export async function updateEmployee(formData: FormData) {
       bank_account_no: "Bank account number",
       ifsc: "IFSC",
       pf_uan: "PF UAN",
-      pf_account_no: "PF Account No"
+      pf_account_no: "PF Account No",
+      esi_no: "ESI No"
     };
     for (const key of dashboardRules.required) {
+      if ((key === "pf_uan" || key === "pf_account_no") && !statutoryApplicability.includes("pf")) continue;
+      if (key === "esi_no" && !statutoryApplicability.includes("esi")) continue;
       if (key in extraPayload && !String(extraPayload[key as keyof typeof extraPayload] ?? "").trim()) {
         throw new Error(`${requiredLabels[key] ?? key} is required.`);
       }

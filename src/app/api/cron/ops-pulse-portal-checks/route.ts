@@ -1,5 +1,17 @@
 import { NextResponse } from "next/server";
+import { sendEmail } from "@/lib/email";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+
+type PortalSetting = {
+  amazon_driver_recon_url: string | null;
+  amazon_bank_deposit_url: string | null;
+  portal_login_url: string | null;
+  portal_username: string | null;
+  portal_secret_name: string | null;
+  portal_check_interval_minutes: number | string | null;
+  escalation_email: string | null;
+  escalation_contact: string | null;
+};
 
 type PortalRun = {
   id: string;
@@ -11,21 +23,7 @@ type PortalRun = {
   check_date: string;
   check_type: "driver_reconciliation" | "prepared_deposit";
   attempt_count: number | string;
-  cod_station_settings?: {
-    amazon_driver_recon_url: string | null;
-    amazon_bank_deposit_url: string | null;
-    portal_login_url: string | null;
-    portal_username: string | null;
-    portal_secret_name: string | null;
-    portal_check_interval_minutes: number | string | null;
-  } | Array<{
-    amazon_driver_recon_url: string | null;
-    amazon_bank_deposit_url: string | null;
-    portal_login_url: string | null;
-    portal_username: string | null;
-    portal_secret_name: string | null;
-    portal_check_interval_minutes: number | string | null;
-  }> | null;
+  cod_station_settings?: PortalSetting | PortalSetting[] | null;
 };
 
 type AmazonConnector = {
@@ -71,7 +69,7 @@ type DriverReconciliationAssociate = {
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const PORTAL_RUN_SELECT = "id, company_id, location_id, cod_master_id, station_code, portal_station_code, check_date, check_type, attempt_count, cod_station_settings (amazon_driver_recon_url, amazon_bank_deposit_url, portal_login_url, portal_username, portal_secret_name, portal_check_interval_minutes)";
+const PORTAL_RUN_SELECT = "id, company_id, location_id, cod_master_id, station_code, portal_station_code, check_date, check_type, attempt_count, cod_station_settings (amazon_driver_recon_url, amazon_bank_deposit_url, portal_login_url, portal_username, portal_secret_name, portal_check_interval_minutes, escalation_email, escalation_contact)";
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -104,6 +102,56 @@ async function logRun(run: PortalRun, eventType: string, message: string, payloa
     message,
     payload
   });
+}
+
+function recipients(value: string | null | undefined) {
+  return String(value ?? "").split(/[;,]/).map((entry) => entry.trim().toLowerCase()).filter(Boolean);
+}
+
+async function escalateExhaustedRun(run: PortalRun, setting: PortalSetting) {
+  if (!supabaseAdmin) return;
+  const { data: closure } = await supabaseAdmin
+    .from("cod_day_closures")
+    .select("id")
+    .eq("company_id", run.company_id)
+    .eq("location_id", run.location_id)
+    .eq("business_date", run.check_date)
+    .maybeSingle();
+  const emails = recipients(setting.escalation_email);
+  const whatsapp = recipients(setting.escalation_contact);
+  const title = `SCC validation exhausted: ${run.station_code}`;
+  const message = `${run.check_type === "driver_reconciliation" ? "Driver Reconciliation" : "Bank Deposit"} could not be validated after 3 attempts for ${run.station_code} on ${run.check_date}. Manager action or exception approval is required.${whatsapp.length ? ` WhatsApp escalation configured for: ${whatsapp.join(", ")}.` : ""}`;
+  if (closure?.id) {
+    await supabaseAdmin.from("cod_manager_notifications").insert({
+      company_id: run.company_id,
+      closure_id: closure.id,
+      location_id: run.location_id,
+      recipient_email: emails.join(", ") || null,
+      notification_type: "SCC validation exhausted",
+      title,
+      message,
+      email_status: emails.length ? "Pending" : "Skipped"
+    });
+  }
+  if (emails.length) {
+    try {
+      await sendEmail({ body: message, companyId: run.company_id, subject: title, to: emails });
+      if (closure?.id) await supabaseAdmin.from("cod_manager_notifications").update({ email_status: "Sent" }).eq("closure_id", closure.id).eq("notification_type", "SCC validation exhausted");
+    } catch (error) {
+      if (closure?.id) await supabaseAdmin.from("cod_manager_notifications").update({
+        email_status: "Failed",
+        email_error: error instanceof Error ? error.message : "Email failed"
+      }).eq("closure_id", closure.id).eq("notification_type", "SCC validation exhausted");
+    }
+  }
+  await markRun(run.id, {
+    status: "Skipped",
+    summary: "Three automation attempts exhausted. Escalated to manager and Control Tower.",
+    error_message: "Automatic validation stopped after 3 attempts.",
+    next_check_at: null,
+    last_checked_at: new Date().toISOString()
+  });
+  await logRun(run, "retry_exhausted", message, { emails, whatsapp });
 }
 
 function normalizeText(value: unknown) {
@@ -260,6 +308,10 @@ async function processRun(run: PortalRun, workerUrl: string, workerSecret: strin
       attempt_count: Number(run.attempt_count ?? 0) + 1,
       next_check_at: retryAt(30)
     });
+    return { error: 1, ok: 0 };
+  }
+  if (Number(run.attempt_count ?? 0) >= 3) {
+    await escalateExhaustedRun(run, setting);
     return { error: 1, ok: 0 };
   }
 

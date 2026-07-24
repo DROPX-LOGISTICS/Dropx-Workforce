@@ -387,8 +387,22 @@ export async function GET(request: NextRequest) {
   }
 
     const nextPath = safeNextPath(request.nextUrl.searchParams.get("next"));
-    const destinationPath = isPlatformAdminHost ? (nextPath.startsWith("/platform-admin") ? nextPath : "/platform-admin") : (nextPath || "/dashboard");
-    return NextResponse.redirect(new URL(destinationPath, request.url));
+    const returnToOps = request.cookies.get("dropx_ops_auth_return")?.value === "1";
+    const destinationPath = isPlatformAdminHost
+      ? (nextPath.startsWith("/platform-admin") ? nextPath : "/platform-admin")
+      : (returnToOps ? "/ops-pulse" : (nextPath || "/dashboard"));
+    const response = NextResponse.redirect(new URL(destinationPath, request.url));
+    if (returnToOps) {
+      response.cookies.set("dropx_ops_auth_return", "", {
+        domain: ".dropxlogistics.com",
+        httpOnly: true,
+        sameSite: "lax",
+        secure: true,
+        path: "/",
+        maxAge: 0
+      });
+    }
+    return response;
   } catch (error) {
     console.error("Auth callback failed", {
       message: error instanceof Error ? error.message : String(error)

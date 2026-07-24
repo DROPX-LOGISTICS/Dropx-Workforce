@@ -6,6 +6,30 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAuthKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
 const COOKIE_CHUNK_SIZE = 3000;
 const MAX_COOKIE_CHUNKS = 8;
+const ENCODED_COOKIE_PREFIX = "b64-";
+
+function encodeCookieValue(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return ENCODED_COOKIE_PREFIX + btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function decodeCookieValue(value: string) {
+  if (!value.startsWith(ENCODED_COOKIE_PREFIX)) return value;
+  const encoded = value.slice(ENCODED_COOKIE_PREFIX.length)
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+  const padded = encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "=");
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
 
 function cookieDomain() {
   const host = headers().get("x-forwarded-host")?.split(":")[0].toLowerCase() ??
@@ -34,7 +58,7 @@ export function createServerSupabaseClient(response?: NextResponse, forceOpsStor
 
   const getStoredValue = (key: string) => {
     const legacyValue = cookieStore.get(key)?.value;
-    if (legacyValue) return legacyValue;
+    if (legacyValue) return decodeCookieValue(legacyValue);
 
     let value = "";
     for (let index = 0; index < MAX_COOKIE_CHUNKS; index += 1) {
@@ -42,7 +66,7 @@ export function createServerSupabaseClient(response?: NextResponse, forceOpsStor
       if (!chunk) break;
       value += chunk;
     }
-    return value || null;
+    return value ? decodeCookieValue(value) : null;
   };
 
   const clearStoredValue = (key: string) => {
@@ -56,7 +80,8 @@ export function createServerSupabaseClient(response?: NextResponse, forceOpsStor
 
   const setStoredValue = (key: string, value: string) => {
     clearStoredValue(key);
-    const chunks = value.match(new RegExp(`.{1,${COOKIE_CHUNK_SIZE}}`, "g")) ?? [];
+    const encodedValue = encodeCookieValue(value);
+    const chunks = encodedValue.match(new RegExp(`.{1,${COOKIE_CHUNK_SIZE}}`, "g")) ?? [];
     chunks.forEach((chunk, index) => {
       cookieStore.set(`${key}.${index}`, chunk, cookieOptions);
       response?.cookies.set(`${key}.${index}`, chunk, cookieOptions);

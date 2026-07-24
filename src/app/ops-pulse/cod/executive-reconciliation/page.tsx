@@ -217,10 +217,11 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
   const rows = defaultLocationId
     ? result.rows.filter((row) => row.location_id === defaultLocationId || row.station_code === selectedStation?.station_code)
     : result.rows;
-  const completed = rows.filter((row) => row.reconciliation_status === "Completed").length;
-  const expectedTotal = rows.reduce((sum, row) => sum + amountValue(row.expected_amount), 0);
-  const collectedTotal = rows.reduce((sum, row) => sum + amountValue(row.collected_amount), 0);
-  const netDifference = rows.reduce((sum, row) => sum + amountValue(row.difference_amount), 0);
+  const savedRows = rows.filter((row) => row.reconciliation_id);
+  const completed = savedRows.filter((row) => row.reconciliation_status === "Completed").length;
+  const expectedTotal = savedRows.reduce((sum, row) => sum + amountValue(row.expected_amount), 0);
+  const collectedTotal = savedRows.reduce((sum, row) => sum + amountValue(row.collected_amount), 0);
+  const netDifference = savedRows.reduce((sum, row) => sum + amountValue(row.difference_amount), 0);
   const hasSingleStationScope = result.locations.length === 1;
   const sccRows = rows.filter((row) => row.source === "scc_driver_reconciliation").length;
   const workerReady = Boolean(process.env.OPS_PORTAL_WORKER_URL?.trim() && process.env.OPS_PORTAL_WORKER_SECRET?.trim());
@@ -329,7 +330,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
           </section>
 
           <section className="summary-grid">
-            <div className="metric-card"><span>Associates</span><strong>{rows.length}</strong><small>SCC roster plus manual rows</small></div>
+            <div className="metric-card"><span>Entered associates</span><strong>{savedRows.length}</strong><small>Saved COD reconciliation rows</small></div>
             <div className="metric-card"><span>Balanced</span><strong>{completed}</strong><small>Cash equals expected COD</small></div>
             <div className="metric-card"><span>Expected COD</span><strong>{formatAmount(expectedTotal)}</strong><small>Amount entered by station</small></div>
             <div className="metric-card"><span>Net Cash Difference</span><strong className={moneyClass(netDifference)}>{differenceLabel(netDifference)}</strong><small>Collected {formatAmount(collectedTotal)}</small></div>
@@ -513,7 +514,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                 <h2>Saved reconciliation entries</h2>
                 <p className="subtle">Saved amounts and denomination counts remain available for review and correction.</p>
               </div>
-              <span className="count-badge">{rows.length} records</span>
+              <span className="count-badge">{savedRows.length} entries</span>
             </div>
             <div className="table-wrap cash-reconciliation-wrap" aria-label="Executive reconciliation sheet">
               <table className="cash-reconciliation-table">
@@ -533,7 +534,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.length ? rows.map((row) => {
+                  {savedRows.length ? savedRows.map((row) => {
                     const difference = amountValue(row.difference_amount);
                     return (
                       <tr key={row.key}>
@@ -585,7 +586,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                       </tr>
                     );
                   }) : (
-                    <tr><td className="empty-cell" colSpan={16}>No SCC associates found yet. Click Sync SCC now for the selected date and station.</td></tr>
+                    <tr><td className="empty-cell" colSpan={16}>No saved COD entries. Select an associate above and save the first reconciliation row.</td></tr>
                   )}
                 </tbody>
               </table>

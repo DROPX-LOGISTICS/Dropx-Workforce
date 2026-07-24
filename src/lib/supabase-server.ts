@@ -1,4 +1,5 @@
 import { cookies, headers } from "next/headers";
+import type { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -14,7 +15,7 @@ function cookieDomain() {
   return host.endsWith("dropxlogistics.com") ? ".dropxlogistics.com" : undefined;
 }
 
-export function createServerSupabaseClient() {
+export function createServerSupabaseClient(response?: NextResponse) {
   if (!supabaseUrl || !supabaseAuthKey) return null;
 
   const cookieStore = cookies();
@@ -47,15 +48,20 @@ export function createServerSupabaseClient() {
 
   const clearStoredValue = (key: string) => {
     cookieStore.set(key, "", { ...cookieOptions, maxAge: 0 });
+    response?.cookies.set(key, "", { ...cookieOptions, maxAge: 0 });
     for (let index = 0; index < MAX_COOKIE_CHUNKS; index += 1) {
       cookieStore.set(`${key}.${index}`, "", { ...cookieOptions, maxAge: 0 });
+      response?.cookies.set(`${key}.${index}`, "", { ...cookieOptions, maxAge: 0 });
     }
   };
 
   const setStoredValue = (key: string, value: string) => {
     clearStoredValue(key);
     const chunks = value.match(new RegExp(`.{1,${COOKIE_CHUNK_SIZE}}`, "g")) ?? [];
-    chunks.forEach((chunk, index) => cookieStore.set(`${key}.${index}`, chunk, cookieOptions));
+    chunks.forEach((chunk, index) => {
+      cookieStore.set(`${key}.${index}`, chunk, cookieOptions);
+      response?.cookies.set(`${key}.${index}`, chunk, cookieOptions);
+    });
   };
 
   return createClient(supabaseUrl, supabaseAuthKey, {

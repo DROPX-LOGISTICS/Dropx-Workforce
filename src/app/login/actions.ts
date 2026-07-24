@@ -46,11 +46,10 @@ function safeNextPath(value: FormDataEntryValue | null) {
 }
 
 export async function signInWithGoogle(formData: FormData) {
-  const supabase = createServerSupabaseClient();
-  if (!supabase) redirect("/login?error=Authentication%20is%20not%20configured");
-
   const requestHeaders = headers();
   const origin = authOriginFromHeaders(requestHeaders);
+  const supabase = createServerSupabaseClient(undefined, origin === "https://ops.dropxlogistics.com" ? false : undefined);
+  if (!supabase) redirect("/login?error=Authentication%20is%20not%20configured");
   const nextPath = safeNextPath(formData.get("next"));
   // Supabase already allowlists the dashboard callback. Use it for the Ops
   // subdomain as well; auth cookies are scoped to .dropxlogistics.com, and the

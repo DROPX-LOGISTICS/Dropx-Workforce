@@ -13,8 +13,9 @@ export async function middleware(request: NextRequest) {
   const isOpsHost = host === "ops.dropxlogistics.com";
   const isDashboardHost = host === "dashboard.dropxlogistics.com";
 
-  if (isDashboardHost && (path === "/ops-pulse" || path.startsWith("/ops-pulse/"))) {
-    return NextResponse.redirect(new URL(path + request.nextUrl.search, "https://ops.dropxlogistics.com"));
+  const opsAppUrl = process.env.OPS_APP_URL?.trim();
+  if (isDashboardHost && opsAppUrl && (path === "/ops-pulse" || path.startsWith("/ops-pulse/"))) {
+    return NextResponse.redirect(new URL(path + request.nextUrl.search, opsAppUrl));
   }
 
   if (isOpsHost && path === "/") {

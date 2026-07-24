@@ -13,7 +13,14 @@ const SLOW_MO_MS = Number(process.env.SLOW_MO_MS || 0);
 const WORKER_TIMEOUT_MS = Math.min(Number(process.env.WORKER_TIMEOUT_MS || 180000), 180000);
 const DEBUG_ARTIFACT_DIR = process.env.DEBUG_ARTIFACT_DIR || "";
 const SESSION_STATE_DIR = process.env.SESSION_STATE_DIR || path.join(process.cwd(), ".amazon-portal-sessions");
-const MANUAL_APPROVAL_WAIT_MS = Number(process.env.MANUAL_APPROVAL_WAIT_MS || 180000);
+// A scheduled check must report that human approval is needed instead of
+// occupying the only browser slot for several minutes. The operator can finish
+// the challenge in noVNC and retry immediately.
+const MANUAL_APPROVAL_WAIT_MS = Math.min(
+  Number(process.env.MANUAL_APPROVAL_WAIT_MS || 30000),
+  30000,
+  Math.max(WORKER_TIMEOUT_MS - 15000, 10000)
+);
 const ENABLE_VNC = String(process.env.ENABLE_VNC || "false").toLowerCase() === "true";
 const NOVNC_PORT = Number(process.env.NOVNC_PORT || 6080);
 

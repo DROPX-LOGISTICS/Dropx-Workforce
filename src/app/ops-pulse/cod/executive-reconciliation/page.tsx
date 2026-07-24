@@ -232,8 +232,17 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
   const selectedClosure = closures.find((closure) => closure.location_id === defaultLocationId) ?? null;
   const driverCleared = selectedClosure?.driver_check_status === "Passed" ||
     selectedClosure?.driver_check_status === "Exception approved";
-  const depositCleared = selectedClosure?.deposit_check_status === "Passed" ||
-    selectedClosure?.deposit_check_status === "Exception approved";
+  const depositAmountDifference = Number((
+    collectedTotal - amountValue(selectedClosure?.amazon_open_remittance_expected)
+  ).toFixed(2));
+  const depositMatched = selectedClosure?.deposit_check_status === "Passed" &&
+    selectedClosure.no_deposit_liability &&
+    selectedClosure.amazon_open_remittance_count > 0 &&
+    Math.abs(depositAmountDifference) <= 1;
+  const depositCleared = depositMatched || selectedClosure?.deposit_check_status === "Exception approved";
+  const depositDisplayStatus = selectedClosure?.deposit_check_status === "Passed" && !depositMatched
+    ? "Pending"
+    : selectedClosure?.deposit_check_status ?? "Locked";
   const canManagerReview = Boolean(authorization.isMasterOwner || authorization.isMasterCompany ||
     `${authorization.roleCode ?? ""} ${authorization.roleName ?? ""}`.toLowerCase().match(/manager|admin|owner/));
   const closureTotals = closures.reduce((totals, closure) => ({
@@ -347,7 +356,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
             <div className="panel-body">
               <div className="summary-grid">
                 <div className="metric-card"><span>Driver Reconciliation</span><strong>{selectedClosure?.driver_check_status ?? "Not run"}</strong><small>Pending {formatAmount(selectedClosure?.driver_reconciliation_pending ?? 0)}</small></div>
-                <div className="metric-card"><span>Bank Deposit</span><strong>{selectedClosure?.deposit_check_status ?? "Locked"}</strong><small>{selectedClosure?.no_deposit_liability ? "No deposit liability" : "Liability clearance not confirmed"}</small></div>
+                <div className="metric-card"><span>Bank Deposit</span><strong>{depositDisplayStatus}</strong><small>{selectedClosure?.no_deposit_liability ? `No liability · COD difference ${formatAmount(depositAmountDifference)}` : "Liability clearance not confirmed"}</small></div>
                 <div className="metric-card"><span>Collected COD</span><strong>{formatAmount(closureTotals.collected)}</strong><small>Submitted station cash</small></div>
                 <div className="metric-card"><span>Amazon expected</span><strong>{formatAmount(closureTotals.expected)}</strong><small>Open remittances without code</small></div>
               </div>
@@ -411,7 +420,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                         {driverCleared ? "Run Bank Deposit check" : "Locked until Driver Recon clears"}
                       </SubmitButton>
                     </form>
-                    {selectedClosure && ["Pending", "Error", "Exception rejected"].includes(selectedClosure.deposit_check_status) ? (
+                    {selectedClosure && ["Pending", "Error", "Exception rejected"].includes(depositDisplayStatus) ? (
                       <form action={requestCodGateException} className="form-grid three" style={{ marginTop: 12 }}>
                         <input type="hidden" name="return_href" value={returnHref} />
                         <input type="hidden" name="business_date" value={result.businessDate} />

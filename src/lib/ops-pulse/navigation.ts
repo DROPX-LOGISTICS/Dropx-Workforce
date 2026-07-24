@@ -5,6 +5,7 @@ export type OpsClientCode = "amazon" | "flipkart";
 export const opsNavItems: NavItem[] = [
   { code: "ops_pulse", label: "Overview", href: "/ops-pulse", icon: "O" },
   { code: "daily_submission", label: "Daily Submission", href: "/ops-pulse/daily-submission", icon: "D" },
+  { code: "cod_master", label: "COD Master", href: "/master/cod-master", icon: "M" },
   {
     code: "cod",
     label: "Amazon Operations",

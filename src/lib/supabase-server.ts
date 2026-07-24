@@ -15,14 +15,14 @@ function cookieDomain() {
   return host.endsWith("dropxlogistics.com") ? ".dropxlogistics.com" : undefined;
 }
 
-export function createServerSupabaseClient(response?: NextResponse) {
+export function createServerSupabaseClient(response?: NextResponse, forceOpsStorage = false) {
   if (!supabaseUrl || !supabaseAuthKey) return null;
 
   const cookieStore = cookies();
   const host = headers().get("x-forwarded-host")?.split(":")[0].toLowerCase() ??
     headers().get("host")?.split(":")[0].toLowerCase() ??
     "";
-  const useOpsStorage = host === "ops.dropxlogistics.com";
+  const useOpsStorage = forceOpsStorage || host === "ops.dropxlogistics.com";
   const cookieOptions = {
     domain: cookieDomain(),
     httpOnly: true,

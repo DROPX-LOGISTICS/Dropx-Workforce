@@ -7,7 +7,7 @@ type OpsAuthTransferPayload = {
 };
 
 function transferKey() {
-  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const secret = process.env.OPS_PORTAL_WORKER_SECRET ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!secret) throw new Error("Ops authentication transfer is not configured.");
   return createHash("sha256").update(`dropx-ops-auth:${secret}`).digest();
 }

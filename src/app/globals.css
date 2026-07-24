@@ -8697,6 +8697,45 @@ tbody tr:hover td {
 .scorecard-timeline span, .scorecard-timeline small { color: #7b8494; font-size: 10px; }
 .scorecard-timeline b { color: #101828; font-size: 18px; }
 
+.scorecard-actions {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+}
+
+.scorecard-actions a {
+  color: var(--ops-accent);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.ops-kpi-grid.compact {
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 18px;
+}
+
+.ops-kpi-grid.compact article {
+  min-height: 108px;
+}
+
+.now-attendance-list {
+  display: grid;
+  margin-top: 12px;
+  border-top: 1px solid #eef1f5;
+}
+
+.now-attendance-list > div {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 18px;
+  padding: 10px 2px;
+  border-bottom: 1px solid #eef1f5;
+  color: #667085;
+  font-size: 11px;
+}
+
+.now-attendance-list strong { color: #344054; }
+
 @media (max-width: 1100px) {
   .ops-kpi-grid { grid-template-columns: repeat(3, 1fr); }
 }

@@ -379,7 +379,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                         Run Driver Reconciliation
                       </SubmitButton>
                     </form>
-                    {selectedClosure && ["Pending", "Error", "Exception rejected"].includes(selectedClosure.driver_check_status) ? (
+                    {selectedClosure && ["Pending", "Manual Review", "Error", "Exception rejected"].includes(selectedClosure.driver_check_status) ? (
                       <form action={requestCodGateException} className="form-grid three" style={{ marginTop: 12 }}>
                         <input type="hidden" name="return_href" value={returnHref} />
                         <input type="hidden" name="business_date" value={result.businessDate} />

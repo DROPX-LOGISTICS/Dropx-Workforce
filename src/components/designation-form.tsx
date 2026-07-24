@@ -9,7 +9,9 @@ import {
   fieldExecutiveProfileFields,
   normalizeProfileFieldRules,
   type DesignationProfileFieldRules,
-  type ProfileFieldRule
+  type ProfileFieldChannelRules,
+  type ProfileFieldRule,
+  type ProfileFieldRuleSet
 } from "@/lib/profile-field-rules";
 
 type ProviderOption = {
@@ -113,30 +115,34 @@ function FieldRuleMatrix({
 }: {
   fields: ProfileFieldRule[];
   namePrefix: "employees" | "field_executives";
-  rules: DesignationProfileFieldRules["employees"];
+  rules: ProfileFieldChannelRules;
   title: string;
 }) {
-  const [enabled, setEnabled] = useState<string[]>(rules.enabled);
-  const [required, setRequired] = useState<string[]>(rules.required.filter((key) => rules.enabled.includes(key)));
-  const enabledSet = useMemo(() => new Set(enabled), [enabled]);
-  const requiredSet = useMemo(() => new Set(required), [required]);
+  const [dropxOne, setDropxOne] = useState<ProfileFieldRuleSet>(rules.dropx_one);
+  const [dashboard, setDashboard] = useState<ProfileFieldRuleSet>(rules.dashboard);
 
-  function toggleEnabled(key: string) {
-    if (enabledSet.has(key)) {
-      setEnabled(enabled.filter((value) => value !== key));
-      setRequired(required.filter((value) => value !== key));
-      return;
+  function toggleRule(
+    scope: ProfileFieldRuleSet,
+    setScope: (value: ProfileFieldRuleSet) => void,
+    key: string,
+    type: "enabled" | "required"
+  ) {
+    const enabledSet = new Set(scope.enabled);
+    const requiredSet = new Set(scope.required);
+    if (type === "enabled") {
+      if (enabledSet.has(key)) {
+        enabledSet.delete(key);
+        requiredSet.delete(key);
+      } else {
+        enabledSet.add(key);
+      }
+    } else if (requiredSet.has(key)) {
+      requiredSet.delete(key);
+    } else {
+      enabledSet.add(key);
+      requiredSet.add(key);
     }
-    setEnabled([...enabled, key]);
-  }
-
-  function toggleRequired(key: string) {
-    if (!enabledSet.has(key)) {
-      setEnabled([...enabled, key]);
-      setRequired([...required, key]);
-      return;
-    }
-    setRequired(requiredSet.has(key) ? required.filter((value) => value !== key) : [...required, key]);
+    setScope({ enabled: Array.from(enabledSet), required: Array.from(requiredSet) });
   }
 
   const grouped = fields.reduce<Record<string, ProfileFieldRule[]>>((acc, field) => {
@@ -146,11 +152,13 @@ function FieldRuleMatrix({
 
   return (
     <section className="designation-field-rules">
-      {enabled.map((key) => <input key={`enabled-${key}`} name={`${namePrefix}_enabled_fields`} type="hidden" value={key} />)}
-      {required.map((key) => <input key={`required-${key}`} name={`${namePrefix}_required_fields`} type="hidden" value={key} />)}
+      {dropxOne.enabled.map((key) => <input key={`dropx-enabled-${key}`} name={`${namePrefix}_dropx_one_enabled_fields`} type="hidden" value={key} />)}
+      {dropxOne.required.map((key) => <input key={`dropx-required-${key}`} name={`${namePrefix}_dropx_one_required_fields`} type="hidden" value={key} />)}
+      {dashboard.enabled.map((key) => <input key={`dashboard-enabled-${key}`} name={`${namePrefix}_dashboard_enabled_fields`} type="hidden" value={key} />)}
+      {dashboard.required.map((key) => <input key={`dashboard-required-${key}`} name={`${namePrefix}_dashboard_required_fields`} type="hidden" value={key} />)}
       <div className="designation-field-rules-head">
         <h3>{title}</h3>
-        <p className="subtle">Choose which profile fields appear in app onboarding and which must be filled.</p>
+        <p className="subtle">Configure visibility and required fields independently for DropX One and Dashboard.</p>
       </div>
       {Object.entries(grouped).map(([group, groupFields]) => (
         <div className="designation-rule-group" key={group}>
@@ -158,18 +166,36 @@ function FieldRuleMatrix({
           <div className="designation-rule-list">
             {groupFields.map((field) => (
               <div className="designation-rule-row" key={field.key}>
-                <div>
+                <div className="designation-rule-name">
                   <strong>{field.label}</strong>
                   <small>{field.kind}</small>
                 </div>
-                <label className="check-row">
-                  <input checked={enabledSet.has(field.key)} className="matrix-checkbox" onChange={() => toggleEnabled(field.key)} type="checkbox" />
-                  <span>Enable</span>
-                </label>
-                <label className="check-row">
-                  <input checked={requiredSet.has(field.key)} className="matrix-checkbox" onChange={() => toggleRequired(field.key)} type="checkbox" />
-                  <span>Required</span>
-                </label>
+                {([
+                  ["DropX One", dropxOne, setDropxOne],
+                  ["Dashboard", dashboard, setDashboard]
+                ] as const).map(([label, scope, setScope]) => (
+                  <div className="designation-rule-channel" key={label}>
+                    <strong>{label}</strong>
+                    <label className="check-row">
+                      <input
+                        checked={scope.enabled.includes(field.key)}
+                        className="matrix-checkbox"
+                        onChange={() => toggleRule(scope, setScope, field.key, "enabled")}
+                        type="checkbox"
+                      />
+                      <span>Enable</span>
+                    </label>
+                    <label className="check-row">
+                      <input
+                        checked={scope.required.includes(field.key)}
+                        className="matrix-checkbox"
+                        onChange={() => toggleRule(scope, setScope, field.key, "required")}
+                        type="checkbox"
+                      />
+                      <span>Required</span>
+                    </label>
+                  </div>
+                ))}
               </div>
             ))}
           </div>

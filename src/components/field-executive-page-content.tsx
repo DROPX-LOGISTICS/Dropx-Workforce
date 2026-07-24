@@ -11,6 +11,7 @@ import { type AuthorizationContext, requirePagePermission } from "@/lib/authoriz
 import { requireCompanyId } from "@/lib/company-scope";
 import { countryCodeOptions } from "@/lib/country-codes";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
+import { normalizeProfileFieldRules } from "@/lib/profile-field-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type LocationRow = {
@@ -29,6 +30,7 @@ type DesignationRow = {
   name: string;
   model_ids?: string[] | null;
   onboarding_categories?: string[] | null;
+  profile_field_rules?: unknown;
   is_active: boolean;
 };
 
@@ -312,7 +314,8 @@ function FieldExecutiveForm({
   locationOptions,
   mode,
   returnPath,
-  submitLabel
+  submitLabel,
+  dashboardRules
 }: {
   action: (formData: FormData) => Promise<void>;
   executive?: ExecutiveRow | null;
@@ -321,7 +324,10 @@ function FieldExecutiveForm({
   mode: "create" | "edit";
   returnPath: FieldExecutiveRoute;
   submitLabel?: string;
+  dashboardRules?: { enabled: string[]; required: string[] };
 }) {
+  const fieldEnabled = (key: string) => !dashboardRules || dashboardRules.enabled.includes(key);
+  const fieldRequired = (key: string) => Boolean(dashboardRules?.required.includes(key));
   return (
     <form action={action} className="form-grid three">
       <input type="hidden" name="return_path" value={returnPath} />
@@ -347,25 +353,25 @@ function FieldExecutiveForm({
         locationName="location_id"
         locationOptions={locationOptions}
       />
-      <label>Gender
+      <label hidden={!fieldEnabled("gender")}>Gender
         <SearchableSelect name="gender" options={genderOptions} defaultValue={executive?.gender} placeholder="Select gender" />
       </label>
-      <label>Date of birth<input className="field" name="date_of_birth" type="date" defaultValue={textValue(executive?.date_of_birth)} /></label>
+      <label hidden={!fieldEnabled("date_of_birth")}>Date of birth<input className="field" name="date_of_birth" required={fieldRequired("date_of_birth")} type="date" defaultValue={textValue(executive?.date_of_birth)} /></label>
 
-      <label>Aadhaar number<input className="field" inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" defaultValue={textValue(executive?.aadhaar_number)} /></label>
-      <label>PAN number<input className="field" name="pan_number" placeholder="Enter PAN number" defaultValue={textValue(executive?.pan_number)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="pan" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
-      <label>eShram UAN<input className="field" inputMode="numeric" maxLength={12} name="eshram_uan" pattern="[0-9]{12}" placeholder="Enter eShram UAN" defaultValue={textValue(executive?.eshram_uan)} /></label>
+      <label hidden={!fieldEnabled("aadhaar_number")}>Aadhaar number<input className="field" inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" required={fieldRequired("aadhaar_number")} defaultValue={textValue(executive?.aadhaar_number)} /></label>
+      <label hidden={!fieldEnabled("pan_number")}>PAN number<input className="field" name="pan_number" placeholder="Enter PAN number" required={fieldRequired("pan_number")} defaultValue={textValue(executive?.pan_number)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="pan" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
+      <label hidden={!fieldEnabled("eshram_uan")}>eShram UAN<input className="field" inputMode="numeric" maxLength={12} name="eshram_uan" pattern="[0-9]{12}" placeholder="Enter eShram UAN" required={fieldRequired("eshram_uan")} defaultValue={textValue(executive?.eshram_uan)} /></label>
 
-      <label className="span-3">Address<input className="field" name="address" placeholder="Enter complete address" defaultValue={textValue(executive?.address)} /></label>
-      <label>Postal PIN<input className="field" inputMode="numeric" maxLength={6} name="postal_pin" pattern="[0-9]{6}" placeholder="Enter PIN" defaultValue={textValue(executive?.postal_pin)} /></label>
-      <label>Land mark<input className="field" name="landmark" placeholder="Enter landmark" defaultValue={textValue(executive?.landmark)} /></label>
-      <label>State
+      <label className="span-3" hidden={!fieldEnabled("address")}>Address<input className="field" name="address" placeholder="Enter complete address" required={fieldRequired("address")} defaultValue={textValue(executive?.address)} /></label>
+      <label hidden={!fieldEnabled("pincode")}>Postal PIN<input className="field" inputMode="numeric" maxLength={6} name="postal_pin" pattern="[0-9]{6}" placeholder="Enter PIN" required={fieldRequired("pincode")} defaultValue={textValue(executive?.postal_pin)} /></label>
+      <label hidden={!fieldEnabled("landmark")}>Land mark<input className="field" name="landmark" placeholder="Enter landmark" required={fieldRequired("landmark")} defaultValue={textValue(executive?.landmark)} /></label>
+      <label hidden={!fieldEnabled("state_code")}>State
         <SearchableSelect name="state_code" options={stateOptions} defaultValue={executive?.state_code} placeholder="Search state code" />
       </label>
 
-      <label>Father name<input className="field" name="father_name" placeholder="Enter father name" defaultValue={textValue(executive?.father_name)} /></label>
-      <label>Blood group<input className="field" name="blood_group" placeholder="Enter blood group" defaultValue={textValue(executive?.blood_group)} /></label>
-      <label>Handicapped
+      <label hidden={!fieldEnabled("father_name")}>Father name<input className="field" name="father_name" placeholder="Enter father name" required={fieldRequired("father_name")} defaultValue={textValue(executive?.father_name)} /></label>
+      <label hidden={!fieldEnabled("blood_group")}>Blood group<input className="field" name="blood_group" placeholder="Enter blood group" required={fieldRequired("blood_group")} defaultValue={textValue(executive?.blood_group)} /></label>
+      <label hidden={!fieldEnabled("is_handicapped")}>Handicapped
         <SearchableSelect
           name="is_handicapped"
           options={yesNoOptions}
@@ -374,28 +380,28 @@ function FieldExecutiveForm({
         />
       </label>
 
-      <label>Bank A/c No.<input className="field" inputMode="numeric" name="bank_account_no" placeholder="Enter bank account number" defaultValue={textValue(executive?.bank_account_no)} /></label>
-      <label>IFSC<input className="field" name="ifsc_code" placeholder="Enter IFSC" defaultValue={textValue(executive?.ifsc_code)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="bank" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
-      <label>Emergency contact number<input className="field" inputMode="numeric" maxLength={10} name="emergency_contact_number" pattern="[0-9]{10}" placeholder="Enter emergency contact number" defaultValue={textValue(executive?.emergency_contact_number)} /></label>
-      <label>Emergency contact name<input className="field" name="emergency_contact_name" placeholder="Enter contact person name" defaultValue={textValue(executive?.emergency_contact_name)} /></label>
-      <label>Emergency relation<input className="field" name="emergency_contact_relation" placeholder="Enter relation" defaultValue={textValue(executive?.emergency_contact_relation)} /></label>
+      <label hidden={!fieldEnabled("bank_account_no")}>Bank A/c No.<input className="field" name="bank_account_no" pattern="[A-Za-z0-9]*" placeholder="Enter bank account number" required={fieldRequired("bank_account_no")} defaultValue={textValue(executive?.bank_account_no)} /></label>
+      <label hidden={!fieldEnabled("ifsc")}>IFSC<input className="field" name="ifsc_code" placeholder="Enter IFSC" required={fieldRequired("ifsc")} defaultValue={textValue(executive?.ifsc_code)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="bank" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
+      <label hidden={!fieldEnabled("emergency_contact_number")}>Emergency contact number<input className="field" inputMode="numeric" maxLength={10} name="emergency_contact_number" pattern="[0-9]{10}" placeholder="Enter emergency contact number" required={fieldRequired("emergency_contact_number")} defaultValue={textValue(executive?.emergency_contact_number)} /></label>
+      <label hidden={!fieldEnabled("emergency_contact_name")}>Emergency contact name<input className="field" name="emergency_contact_name" placeholder="Enter contact person name" required={fieldRequired("emergency_contact_name")} defaultValue={textValue(executive?.emergency_contact_name)} /></label>
+      <label hidden={!fieldEnabled("emergency_contact_relation")}>Emergency relation<input className="field" name="emergency_contact_relation" placeholder="Enter relation" required={fieldRequired("emergency_contact_relation")} defaultValue={textValue(executive?.emergency_contact_relation)} /></label>
 
-      <label>Driving license no.<input className="field" name="driving_license_no" placeholder="Enter DL number" defaultValue={textValue(executive?.driving_license_no)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="dl" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
-      <label>DL expiry date<input className="field" name="driving_license_exp_date" type="date" defaultValue={textValue(executive?.driving_license_exp_date)} /></label>
-      <label>Vehicle reg no.<input className="field" name="vehicle_reg_no" placeholder="Enter vehicle number" defaultValue={textValue(executive?.vehicle_reg_no)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="vehicle" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
+      <label hidden={!fieldEnabled("driving_license_no")}>Driving license no.<input className="field" name="driving_license_no" placeholder="Enter DL number" required={fieldRequired("driving_license_no")} defaultValue={textValue(executive?.driving_license_no)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="dl" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
+      <label hidden={!fieldEnabled("driving_license_exp_date")}>DL expiry date<input className="field" name="driving_license_exp_date" required={fieldRequired("driving_license_exp_date")} type="date" defaultValue={textValue(executive?.driving_license_exp_date)} /></label>
+      <label hidden={!fieldEnabled("vehicle_reg_no")}>Vehicle reg no.<input className="field" name="vehicle_reg_no" placeholder="Enter vehicle number" required={fieldRequired("vehicle_reg_no")} defaultValue={textValue(executive?.vehicle_reg_no)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="vehicle" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
 
-      <label>Vehicle reg expiry<input className="field" name="vehicle_reg_exp_date" type="date" defaultValue={textValue(executive?.vehicle_reg_exp_date)} /></label>
-      <label>Vehicle Insurance expiry<input className="field" name="vehicle_insurance_exp_date" type="date" defaultValue={textValue(executive?.vehicle_insurance_exp_date)} /></label>
-      <label>Pollution expiry<input className="field" name="vehicle_pollution_exp_date" type="date" defaultValue={textValue(executive?.vehicle_pollution_exp_date)} /></label>
+      <label hidden={!fieldEnabled("vehicle_reg_exp_date")}>Vehicle reg expiry<input className="field" name="vehicle_reg_exp_date" required={fieldRequired("vehicle_reg_exp_date")} type="date" defaultValue={textValue(executive?.vehicle_reg_exp_date)} /></label>
+      <label hidden={!fieldEnabled("vehicle_insurance_exp_date")}>Vehicle Insurance expiry<input className="field" name="vehicle_insurance_exp_date" required={fieldRequired("vehicle_insurance_exp_date")} type="date" defaultValue={textValue(executive?.vehicle_insurance_exp_date)} /></label>
+      <label hidden={!fieldEnabled("vehicle_pollution_exp_date")}>Pollution expiry<input className="field" name="vehicle_pollution_exp_date" required={fieldRequired("vehicle_pollution_exp_date")} type="date" defaultValue={textValue(executive?.vehicle_pollution_exp_date)} /></label>
 
       {mode === "edit" ? (
         <>
-          <label>Aadhaar front file<input className="field" name="aadhaar_front_file" type="file" /></label>
-          <label>Aadhaar back file<input className="field" name="aadhaar_back_file" type="file" /></label>
-          <label>PAN upload<input className="field" name="pan_upload_file" type="file" /></label>
-          <label>DL front file<input className="field" name="dl_front_file" type="file" /></label>
-          <label>DL back file<input className="field" name="dl_back_file" type="file" /></label>
-          <label>Profile photo<input accept="image/*" className="field" name="profile_photo_file" type="file" /></label>
+          <label hidden={!fieldEnabled("aadhaar_front")}>Aadhaar front file<input className="field" name="aadhaar_front_file" type="file" /></label>
+          <label hidden={!fieldEnabled("aadhaar_back")}>Aadhaar back file<input className="field" name="aadhaar_back_file" type="file" /></label>
+          <label hidden={!fieldEnabled("pan_upload")}>PAN upload<input className="field" name="pan_upload_file" type="file" /></label>
+          <label hidden={!fieldEnabled("dl_front")}>DL front file<input className="field" name="dl_front_file" type="file" /></label>
+          <label hidden={!fieldEnabled("dl_back")}>DL back file<input className="field" name="dl_back_file" type="file" /></label>
+          <label hidden={!fieldEnabled("profile_photo")}>Profile photo<input accept="image/*" className="field" name="profile_photo_file" type="file" /></label>
         </>
       ) : null}
 
@@ -541,7 +547,7 @@ async function loadFieldExecutiveData(
 
   let designationsResult: { data: unknown[] | null; error: { message?: string } | null } = await supabaseAdmin
     .from("designations")
-    .select("id, code, name, model_ids, onboarding_categories, is_active")
+    .select("id, code, name, model_ids, onboarding_categories, profile_field_rules, is_active")
     .eq("company_id", companyId)
     .eq("is_active", true)
     .order("name");
@@ -554,7 +560,7 @@ async function loadFieldExecutiveData(
       .order("name");
     designationsResult = {
       ...fallbackDesignationsResult,
-      data: (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...(designation as Record<string, unknown>), model_ids: [], onboarding_categories: ["employees"] }))
+      data: (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...(designation as Record<string, unknown>), model_ids: [], onboarding_categories: ["employees"], profile_field_rules: {} }))
     };
   }
 
@@ -736,7 +742,8 @@ export async function FieldExecutivePageContent({
     value: designation.name,
     label: designation.name,
     helper: designation.code,
-    modelIds: designation.model_ids ?? []
+    modelIds: designation.model_ids ?? [],
+    dashboardRules: normalizeProfileFieldRules(designation.profile_field_rules).field_executives.dashboard
   }));
 
   return (
@@ -800,7 +807,15 @@ export async function FieldExecutivePageContent({
               </div>
               <PendingLink className="icon-button" href={returnPath} scroll={false} aria-label={`Close edit ${entityLabel.toLowerCase()}`}>x</PendingLink>
             </div>
-            <FieldExecutiveForm action={updateFieldExecutive} designationOptions={designationOptions} executive={editExecutive} locationOptions={locationOptions} mode="edit" returnPath={returnPath} />
+            <FieldExecutiveForm
+              action={updateFieldExecutive}
+              dashboardRules={designationOptions.find((option) => option.value === editExecutive.designation)?.dashboardRules}
+              designationOptions={designationOptions}
+              executive={editExecutive}
+              locationOptions={locationOptions}
+              mode="edit"
+              returnPath={returnPath}
+            />
           </section>
         </div>
       ) : null}

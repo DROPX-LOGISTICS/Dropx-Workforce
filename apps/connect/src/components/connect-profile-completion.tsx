@@ -28,6 +28,7 @@ type ProfilePayload = {
   };
   editable: Record<string, string>;
   statutoryApplicability: string[];
+  fieldRules?: { enabled?: string[]; required?: string[] };
   uploads: {
     aadhaarFront: boolean;
     aadhaarBack: boolean;
@@ -186,7 +187,9 @@ export function ConnectProfileCompletion({
         throw new Error("Please select whether you have ESI No.");
       }
       const pfUan = String(formData.get("pf_uan") ?? "").trim();
+      const pfAccountNo = String(formData.get("pf_account_no") ?? "").trim();
       const esiNo = String(formData.get("esi_no") ?? "").trim();
+      const bankAccountNo = String(formData.get("bank_account_no") ?? "").trim();
       if (formData.get("has_pf_uan") === "yes" && !pfUan) {
         throw new Error("Enter PF UAN.");
       }
@@ -195,6 +198,12 @@ export function ConnectProfileCompletion({
       }
       if (pfUan && !/^[A-Za-z0-9]+$/.test(pfUan)) {
         throw new Error("PF UAN can contain only letters and numbers.");
+      }
+      if (pfAccountNo && !/^[A-Za-z0-9]+$/.test(pfAccountNo)) {
+        throw new Error("PF Account No can contain only letters and numbers.");
+      }
+      if (bankAccountNo && !/^[A-Za-z0-9]+$/.test(bankAccountNo)) {
+        throw new Error("Bank account no can contain only letters and numbers.");
       }
       if (esiNo && !/^[A-Za-z0-9]+$/.test(esiNo)) {
         throw new Error("ESI No can contain only letters and numbers.");
@@ -233,6 +242,9 @@ export function ConnectProfileCompletion({
   }
 
   const statutoryApplicability = profile.statutoryApplicability ?? [];
+  const enabledFields = new Set(profile.fieldRules?.enabled ?? []);
+  const pfAccountEnabled = enabledFields.has("pf_account_no");
+  const pfAccountRequired = profile.fieldRules?.required?.includes("pf_account_no") === true;
   const showPfDetails = statutoryApplicability.includes("pf");
   const showEsiDetails = statutoryApplicability.includes("esi");
 
@@ -338,7 +350,7 @@ export function ConnectProfileCompletion({
         <h3>Bank details</h3>
         <label>
           Bank account no <RequiredMark />
-          <input defaultValue={profile.editable.bankAccountNo} inputMode="numeric" name="bank_account_no" required />
+          <input defaultValue={profile.editable.bankAccountNo} name="bank_account_no" pattern="[A-Za-z0-9]*" required />
         </label>
         <label>
           IFSC <RequiredMark />
@@ -346,7 +358,7 @@ export function ConnectProfileCompletion({
         </label>
       </section>
 
-      {showPfDetails || showEsiDetails ? (
+      {showPfDetails || showEsiDetails || pfAccountEnabled ? (
         <section className="connect-profile-section">
           <h3>Statutory details</h3>
           {showPfDetails ? (
@@ -378,6 +390,18 @@ export function ConnectProfileCompletion({
                 </label>
               ) : null}
             </div>
+          ) : null}
+          {pfAccountEnabled ? (
+            <label>
+              PF Account No {pfAccountRequired ? <RequiredMark /> : null}
+              <input
+                defaultValue={profile.editable.pfAccountNo}
+                name="pf_account_no"
+                pattern="[A-Za-z0-9]*"
+                required={pfAccountRequired}
+                title="Only letters and numbers are allowed"
+              />
+            </label>
           ) : null}
         </section>
       ) : null}

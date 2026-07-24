@@ -103,7 +103,7 @@ export function ProfileVerificationPanel({ accountId, kind, profileType, pageCod
       dateOfBirth: text(data.get("date_of_birth")),
       drivingLicenseNo: text(data.get("driving_license_no")).toUpperCase(),
       vehicleRegNo: text(data.get("vehicle_reg_no")).toUpperCase(),
-      bankAccountNo: text(data.get("bank_account_no")).replace(/\D/g, ""),
+      bankAccountNo: text(data.get("bank_account_no")).replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
       ifsc: text(data.get("ifsc") ?? data.get("ifsc_code")).toUpperCase(),
       pfUan: text(data.get("pf_uan")).replace(/\D/g, "")
     };

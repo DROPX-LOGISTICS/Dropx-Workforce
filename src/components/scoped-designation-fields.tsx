@@ -15,6 +15,7 @@ export type ScopedDesignationOption = {
   label: string;
   helper?: string;
   modelIds?: string[];
+  dashboardRules?: { enabled: string[]; required: string[] };
 };
 
 function designationOptionsForLocation(
@@ -37,6 +38,7 @@ export function ScopedDesignationFields({
   initialLocationId = "",
   locationName,
   locationOptions,
+  onDesignationChange,
   required = true
 }: {
   designationName: string;
@@ -45,6 +47,7 @@ export function ScopedDesignationFields({
   initialLocationId?: string | null;
   locationName: string;
   locationOptions: ScopedLocationOption[];
+  onDesignationChange?: (value: string) => void;
   required?: boolean;
 }) {
   const [selectedLocationId, setSelectedLocationId] = useState(initialLocationId ?? "");
@@ -63,6 +66,7 @@ export function ScopedDesignationFields({
           onValueChange={(value) => {
             setSelectedLocationId(value);
             setSelectedDesignation("");
+            onDesignationChange?.("");
           }}
           options={locationOptions}
           placeholder="Select location"
@@ -74,7 +78,10 @@ export function ScopedDesignationFields({
         <SearchableSelect
           disabled={designationDisabled}
           name={designationName}
-          onValueChange={setSelectedDesignation}
+          onValueChange={(value) => {
+            setSelectedDesignation(value);
+            onDesignationChange?.(value);
+          }}
           options={effectiveDesignationOptions}
           placeholder={selectedLocationId ? "Select designation" : "Select location first"}
           required={required && !designationDisabled}

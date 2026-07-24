@@ -12,6 +12,7 @@ import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
 import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
+import { normalizeProfileFieldRules } from "@/lib/profile-field-rules";
 import { saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { sendEmployeeOnboardingWhatsApp } from "@/lib/whatsapp";
@@ -96,7 +97,7 @@ export async function createEmployee(formData: FormData) {
 
     const [locationResult, designationResult] = await Promise.all([
       supabaseAdmin.from("stations").select("id, station_code, station_name").eq("id", locationId).eq("company_id", companyId).maybeSingle(),
-      supabaseAdmin.from("designations").select("id, name").eq("id", designationId).eq("company_id", companyId).eq("is_active", true).maybeSingle()
+      supabaseAdmin.from("designations").select("id, name, profile_field_rules").eq("id", designationId).eq("company_id", companyId).eq("is_active", true).maybeSingle()
     ]);
     if (locationResult.error) throw new Error(locationResult.error.message);
     if (designationResult.error) throw new Error(designationResult.error.message);
@@ -203,9 +204,10 @@ export async function updateEmployee(formData: FormData) {
       emergency_contact_name: optional(formData.get("emergency_contact_name")),
       emergency_contact_number: optional(formData.get("emergency_contact_number"))?.replace(/\D/g, "") ?? null,
       emergency_contact_relation: optional(formData.get("emergency_contact_relation")),
-      bank_account_no: optional(formData.get("bank_account_no"))?.replace(/\D/g, "") ?? null,
+      bank_account_no: optional(formData.get("bank_account_no"))?.toUpperCase() ?? null,
       ifsc: optional(formData.get("ifsc"))?.toUpperCase() ?? null,
-      pf_uan: optional(formData.get("pf_uan"))?.replace(/\D/g, "") ?? null
+      pf_uan: optional(formData.get("pf_uan"))?.replace(/\D/g, "") ?? null,
+      pf_account_no: optional(formData.get("pf_account_no"))?.toUpperCase() ?? null
     };
 
     if (!/^\d{6,15}$/.test(mobile)) throw new Error("Mobile number must contain 6 to 15 digits.");
@@ -214,7 +216,9 @@ export async function updateEmployee(formData: FormData) {
     if (extraPayload.pincode && !/^\d{6}$/.test(extraPayload.pincode)) throw new Error("Postal PIN must contain exactly 6 digits.");
     if (extraPayload.emergency_contact_number && !/^\d{10}$/.test(extraPayload.emergency_contact_number)) throw new Error("Emergency contact number must contain exactly 10 digits.");
     if (extraPayload.ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(extraPayload.ifsc)) throw new Error("IFSC format is invalid.");
+    if (extraPayload.bank_account_no && !/^[A-Z0-9]+$/.test(extraPayload.bank_account_no)) throw new Error("Bank account number can contain only letters and numbers.");
     if (extraPayload.pf_uan && !/^\d{12}$/.test(extraPayload.pf_uan)) throw new Error("PF UAN must contain exactly 12 digits.");
+    if (extraPayload.pf_account_no && !/^[A-Z0-9]+$/.test(extraPayload.pf_account_no)) throw new Error("PF Account No can contain only letters and numbers.");
     if (Number.isNaN(Date.parse(dateOfJoin))) throw new Error("Enter a valid date of join.");
     if (extraPayload.date_of_birth && Number.isNaN(Date.parse(extraPayload.date_of_birth))) throw new Error("Enter a valid date of birth.");
     if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
@@ -223,12 +227,41 @@ export async function updateEmployee(formData: FormData) {
 
     const [locationResult, designationResult] = await Promise.all([
       supabaseAdmin.from("stations").select("id, station_code, station_name").eq("id", locationId).eq("company_id", companyId).maybeSingle(),
-      supabaseAdmin.from("designations").select("id, name").eq("id", designationId).eq("company_id", companyId).eq("is_active", true).maybeSingle()
+      supabaseAdmin.from("designations").select("id, name, profile_field_rules").eq("id", designationId).eq("company_id", companyId).eq("is_active", true).maybeSingle()
     ]);
     if (locationResult.error) throw new Error(locationResult.error.message);
     if (designationResult.error) throw new Error(designationResult.error.message);
     if (!locationResult.data) throw new Error("Selected location is not available for this company.");
     if (!designationResult.data) throw new Error("Selected designation is not available.");
+    const dashboardRules = normalizeProfileFieldRules(designationResult.data.profile_field_rules).employees.dashboard;
+    const dashboardEnabled = new Set(dashboardRules.enabled);
+    const filteredExtraPayload = Object.fromEntries(
+      Object.entries(extraPayload).filter(([key]) => dashboardEnabled.has(key))
+    );
+    const requiredLabels: Record<string, string> = {
+      gender: "Gender",
+      date_of_birth: "Date of birth",
+      father_name: "Father name",
+      blood_group: "Blood group",
+      aadhaar_number: "Aadhaar number",
+      pan_number: "PAN number",
+      address: "Address",
+      state_code: "State",
+      pincode: "Postal PIN",
+      landmark: "Landmark",
+      emergency_contact_name: "Emergency contact name",
+      emergency_contact_number: "Emergency contact number",
+      emergency_contact_relation: "Emergency relation",
+      bank_account_no: "Bank account number",
+      ifsc: "IFSC",
+      pf_uan: "PF UAN",
+      pf_account_no: "PF Account No"
+    };
+    for (const key of dashboardRules.required) {
+      if (key in extraPayload && !String(extraPayload[key as keyof typeof extraPayload] ?? "").trim()) {
+        throw new Error(`${requiredLabels[key] ?? key} is required.`);
+      }
+    }
 
     const existingResult = await supabaseAdmin
       .from("employees")
@@ -274,7 +307,7 @@ export async function updateEmployee(formData: FormData) {
       location_id: locationId,
       designation_id: designationId,
       statutory_applicability: statutoryApplicability,
-      ...extraPayload,
+      ...filteredExtraPayload,
       ...documentPayload,
       is_active: isActive,
       updated_at: new Date().toISOString()

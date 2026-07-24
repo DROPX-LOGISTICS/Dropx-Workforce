@@ -66,12 +66,24 @@ function onboardingCategories(formData: FormData) {
 function profileFieldRules(formData: FormData) {
   return normalizeProfileFieldRules({
     employees: {
-      enabled: formData.getAll("employees_enabled_fields"),
-      required: formData.getAll("employees_required_fields")
+      dropx_one: {
+        enabled: formData.getAll("employees_dropx_one_enabled_fields"),
+        required: formData.getAll("employees_dropx_one_required_fields")
+      },
+      dashboard: {
+        enabled: formData.getAll("employees_dashboard_enabled_fields"),
+        required: formData.getAll("employees_dashboard_required_fields")
+      }
     },
     field_executives: {
-      enabled: formData.getAll("field_executives_enabled_fields"),
-      required: formData.getAll("field_executives_required_fields")
+      dropx_one: {
+        enabled: formData.getAll("field_executives_dropx_one_enabled_fields"),
+        required: formData.getAll("field_executives_dropx_one_required_fields")
+      },
+      dashboard: {
+        enabled: formData.getAll("field_executives_dashboard_enabled_fields"),
+        required: formData.getAll("field_executives_dashboard_required_fields")
+      }
     }
   });
 }

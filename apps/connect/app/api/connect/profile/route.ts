@@ -31,6 +31,7 @@ type EmployeeProfileRow = {
   ifsc: string | null;
   statutory_applicability: string[] | null;
   pf_uan?: string | null;
+  pf_account_no?: string | null;
   esi_no?: string | null;
   emergency_contact_name: string | null;
   emergency_contact_number: string | null;
@@ -136,7 +137,7 @@ async function loadEmployee(employeeId: string, companyId: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const result = await supabaseAdmin
     .from("employees")
-    .select("id, company_id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, gender, date_of_birth, aadhaar_number, pan_number, address, state, pincode, landmark, state_code, father_name, blood_group, bank_account_no, ifsc, statutory_applicability, pf_uan, esi_no, emergency_contact_name, emergency_contact_number, emergency_contact_relation, profile_photo_path, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_completion_status, stations (station_code, station_name), designations (code, name, profile_field_rules)")
+    .select("id, company_id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, gender, date_of_birth, aadhaar_number, pan_number, address, state, pincode, landmark, state_code, father_name, blood_group, bank_account_no, ifsc, statutory_applicability, pf_uan, pf_account_no, esi_no, emergency_contact_name, emergency_contact_number, emergency_contact_relation, profile_photo_path, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_completion_status, stations (station_code, station_name), designations (code, name, profile_field_rules)")
     .eq("id", employeeId)
     .eq("company_id", companyId)
     .maybeSingle();
@@ -149,7 +150,7 @@ async function loadEmployee(employeeId: string, companyId: string) {
       .maybeSingle();
     if (fallbackResult.error) throw new Error(fallbackResult.error.message);
     if (!fallbackResult.data) throw new Error("Employee profile was not found.");
-    return { ...fallbackResult.data, pf_uan: null, esi_no: null } as EmployeeProfileRow;
+    return { ...fallbackResult.data, pf_uan: null, pf_account_no: null, esi_no: null } as EmployeeProfileRow;
   }
   if (result.error) throw new Error(result.error.message);
   if (!result.data) throw new Error("Employee profile was not found.");
@@ -167,7 +168,7 @@ async function signedProfileUrl(path: string | null) {
 async function serializeEmployee(row: EmployeeProfileRow) {
   const station = firstRelation(row.stations);
   const designation = firstRelation(row.designations);
-  const fieldRules = normalizeProfileFieldRules(designation?.profile_field_rules).employees;
+  const fieldRules = normalizeProfileFieldRules(designation?.profile_field_rules).employees.dropx_one;
   return {
     id: row.id,
     readOnly: {
@@ -195,6 +196,7 @@ async function serializeEmployee(row: EmployeeProfileRow) {
       bankAccountNo: row.bank_account_no ?? "",
       ifsc: row.ifsc ?? "",
       pfUan: row.pf_uan ?? "",
+      pfAccountNo: row.pf_account_no ?? "",
       esiNo: row.esi_no ?? "",
       emergencyContactName: row.emergency_contact_name ?? "",
       emergencyContactNumber: row.emergency_contact_number ?? "",
@@ -273,7 +275,7 @@ export async function POST(request: Request) {
       state_code: cleanText(formData.get("state_code"))?.toUpperCase() ?? null,
       father_name: cleanText(formData.get("father_name")),
       blood_group: cleanText(formData.get("blood_group")),
-      bank_account_no: cleanDigits(formData.get("bank_account_no")),
+      bank_account_no: normalizeAlphaNum(formData.get("bank_account_no"), "Bank account no"),
       ifsc: cleanText(formData.get("ifsc"))?.toUpperCase() ?? null,
       emergency_contact_name: cleanText(formData.get("emergency_contact_name")),
       emergency_contact_number: cleanDigits(formData.get("emergency_contact_number")),
@@ -283,8 +285,10 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString()
     };
     const pfUan = normalizeAlphaNum(formData.get("pf_uan"), "PF UAN");
+    const pfAccountNo = normalizeAlphaNum(formData.get("pf_account_no"), "PF Account No");
     const esiNo = normalizeAlphaNum(formData.get("esi_no"), "ESI No");
     if (pfUan) updatePayload.pf_uan = pfUan;
+    if (pfAccountNo) updatePayload.pf_account_no = pfAccountNo;
     if (esiNo) updatePayload.esi_no = esiNo;
     const [aadhaarFrontPath, aadhaarBackPath, panUploadPath, profilePhotoPath] = uploads;
     if (aadhaarFrontPath) updatePayload.aadhaar_front_path = aadhaarFrontPath;

@@ -85,6 +85,16 @@ function requiredPan(value: FormDataEntryValue | null) {
   return text;
 }
 
+function alphaNumValue(value: FormDataEntryValue | null, label: string, required = false) {
+  const text = cleanText(value)?.toUpperCase() ?? null;
+  if (!text) {
+    if (required) throw new Error(`${label} is required.`);
+    return null;
+  }
+  if (!/^[A-Z0-9]+$/.test(text)) throw new Error(`${label} can contain only letters and numbers.`);
+  return text;
+}
+
 function requiredTwelveDigits(value: FormDataEntryValue | null, label: string) {
   const text = requiredDigits(value, label);
   if (!/^\d{12}$/.test(text)) throw new Error(`${label} must contain exactly 12 digits.`);
@@ -184,7 +194,7 @@ async function serializeExecutive(row: FieldExecutiveRow) {
       .eq("name", row.designation)
       .maybeSingle()
     : null;
-  const fieldRules = normalizeProfileFieldRules(designationResult?.data?.profile_field_rules).field_executives;
+  const fieldRules = normalizeProfileFieldRules(designationResult?.data?.profile_field_rules).field_executives.dropx_one;
   return {
     id: row.id,
     readOnly: {
@@ -288,11 +298,12 @@ export async function POST(request: Request) {
         .eq("name", currentExecutive.designation)
         .maybeSingle()
       : null;
-    const rules = normalizeProfileFieldRules(designationResult?.data?.profile_field_rules).field_executives;
+    const rules = normalizeProfileFieldRules(designationResult?.data?.profile_field_rules).field_executives.dropx_one;
     const requiredFields = new Set(rules.required);
     const isRequired = (key: string) => requiredFields.has(key);
     const textValue = (key: string, label: string) => isRequired(key) ? requiredText(formData.get(key), label) : cleanText(formData.get(key));
     const digitsValue = (key: string, label: string) => isRequired(key) ? requiredDigits(formData.get(key), label) : cleanDigits(formData.get(key));
+    const bankAccountValue = alphaNumValue(formData.get("bank_account_no"), "Bank account no", isRequired("bank_account_no"));
     const dateValue = (key: string, label: string) => normalizeDate(isRequired(key) ? requiredText(formData.get(key), label) : formData.get(key));
     const panValue = isRequired("pan_number") || cleanText(formData.get("pan_number")) ? requiredPan(formData.get("pan_number")) : null;
     const eshramValue = isRequired("eshram_uan") || cleanText(formData.get("eshram_uan")) ? requiredTwelveDigits(formData.get("eshram_uan"), "eShram UAN") : null;
@@ -310,7 +321,7 @@ export async function POST(request: Request) {
       state_code: textValue("state_code", "State code")?.toUpperCase() ?? null,
       postal_pin: digitsValue("pincode", "Pincode"),
       landmark: textValue("landmark", "Landmark"),
-      bank_account_no: digitsValue("bank_account_no", "Bank account no"),
+      bank_account_no: bankAccountValue,
       ifsc_code: textValue("ifsc", "IFSC")?.toUpperCase() ?? null,
       emergency_contact_name: textValue("emergency_contact_name", "Emergency contact name"),
       emergency_contact_number: digitsValue("emergency_contact_number", "Emergency contact number"),

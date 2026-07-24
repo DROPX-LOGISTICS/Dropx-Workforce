@@ -13,6 +13,7 @@ import { cleanCountryCode } from "@/lib/country-codes";
 import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
+import { normalizeProfileFieldRules } from "@/lib/profile-field-rules";
 import { saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { sendFieldExecutiveOnboardingWhatsApp } from "@/lib/whatsapp";
@@ -127,7 +128,7 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
   const bloodGroup = optional(formData.get("blood_group"));
   const isHandicappedValue = optional(formData.get("is_handicapped"));
   const isHandicapped = isHandicappedValue === null ? null : isHandicappedValue === "true";
-  const bankAccountNo = optional(formData.get("bank_account_no"))?.replace(/\D/g, "") ?? null;
+  const bankAccountNo = optional(formData.get("bank_account_no"))?.toUpperCase() ?? null;
   const ifscCode = optional(formData.get("ifsc_code"))?.toUpperCase() ?? null;
   const drivingLicenseNo = optional(formData.get("driving_license_no"))?.toUpperCase() ?? null;
   const drivingLicenseExpDate = optional(formData.get("driving_license_exp_date"));
@@ -149,6 +150,7 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
   if (eshramUan && !/^\d{12}$/.test(eshramUan)) throw new Error("eShram UAN must contain exactly 12 digits.");
   if (panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panNumber)) throw new Error("PAN number format is invalid.");
   if (ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode)) throw new Error("IFSC format is invalid.");
+  if (bankAccountNo && !/^[A-Z0-9]+$/.test(bankAccountNo)) throw new Error("Bank account number can contain only letters and numbers.");
 
   [
     ["Date of join", dateOfJoin],
@@ -229,7 +231,6 @@ export async function createFieldExecutive(formData: FormData) {
       .maybeSingle();
     if (locationError) throw new Error(locationError.message);
     if (!location) throw new Error("Selected location is not available for this company.");
-
     const workerCategory = await loadWorkerCategoryForDesignation(companyId, designation);
     const biometricId = await generateConfiguredBiometricId({
       category: workerCategory,
@@ -357,6 +358,64 @@ export async function updateFieldExecutive(formData: FormData) {
     if (locationError) throw new Error(locationError.message);
     if (!location) throw new Error("Selected location is not available for this company.");
 
+    const designationResult = await supabaseAdmin
+      .from("designations")
+      .select("profile_field_rules")
+      .eq("company_id", companyId)
+      .eq("name", payload.designation)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (designationResult.error) throw new Error(designationResult.error.message);
+    const dashboardRules = normalizeProfileFieldRules(designationResult.data?.profile_field_rules).field_executives.dashboard;
+    const profilePayloadKeys: Record<string, keyof typeof payload> = {
+      gender: "gender",
+      date_of_birth: "date_of_birth",
+      aadhaar_number: "aadhaar_number",
+      pan_number: "pan_number",
+      eshram_uan: "eshram_uan",
+      father_name: "father_name",
+      blood_group: "blood_group",
+      is_handicapped: "is_handicapped",
+      address: "address",
+      state_code: "state_code",
+      pincode: "postal_pin",
+      landmark: "landmark",
+      bank_account_no: "bank_account_no",
+      ifsc: "ifsc_code",
+      driving_license_no: "driving_license_no",
+      driving_license_exp_date: "driving_license_exp_date",
+      vehicle_reg_no: "vehicle_reg_no",
+      vehicle_reg_exp_date: "vehicle_reg_exp_date",
+      vehicle_insurance_exp_date: "vehicle_insurance_exp_date",
+      vehicle_pollution_exp_date: "vehicle_pollution_exp_date",
+      emergency_contact_name: "emergency_contact_name",
+      emergency_contact_number: "emergency_contact_number",
+      emergency_contact_relation: "emergency_contact_relation"
+    };
+    for (const key of dashboardRules.required) {
+      const payloadKey = profilePayloadKeys[key];
+      if (payloadKey && !String(payload[payloadKey] ?? "").trim()) {
+        throw new Error(`${key.replaceAll("_", " ")} is required.`);
+      }
+    }
+    const profilePayload = Object.fromEntries(
+      dashboardRules.enabled
+        .map((key) => profilePayloadKeys[key])
+        .filter((key): key is keyof typeof payload => Boolean(key))
+        .map((key) => [key, payload[key]])
+    );
+    const corePayload = {
+      full_name: payload.full_name,
+      mobile_country_code: payload.mobile_country_code,
+      mobile: payload.mobile,
+      email: payload.email,
+      date_of_join: payload.date_of_join,
+      location_id: payload.location_id,
+      designation: payload.designation,
+      biometric_id: payload.biometric_id,
+      is_active: payload.is_active
+    };
+
     const documentPayload: Record<string, string> = {};
     const existingPaths = existingResult.data as Record<string, string | null> | null;
     for (const field of fieldExecutiveDocumentFields) {
@@ -386,7 +445,8 @@ export async function updateFieldExecutive(formData: FormData) {
     const { error } = await supabaseAdmin
       .from("field_executives")
       .update({
-        ...payload,
+        ...corePayload,
+        ...profilePayload,
         ...documentPayload,
         updated_at: new Date().toISOString()
       })

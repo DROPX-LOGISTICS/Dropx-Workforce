@@ -10,9 +10,14 @@ export type ProfileFieldRuleSet = {
   required: string[];
 };
 
+export type ProfileFieldChannelRules = {
+  dropx_one: ProfileFieldRuleSet;
+  dashboard: ProfileFieldRuleSet;
+};
+
 export type DesignationProfileFieldRules = {
-  employees: ProfileFieldRuleSet;
-  field_executives: ProfileFieldRuleSet;
+  employees: ProfileFieldChannelRules;
+  field_executives: ProfileFieldChannelRules;
 };
 
 export const employeeProfileFields: ProfileFieldRule[] = [
@@ -26,9 +31,10 @@ export const employeeProfileFields: ProfileFieldRule[] = [
   { key: "state_code", label: "State code", group: "Address", kind: "select" },
   { key: "pincode", label: "Pincode", group: "Address", kind: "number" },
   { key: "landmark", label: "Landmark", group: "Address", kind: "text" },
-  { key: "bank_account_no", label: "Bank account no", group: "Bank details", kind: "number" },
+  { key: "bank_account_no", label: "Bank account no", group: "Bank details", kind: "text" },
   { key: "ifsc", label: "IFSC", group: "Bank details", kind: "text" },
   { key: "pf_uan", label: "PF UAN", group: "Statutory details", kind: "text" },
+  { key: "pf_account_no", label: "PF Account No", group: "Statutory details", kind: "text" },
   { key: "esi_no", label: "ESI No", group: "Statutory details", kind: "text" },
   { key: "emergency_contact_number", label: "Emergency contact number", group: "Emergency contact", kind: "number" },
   { key: "emergency_contact_name", label: "Emergency contact name", group: "Emergency contact", kind: "text" },
@@ -52,7 +58,7 @@ export const fieldExecutiveProfileFields: ProfileFieldRule[] = [
   { key: "state_code", label: "State code", group: "Address", kind: "select" },
   { key: "pincode", label: "Pincode", group: "Address", kind: "number" },
   { key: "landmark", label: "Landmark", group: "Address", kind: "text" },
-  { key: "bank_account_no", label: "Bank account no", group: "Bank details", kind: "number" },
+  { key: "bank_account_no", label: "Bank account no", group: "Bank details", kind: "text" },
   { key: "ifsc", label: "IFSC", group: "Bank details", kind: "text" },
   { key: "driving_license_no", label: "Driving license no", group: "Driving and vehicle", kind: "text" },
   { key: "driving_license_exp_date", label: "DL expiry date", group: "Driving and vehicle", kind: "date" },
@@ -71,12 +77,16 @@ export const fieldExecutiveProfileFields: ProfileFieldRule[] = [
   { key: "profile_photo", label: "Photo upload", group: "Uploads", kind: "file" }
 ];
 
-function normalizeRuleSet(value: unknown, fields: ProfileFieldRule[]): ProfileFieldRuleSet {
+function normalizeRuleSet(
+  value: unknown,
+  fields: ProfileFieldRule[],
+  defaultEnabled: string[]
+): ProfileFieldRuleSet {
   const fieldKeys = new Set(fields.map((field) => field.key));
   const record = value && typeof value === "object" ? value as { enabled?: unknown; required?: unknown } : {};
   const enabled = Array.isArray(record.enabled)
     ? record.enabled.map(String).filter((key) => fieldKeys.has(key))
-    : fields.map((field) => field.key);
+    : defaultEnabled.filter((key) => fieldKeys.has(key));
   const enabledSet = new Set(enabled);
   const required = Array.isArray(record.required)
     ? record.required.map(String).filter((key) => enabledSet.has(key))
@@ -84,10 +94,33 @@ function normalizeRuleSet(value: unknown, fields: ProfileFieldRule[]): ProfileFi
   return { enabled, required };
 }
 
+function normalizeChannelRules(value: unknown, fields: ProfileFieldRule[]): ProfileFieldChannelRules {
+  const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const allFieldKeys = fields.map((field) => field.key);
+  const dropxOneDefaults = allFieldKeys.filter((key) => key !== "pf_account_no");
+  const hasChannelRules = "dropx_one" in record || "dashboard" in record;
+
+  if (!hasChannelRules) {
+    const legacy = normalizeRuleSet(value, fields, dropxOneDefaults);
+    return {
+      dropx_one: legacy,
+      dashboard: {
+        enabled: Array.from(new Set([...legacy.enabled, ...allFieldKeys.filter((key) => key === "pf_account_no")])),
+        required: legacy.required
+      }
+    };
+  }
+
+  return {
+    dropx_one: normalizeRuleSet(record.dropx_one, fields, dropxOneDefaults),
+    dashboard: normalizeRuleSet(record.dashboard, fields, allFieldKeys)
+  };
+}
+
 export function normalizeProfileFieldRules(value: unknown): DesignationProfileFieldRules {
   const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return {
-    employees: normalizeRuleSet(record.employees, employeeProfileFields),
-    field_executives: normalizeRuleSet(record.field_executives, fieldExecutiveProfileFields)
+    employees: normalizeChannelRules(record.employees, employeeProfileFields),
+    field_executives: normalizeChannelRules(record.field_executives, fieldExecutiveProfileFields)
   };
 }

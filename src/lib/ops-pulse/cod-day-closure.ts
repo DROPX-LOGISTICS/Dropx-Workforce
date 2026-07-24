@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export type CodGateStatus =
   | "Not run" | "Locked" | "Queued" | "Running" | "Passed" | "Pending"
-  | "Exception requested" | "Exception approved" | "Exception rejected" | "Error";
+  | "Manual Review" | "Exception requested" | "Exception approved" | "Exception rejected" | "Error";
 
 export type CodDayClosure = {
   id: string;
@@ -62,7 +62,8 @@ function runStatus(run: PortalRun | undefined): CodGateStatus {
   if (!run) return "Not run";
   if (run.status === "Queued") return "Queued";
   if (run.status === "Running") return "Running";
-  if (run.status === "Error" || run.status === "Manual Review") return "Error";
+  if (run.status === "Manual Review") return "Manual Review";
+  if (run.status === "Error") return "Error";
   return run.status === "Pass" ? "Passed" : "Pending";
 }
 

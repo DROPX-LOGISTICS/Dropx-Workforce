@@ -13,6 +13,7 @@ import {
   firstRelation,
   formatDate,
   formatDateTime,
+  inferFormTypeFromLocation,
   isMissingCodSetup,
   loadCodLocations,
   loadDailySubmissions,
@@ -25,6 +26,7 @@ import { createDailySubmission } from "./actions";
 type SearchParams = {
   ai_status?: string;
   business_date?: string;
+  client?: string;
   location?: string;
   manager_status?: string;
 };
@@ -82,12 +84,17 @@ export default async function DailySubmissionPage({ searchParams }: { searchPara
     })
   ]);
   const setupError = submissionsResult.error && isMissingCodSetup({ message: submissionsResult.error }) ? submissionsResult.error : null;
-  const stationOptions = locations.map((location) => ({
+  const selectedClient = searchParams?.client === "amazon" || searchParams?.client === "flipkart" ? searchParams.client : "";
+  const clientLocations = selectedClient ? locations.filter((location) => inferFormTypeFromLocation(location) === selectedClient) : locations;
+  const clientLocationIds = new Set(clientLocations.map((location) => location.id));
+  const stationOptions = clientLocations.map((location) => ({
     value: location.id,
     label: locationLabel(location),
     helper: [location.state, location.station_manager_email].filter(Boolean).join(" / ")
   }));
-  const rows = submissionsResult.rows;
+  const rows = selectedClient
+    ? submissionsResult.rows.filter((row) => !row.location_id || clientLocationIds.has(row.location_id))
+    : submissionsResult.rows;
   const submittedStations = new Set(rows.map((row) => row.location_id).filter(Boolean)).size;
   const pendingManager = rows.filter((row) => row.manager_status === "Pending").length;
   const queuedAi = rows.filter((row) => String(row.ai_status ?? "").toLowerCase().includes("queued")).length;
@@ -179,9 +186,10 @@ export default async function DailySubmissionPage({ searchParams }: { searchPara
                 <label>Station
                   <select className="field" name="location" defaultValue={searchParams?.location ?? ""}>
                     <option value="">All permitted stations</option>
-                    {locations.map((location) => <option key={location.id} value={location.id}>{locationLabel(location)}</option>)}
+                    {clientLocations.map((location) => <option key={location.id} value={location.id}>{locationLabel(location)}</option>)}
                   </select>
                 </label>
+                <input type="hidden" name="client" value={selectedClient} />
                 <label>Manager Status
                   <select className="field" name="manager_status" defaultValue={searchParams?.manager_status ?? ""}>
                     <option value="">All statuses</option>

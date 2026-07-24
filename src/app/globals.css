@@ -8665,6 +8665,38 @@ tbody tr:hover td {
   background: linear-gradient(90deg, var(--ops-accent), color-mix(in srgb, var(--ops-accent) 45%, white));
 }
 
+.scorecard-timeline {
+  display: grid;
+  gap: 5px;
+  margin-top: 18px;
+}
+
+.scorecard-timeline > div {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.scorecard-timeline i {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #fff7ed;
+  color: #ea580c;
+  font-style: normal;
+  font-weight: 950;
+}
+
+.scorecard-timeline i.sla { background: #eef2ff; color: #4f46e5; }
+.scorecard-timeline > div > div { display: grid; gap: 3px; }
+.scorecard-timeline span, .scorecard-timeline small { color: #7b8494; font-size: 10px; }
+.scorecard-timeline b { color: #101828; font-size: 18px; }
+
 @media (max-width: 1100px) {
   .ops-kpi-grid { grid-template-columns: repeat(3, 1fr); }
 }

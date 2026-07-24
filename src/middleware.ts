@@ -10,6 +10,30 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname || "/";
   const host = request.headers.get("host")?.split(":")[0].toLowerCase() ?? "";
   const isPlatformAdminHost = host === "admin-panel.dropxlogistics.com";
+  const isOpsHost = host === "ops.dropxlogistics.com";
+  const isDashboardHost = host === "dashboard.dropxlogistics.com";
+
+  if (isDashboardHost && (path === "/ops-pulse" || path.startsWith("/ops-pulse/"))) {
+    return NextResponse.redirect(new URL(path + request.nextUrl.search, "https://ops.dropxlogistics.com"));
+  }
+
+  if (isOpsHost && path === "/") {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = "/ops-pulse";
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  if (
+    isOpsHost &&
+    path !== "/login" &&
+    !path.startsWith("/ops-pulse") &&
+    !path.startsWith("/api/") &&
+    !path.startsWith("/auth/") &&
+    !path.startsWith("/_next/") &&
+    !path.includes(".")
+  ) {
+    return NextResponse.redirect(new URL("/", "https://dashboard.dropxlogistics.com"));
+  }
 
   if (request.nextUrl.pathname === "/partner" || request.nextUrl.pathname.startsWith("/partner/")) {
     const redirectUrl = request.nextUrl.clone();

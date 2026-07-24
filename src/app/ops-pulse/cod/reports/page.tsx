@@ -14,6 +14,7 @@ import {
   formatDate,
   formatDateTime,
   formTypeLabel,
+  inferFormTypeFromLocation,
   isMissingCodSetup,
   loadCodLocations,
   loadCodSubmissions,
@@ -45,6 +46,8 @@ export default async function CodReportsPage({ searchParams }: { searchParams?: 
       validationStatus: searchParams?.status ?? ""
     })
   ]);
+  const selectedClient = searchParams?.client === "amazon" || searchParams?.client === "flipkart" ? searchParams.client : "";
+  const clientLocations = selectedClient ? locations.filter((location) => inferFormTypeFromLocation(location) === selectedClient) : locations;
   const setupError = submissionsResult.error && isMissingCodSetup({ message: submissionsResult.error }) ? submissionsResult.error : null;
   const rows = submissionsResult.rows;
   const deposited = rows.reduce((sum, row) => sum + amountValue(row.deposited_amount), 0);
@@ -84,7 +87,7 @@ export default async function CodReportsPage({ searchParams }: { searchParams?: 
                 <label>Station
                   <select className="field" name="location" defaultValue={searchParams?.location ?? ""}>
                     <option value="">All permitted stations</option>
-                    {locations.map((location) => <option key={location.id} value={location.id}>{locationLabel(location)}</option>)}
+                    {clientLocations.map((location) => <option key={location.id} value={location.id}>{locationLabel(location)}</option>)}
                   </select>
                 </label>
                 <label>Client

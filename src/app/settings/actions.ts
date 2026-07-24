@@ -530,6 +530,8 @@ export async function createLocation(formData: FormData) {
   const addressLine2 = clean(formData.get("address_line2"));
   const city = clean(formData.get("city"));
   const state = clean(formData.get("state"));
+  const region = required(formData.get("region"), "Region").toUpperCase();
+  const cluster = required(formData.get("cluster"), "Cluster");
   const postalCode = clean(formData.get("postal_code"));
   const latitude = optionalCoordinate(formData.get("latitude"), "Latitude", -90, 90);
   const longitude = optionalCoordinate(formData.get("longitude"), "Longitude", -180, 180);
@@ -549,6 +551,8 @@ export async function createLocation(formData: FormData) {
     address_line2: addressLine2,
     city,
     state,
+    region,
+    cluster,
     postal_code: postalCode,
     latitude,
     longitude,
@@ -584,6 +588,8 @@ export async function updateLocation(formData: FormData) {
   const addressLine2 = clean(formData.get("address_line2"));
   const city = clean(formData.get("city"));
   const state = clean(formData.get("state"));
+  const region = required(formData.get("region"), "Region").toUpperCase();
+  const cluster = required(formData.get("cluster"), "Cluster");
   const postalCode = clean(formData.get("postal_code"));
   const latitude = optionalCoordinate(formData.get("latitude"), "Latitude", -90, 90);
   const longitude = optionalCoordinate(formData.get("longitude"), "Longitude", -180, 180);
@@ -613,6 +619,8 @@ export async function updateLocation(formData: FormData) {
       address_line2: addressLine2,
       city,
       state,
+      region,
+      cluster,
       postal_code: postalCode,
       latitude,
       longitude,

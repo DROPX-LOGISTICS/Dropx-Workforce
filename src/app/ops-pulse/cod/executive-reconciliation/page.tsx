@@ -33,6 +33,7 @@ import {
 import { LiveCacheRefresh } from "./live-cache-refresh";
 import { AssociateEntryBuilder } from "./associate-entry-builder";
 import { loadCodDayClosures, loadCodManagerNotifications } from "@/lib/ops-pulse/cod-day-closure";
+import { canAccessCodAudit, loadCodAuditRows } from "@/lib/ops-pulse/cod-audit";
 
 export const maxDuration = 300;
 
@@ -225,9 +226,13 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
   const hasSingleStationScope = result.locations.length === 1;
   const sccRows = rows.filter((row) => row.source === "scc_driver_reconciliation").length;
   const workerReady = Boolean(process.env.OPS_PORTAL_WORKER_URL?.trim() && process.env.OPS_PORTAL_WORKER_SECRET?.trim());
-  const [closures, managerNotifications] = await Promise.all([
+  const auditAllowed = canAccessCodAudit(authorization);
+  const [closures, managerNotifications, auditRows] = await Promise.all([
     loadCodDayClosures(companyId, result.businessDate, result.locations.map((location) => location.id)),
-    loadCodManagerNotifications(companyId, result.locations.map((location) => location.id))
+    loadCodManagerNotifications(companyId, result.locations.map((location) => location.id)),
+    auditAllowed
+      ? loadCodAuditRows(companyId, result.locations.map((location) => location.id), result.businessDate, defaultLocationId)
+      : Promise.resolve([])
   ]);
   const selectedClosure = closures.find((closure) => closure.location_id === defaultLocationId) ?? null;
   const driverCleared = selectedClosure?.driver_check_status === "Passed" ||
@@ -243,8 +248,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
   const depositDisplayStatus = selectedClosure?.deposit_check_status === "Passed" && !depositMatched
     ? "Pending"
     : selectedClosure?.deposit_check_status ?? "Locked";
-  const canManagerReview = Boolean(authorization.isMasterOwner || authorization.isMasterCompany ||
-    `${authorization.roleCode ?? ""} ${authorization.roleName ?? ""}`.toLowerCase().match(/manager|admin|owner/));
+  const canManagerReview = auditAllowed;
   const closureTotals = closures.reduce((totals, closure) => ({
     collected: totals.collected + Number(closure.collected_cod ?? 0),
     expected: totals.expected + Number(closure.amazon_open_remittance_expected ?? 0),
@@ -539,7 +543,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     <th>Short / Excess</th>
                     <th>Status</th>
                     <th>Remarks</th>
-                    <th>Save</th>
+                    <th>Edit / Delete</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -580,7 +584,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                             <input type="hidden" name="total_delivery" value={String(row.total_delivery ?? 0)} />
                             <input type="hidden" name="total_activity" value={String(row.total_activity ?? 0)} />
                             <div className="form-actions" style={{ flexWrap: "nowrap" }}>
-                              <SubmitButton className="button secondary small-button" disabled={!permission.canEdit || selectedClosure?.is_final_submitted}>Save</SubmitButton>
+                              <SubmitButton className="button secondary small-button" disabled={!permission.canEdit || selectedClosure?.is_final_submitted}>Update</SubmitButton>
                               <button
                                 className="button ghost small-button"
                                 formAction={deleteExecutiveReconciliation}
@@ -601,6 +605,42 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
               </table>
             </div>
           </section>
+
+          {auditAllowed ? (
+            <section className="panel">
+              <div className="panel-head toolbar">
+                <div>
+                  <h2>COD activity history</h2>
+                  <p className="subtle">Immutable manager/owner history of entries, edits, deletes, validation checks, exceptions, approvals, and final submission.</p>
+                </div>
+                <a
+                  className="button secondary"
+                  href={`/api/ops-pulse/cod/audit-export?date=${encodeURIComponent(result.businessDate)}${defaultLocationId ? `&location=${encodeURIComponent(defaultLocationId)}` : ""}`}
+                >
+                  Download audit CSV
+                </a>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Time</th><th>Station</th><th>Associate</th><th>Action</th><th>Changed fields</th><th>Performed by</th></tr></thead>
+                  <tbody>
+                    {auditRows.length ? auditRows.map((audit) => (
+                      <tr key={audit.id}>
+                        <td>{formatDateTime(audit.created_at)}</td>
+                        <td>{audit.station_code}</td>
+                        <td>{audit.associate_name ?? audit.provider_employee_id ?? "-"}</td>
+                        <td><strong>{audit.action}</strong></td>
+                        <td>{Array.isArray(audit.changed_fields) && audit.changed_fields.length ? audit.changed_fields.join(", ") : "-"}</td>
+                        <td>{audit.actor_name ?? audit.actor_email ?? audit.actor_role ?? "-"}</td>
+                      </tr>
+                    )) : (
+                      <tr><td className="empty-cell" colSpan={6}>No audited COD activity for this selection yet.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
 
           {permission.canAdd ? (
             <section className="panel">

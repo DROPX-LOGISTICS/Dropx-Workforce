@@ -18,6 +18,11 @@ export function createServerSupabaseClient() {
   if (!supabaseUrl || !supabaseAuthKey) return null;
 
   const cookieStore = cookies();
+  const host = headers().get("x-forwarded-host")?.split(":")[0].toLowerCase() ??
+    headers().get("host")?.split(":")[0].toLowerCase() ??
+    "";
+  const useOpsStorage = host === "ops.dropxlogistics.com" ||
+    cookieStore.get("dropx_ops_auth_return")?.value === "1";
   const cookieOptions = {
     domain: cookieDomain(),
     httpOnly: true,
@@ -56,6 +61,7 @@ export function createServerSupabaseClient() {
   return createClient(supabaseUrl, supabaseAuthKey, {
     auth: {
       flowType: "pkce",
+      storageKey: useOpsStorage ? "dropx-ops-auth" : undefined,
       autoRefreshToken: false,
       detectSessionInUrl: false,
       persistSession: true,

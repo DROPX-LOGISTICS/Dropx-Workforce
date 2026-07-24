@@ -57,12 +57,6 @@ export const navItems: NavItem[] = [
   { code: "rate_cards", label: "Rate Cards", href: "/rate-cards", icon: "Rs" },
   { code: "imports", label: "Report Imports", href: "/imports", icon: "^" },
   {
-    code: "ops_pulse",
-    label: "Ops Pulse",
-    href: "/ops-pulse",
-    icon: "O",
-  },
-  {
     code: "cps",
     label: "CPS",
     icon: "C",
@@ -134,7 +128,6 @@ export const navItems: NavItem[] = [
       { code: "master_payment_heads", label: "Payment Heads", href: "/master/payment-heads" },
       { code: "designations", label: "Designations", href: "/master/designations" },
       { code: "biometric_devices", label: "Device Master", href: "/master/biometric-devices" },
-      { code: "cod_master", label: "COD Master", href: "/master/cod-master" },
       { code: "master_documents", label: "Documents", href: "/master/documents" }
     ]
   },

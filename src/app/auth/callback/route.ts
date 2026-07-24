@@ -199,7 +199,8 @@ export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   const errorDescription = request.nextUrl.searchParams.get("error_description");
   const loginUrl = new URL("/login", request.url);
-  const supabase = createServerSupabaseClient();
+  const callbackResponse = NextResponse.redirect(new URL("/dashboard", request.url));
+  const supabase = createServerSupabaseClient(callbackResponse);
 
   try {
     if (!code) {
@@ -391,9 +392,9 @@ export async function GET(request: NextRequest) {
     const destinationPath = isPlatformAdminHost
       ? (nextPath.startsWith("/platform-admin") ? nextPath : "/platform-admin")
       : (returnToOps ? "/ops-pulse" : (nextPath || "/dashboard"));
-    const response = NextResponse.redirect(new URL(destinationPath, request.url));
+    callbackResponse.headers.set("location", new URL(destinationPath, request.url).toString());
     if (returnToOps) {
-      response.cookies.set("dropx_ops_auth_return", "", {
+      callbackResponse.cookies.set("dropx_ops_auth_return", "", {
         domain: ".dropxlogistics.com",
         httpOnly: true,
         sameSite: "lax",
@@ -402,7 +403,7 @@ export async function GET(request: NextRequest) {
         maxAge: 0
       });
     }
-    return response;
+    return callbackResponse;
   } catch (error) {
     console.error("Auth callback failed", {
       message: error instanceof Error ? error.message : String(error)

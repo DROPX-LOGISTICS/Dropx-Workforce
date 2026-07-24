@@ -12,6 +12,7 @@ import {
 import { requirePagePermission, type AuthorizationContext } from "@/lib/authorization";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { finalizeCodClosure, notifyCodManager } from "@/lib/ops-pulse/cod-day-closure";
+import { canAccessCodAudit, writeCodAudit } from "@/lib/ops-pulse/cod-audit";
 
 const pagePath = "/ops-pulse/cod/executive-reconciliation";
 
@@ -211,12 +212,6 @@ function assertLocationAccess(authorization: AuthorizationContext, locationId: s
   throw new Error("You do not have access to update this station.");
 }
 
-function isCodManager(authorization: AuthorizationContext) {
-  const role = `${authorization.roleCode ?? ""} ${authorization.roleName ?? ""}`.toLowerCase();
-  return authorization.isMasterOwner || authorization.isMasterCompany ||
-    role.includes("manager") || role.includes("admin") || role.includes("owner");
-}
-
 async function assertClosureEditable(companyId: string, businessDate: string, locationId: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const { data, error } = await supabaseAdmin
@@ -303,10 +298,34 @@ async function savePayload(
     updated_by: authorization.userId
   }, companyId);
 
-  const { error } = await supabaseAdmin
+  const existing = await supabaseAdmin
     .from("cod_executive_reconciliations")
-    .upsert(payload, { onConflict: "company_id,business_date,station_code,provider_employee_id" });
+    .select("*")
+    .eq("company_id", companyId)
+    .eq("business_date", businessDate)
+    .eq("station_code", station.station_code)
+    .eq("provider_employee_id", providerEmployeeId)
+    .maybeSingle();
+  if (existing.error) throw new Error(existing.error.message);
+
+  const { data: saved, error } = await supabaseAdmin
+    .from("cod_executive_reconciliations")
+    .upsert(payload, { onConflict: "company_id,business_date,station_code,provider_employee_id" })
+    .select("*")
+    .single();
   if (error) throw new Error(error.message);
+  await writeCodAudit({
+    action: existing.data ? "Executive updated" : "Executive created",
+    before: (existing.data ?? {}) as Record<string, unknown>,
+    after: saved as Record<string, unknown>,
+    authorization,
+    businessDate,
+    locationId: station.id,
+    stationCode: station.station_code,
+    reconciliationId: saved.id,
+    providerEmployeeId,
+    associateName: sourceAssociateName ?? manualAssociateName
+  });
 
   revalidatePath(pagePath);
   redirectWithFlash({ notice: successMessage }, returnHref);
@@ -608,6 +627,16 @@ export async function deleteExecutiveReconciliation(formData: FormData) {
     const station = await stationForInput(companyId, locationId, null);
     assertLocationAccess(authorization, station.id);
     await assertClosureEditable(companyId, businessDate, locationId);
+    const existing = await supabaseAdmin
+      .from("cod_executive_reconciliations")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("business_date", businessDate)
+      .eq("location_id", locationId)
+      .eq("provider_employee_id", providerEmployeeId)
+      .maybeSingle();
+    if (existing.error) throw new Error(existing.error.message);
+    if (!existing.data) throw new Error("COD reconciliation entry was not found.");
     const { error } = await supabaseAdmin
       .from("cod_executive_reconciliations")
       .delete()
@@ -616,6 +645,17 @@ export async function deleteExecutiveReconciliation(formData: FormData) {
       .eq("location_id", locationId)
       .eq("provider_employee_id", providerEmployeeId);
     if (error) throw new Error(error.message);
+    await writeCodAudit({
+      action: "Executive deleted",
+      before: existing.data as Record<string, unknown>,
+      authorization,
+      businessDate,
+      locationId,
+      stationCode: station.station_code,
+      reconciliationId: existing.data.id,
+      providerEmployeeId,
+      associateName: existing.data.source_associate_name ?? existing.data.manual_associate_name
+    });
     revalidatePath(pagePath);
     redirectWithFlash({ notice: `${providerEmployeeId} reconciliation entry deleted.` }, returnHref);
   } catch (error) {
@@ -727,6 +767,17 @@ export async function queueCodClosureCheck(formData: FormData) {
       .select("id")
       .single();
     if (run.error) throw new Error(run.error.message);
+    const closureId = closureResult.data?.id;
+    if (!closureId) throw new Error("Could not create the COD closure audit record.");
+    await writeCodAudit({
+      action: checkType === "driver_reconciliation" ? "Driver check queued" : "Bank Deposit check queued",
+      after: { run_id: run.data.id, check_type: checkType, status: "Queued" },
+      authorization,
+      businessDate,
+      closureId,
+      locationId,
+      stationCode: station.station_code
+    });
 
     const baseUrl = appBaseUrl();
     if (baseUrl) {
@@ -794,6 +845,15 @@ export async function requestCodGateException(formData: FormData) {
     if (error) throw new Error(error.message);
 
     const label = gate === "driver" ? "Driver Reconciliation" : "Bank Deposit";
+    await writeCodAudit({
+      action: `${label} exception requested`,
+      after: { gate, reason, status: "Exception requested" },
+      authorization,
+      businessDate,
+      closureId: closure.id,
+      locationId,
+      stationCode: station.station_code
+    });
     await notifyCodManager({
       closureId: closure.id,
       companyId,
@@ -817,7 +877,7 @@ export async function reviewCodGateException(formData: FormData) {
   const returnHref = safeReturnHref(formData.get("return_href"));
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
-    if (!isCodManager(authorization)) throw new Error("Only a manager or administrator can review COD exceptions.");
+    if (!canAccessCodAudit(authorization)) throw new Error("Only a manager or administrator can review COD exceptions.");
     const closureId = required(formData.get("closure_id"), "Closure");
     const gate = required(formData.get("gate"), "Validation gate");
     const decision = required(formData.get("decision"), "Decision");
@@ -827,7 +887,7 @@ export async function reviewCodGateException(formData: FormData) {
     }
     const { data: closure, error: closureError } = await supabaseAdmin
       .from("cod_day_closures")
-      .select("id, location_id")
+      .select("id, location_id, business_date, station_code")
       .eq("id", closureId)
       .eq("company_id", companyId)
       .maybeSingle();
@@ -850,6 +910,15 @@ export async function reviewCodGateException(formData: FormData) {
     if (gate === "driver" && approved) update.deposit_check_status = "Not run";
     const { error } = await supabaseAdmin.from("cod_day_closures").update(update).eq("id", closureId);
     if (error) throw new Error(error.message);
+    await writeCodAudit({
+      action: `COD ${gate} exception ${approved ? "approved" : "rejected"}`,
+      after: { gate, decision, remarks, status: approved ? "Exception approved" : "Exception rejected" },
+      authorization,
+      businessDate: closure.business_date,
+      closureId,
+      locationId: closure.location_id,
+      stationCode: closure.station_code
+    });
     await supabaseAdmin.from("cod_manager_notifications").update({
       status: "Resolved",
       resolved_at: now
@@ -877,6 +946,22 @@ export async function submitCodDayClosure(formData: FormData) {
       locationId,
       stationCode: station.station_code,
       userId: authorization.userId
+    });
+    const closure = await supabaseAdmin
+      ?.from("cod_day_closures")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("business_date", businessDate)
+      .eq("location_id", locationId)
+      .maybeSingle();
+    await writeCodAudit({
+      action: "Final COD closure submitted",
+      after: { collected_cod: result.collectedCod, difference_amount: result.difference, locked: true },
+      authorization,
+      businessDate,
+      closureId: closure?.data?.id ?? null,
+      locationId,
+      stationCode: station.station_code
     });
     revalidatePath(pagePath);
     revalidatePath("/ops-pulse/cod");

@@ -1,6 +1,6 @@
 "use server";
 
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
@@ -59,7 +59,18 @@ export async function signInWithGoogle(formData: FormData) {
     ? "https://dashboard.dropxlogistics.com"
     : origin;
   const callbackUrl = new URL("/auth/callback", callbackOrigin);
-  if (nextPath) callbackUrl.searchParams.set("next", nextPath);
+  if (origin === "https://ops.dropxlogistics.com") {
+    cookies().set("dropx_ops_auth_return", "1", {
+      domain: ".dropxlogistics.com",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: true,
+      path: "/",
+      maxAge: 10 * 60
+    });
+  } else if (nextPath) {
+    callbackUrl.searchParams.set("next", nextPath);
+  }
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",

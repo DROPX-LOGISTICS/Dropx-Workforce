@@ -97,9 +97,7 @@ export async function middleware(request: NextRequest) {
   const supabase = createClient(supabaseUrl, supabaseAuthKey, {
     auth: {
       flowType: "pkce",
-      storageKey: isOpsHost || request.cookies.get("dropx_ops_auth_return")?.value === "1"
-        ? "dropx-ops-auth"
-        : undefined,
+      storageKey: isOpsHost ? "dropx-ops-auth" : undefined,
       autoRefreshToken: false,
       detectSessionInUrl: false,
       persistSession: true,

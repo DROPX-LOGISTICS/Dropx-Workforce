@@ -64,8 +64,8 @@ function StationFields({
       <label>Pickup End<input className="field" defaultValue={timeText(row?.pickup_window_end)} name="pickup_window_end" type="time" /></label>
       <label>COD Due Time<input className="field" defaultValue={timeText(row?.cod_submission_due_time)} name="cod_submission_due_time" type="time" /></label>
       <label>EOD Due Time<input className="field" defaultValue={timeText(row?.eod_submission_due_time)} name="eod_submission_due_time" type="time" /></label>
-      <label>Escalation Contact<input className="field" defaultValue={row?.escalation_contact ?? ""} name="escalation_contact" inputMode="tel" placeholder="Escalation mobile" /></label>
-      <label>Escalation Email<input className="field" defaultValue={row?.escalation_email ?? ""} name="escalation_email" type="email" placeholder="Escalation email" /></label>
+      <label>WhatsApp Escalation Numbers<input className="field" defaultValue={row?.escalation_contact ?? ""} name="escalation_contact" placeholder="+91… (comma separated)" /></label>
+      <label className="span-2">Manager & Control Tower Emails<input className="field" defaultValue={row?.escalation_email ?? ""} name="escalation_email" placeholder="manager@… , controltower@…" /></label>
       <div className="span-3 section-divider">
         <strong>Station Command Center checks</strong>
         <span>Station-specific schedule for driver reconciliation and prepared deposit checks. Login credentials and base URLs stay in Settings.</span>

@@ -69,12 +69,24 @@ export function createServerSupabaseClient(response?: NextResponse, forceOpsStor
     return value ? decodeCookieValue(value) : null;
   };
 
+  const writeStoredCookie = (
+    name: string,
+    value: string,
+    options: typeof cookieOptions | (typeof cookieOptions & { maxAge: number })
+  ) => {
+    response?.cookies.set(name, value, options);
+    try {
+      cookieStore.set(name, value, options);
+    } catch {
+      // Server components cannot mutate the request cookie store. Route
+      // handlers still persist through the explicit response above.
+    }
+  };
+
   const clearStoredValue = (key: string) => {
-    cookieStore.set(key, "", { ...cookieOptions, maxAge: 0 });
-    response?.cookies.set(key, "", { ...cookieOptions, maxAge: 0 });
+    writeStoredCookie(key, "", { ...cookieOptions, maxAge: 0 });
     for (let index = 0; index < MAX_COOKIE_CHUNKS; index += 1) {
-      cookieStore.set(`${key}.${index}`, "", { ...cookieOptions, maxAge: 0 });
-      response?.cookies.set(`${key}.${index}`, "", { ...cookieOptions, maxAge: 0 });
+      writeStoredCookie(`${key}.${index}`, "", { ...cookieOptions, maxAge: 0 });
     }
   };
 
@@ -83,8 +95,7 @@ export function createServerSupabaseClient(response?: NextResponse, forceOpsStor
     const encodedValue = encodeCookieValue(value);
     const chunks = encodedValue.match(new RegExp(`.{1,${COOKIE_CHUNK_SIZE}}`, "g")) ?? [];
     chunks.forEach((chunk, index) => {
-      cookieStore.set(`${key}.${index}`, chunk, cookieOptions);
-      response?.cookies.set(`${key}.${index}`, chunk, cookieOptions);
+      writeStoredCookie(`${key}.${index}`, chunk, cookieOptions);
     });
   };
 
@@ -97,20 +108,8 @@ export function createServerSupabaseClient(response?: NextResponse, forceOpsStor
       persistSession: true,
       storage: {
         getItem: getStoredValue,
-        setItem: (key, value) => {
-          try {
-            setStoredValue(key, value);
-          } catch {
-            // Middleware refreshes the session before server components render.
-          }
-        },
-        removeItem: (key) => {
-          try {
-            clearStoredValue(key);
-          } catch {
-            // Middleware refreshes the session before server components render.
-          }
-        }
+        setItem: setStoredValue,
+        removeItem: clearStoredValue
       }
     }
   });

@@ -28,6 +28,8 @@ export type CodLocationRow = {
   station_name: string | null;
   city?: string | null;
   state?: string | null;
+  region?: string | null;
+  cluster?: string | null;
   station_manager_email?: string | null;
   hide_from_location_list?: boolean | null;
   providers?: Relation<{ code?: string | null; name?: string | null }>;
@@ -501,7 +503,7 @@ export async function loadCodLocations(companyId: string, locationScopeIds: stri
   if (!supabaseAdmin) return { locations: [] as CodLocationRow[], error: "Supabase service role key is not configured." };
   const { data, error } = await supabaseAdmin
     .from("stations")
-    .select("id, station_code, station_name, city, state, station_manager_email, hide_from_location_list, providers (code, name), location_models (code, name)")
+    .select("id, station_code, station_name, city, state, region, cluster, station_manager_email, hide_from_location_list, providers (code, name), location_models (code, name)")
     .eq("company_id", companyId)
     .eq("is_active", true)
     .order("station_code");

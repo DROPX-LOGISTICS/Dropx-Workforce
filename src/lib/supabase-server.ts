@@ -22,8 +22,7 @@ export function createServerSupabaseClient(response?: NextResponse) {
   const host = headers().get("x-forwarded-host")?.split(":")[0].toLowerCase() ??
     headers().get("host")?.split(":")[0].toLowerCase() ??
     "";
-  const useOpsStorage = host === "ops.dropxlogistics.com" ||
-    cookieStore.get("dropx_ops_auth_return")?.value === "1";
+  const useOpsStorage = host === "ops.dropxlogistics.com";
   const cookieOptions = {
     domain: cookieDomain(),
     httpOnly: true,

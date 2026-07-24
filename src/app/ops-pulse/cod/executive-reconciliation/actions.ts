@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { waitUntil } from "@vercel/functions";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import {
   clean,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/ops-pulse/cod";
 import { requirePagePermission, type AuthorizationContext } from "@/lib/authorization";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { submitCodClosure } from "@/lib/ops-pulse/cod-day-closure";
 
 const pagePath = "/ops-pulse/cod/executive-reconciliation";
 
@@ -28,6 +30,12 @@ function safeReturnHref(value: FormDataEntryValue | null) {
   if (!href) return pagePath;
   if (!href.startsWith(pagePath)) return pagePath;
   return href;
+}
+
+function appBaseUrl() {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || process.env.VERCEL_URL;
+  if (!appUrl) return "";
+  return appUrl.startsWith("http") ? appUrl : `https://${appUrl}`;
 }
 
 function isNextRedirectError(error: unknown) {
@@ -543,6 +551,19 @@ export async function refreshExecutiveReconciliationRoster(formData: FormData) {
 
     if (!runId) throw new Error("Could not create SCC refresh run.");
 
+    const baseUrl = appBaseUrl();
+    if (baseUrl) {
+      waitUntil(fetch(`${baseUrl}/api/cron/ops-pulse-portal-checks`, {
+        method: "POST",
+        headers: {
+          ...(process.env.CRON_SECRET ? { Authorization: `Bearer ${process.env.CRON_SECRET}` } : {}),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ run_id: runId }),
+        cache: "no-store"
+      }).catch(() => undefined));
+    }
+
     revalidatePath(pagePath);
     redirectWithFlash({
       notice: `SCC refresh queued for ${station.station_code}. You can keep working; this sheet updates automatically.`
@@ -550,5 +571,35 @@ export async function refreshExecutiveReconciliationRoster(formData: FormData) {
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     redirectWithFlash({ error: (error as Error).message }, safeReturnHref(formData.get("return_href")));
+  }
+}
+
+export async function submitCodDayClosure(formData: FormData) {
+  const authorization = await requirePagePermission("cod_executive_reconciliation", "edit");
+  const companyId = requireCompanyId(authorization);
+  const returnHref = safeReturnHref(formData.get("return_href"));
+  try {
+    const businessDate = required(formData.get("business_date"), "Business date");
+    const locationId = required(formData.get("location_id"), "Station");
+    const station = await stationForInput(companyId, locationId, null);
+    assertLocationAccess(authorization, station.id);
+    const result = await submitCodClosure({
+      businessDate,
+      companyId,
+      locationId,
+      overrideReason: clean(formData.get("override_reason")) ?? "",
+      stationCode: station.station_code,
+      userId: authorization.userId
+    });
+    revalidatePath(pagePath);
+    revalidatePath("/ops-pulse/cod");
+    redirectWithFlash({
+      notice: result.matched
+        ? `COD day closure matched and submitted for ${station.station_code}.`
+        : `COD mismatch submitted for manager approval. Difference ${result.difference.toFixed(2)}.`
+    }, returnHref);
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    redirectWithFlash({ error: error instanceof Error ? error.message : "Unable to submit COD day closure." }, returnHref);
   }
 }

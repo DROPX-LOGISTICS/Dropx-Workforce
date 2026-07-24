@@ -19,7 +19,10 @@ export async function AppShell({ children, active, pageCode }: { children: React
   if (!authorization) redirect("/login");
   const host = headers().get("host")?.split(":")[0].toLowerCase() ?? "";
   const isOpsHost = host === "ops.dropxlogistics.com" || host.startsWith("ops-");
-  const shellNavItems = isOpsHost ? opsNavItems : navItems;
+  const opsAppUrl = process.env.OPS_APP_URL?.trim();
+  const shellNavItems = isOpsHost
+    ? opsNavItems
+    : navItems.map((item) => item.code === "ops_pulse" && opsAppUrl ? { ...item, href: opsAppUrl } : item);
 
   const activeItem = shellNavItems.find((item) => item.label === active || item.children?.some((child) => child.label === active));
   const currentPageCode = pageCode ?? activeItem?.code;

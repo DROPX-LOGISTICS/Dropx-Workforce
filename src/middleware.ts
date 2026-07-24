@@ -58,7 +58,7 @@ export async function middleware(request: NextRequest) {
   const response = NextResponse.next();
   const cookieDomain = host.endsWith("dropxlogistics.com") ? ".dropxlogistics.com" : undefined;
   const cookieOptions = {
-    domain: cookieDomain,
+    ...(isOpsHost ? {} : { domain: cookieDomain }),
     httpOnly: true,
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",

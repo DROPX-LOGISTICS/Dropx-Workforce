@@ -6,13 +6,18 @@ import { DocumentTitle } from "@/components/document-title";
 import { InboxNotificationListener } from "@/components/inbox-notification-listener";
 import { PaymentNotificationBell } from "@/components/payment-notification-bell";
 import { PaymentNotificationProvider } from "@/components/payment-notification-provider";
+import { OpsContextSwitcher } from "@/components/ops-context-switcher";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { UserMenu } from "@/components/user-menu";
 import { redirect } from "next/navigation";
 import { getAuthorization, hasPermission } from "@/lib/authorization";
 import { navItems } from "@/lib/app-navigation";
+import { requireCompanyId } from "@/lib/company-scope";
+import { loadCodLocations } from "@/lib/ops-pulse/cod";
+import { resolveOperatingContext } from "@/lib/ops-pulse/operating-context";
+import { operatingModeForLocation } from "@/lib/ops-pulse/operating-context";
 import { loadPaymentNotificationSnapshot } from "@/lib/payment-notification-counts";
-import { opsNavItems } from "@/lib/ops-pulse/navigation";
+import { opsNavItemsForMode } from "@/lib/ops-pulse/navigation";
 
 export async function AppShell({ children, active, pageCode }: { children: ReactNode; active: string; pageCode?: string }) {
   const authorization = await getAuthorization();
@@ -20,8 +25,16 @@ export async function AppShell({ children, active, pageCode }: { children: React
   const host = headers().get("host")?.split(":")[0].toLowerCase() ?? "";
   const isOpsHost = host === "ops.dropxlogistics.com" || host.startsWith("ops-");
   const opsAppUrl = process.env.OPS_APP_URL?.trim();
+  const opsLocationsResult = isOpsHost
+    ? await loadCodLocations(
+      requireCompanyId(authorization),
+      authorization.locationScopeIds,
+      authorization.hasAllLocationAccess
+    )
+    : { locations: [], error: null };
+  const opsContext = resolveOperatingContext(opsLocationsResult.locations);
   const shellNavItems = isOpsHost
-    ? opsNavItems
+    ? opsNavItemsForMode(opsContext.mode)
     : navItems.map((item) => item.code === "ops_pulse" && opsAppUrl ? { ...item, href: opsAppUrl } : item);
 
   const activeItem = shellNavItems.find((item) => item.label === active || item.children?.some((child) => child.label === active));
@@ -59,6 +72,16 @@ export async function AppShell({ children, active, pageCode }: { children: React
             <img className="brand-logo" src="/dropx-logo.png" alt="DropX" />
             {isOpsHost ? <span className="count-badge">OPS PULSE</span> : null}
           </div>
+
+          {isOpsHost && opsContext.location ? (
+            <OpsContextSwitcher
+              availableModes={opsContext.availableModes}
+              locationId={opsContext.location.id}
+              locationModes={Object.fromEntries(opsLocationsResult.locations.map((location) => [location.id, operatingModeForLocation(location)]))}
+              locations={opsLocationsResult.locations}
+              mode={opsContext.mode}
+            />
+          ) : null}
 
           <SidebarNav active={active} items={visibleNavItems} />
 

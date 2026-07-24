@@ -53,7 +53,8 @@ export async function middleware(request: NextRequest) {
     path !== "/login" &&
     !path.startsWith("/ops-pulse") &&
     !path.startsWith("/cps") &&
-    path !== "/master/cod-master" &&
+    !path.startsWith("/master/") &&
+    !path.startsWith("/users") &&
     !path.startsWith("/api/") &&
     !path.startsWith("/auth/") &&
     !path.startsWith("/_next/") &&

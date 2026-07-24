@@ -11,7 +11,7 @@ import {
 } from "@/lib/ops-pulse/cod";
 import { requirePagePermission, type AuthorizationContext } from "@/lib/authorization";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { submitCodClosure } from "@/lib/ops-pulse/cod-day-closure";
+import { finalizeCodClosure, notifyCodManager } from "@/lib/ops-pulse/cod-day-closure";
 
 const pagePath = "/ops-pulse/cod/executive-reconciliation";
 
@@ -211,6 +211,27 @@ function assertLocationAccess(authorization: AuthorizationContext, locationId: s
   throw new Error("You do not have access to update this station.");
 }
 
+function isCodManager(authorization: AuthorizationContext) {
+  const role = `${authorization.roleCode ?? ""} ${authorization.roleName ?? ""}`.toLowerCase();
+  return authorization.isMasterOwner || authorization.isMasterCompany ||
+    role.includes("manager") || role.includes("admin") || role.includes("owner");
+}
+
+async function assertClosureEditable(companyId: string, businessDate: string, locationId: string) {
+  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+  const { data, error } = await supabaseAdmin
+    .from("cod_day_closures")
+    .select("is_final_submitted")
+    .eq("company_id", companyId)
+    .eq("business_date", businessDate)
+    .eq("location_id", locationId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (data?.is_final_submitted) {
+    throw new Error("This COD day is finally submitted and locked. Reopen it through manager approval before editing.");
+  }
+}
+
 async function savePayload(
   formData: FormData,
   authorization: AuthorizationContext,
@@ -225,6 +246,7 @@ async function savePayload(
   if (!locationId && !stationCode) throw new Error("Station is required.");
   const station = await stationForInput(companyId, locationId, stationCode || null);
   assertLocationAccess(authorization, station.id);
+  await assertClosureEditable(companyId, businessDate, station.id);
 
   const sourceAssociateName = clean(formData.get("source_associate_name"));
   const manualAssociateName = clean(formData.get("manual_associate_name"));
@@ -574,6 +596,272 @@ export async function refreshExecutiveReconciliationRoster(formData: FormData) {
   }
 }
 
+export async function deleteExecutiveReconciliation(formData: FormData) {
+  const authorization = await requirePagePermission("cod_executive_reconciliation", "edit");
+  const companyId = requireCompanyId(authorization);
+  const returnHref = safeReturnHref(formData.get("return_href"));
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    const businessDate = required(formData.get("business_date"), "Business date");
+    const locationId = required(formData.get("location_id"), "Station");
+    const providerEmployeeId = required(formData.get("provider_employee_id"), "Associate");
+    const station = await stationForInput(companyId, locationId, null);
+    assertLocationAccess(authorization, station.id);
+    await assertClosureEditable(companyId, businessDate, locationId);
+    const { error } = await supabaseAdmin
+      .from("cod_executive_reconciliations")
+      .delete()
+      .eq("company_id", companyId)
+      .eq("business_date", businessDate)
+      .eq("location_id", locationId)
+      .eq("provider_employee_id", providerEmployeeId);
+    if (error) throw new Error(error.message);
+    revalidatePath(pagePath);
+    redirectWithFlash({ notice: `${providerEmployeeId} reconciliation entry deleted.` }, returnHref);
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    redirectWithFlash({ error: error instanceof Error ? error.message : "Unable to delete reconciliation entry." }, returnHref);
+  }
+}
+
+export async function queueCodClosureCheck(formData: FormData) {
+  const authorization = await requirePagePermission("cod_executive_reconciliation", "edit");
+  const companyId = requireCompanyId(authorization);
+  const returnHref = safeReturnHref(formData.get("return_href"));
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    const businessDate = required(formData.get("business_date"), "Business date");
+    const locationId = required(formData.get("location_id"), "Station");
+    const checkType = required(formData.get("check_type"), "Check type");
+    if (!["driver_reconciliation", "prepared_deposit"].includes(checkType)) throw new Error("Invalid COD validation step.");
+    const station = await stationForInput(companyId, locationId, null);
+    assertLocationAccess(authorization, station.id);
+    await assertClosureEditable(companyId, businessDate, locationId);
+
+    const settingResult = await supabaseAdmin
+      .from("cod_station_settings")
+      .select("id, portal_station_code, is_active")
+      .eq("company_id", companyId)
+      .eq("location_id", locationId)
+      .maybeSingle();
+    if (settingResult.error) throw new Error(settingResult.error.message);
+    if (!settingResult.data?.id || settingResult.data.is_active === false) {
+      throw new Error("Add this station in COD Master before running Amazon validation.");
+    }
+
+    let closureResult = await supabaseAdmin
+      .from("cod_day_closures")
+      .select("id, driver_check_status, is_final_submitted")
+      .eq("company_id", companyId)
+      .eq("business_date", businessDate)
+      .eq("location_id", locationId)
+      .maybeSingle();
+    if (closureResult.error) throw new Error(closureResult.error.message);
+
+    if (checkType === "prepared_deposit") {
+      const driverRun = await supabaseAdmin
+        .from("ops_portal_check_runs")
+        .select("status, pending_amount")
+        .eq("company_id", companyId)
+        .eq("location_id", locationId)
+        .eq("check_date", businessDate)
+        .eq("check_type", "driver_reconciliation")
+        .maybeSingle();
+      if (driverRun.error) throw new Error(driverRun.error.message);
+      const driverPassed = driverRun.data?.status === "Pass" && Number(driverRun.data.pending_amount ?? 0) === 0;
+      const driverApproved = closureResult.data?.driver_check_status === "Exception approved";
+      if (!driverPassed && !driverApproved) {
+        throw new Error("Complete Driver Reconciliation or obtain manager exception approval before Bank Deposit.");
+      }
+    }
+
+    if (!closureResult.data) {
+      closureResult = await supabaseAdmin
+        .from("cod_day_closures")
+        .insert({
+          company_id: companyId,
+          business_date: businessDate,
+          location_id: locationId,
+          station_code: station.station_code,
+          submission_status: "Draft",
+          manager_status: "Not required",
+          driver_check_status: checkType === "driver_reconciliation" ? "Queued" : "Passed",
+          deposit_check_status: checkType === "prepared_deposit" ? "Queued" : "Locked",
+          submitted_by: authorization.userId
+        })
+        .select("id, driver_check_status, is_final_submitted")
+        .single();
+      if (closureResult.error) throw new Error(closureResult.error.message);
+    } else {
+      const gateColumn = checkType === "driver_reconciliation" ? "driver_check_status" : "deposit_check_status";
+      const { error } = await supabaseAdmin
+        .from("cod_day_closures")
+        .update({ [gateColumn]: "Queued", updated_at: new Date().toISOString() })
+        .eq("id", closureResult.data.id);
+      if (error) throw new Error(error.message);
+    }
+
+    const now = new Date().toISOString();
+    const run = await supabaseAdmin
+      .from("ops_portal_check_runs")
+      .upsert({
+        company_id: companyId,
+        location_id: locationId,
+        cod_master_id: settingResult.data.id,
+        station_code: station.station_code,
+        portal_station_code: settingResult.data.portal_station_code ?? station.station_code,
+        check_date: businessDate,
+        check_type: checkType,
+        status: "Queued",
+        pending_count: 0,
+        pending_amount: 0,
+        summary: `Queued from COD closure step: ${checkType}.`,
+        evidence: {},
+        raw_result: {},
+        attempt_count: 0,
+        next_check_at: now,
+        error_message: null,
+        updated_at: now,
+        created_by: authorization.userId
+      }, { onConflict: "company_id,location_id,check_date,check_type" })
+      .select("id")
+      .single();
+    if (run.error) throw new Error(run.error.message);
+
+    const baseUrl = appBaseUrl();
+    if (baseUrl) {
+      waitUntil(fetch(`${baseUrl}/api/cron/ops-pulse-portal-checks`, {
+        method: "POST",
+        headers: {
+          ...(process.env.CRON_SECRET ? { Authorization: `Bearer ${process.env.CRON_SECRET}` } : {}),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ run_id: run.data.id }),
+        cache: "no-store"
+      }).catch(() => undefined));
+    }
+    revalidatePath(pagePath);
+    redirectWithFlash({
+      notice: checkType === "driver_reconciliation"
+        ? `Driver Reconciliation queued for ${station.station_code}.`
+        : `Bank Deposit validation queued for ${station.station_code}.`
+    }, returnHref);
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    redirectWithFlash({ error: error instanceof Error ? error.message : "Unable to queue COD validation." }, returnHref);
+  }
+}
+
+export async function requestCodGateException(formData: FormData) {
+  const authorization = await requirePagePermission("cod_executive_reconciliation", "edit");
+  const companyId = requireCompanyId(authorization);
+  const returnHref = safeReturnHref(formData.get("return_href"));
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    const businessDate = required(formData.get("business_date"), "Business date");
+    const locationId = required(formData.get("location_id"), "Station");
+    const gate = required(formData.get("gate"), "Validation gate");
+    const reason = required(formData.get("exception_reason"), "Exception reason");
+    if (!["driver", "deposit"].includes(gate)) throw new Error("Invalid exception gate.");
+    const station = await stationForInput(companyId, locationId, null);
+    assertLocationAccess(authorization, station.id);
+    await assertClosureEditable(companyId, businessDate, locationId);
+
+    const { data: closure, error: closureError } = await supabaseAdmin
+      .from("cod_day_closures")
+      .select("id, driver_check_status")
+      .eq("company_id", companyId)
+      .eq("business_date", businessDate)
+      .eq("location_id", locationId)
+      .maybeSingle();
+    if (closureError) throw new Error(closureError.message);
+    if (!closure) throw new Error("Run the validation step before requesting an exception.");
+    if (gate === "deposit" && !["Passed", "Exception approved"].includes(closure.driver_check_status)) {
+      throw new Error("Driver Reconciliation must be cleared before requesting a Bank Deposit exception.");
+    }
+
+    const prefix = gate === "driver" ? "driver" : "deposit";
+    const now = new Date().toISOString();
+    const { error } = await supabaseAdmin.from("cod_day_closures").update({
+      [`${prefix}_check_status`]: "Exception requested",
+      [`${prefix}_exception_reason`]: reason,
+      [`${prefix}_exception_requested_by`]: authorization.userId,
+      [`${prefix}_exception_requested_at`]: now,
+      submission_status: "Manager approval required",
+      manager_status: "Pending",
+      updated_at: now
+    }).eq("id", closure.id);
+    if (error) throw new Error(error.message);
+
+    const label = gate === "driver" ? "Driver Reconciliation" : "Bank Deposit";
+    await notifyCodManager({
+      closureId: closure.id,
+      companyId,
+      locationId,
+      stationCode: station.station_code,
+      notificationType: `${label} exception`,
+      title: `COD ${label} exception: ${station.station_code} on ${businessDate}`,
+      message: `${label} is pending, but the station requested permission to continue. Reason: ${reason}`
+    });
+    revalidatePath(pagePath);
+    redirectWithFlash({ notice: `${label} exception sent to the manager for approval.` }, returnHref);
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    redirectWithFlash({ error: error instanceof Error ? error.message : "Unable to request manager approval." }, returnHref);
+  }
+}
+
+export async function reviewCodGateException(formData: FormData) {
+  const authorization = await requirePagePermission("cod_executive_reconciliation", "edit");
+  const companyId = requireCompanyId(authorization);
+  const returnHref = safeReturnHref(formData.get("return_href"));
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    if (!isCodManager(authorization)) throw new Error("Only a manager or administrator can review COD exceptions.");
+    const closureId = required(formData.get("closure_id"), "Closure");
+    const gate = required(formData.get("gate"), "Validation gate");
+    const decision = required(formData.get("decision"), "Decision");
+    const remarks = clean(formData.get("manager_remarks"));
+    if (!["driver", "deposit"].includes(gate) || !["approve", "reject"].includes(decision)) {
+      throw new Error("Invalid manager decision.");
+    }
+    const { data: closure, error: closureError } = await supabaseAdmin
+      .from("cod_day_closures")
+      .select("id, location_id")
+      .eq("id", closureId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (closureError) throw new Error(closureError.message);
+    if (!closure) throw new Error("COD closure was not found.");
+    assertLocationAccess(authorization, closure.location_id);
+
+    const prefix = gate === "driver" ? "driver" : "deposit";
+    const approved = decision === "approve";
+    const now = new Date().toISOString();
+    const update: Record<string, unknown> = {
+      [`${prefix}_check_status`]: approved ? "Exception approved" : "Exception rejected",
+      [`${prefix}_exception_reviewed_by`]: authorization.userId,
+      [`${prefix}_exception_reviewed_at`]: now,
+      [`${prefix}_exception_manager_remarks`]: remarks,
+      manager_status: approved ? "Approved" : "Rejected",
+      submission_status: approved ? "Draft" : "Rejected",
+      updated_at: now
+    };
+    if (gate === "driver" && approved) update.deposit_check_status = "Not run";
+    const { error } = await supabaseAdmin.from("cod_day_closures").update(update).eq("id", closureId);
+    if (error) throw new Error(error.message);
+    await supabaseAdmin.from("cod_manager_notifications").update({
+      status: "Resolved",
+      resolved_at: now
+    }).eq("closure_id", closureId).eq("status", "Unread");
+    revalidatePath(pagePath);
+    redirectWithFlash({ notice: `COD ${gate} exception ${approved ? "approved" : "rejected"}.` }, returnHref);
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    redirectWithFlash({ error: error instanceof Error ? error.message : "Unable to review COD exception." }, returnHref);
+  }
+}
+
 export async function submitCodDayClosure(formData: FormData) {
   const authorization = await requirePagePermission("cod_executive_reconciliation", "edit");
   const companyId = requireCompanyId(authorization);
@@ -583,21 +871,16 @@ export async function submitCodDayClosure(formData: FormData) {
     const locationId = required(formData.get("location_id"), "Station");
     const station = await stationForInput(companyId, locationId, null);
     assertLocationAccess(authorization, station.id);
-    const result = await submitCodClosure({
+    const result = await finalizeCodClosure({
       businessDate,
       companyId,
       locationId,
-      overrideReason: clean(formData.get("override_reason")) ?? "",
       stationCode: station.station_code,
       userId: authorization.userId
     });
     revalidatePath(pagePath);
     revalidatePath("/ops-pulse/cod");
-    redirectWithFlash({
-      notice: result.matched
-        ? `COD day closure matched and submitted for ${station.station_code}.`
-        : `COD mismatch submitted for manager approval. Difference ${result.difference.toFixed(2)}.`
-    }, returnHref);
+    redirectWithFlash({ notice: `COD day closure submitted for ${station.station_code}. Collected ₹${result.collectedCod.toFixed(2)}.` }, returnHref);
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     redirectWithFlash({ error: error instanceof Error ? error.message : "Unable to submit COD day closure." }, returnHref);

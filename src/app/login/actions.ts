@@ -7,7 +7,8 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 function authOriginFromHeaders(requestHeaders: Headers) {
   const allowedOrigins = new Set([
     "https://dashboard.dropxlogistics.com",
-    "https://admin-panel.dropxlogistics.com"
+    "https://admin-panel.dropxlogistics.com",
+    "https://ops.dropxlogistics.com"
   ]);
   const originHeader = requestHeaders.get("origin");
   if (originHeader && allowedOrigins.has(originHeader)) return originHeader;
@@ -51,7 +52,13 @@ export async function signInWithGoogle(formData: FormData) {
   const requestHeaders = headers();
   const origin = authOriginFromHeaders(requestHeaders);
   const nextPath = safeNextPath(formData.get("next"));
-  const callbackUrl = new URL("/auth/callback", origin);
+  // Supabase already allowlists the dashboard callback. Use it for the Ops
+  // subdomain as well; auth cookies are scoped to .dropxlogistics.com, and the
+  // dashboard middleware hands /ops-pulse back to the dedicated Ops app.
+  const callbackOrigin = origin === "https://ops.dropxlogistics.com"
+    ? "https://dashboard.dropxlogistics.com"
+    : origin;
+  const callbackUrl = new URL("/auth/callback", callbackOrigin);
   if (nextPath) callbackUrl.searchParams.set("next", nextPath);
 
   const { data, error } = await supabase.auth.signInWithOAuth({

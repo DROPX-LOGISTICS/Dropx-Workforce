@@ -176,7 +176,7 @@ a {
 }
 
 .brand-logo {
-  width: 86px;
+  width: 76px;
   height: 42px;
   object-fit: contain;
   object-position: left center;
@@ -184,17 +184,17 @@ a {
 
 .ops-brand-lockup {
   min-width: 0;
-  padding-left: 10px;
+  padding-left: 8px;
   border-left: 1px solid #e4e7ec;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
 }
 
 .ops-brand-mark {
-  width: 27px;
-  height: 27px;
-  flex: 0 0 27px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   display: grid;
   place-items: center;
   border-radius: 8px;
@@ -203,8 +203,8 @@ a {
 }
 
 .ops-brand-mark svg {
-  width: 21px;
-  height: 21px;
+  width: 19px;
+  height: 19px;
   fill: none;
   stroke: #fff;
   stroke-width: 2.2;
@@ -221,7 +221,7 @@ a {
 
 .ops-brand-copy strong {
   color: #172033;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 850;
   letter-spacing: -0.045em;
   white-space: nowrap;
@@ -233,7 +233,7 @@ a {
 
 .ops-brand-copy small {
   color: #7b8495;
-  font-size: 6.5px;
+  font-size: 6.25px;
   font-weight: 750;
   letter-spacing: 0.065em;
   text-transform: uppercase;

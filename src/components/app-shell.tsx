@@ -89,7 +89,7 @@ export async function AppShell({ children, active, pageCode }: { children: React
                 </span>
                 <span className="ops-brand-copy">
                   <strong>Ops<span>Pulse</span></strong>
-                  <small>Operations intelligence</small>
+                  <small>Ops intelligence</small>
                 </span>
               </div>
             ) : null}

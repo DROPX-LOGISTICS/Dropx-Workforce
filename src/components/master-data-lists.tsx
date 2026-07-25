@@ -31,6 +31,8 @@ type LocationRow = {
   city: string | null;
   state: string | null;
   region: string | null;
+  aom: string | null;
+  cluster_manager: string | null;
   cluster: string | null;
   postal_code: string | null;
   latitude: number | null;
@@ -408,6 +410,8 @@ export function MasterDataLists({
         location.city,
         location.state,
         location.region,
+        location.aom,
+        location.cluster_manager,
         location.cluster,
         location.postal_code,
         location.latitude?.toString(),
@@ -486,6 +490,8 @@ export function MasterDataLists({
                 <th>Code</th>
                 <th>Location</th>
                 <th>Region</th>
+                <th>AOM</th>
+                <th>Cluster Manager</th>
                 <th>Cluster</th>
                 <th>Provider</th>
                 <th>Model</th>
@@ -501,6 +507,8 @@ export function MasterDataLists({
                   <td><strong>{row.station_code}</strong></td>
                   <td>{row.station_name && !sameText(row.station_name, row.station_code) ? row.station_name : "-"}</td>
                   <td>{row.region || "-"}</td>
+                  <td>{row.aom || "-"}</td>
+                  <td>{row.cluster_manager || "-"}</td>
                   <td>{row.cluster || "-"}</td>
                   <td>{row.providers?.name || "-"}</td>
                   <td>{row.location_models?.code || "-"}</td>
@@ -536,7 +544,7 @@ export function MasterDataLists({
                   {canEdit ? <td className="action-cell"><EditButton href={editHref("location", row.id)} label={`Edit ${row.station_code}`} /></td> : null}
                 </tr>
               )) : (
-                <tr><td colSpan={canEdit ? 10 : 9} className="empty-cell">No locations found.</td></tr>
+                <tr><td colSpan={canEdit ? 12 : 11} className="empty-cell">No locations found.</td></tr>
               )}
             </tbody>
           </table>

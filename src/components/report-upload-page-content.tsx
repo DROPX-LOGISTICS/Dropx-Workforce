@@ -38,8 +38,16 @@ function displayDate(value: string) {
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "short",
-    year: "numeric"
-  }).format(new Date(`${value}T00:00:00+05:30`));
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(new Date(`${value}T00:00:00Z`));
+}
+
+function reportIsDue(report: ReportImportMaster, date: string) {
+  if (report.frequency === "weekly" && report.weekday !== null) {
+    return new Date(`${date}T00:00:00Z`).getUTCDay() === report.weekday;
+  }
+  return report.frequency !== "adhoc";
 }
 
 function createdDateInIndia(value: string) {
@@ -142,7 +150,7 @@ export async function ReportUploadPageContent({
               {reports.map((report) => {
                 const batch = latestBySource.get(report.source_code);
                 const schedule = reportSchedule(report).split(" · ");
-                const status = batch?.status ?? "Pending";
+                const status = batch?.status ?? (reportIsDue(report, date) ? "Pending" : "Not due");
                 return (
                   <tr key={report.id}>
                     <td><strong>{report.name}</strong></td>

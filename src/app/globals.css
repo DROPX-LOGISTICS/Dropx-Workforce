@@ -8241,6 +8241,137 @@ tbody tr:hover td {
   cursor: pointer;
 }
 
+.ops-scope-menu {
+  position: relative;
+  z-index: 30;
+}
+
+.ops-scope-menu > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 145px;
+  padding: 7px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  list-style: none;
+  font-size: 11px;
+}
+
+.ops-scope-menu > summary::-webkit-details-marker { display: none; }
+.ops-scope-menu > summary strong { color: #172033; }
+.ops-scope-menu > summary i { margin-left: auto; font-style: normal; }
+
+.ops-scope-popover {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(650px, calc(100vh - 90px));
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 22px 60px rgba(15, 23, 42, .18);
+}
+
+.ops-scope-popover header,
+.ops-scope-popover footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ops-scope-popover header { padding-bottom: 13px; border-bottom: 1px solid #eef2f7; }
+.ops-scope-popover header div { display: grid; gap: 2px; }
+.ops-scope-popover header small,
+.ops-scope-fixed small { color: #ea580c; font-size: 9px; font-weight: 900; letter-spacing: .08em; }
+.ops-scope-popover header > span { color: #64748b; font-size: 11px; }
+
+.ops-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 13px 0;
+}
+
+.ops-scope-popover fieldset,
+.ops-scope-fixed {
+  min-width: 0;
+  margin: 0;
+  padding: 9px;
+  border: 1px solid #e9edf3;
+  border-radius: 10px;
+}
+
+.ops-scope-popover legend {
+  padding: 0 4px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.ops-scope-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 112px;
+  overflow: auto;
+}
+
+.ops-scope-options label { cursor: pointer; }
+.ops-scope-options input { position: absolute; opacity: 0; pointer-events: none; }
+.ops-scope-options span {
+  display: block;
+  padding: 6px 8px;
+  border: 1px solid #dfe5ec;
+  border-radius: 8px;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.ops-scope-options input:checked + span {
+  border-color: #f97316;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.ops-location-picker .ops-scope-options { max-height: 160px; }
+.ops-scope-popover footer { margin-top: 13px; padding-top: 13px; border-top: 1px solid #eef2f7; }
+.ops-scope-popover footer small { color: #64748b; }
+.ops-scope-popover footer button {
+  border: 0;
+  border-radius: 9px;
+  background: #ea580c;
+  color: #fff;
+  font-weight: 800;
+  padding: 9px 14px;
+}
+
+.ops-scope-single {
+  display: grid;
+  gap: 1px;
+  padding: 5px 9px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.ops-scope-single small { color: #ea580c; font-size: 8px; font-weight: 900; }
+.ops-scope-single strong { color: #172033; font-size: 10px; }
+
+@media (max-width: 760px) {
+  .ops-scope-grid { grid-template-columns: 1fr 1fr; }
+  .ops-scope-menu > summary { min-width: 0; }
+  .ops-scope-menu > summary span { display: none; }
+}
+
 .ops-command-center {
   --ops-accent: #ea580c;
   --ops-soft: #fff7ed;

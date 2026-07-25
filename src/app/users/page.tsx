@@ -8,6 +8,7 @@ import { SearchableSelect } from "@/components/searchable-select";
 import { SubmitButton } from "@/components/submit-button";
 import { UserRolesListPanel } from "@/components/user-roles-list-panel";
 import { UsersListPanel } from "@/components/users-list-panel";
+import { accessSurfaceLabel, currentAccessSurface, pageBelongsToSurface } from "@/lib/access-surface";
 import { accessPages, ensureAccessPages } from "@/lib/access-pages";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
@@ -209,11 +210,14 @@ function sectionHref(section: "roles" | "users", params?: Record<string, string>
 
 async function loadAccessData(
   companyId: string,
+  surface: ReturnType<typeof currentAccessSurface>,
   options: { includeUsers: boolean; includeRoleEditorData: boolean }
 ) {
   if (!supabaseAdmin) {
     return {
-      pages: accessPages.map((page) => ({ ...page, id: page.code, is_active: true })) as AppPageRow[],
+      pages: accessPages
+        .filter((page) => pageBelongsToSurface(page.code, surface))
+        .map((page) => ({ ...page, id: page.code, is_active: true })) as AppPageRow[],
       roles: [] as UserRoleRow[],
       permissions: [] as RolePermissionRow[],
       users: [] as UserRow[],
@@ -352,7 +356,8 @@ async function loadAccessData(
   const users = (usersResult.data ?? []) as UserRow[];
 
   return {
-    pages: ((pagesResult.data ?? []) as AppPageRow[]).filter((page) => page.code !== "company_master"),
+    pages: ((pagesResult.data ?? []) as AppPageRow[])
+      .filter((page) => page.code !== "company_master" && pageBelongsToSurface(page.code, surface)),
     roles: (rolesResult.data ?? []) as UserRoleRow[],
     permissions: ((permissionsResult.data ?? []) as RolePermissionRow[])
       .filter((permission) => ((rolesResult.data ?? []) as UserRoleRow[]).some((role) => role.id === permission.role_id)),
@@ -372,13 +377,14 @@ export const dynamic = "force-dynamic";
 export default async function UsersPage({ searchParams }: UsersPageProps) {
   const authorization = await requirePagePermission("users", "access");
   const companyId = requireCompanyId(authorization);
+  const accessSurface = currentAccessSurface();
   const pagePermission = authorization.permissions.users;
   const activeSection = searchParams?.section === "roles" || searchParams?.addRole || searchParams?.editRole ? "roles" : "users";
   const showUsersSection = activeSection === "users";
   const showRolesSection = activeSection === "roles";
   const needsUserData = showUsersSection || Boolean(searchParams?.addUser || searchParams?.editUser);
   const needsRoleEditorData = Boolean(searchParams?.addRole || searchParams?.editRole);
-  const { pages, roles, permissions, users, locations, error } = await loadAccessData(companyId, {
+  const { pages, roles, permissions, users, locations, error } = await loadAccessData(companyId, accessSurface, {
     includeUsers: needsUserData,
     includeRoleEditorData: needsRoleEditorData
   });
@@ -459,11 +465,11 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   return (
     <AppShell active="Users & Access">
       <PageHead
-        eyebrow="Admin setup"
+        eyebrow={`${accessSurfaceLabel(accessSurface)} admin setup`}
         title={showRolesSection ? "User roles and permissions" : "Users and station access"}
         subtitle={showRolesSection
-          ? "Define role hierarchy, page permissions, and location access rules."
-          : "Create office users, define role permissions, and restrict manager access to the locations they operate."}
+          ? `Define role hierarchy and permissions for the ${accessSurfaceLabel(accessSurface).toLowerCase()} frontend only. Other frontend permissions are preserved.`
+          : `Create users and manage access for the ${accessSurfaceLabel(accessSurface).toLowerCase()} frontend.`}
       />
 
       {error ? (
@@ -563,6 +569,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
               </div>
             ) : null}
             <form action={createUserRole}>
+              <input name="surface" type="hidden" value={accessSurface} />
               <div className="form-grid">
                 <label>Role code<input className="field" name="code" placeholder="Enter role code" required /></label>
                 <label>Role name<input className="field" name="name" placeholder="Enter role name" required /></label>
@@ -622,6 +629,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
               <>
                 <form action={updateUserRole}>
                   <input type="hidden" name="id" value={editRole.id} />
+                  <input name="surface" type="hidden" value={accessSurface} />
                   <div className="form-grid">
                     <label>Role code<input className="field" defaultValue={editRole.code} disabled /></label>
                     <label>Role name<input className="field" name="name" defaultValue={editRole.name} disabled={editRole.code === "LOCATION"} required /></label>

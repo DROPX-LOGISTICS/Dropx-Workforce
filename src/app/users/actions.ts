@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { accessPages, ensureAccessPages } from "@/lib/access-pages";
+import { currentAccessSurface, pageBelongsToSurface } from "@/lib/access-surface";
 import { isCompanyOwner, requirePagePermission, type AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
@@ -306,6 +307,7 @@ export async function createUserRole(formData: FormData) {
     const mode = locationAccessMode(required(formData.get("location_access_mode"), "Location access"));
 
     await ensureAccessPages(supabaseAdmin, companyId);
+    const surface = currentAccessSurface();
 
     const { data: role, error: roleError } = await supabaseAdmin
       .from("user_roles")
@@ -317,13 +319,13 @@ export async function createUserRole(formData: FormData) {
 
     let { data: pages, error: pagesError } = await supabaseAdmin
       .from("app_pages")
-      .select("id")
+      .select("id, code")
       .eq("company_id", companyId)
       .eq("is_active", true);
     if (!pagesError && !(pages ?? []).length) {
       const legacyPagesResult = await supabaseAdmin
         .from("app_pages")
-        .select("id")
+        .select("id, code")
         .in("code", accessPages.map((page) => page.code))
         .eq("is_active", true);
       pages = legacyPagesResult.data;
@@ -336,7 +338,7 @@ export async function createUserRole(formData: FormData) {
     await assertDeveloperPermissionChangeAllowed(companyId, authorization, submittedPermissions);
     const submittedByPage = new Map(submittedPermissions.map((permission) => [permission.page_id, permission]));
 
-    const permissions = (pages ?? []).map((page) => {
+    const permissions = (pages ?? []).filter((page) => pageBelongsToSurface(page.code, surface)).map((page) => {
       const submitted = submittedByPage.get(page.id);
       return {
         company_id: companyId,
@@ -375,6 +377,7 @@ export async function updateUserRole(formData: FormData) {
     }
 
     const roleId = required(formData.get("id"), "Role ID");
+    const surface = currentAccessSurface();
 
     const { data: existingRole, error: existingRoleError } = await supabaseAdmin
       .from("user_roles")
@@ -419,18 +422,36 @@ export async function updateUserRole(formData: FormData) {
 
     const submittedPermissions = permissionsFromForm(formData);
     await assertDeveloperPermissionChangeAllowed(companyId, authorization, submittedPermissions, roleId);
-    const { error: clearPermissionsError } = await supabaseAdmin
+    const { data: surfacePages, error: surfacePagesError } = await supabaseAdmin
+      .from("app_pages")
+      .select("id, code")
+      .eq("company_id", companyId)
+      .eq("is_active", true);
+    if (surfacePagesError) throw new Error(surfacePagesError.message);
+
+    const surfacePageIds = (surfacePages ?? [])
+      .filter((page) => pageBelongsToSurface(page.code, surface))
+      .map((page) => page.id);
+    const submittedPageIds = new Set(submittedPermissions.map((permission) => permission.page_id));
+    if (submittedPermissions.some((permission) => !surfacePageIds.includes(permission.page_id))) {
+      throw new Error("The submitted permissions include pages from another frontend.");
+    }
+
+    const clearQuery = supabaseAdmin
       .from("role_page_permissions")
       .delete()
       .eq("company_id", companyId)
       .eq("role_id", roleId);
+    const { error: clearPermissionsError } = surfacePageIds.length
+      ? await clearQuery.in("page_id", surfacePageIds)
+      : { error: null };
 
     if (clearPermissionsError) throw new Error(clearPermissionsError.message);
 
     if (submittedPermissions.length) {
       const { error: permissionsError } = await supabaseAdmin
         .from("role_page_permissions")
-        .insert(submittedPermissions.map((permission) => ({
+        .insert(submittedPermissions.filter((permission) => submittedPageIds.has(permission.page_id)).map((permission) => ({
           company_id: companyId,
           role_id: roleId,
           page_id: permission.page_id,

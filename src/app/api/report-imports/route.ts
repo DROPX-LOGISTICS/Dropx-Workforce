@@ -335,8 +335,8 @@ function parseAmazon(raw: RawRecord, rowNumber: number): NormalizedImport | null
   const swa = toNumber(findValueIncludes(raw, ["overalldeliveredswa"])) + toNumber(findValueIncludes(raw, ["overalldeliveredswaconsumable"]));
   const shipmentType = clean(findValue(raw, ["Shipment Type", "Type"]));
   const finalCReturn = toNumber(findValue(raw, ["final_creturn_count", "Final CReturn Count", "C Return", "C_Return"]));
-  const amazonDelivery = delivered + smd + smd2 + (shipmentType.toLowerCase() === "delivery" ? finalCReturn : 0);
-  const cReturn = shipmentType.toLowerCase() === "returnpickup" ? finalCReturn : 0;
+  const amazonDelivery = delivered + smd + smd2;
+  const cReturn = finalCReturn;
   const mfn = toNumber(findValue(raw, ["final_mfn_count", "Final MFN Count", "MFN"]));
   const mfnReturn = toNumber(findValue(raw, ["final_seller_returns", "Final Seller Returns", "MFN Return"]));
   const totalDelivery = amazonDelivery + swa;
@@ -747,7 +747,7 @@ async function auditParsedRows(companyId: string, sourceType: SourceType, parsed
 
     const duplicateScope = seenInFile.has(row.hash) ? "file" : existingHashes.has(row.hash) ? "existing" : null;
     const isDuplicate = duplicateScope !== null;
-    if (!isDuplicate) seenInFile.add(row.hash);
+    seenInFile.add(row.hash);
     return {
       ...row,
       duplicateScope,

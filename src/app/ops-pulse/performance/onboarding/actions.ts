@@ -11,15 +11,24 @@ export async function updateOnboardingStatus(formData: FormData) {
   const companyId = requireCompanyId(authorization);
   const { locations } = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const id = String(formData.get("id") ?? "");
-  const locationId = String(formData.get("location_id") ?? "");
+  const stationCode = String(formData.get("station_code") ?? "").trim().toUpperCase();
   const status = String(formData.get("status") ?? "");
-  if (!id || !locations.some((location) => location.id === locationId) || !["pending", "active"].includes(status)) {
+  const actionItem = String(formData.get("action_item") ?? "").trim().slice(0, 500);
+  if (!id || !locations.some((location) => location.station_code === stationCode) || !["pending", "cleared"].includes(status)) {
     redirect("/ops-pulse/performance/onboarding?error=Invalid+update");
   }
   if (!supabaseAdmin) redirect("/ops-pulse/performance/onboarding?error=Service+unavailable");
-  const { error } = await supabaseAdmin.from("field_executives").update({
-    onboarding_status: status,
-    updated_at: new Date().toISOString()
-  }).eq("id", id).eq("location_id", locationId);
+  const existing = await supabaseAdmin.from("report_import_rows").select("normalized_data").eq("company_id", companyId).eq("id", id).single();
+  if (existing.error) redirect(`/ops-pulse/performance/onboarding?error=${encodeURIComponent(existing.error.message)}`);
+  const normalized = existing.data?.normalized_data && typeof existing.data.normalized_data === "object" ? existing.data.normalized_data : {};
+  const { error } = await supabaseAdmin.from("report_import_rows").update({
+    normalized_data: {
+      ...normalized,
+      ops_action_item: actionItem || null,
+      ops_clearance_status: status,
+      ops_cleared_at: status === "cleared" ? new Date().toISOString() : null,
+      ops_updated_by: authorization.userId
+    }
+  }).eq("company_id", companyId).eq("id", id);
   redirect(`/ops-pulse/performance/onboarding?${error ? `error=${encodeURIComponent(error.message)}` : "saved=1"}`);
 }

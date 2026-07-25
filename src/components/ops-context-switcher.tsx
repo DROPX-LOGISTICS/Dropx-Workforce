@@ -59,6 +59,7 @@ export function OpsContextSwitcher({
   const [managers, setManagers] = useState(unique(selectedRows.map((location) => location.cluster_manager)));
   const [selectedIds, setSelectedIds] = useState(selectedLocationIds);
   const [autoSelectAll, setAutoSelectAll] = useState(false);
+  const [locationQuery, setLocationQuery] = useState("");
   const modeLocations = useMemo(
     () => locations.filter((location) => locationModes[location.id] === selectedMode),
     [locationModes, locations, selectedMode]
@@ -69,6 +70,9 @@ export function OpsContextSwitcher({
   const aomLocations = aoms.length ? regionLocations.filter((location) => aoms.includes(String(location.aom))) : regionLocations;
   const managerOptions = unique(aomLocations.map((location) => location.cluster_manager));
   const filteredLocations = managers.length ? aomLocations.filter((location) => managers.includes(String(location.cluster_manager))) : aomLocations;
+  const visibleLocations = locationQuery.trim()
+    ? filteredLocations.filter((location) => locationLabel(location).toLowerCase().includes(locationQuery.trim().toLowerCase()))
+    : filteredLocations;
   const selectedCount = selectedLocationIds.filter((id) => modeLocations.some((location) => location.id === id)).length || 1;
 
   function changeMode(next: OperatingMode) {
@@ -114,12 +118,20 @@ export function OpsContextSwitcher({
         </div>
         <fieldset className="ops-location-picker">
           <legend>Locations</legend>
+          <div className="ops-location-tools">
+            <input aria-label="Search locations" placeholder="Search code or location" value={locationQuery} onChange={(event) => setLocationQuery(event.target.value)} />
+            <button type="button" onClick={() => { setSelectedIds(filteredLocations.map((location) => location.id)); setAutoSelectAll(false); }}>Select all</button>
+            <button type="button" onClick={() => { setSelectedIds([]); setAutoSelectAll(false); }}>Clear</button>
+          </div>
           <div className="ops-scope-options">
-            {filteredLocations.map((location) => (
-              <label key={location.id}>
-                <input name="locations" type="checkbox" value={location.id} checked={autoSelectAll || selectedIds.includes(location.id) || (selectedIds.length === 0 && !autoSelectAll && location.id === locationId)} onChange={() => toggleLocation(location.id)} />
-                <span>{locationLabel(location)}</span>
-              </label>
+            {visibleLocations.map((location) => (
+              <div className="ops-location-option" key={location.id}>
+                <label>
+                  <input name="locations" type="checkbox" value={location.id} checked={autoSelectAll || selectedIds.includes(location.id)} onChange={() => toggleLocation(location.id)} />
+                  <span>{locationLabel(location)}</span>
+                </label>
+                <button type="button" onClick={() => { setSelectedIds([location.id]); setAutoSelectAll(false); }}>Only</button>
+              </div>
             ))}
           </div>
         </fieldset>

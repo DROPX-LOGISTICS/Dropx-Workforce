@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
-import { PerformanceWorkspaceTabs } from "@/components/performance-workspace-tabs";
+import { CapacityWorkspaceTabs } from "@/components/capacity-workspace-tabs";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
@@ -99,10 +99,10 @@ export default async function DeliveryDataPage({ searchParams }: { searchParams?
   const sortable = (label: string, field: string) => <Link href={`/ops-pulse/performance/shipments?${base}&sort=${field}&dir=${sort === field && direction === -1 ? "asc" : "desc"}`}>{label}{sort === field ? direction === -1 ? " ↓" : " ↑" : ""}</Link>;
 
   return (
-    <AppShell active="Performance" pageCode="cps_shipments">
+    <AppShell active="Capacity" pageCode="cps_shipments">
       <div className="ops-command-center shipment-workspace">
-        <PageHead eyebrow="Performance" title="Delivery Data" subtitle="Station, day and delivery-associate detail." />
-        <PerformanceWorkspaceTabs active="delivery" />
+        <PageHead eyebrow="Capacity" title="Delivery Data" subtitle="Station, day and delivery-associate workload detail supporting capacity decisions." />
+        <CapacityWorkspaceTabs active="delivery" />
         <section className="ops-control-strip">
           <div className="ops-context-summary"><span>{selectedDay ? "DA detail" : selectedStation ? "Daily detail" : "Station overview"}</span><strong>{selectedDay || selectedStation || `${stationRows.length} stations`}</strong><small>{from} to {to}</small></div>
           <form className="ops-date-controls"><label>From<input name="from" type="date" defaultValue={from} /></label><label>To<input name="to" type="date" defaultValue={to} /></label><button>Apply range</button></form>

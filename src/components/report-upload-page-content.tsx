@@ -1,8 +1,10 @@
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import { ReportImportUploader } from "@/components/report-import-uploader";
+import { ImportMasterPanel } from "@/components/import-master-panel";
 import { StatusPill } from "@/components/status-pill";
 import { getAuthorization } from "@/lib/authorization";
+import { ReportImportMaster } from "@/lib/report-import-master";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 
 type ImportBatch = {
@@ -84,6 +86,17 @@ async function loadRecentImports(companyId: string | null) {
     .limit(20);
   if (error) return { rows: [] as ImportBatch[], error: error.message };
   return { rows: (data ?? []) as ImportBatch[], error: null };
+}
+
+async function loadImportMaster(companyId: string | null) {
+  if (!companyId || !supabaseAdmin) return { rows: [] as ReportImportMaster[], error: null as string | null };
+  const { data, error } = await supabaseAdmin
+    .from("report_import_master")
+    .select("id, source_code, name, description, file_types, day_offset, upload_time, frequency, weekday, parser_type, dedupe_fields, is_active")
+    .eq("company_id", companyId)
+    .order("name");
+  if (error) return { rows: [] as ReportImportMaster[], error: error.message };
+  return { rows: (data ?? []) as ReportImportMaster[], error: null };
 }
 
 async function loadShipmentFacts(companyId: string | null) {
@@ -185,6 +198,7 @@ export async function ReportUploadPageContent({
   const authorization = await getAuthorization();
   const companyId = authorization?.companyId ?? null;
   const { rows, error } = await loadRecentImports(companyId);
+  const { rows: importMaster, error: importMasterError } = await loadImportMaster(companyId);
   const { rows: shipmentRows, error: shipmentError } = await loadShipmentFacts(companyId);
   const shipmentSummary = summarizeShipments(shipmentRows);
 
@@ -193,7 +207,7 @@ export async function ReportUploadPageContent({
       <PageHead
         eyebrow="Report Imports"
         title="Source file imports"
-        subtitle="Upload Amazon shipment counts, IOC/BPCL fuel, and cashbook expenses. Imported rows feed CPS and later payroll."
+        subtitle="Upload operational reports using database-managed file contracts, schedules, parsers and duplicate rules."
         action={<span className={`status-pill ${isSupabaseAdminConfigured ? "good" : "warn"}`}>{isSupabaseAdminConfigured ? "Database connected" : "Database key missing"}</span>}
       />
 
@@ -216,7 +230,7 @@ export async function ReportUploadPageContent({
               <p className="subtle">Each file is stored raw first, then normalized into station-day facts.</p>
             </div>
           </div>
-          <ReportImportUploader />
+          <ReportImportUploader reports={importMaster} />
         </div>
 
         <aside className="panel">
@@ -241,6 +255,10 @@ export async function ReportUploadPageContent({
           </div>
         </aside>
       </section>
+
+      {importMasterError ? (
+        <section className="panel message-panel error"><div className="panel-body"><strong>Import Master setup needed</strong><p className="subtle">{importMasterError} Run `scripts/report_import_master_v1.sql` in Supabase.</p></div></section>
+      ) : <ImportMasterPanel reports={importMaster} />}
 
       <section className="panel">
         <div className="panel-head">

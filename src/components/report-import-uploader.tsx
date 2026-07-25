@@ -2,18 +2,13 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
 
-const sourceOptions = [
-  { value: "amazon_shipments", label: "Amazon Daily Shipment Count", helper: "Station/date/associate delivery counts. Feeds CPS denominator and DA activity." },
-  { value: "iocl_fuel", label: "IOCL Fuel", helper: "IOCL fuel transactions. Vehicle number is mapped to station where possible." },
-  { value: "bpcl_fuel", label: "BPCL Fuel", helper: "BPCL fuel transactions. Duplicate transaction IDs are ignored for CPS." },
-  { value: "cashbook", label: "Cashbook", helper: "Station expense file. Date, station, amount and head are normalized for CPS costs." }
-];
-
-export function ReportImportUploader() {
+export function ReportImportUploader({ reports }: { reports: ReportImportMaster[] }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [sourceType, setSourceType] = useState(sourceOptions[0].value);
+  const sourceOptions = reports.filter((report) => report.is_active);
+  const [sourceType, setSourceType] = useState(sourceOptions[0]?.source_code ?? "");
   const [message, setMessage] = useState<string | null>(null);
   const [summary, setSummary] = useState<{ duplicateRows?: number; imported?: number; skipped?: number; totalRows?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +20,7 @@ export function ReportImportUploader() {
     setError(null);
     const file = fileRef.current?.files?.[0];
     if (!file) {
-      setError("Choose an Excel or CSV file first.");
+      setError("Choose a report file first.");
       return;
     }
     const payload = new FormData();
@@ -53,20 +48,22 @@ export function ReportImportUploader() {
     });
   }
 
-  const selected = sourceOptions.find((option) => option.value === sourceType) ?? sourceOptions[0];
+  const selected = sourceOptions.find((option) => option.source_code === sourceType) ?? sourceOptions[0];
+  const accepted = selected?.file_types.map((type) => `.${type}`).join(",") ?? "";
 
   return (
     <div className="panel-body stacked">
       <div className="import-source-grid">
         {sourceOptions.map((option) => (
           <button
-            className={`import-source-card ${sourceType === option.value ? "active" : ""}`}
-            key={option.value}
-            onClick={() => setSourceType(option.value)}
+            className={`import-source-card ${sourceType === option.source_code ? "active" : ""}`}
+            key={option.source_code}
+            onClick={() => setSourceType(option.source_code)}
             type="button"
           >
-            <strong>{option.label}</strong>
-            <span>{option.helper}</span>
+            <strong>{option.name}</strong>
+            <span>{option.description}</span>
+            <small>{reportSchedule(option)}</small>
           </button>
         ))}
       </div>
@@ -75,18 +72,19 @@ export function ReportImportUploader() {
         <label>
           <span>Import type</span>
           <select className="select" value={sourceType} onChange={(event) => setSourceType(event.target.value)}>
-            {sourceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            {sourceOptions.map((option) => <option key={option.source_code} value={option.source_code}>{option.name} · {reportSchedule(option)}</option>)}
           </select>
         </label>
         <label style={{ gridColumn: "span 2" }}>
           <span>File</span>
-          <input ref={fileRef} className="field" type="file" accept=".xlsx,.xls,.csv" />
+          <input ref={fileRef} className="field" type="file" accept={accepted} />
         </label>
       </div>
       <div className="dropzone" style={{ minHeight: 120 }}>
         <div>
-          <h2>{selected.label}</h2>
-          <p className="subtle" style={{ marginTop: 8 }}>{selected.helper}</p>
+          <h2>{selected?.name ?? "No active reports"}</h2>
+          <p className="subtle" style={{ marginTop: 8 }}>{selected?.description}</p>
+          {selected ? <p className="subtle" style={{ marginTop: 6 }}>{reportSchedule(selected)} · accepts {selected.file_types.map((type) => `.${type}`).join(", ")}</p> : null}
           <button className={`button ${isPending ? "loading" : ""}`} disabled={isPending} onClick={upload} style={{ marginTop: 16 }} type="button">
             {isPending ? "Importing..." : "Import file"}
           </button>

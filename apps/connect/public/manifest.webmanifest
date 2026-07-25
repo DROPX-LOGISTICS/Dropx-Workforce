@@ -1,7 +1,7 @@
 {
-  "name": "DropX Connect",
-  "short_name": "DropX Connect",
-  "description": "Mobile access for DropX employees, field executives, vendors, and contractors.",
+  "name": "DropX One",
+  "short_name": "DropX One",
+  "description": "DropX One mobile workspace for employees and field teams.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

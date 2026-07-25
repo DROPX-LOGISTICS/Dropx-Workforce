@@ -1,23 +1,15 @@
-import Image from "next/image";
 import { ConnectLoginFlow } from "@/components/connect-login-flow";
 
 export const metadata = {
   title: {
-    absolute: "DropX Connect"
+    absolute: "DropX One"
   }
 };
 
 export default function DropXConnectPage() {
   return (
-    <main className="connect-page">
-      <section className="connect-desktop-block" aria-label="Desktop not supported">
-        <Image alt="DropX" height={54} priority src="/dropx-logo.png" width={154} />
-        <p>DropX Connect</p>
-        <h1>Desktop not supported</h1>
-        <span>Please open this app on a mobile device.</span>
-      </section>
-
-      <section className="connect-shell" aria-label="DropX Connect login">
+    <main className="connect-page dx-web-page">
+      <section className="connect-shell" aria-label="DropX One">
         <ConnectLoginFlow />
       </section>
     </main>

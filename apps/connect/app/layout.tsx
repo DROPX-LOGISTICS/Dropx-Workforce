@@ -4,14 +4,14 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "DropX Connect",
+    default: "DropX One",
     template: "%s"
   },
-  description: "Mobile access for DropX employees, field executives, vendors, and contractors.",
+  description: "DropX One mobile workspace for employees and field teams.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "DropX Connect",
+    title: "DropX One",
     statusBarStyle: "default"
   },
   icons: {

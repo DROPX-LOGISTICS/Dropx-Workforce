@@ -69,6 +69,11 @@ function friendlyFieldExecutiveError(message: string) {
   return message;
 }
 
+function isNextRedirectError(error: unknown) {
+  return typeof (error as { digest?: unknown })?.digest === "string" &&
+    String((error as { digest: string }).digest).startsWith("NEXT_REDIRECT");
+}
+
 function generatedDropxId() {
   return `FE-${Date.now().toString(36).toUpperCase()}`;
 }
@@ -317,6 +322,7 @@ export async function createFieldExecutive(formData: FormData) {
     revalidatePath("/field-executive");
     revalidatePath("/contractors");
   } catch (error) {
+    if (isNextRedirectError(error)) throw error;
     fieldExecutiveRedirect({
       ...addFormParams(formData),
       error: error instanceof Error ? friendlyFieldExecutiveError(error.message) : "Unable to add field executive."
@@ -482,6 +488,7 @@ export async function updateFieldExecutive(formData: FormData) {
     revalidatePath("/field-executive");
     revalidatePath("/contractors");
   } catch (error) {
+    if (isNextRedirectError(error)) throw error;
     fieldExecutiveRedirect({ edit: String(formData.get("id") ?? ""), error: error instanceof Error ? friendlyFieldExecutiveError(error.message) : "Unable to update field executive." }, returnPath);
   }
 
@@ -659,6 +666,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
     revalidatePath("/contractors");
     fieldExecutiveRedirect({ notice: `${inserted.length} ${entityLabel.toLowerCase()} records imported successfully.` }, returnPath);
   } catch (error) {
+    if (isNextRedirectError(error)) throw error;
     fieldExecutiveRedirect({ error: error instanceof Error ? friendlyFieldExecutiveError(error.message) : "Unable to import field executives." }, returnPath);
   }
 }

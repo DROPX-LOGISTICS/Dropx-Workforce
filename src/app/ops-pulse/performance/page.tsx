@@ -55,6 +55,10 @@ function standing(raw: string | null) {
   return raw?.match(/\b(FANTASTIC|GREAT|FAIR|POOR)\b/i)?.[1]?.toUpperCase() ?? "—";
 }
 
+function isStandingLabel(value: string | null) {
+  return /^(FANTASTIC|GREAT|FAIR|POOR)$/i.test(String(value ?? "").trim());
+}
+
 function stationCode(value: string | null) {
   return String(value ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -210,10 +214,29 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
   const selectedWeek = Number(searchParams?.week) || availableWeeks[0] || 1;
   const stationQuery = selectedCodes.length === permittedCodes.length ? "" : `&stations=${encodeURIComponent(selectedCodes.join(","))}`;
   const currentWeek = amazonWeekNumber(today());
-  const slsRows = scopedFacts.filter((row) => {
+  const slsCandidates = scopedFacts.filter((row) => {
     const values = metricValues(row);
     return row.source_type === "edsp_sls_scorecard" && Number(row.report_week) === selectedWeek && row.station_code && selectedCodes.includes(stationCode(row.station_code)) && values.length > 2 && values[1] > 0 && values[1] <= 1;
   });
+  const latestSlsBatch = slsCandidates[0]?.batch_id ?? null;
+  const latestSlsBatchRows = latestSlsBatch ? slsCandidates.filter((row) => row.batch_id === latestSlsBatch) : [];
+  const slsByStation = new Map<string, MetricFact>();
+  latestSlsBatchRows.forEach((row) => {
+    const code = stationCode(row.station_code);
+    const existing = slsByStation.get(code);
+    if (!existing) {
+      slsByStation.set(code, row);
+      return;
+    }
+    const quality = (candidate: MetricFact) => {
+      const values = metricValues(candidate);
+      const populatedMetrics = values.slice(1, 22).filter((value) => value !== 0).length;
+      return (isStandingLabel(candidate.row_label) ? 0 : 100) + Math.min(values.length, 30) + populatedMetrics;
+    };
+    if (quality(row) > quality(existing)) slsByStation.set(code, row);
+  });
+  const slsRows = [...slsByStation.values()];
+  const suppressedSlsRows = Math.max(0, latestSlsBatchRows.length - slsRows.length);
   const dailyCandidates = scopedFacts.filter((row) => {
     const values = metricValues(row);
     return row.source_type === "daily_edsp_metrics" && row.station_code && selectedCodes.includes(stationCode(row.station_code)) && values.length > 5;
@@ -249,6 +272,7 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
   });
   const missingDsrStations = dailyRows.filter((row) => Number(metricValues(row)[20] ?? 0) === 0).length;
   const shipments = (shipmentResult.data ?? []) as ShipmentFact[];
+  const locationByCode = new Map(permittedLocations.map((location) => [location.station_code, location]));
   const shipmentMap = new Map<string, { delivered: number; cReturn: number; mfn: number; mfnReturn: number; total: number }>();
   shipments.forEach((row) => {
     const current = shipmentMap.get(row.station_code) ?? { delivered: 0, cReturn: 0, mfn: 0, mfnReturn: 0, total: 0 };
@@ -365,19 +389,24 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
                     const values = metricValues(row);
                     const targetMetrics = slsMetricDefinitions.filter((metric) => metric.target != null);
                     const achieved = targetMetrics.filter((metric) => ragStatus(values[metric.index] ?? 0, metric.target, metric.direction) === "green").length;
-                    return <tr key={`${row.batch_id}-${row.station_code}`}><td>{index + 1}</td><td><strong>{row.station_code}</strong></td><td>{row.row_label || "—"}</td><td><span className={`performance-standing ${standing(row.raw_text).toLowerCase()}`}>{standing(row.raw_text)}</span></td><td><strong>{percent(values[1])}</strong></td><td><strong>{Math.round(achieved / targetMetrics.length * 100)}%</strong><small className="achievement-count">{achieved}/{targetMetrics.length} targets</small></td></tr>;
+                    const code = stationCode(row.station_code);
+                    const location = locationByCode.get(code);
+                    return <tr key={`${row.batch_id}-${code}`}><td>{index + 1}</td><td><strong>{code}</strong></td><td>{location?.station_name || location?.city || row.row_label || "—"}</td><td><span className={`performance-standing ${standing(row.raw_text).toLowerCase()}`}>{standing(row.raw_text)}</span></td><td><strong>{percent(values[1])}</strong></td><td><strong>{Math.round(achieved / targetMetrics.length * 100)}%</strong><small className="achievement-count">{achieved}/{targetMetrics.length} targets</small></td></tr>;
                   })}
                   {!slsRows.length ? <tr><td colSpan={6} className="empty-cell">Data not available for Week {selectedWeek}.</td></tr> : null}
                 </tbody></table></div>
               </article>
+              {suppressedSlsRows ? <div className="performance-data-note">{suppressedSlsRows} duplicate summary row{suppressedSlsRows === 1 ? "" : "s"} excluded from this week.</div> : null}
               <section className="sls-station-scorecards">
                 {sortedSlsRows.map((row) => {
                   const values = metricValues(row);
+                  const code = stationCode(row.station_code);
+                  const location = locationByCode.get(code);
                   const targetMetrics = slsMetricDefinitions.filter((metric) => metric.target != null);
                   const achieved = targetMetrics.filter((metric) => ragStatus(values[metric.index] ?? 0, metric.target, metric.direction) === "green").length;
                   const achievement = Math.round(achieved / targetMetrics.length * 100);
-                  return <details className="sls-station-scorecard" key={`detail-${row.batch_id}-${row.station_code}`} open={slsRows.length === 1}>
-                    <summary><div><span>{row.station_code}</span><strong>{row.row_label || row.station_code}</strong></div><div className="sls-score-summary"><span className={`performance-standing ${standing(row.raw_text).toLowerCase()}`}>{standing(row.raw_text)}</span><b>{percent(values[1])} SLS</b><i className={achievement >= 90 ? "green" : achievement >= 70 ? "amber" : "red"}>{achievement}% targets achieved</i></div><em>⌄</em></summary>
+                  return <details className="sls-station-scorecard" key={`detail-${row.batch_id}-${code}`} open={slsRows.length === 1}>
+                    <summary><div><span>{code}</span><strong>{location?.station_name || location?.city || row.row_label || code}</strong></div><div className="sls-score-summary"><span className={`performance-standing ${standing(row.raw_text).toLowerCase()}`}>{standing(row.raw_text)}</span><b>{percent(values[1])} SLS</b><i className={achievement >= 90 ? "green" : achievement >= 70 ? "amber" : "red"}>{achievement}% targets achieved</i></div><em>⌄</em></summary>
                     <div className="sls-target-legend"><span><i className="green" /> Achieved</span><span><i className="amber" /> Near target</span><span><i className="red" /> Missed</span></div>
                     <div className="sls-target-grid">{slsMetricDefinitions.map((metric) => {
                       const value = values[metric.index] ?? 0;

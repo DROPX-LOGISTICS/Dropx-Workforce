@@ -4911,6 +4911,7 @@ tbody tr:hover td {
 .onboarding-filter-columns label { display:flex; gap:8px; align-items:center; padding:7px 5px; }
 .onboarding-filter-columns label span { display:grid; font-size:11px; color:#64748b; }.onboarding-filter-columns label strong { color:#172033; }
 .onboarding-action-form { min-width:360px; }.onboarding-action-form input { min-width:170px; padding:9px; border:1px solid #cbd5e1; border-radius:8px; }
+.performance-data-note { margin:-4px 2px 2px; color:#64748b; font-size:11px; text-align:right; }
 
 @media (max-width: 1080px) {
   body.mobile-nav-open {

@@ -115,7 +115,7 @@ function expired(value?: string) {
   return end.getTime() < Date.now();
 }
 
-function VerifyField({ label, name, value, onChange, onVerify, running, checked, verified, disabled }: {
+function VerifyField({ label, name, value, onChange, onVerify, running, checked, verified, disabled, placeholder }: {
   label: string;
   name: string;
   value: string;
@@ -125,12 +125,13 @@ function VerifyField({ label, name, value, onChange, onVerify, running, checked,
   checked?: boolean;
   verified?: boolean;
   disabled?: boolean;
+  placeholder?: string;
 }) {
   const verificationCompleted = checked ?? verified;
   return <label className="dx-field">
     <span>{label}</span>
-    <div className="dx-input-action">
-      <input disabled={disabled} name={name} onChange={(event) => onChange(event.target.value)} value={value} />
+    <div className={`dx-input-action${disabled && placeholder ? " dx-verify-disabled" : ""}`}>
+      <input disabled={disabled} name={name} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} value={value} />
       {onVerify && !verificationCompleted ? <button disabled={disabled || running} onClick={onVerify} type="button">{running ? <i className="mini-spin" /> : "Verify"}</button> : null}
       {verified ? <BadgeCheck className="dx-verified-icon" /> : null}
     </div>
@@ -485,6 +486,10 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
     <ProfileSection title="Personal details">
       {input("gender","Gender",{ choices: ["Male","Female","Other"] })}
       {dateField("date_of_birth","Date of birth")}
+      {enabled.has("pan_number") ? <>
+        <VerifyField label={`PAN${required.has("pan_number") ? " *" : ""}`} name="pan_number" onChange={(value) => set("panNumber", value.toUpperCase(), ["pan","pan_aadhaar"])} onVerify={() => verify("pan")} running={running === "pan"} value={values.panNumber || ""} checked={attempted("pan")} verified={verified("pan")} />
+        <VerificationText checks={[currentCheck("pan")]} />
+      </> : null}
       {enabled.has("aadhaar_number") ? <>
         <VerifyField
           label={`Aadhaar number${required.has("aadhaar_number") ? " *" : ""}`}
@@ -496,12 +501,9 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
           checked={attempted("pan_aadhaar")}
           verified={verified("pan_aadhaar")}
           disabled={!attempted("pan") || Boolean(currentCheck("pan")?.blockSubmit)}
+          placeholder={!attempted("pan") || Boolean(currentCheck("pan")?.blockSubmit) ? "Verify PAN first" : undefined}
         />
         <VerificationText checks={[currentCheck("pan_aadhaar")]} />
-      </> : null}
-      {enabled.has("pan_number") ? <>
-        <VerifyField label={`PAN${required.has("pan_number") ? " *" : ""}`} name="pan_number" onChange={(value) => set("panNumber", value.toUpperCase(), ["pan","pan_aadhaar"])} onVerify={() => verify("pan")} running={running === "pan"} value={values.panNumber || ""} checked={attempted("pan")} verified={verified("pan")} />
-        <VerificationText checks={[currentCheck("pan")]} />
       </> : null}
       {input("eshram_uan","eShram UAN")}
       {input("father_name","Father name")}

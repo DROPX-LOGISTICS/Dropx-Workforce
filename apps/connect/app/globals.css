@@ -7721,3 +7721,8 @@ tr:last-child td {
   font-size: 10px;
   line-height: 1.3;
 }
+
+.dx-input-action.dx-verify-disabled input::placeholder {
+  color: #d66b72;
+  opacity: 0.75;
+}

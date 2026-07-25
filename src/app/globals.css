@@ -2008,6 +2008,42 @@ h3 {
 .sls-metric-grid span { color: #64748b; font-size: 8px; text-transform: uppercase; }
 .sls-metric-grid strong { color: #172033; font-size: 13px; }
 .sls-metric-detail > small { display: block; max-width: 700px; margin-top: 7px; color: #94a3b8; font-size: 8px; white-space: normal; }
+.sls-review-stack { display: grid; gap: 12px; min-width: 0; }
+.sls-standing-card { min-height: auto; }
+.sls-ranking-card { min-width: 0; }
+.achievement-count { display: block; margin-top: 2px; color: #64748b; font-size: 8px; }
+.sls-station-scorecards { display: grid; gap: 10px; }
+.sls-station-scorecard { overflow: hidden; border: 1px solid #e2e8f0; border-radius: 13px; background: #fff; }
+.sls-station-scorecard > summary { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 16px; padding: 13px 16px; cursor: pointer; list-style: none; }
+.sls-station-scorecard > summary > div:first-child { display: grid; }
+.sls-station-scorecard > summary span { color: #64748b; font-size: 9px; font-weight: 800; }
+.sls-station-scorecard > summary strong { color: #172033; font-size: 15px; }
+.sls-station-scorecard > summary em { color: #64748b; font-size: 18px; font-style: normal; transition: transform .2s; }
+.sls-station-scorecard[open] > summary em { transform: rotate(180deg); }
+.sls-score-summary { display: flex; align-items: center; gap: 10px; }
+.sls-score-summary b { color: #172033; font-size: 12px; }
+.sls-score-summary i { padding: 5px 8px; border-radius: 999px; font-size: 9px; font-style: normal; font-weight: 900; }
+.sls-score-summary i.green { background: #dcfce7; color: #166534; }
+.sls-score-summary i.amber { background: #fef3c7; color: #92400e; }
+.sls-score-summary i.red { background: #fee2e2; color: #b91c1c; }
+.sls-target-legend { display: flex; gap: 14px; padding: 8px 16px; border-top: 1px solid #edf0f4; background: #fafbfc; }
+.sls-target-legend span { display: flex; align-items: center; gap: 5px; color: #64748b; font-size: 9px; font-weight: 700; }
+.sls-target-legend i { width: 8px; height: 8px; border-radius: 50%; }
+.sls-target-legend i.green { background: #22c55e; }
+.sls-target-legend i.amber { background: #f59e0b; }
+.sls-target-legend i.red { background: #ef4444; }
+.sls-target-grid { display: grid; grid-template-columns: repeat(7, minmax(115px, 1fr)); border-top: 1px solid #edf0f4; }
+.sls-target-grid article { display: grid; gap: 3px; min-height: 92px; padding: 11px; border-right: 1px solid #edf0f4; border-bottom: 1px solid #edf0f4; }
+.sls-target-grid article > span { color: #64748b; font-size: 8px; font-weight: 850; line-height: 1.3; text-transform: uppercase; }
+.sls-target-grid article strong { font-size: 18px; }
+.sls-target-grid article small { color: #64748b; font-size: 8px; }
+.sls-target-grid article.green { background: #f4fbf6; }
+.sls-target-grid article.green strong { color: #15803d; }
+.sls-target-grid article.amber { background: #fffbeb; }
+.sls-target-grid article.amber strong { color: #b45309; }
+.sls-target-grid article.red { background: #fff7f7; }
+.sls-target-grid article.red strong { color: #dc2626; }
+.sls-target-grid article.neutral strong { color: #334155; }
 .station-command-matrix { min-width: 0; }
 .station-matrix-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; border-bottom: 1px solid #e5eaf0; background: #e5eaf0; }
 .station-matrix-summary span { display: grid; gap: 2px; padding: 11px 14px; background: #fff; color: #64748b; font-size: 9px; font-weight: 700; text-transform: uppercase; }
@@ -2025,6 +2061,7 @@ h3 {
   .performance-summary-grid { grid-template-columns: 1fr 1fr; }
   .daily-metric-grid { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
   .station-matrix-summary { grid-template-columns: 1fr 1fr; }
+  .sls-target-grid { grid-template-columns: repeat(4, minmax(115px, 1fr)); }
 }
 
 @media (max-width: 650px) {
@@ -2032,6 +2069,9 @@ h3 {
   .performance-station-popover { max-width: calc(100vw - 42px); }
   .daily-volume-strip { display: grid; grid-template-columns: 1fr 1fr; }
   .daily-metric-grid { grid-template-columns: 1fr 1fr; }
+  .sls-station-scorecard > summary { grid-template-columns: 1fr auto; }
+  .sls-score-summary { grid-column: 1 / -1; flex-wrap: wrap; }
+  .sls-target-grid { grid-template-columns: 1fr 1fr; }
 }
 
 .panel-foot {

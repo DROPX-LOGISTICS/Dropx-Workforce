@@ -30,9 +30,16 @@ export function resolveOperatingContext(locations: CodLocationRow[]) {
     ? requestedMode!
     : availableModes[0]?.code ?? "amazon_edsp";
   const modeLocations = locationsForMode(locations, mode);
+  const requestedLocationIds = (cookies().get("dropx-ops-locations")?.value ?? "")
+    .split(",")
+    .filter(Boolean);
   const requestedLocationId = cookies().get("dropx-ops-location")?.value;
-  const location = modeLocations.find((entry) => entry.id === requestedLocationId) ?? modeLocations[0] ?? null;
-  return { availableModes, location, mode, modeLocations };
+  const selectedLocations = modeLocations.filter((entry) => requestedLocationIds.includes(entry.id));
+  const scopedLocations = selectedLocations.length
+    ? selectedLocations
+    : [modeLocations.find((entry) => entry.id === requestedLocationId) ?? modeLocations[0]].filter(Boolean) as CodLocationRow[];
+  const location = scopedLocations[0] ?? null;
+  return { availableModes, location, mode, modeLocations, selectedLocations: scopedLocations };
 }
 
 export function operatingModeLabel(mode: OperatingMode) {

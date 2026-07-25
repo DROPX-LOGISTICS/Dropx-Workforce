@@ -95,10 +95,10 @@ function isoDate(value = "") {
   return local ? `${local[3]}-${local[2]}-${local[1]}` : value;
 }
 
-function formatDateTyping(value: string) {
+function formatDateTyping(value: string, appendSeparator = true) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
   if (digits.length <= 2) return digits;
-  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}${appendSeparator && digits.length === 4 ? "/" : ""}`;
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 }
 
@@ -150,7 +150,16 @@ function ManualDateField({ label, name, value, required, readOnly, warning, onCh
         inputMode="numeric"
         maxLength={10}
         name={name}
-        onChange={(event) => onChange(formatDateTyping(event.target.value))}
+        onChange={(event) => {
+          const raw = event.target.value;
+          const deleting = raw.length < displayDate(value).length;
+          const digits = raw.replace(/\D/g, "");
+          if (!deleting && digits.length === 2) {
+            onChange(`${digits}/`);
+            return;
+          }
+          onChange(formatDateTyping(raw, !deleting));
+        }}
         placeholder="dd/mm/yyyy"
         readOnly={readOnly}
         required={required}
@@ -529,9 +538,10 @@ function ProfileSection({ title: heading, children }: { title: string; children:
 function VerificationText({ checks }: { checks: Array<Verification | undefined> }) {
   return <>{checks.filter(Boolean).map((check) => {
     const holder = check!.name || check!.accountName || check!.ownerName;
-    const message = check!.verified && holder
-      ? `${holder}${check!.fuelType ? ` | Fuel type: ${check!.fuelType}` : ""}`
-      : check!.message || (check!.verified ? "Verified" : "Verification failed");
+    const status = check!.message || (check!.verified ? "Verified" : "Verification failed");
+    const message = holder
+      ? `${holder}${check!.fuelType ? ` | Fuel type: ${check!.fuelType}` : ""}${check!.verified ? "" : ` | ${status}`}`
+      : status;
     return <p className={`dx-verification ${check!.verified ? "ok" : "fail"}`} key={check!.kind}><ShieldCheck />{message}</p>;
   })}</>;
 }

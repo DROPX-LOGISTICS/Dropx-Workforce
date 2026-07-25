@@ -48,6 +48,8 @@ export function ConnectLoginFlow() {
     fetch("/api/connect/auth/session").then((r) => r.json()).then((payload) => {
       if (payload.authenticated) {
         const rows = payload.accounts ?? [];
+        setCountryCode(String(payload.countryCode || "91"));
+        setMobile(String(payload.mobile || ""));
         if (localStorage.getItem(biometricKey) === "true" && localStorage.getItem(credentialKey)) {
           setLockedAccounts(rows);
           setStep("unlock");
@@ -123,7 +125,7 @@ export function ConnectLoginFlow() {
       if (!window.PublicKeyCredential) throw new Error("Face ID or passkeys are not supported on this browser.");
       const credential = await navigator.credentials.create({ publicKey: {
         challenge: crypto.getRandomValues(new Uint8Array(32)),
-        rp: { name: "DropX" },
+        rp: { name: "DropX One" },
         user: { id: crypto.getRandomValues(new Uint8Array(16)), name: account?.reference || account?.id || "dropx-user", displayName: account?.name || "DropX user" },
         pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
         authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" },
@@ -191,7 +193,7 @@ export function ConnectLoginFlow() {
       {step === "pin" ? <form onSubmit={verifyPin}><label>App PIN<input inputMode="numeric" maxLength={6} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" value={pin} /></label><button disabled={pending || pin.length !== 6}>Sign in</button><button className="text" onClick={resetPin} type="button">Reset PIN</button><button className="text" onClick={() => setStep("mobile")} type="button">Change mobile number</button></form> : null}
       {step === "otp" ? <form onSubmit={(e) => { e.preventDefault(); if (otp.length === 6) setStep("createPin"); }}><label>WhatsApp OTP<input inputMode="numeric" maxLength={6} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} value={otp} /></label><button disabled={otp.length !== 6}>Continue</button></form> : null}
       {step === "createPin" ? <form onSubmit={savePin}><label>Create app PIN<input inputMode="numeric" maxLength={6} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" value={pin} /></label><label>Re-enter app PIN<input inputMode="numeric" maxLength={6} onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))} type="password" value={confirmPin} /></label><button disabled={pending || pin.length !== 6}>Save PIN</button></form> : null}
-      {step === "unlock" ? <form onSubmit={(e) => { e.preventDefault(); unlock(); }}><div className="dx-unlock"><Fingerprint /><strong>Unlock DropX</strong><small>Use Face ID or your device security to continue.</small></div><button disabled={pending}>{pending ? "Unlocking..." : "Unlock"}</button><button className="text" onClick={() => { localStorage.removeItem(biometricKey); setStep("mobile"); }} type="button">Use mobile number and PIN</button></form> : null}
+      {step === "unlock" ? <form onSubmit={(e) => { e.preventDefault(); unlock(); }}><div className="dx-unlock"><Fingerprint /><strong>Unlock DropX One</strong><small>Use Face ID or your device security to continue.</small></div><button disabled={pending}>{pending ? "Unlocking..." : "Unlock"}</button><button className="text" onClick={() => { setPin(""); setStep("pin"); }} type="button">Use PIN</button></form> : null}
     </div> : <main className="dx-content">
       {notice ? <div className="dx-alert success">{notice}<button onClick={() => setNotice("")}><X /></button></div> : null}
       {step === "accounts" ? <section className="dx-accounts"><h1>Choose account</h1>{accounts.map((row) => <button key={accountKey(row)} onClick={() => choose(row)}><i>{row.profilePhotoUrl ? <img alt="" src={row.profilePhotoUrl} /> : <UsersRound />}</i><span><strong>{row.companyName}</strong><em>{row.name || row.reference}</em><small>{row.reference} {row.biometricId ? ` | ${row.biometricId}` : ""}</small></span><ChevronRight /></button>)}</section> : null}

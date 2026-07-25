@@ -52,8 +52,8 @@ a {
 .dx-unlock{display:grid;place-items:center;gap:8px;padding:10px;text-align:center}.dx-unlock>svg{width:42px;height:42px;color:#d83242}.dx-unlock strong{font-size:18px}.dx-unlock small{color:#746f68}@media(min-width:700px){.dx-web-page .connect-shell{max-width:520px}.dx-content{padding-inline:24px}}@media(max-width:370px){.dx-header{grid-template-columns:44px 105px 1fr 40px 44px;padding-inline:10px}.dx-attendance-summary{padding-inline:5px}.dx-attendance-summary>div{padding-inline:4px}.dx-profile-view section>div{grid-template-columns:1fr}}
 
 /* Connect mobile web refinements */
-.dx-web-page .connect-shell{padding-top:8px}
-.dx-header{top:8px;height:76px}
+.dx-web-page .connect-shell{padding-top:0}
+.dx-header{top:0;height:76px}
 .dx-content{padding:18px 14px 36px}
 .dx-profile-form{gap:11px;padding-bottom:8px}
 .dx-company{margin-bottom:8px;font-size:11px}

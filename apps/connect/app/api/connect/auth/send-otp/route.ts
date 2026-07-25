@@ -182,7 +182,7 @@ export async function POST(request: Request) {
     const values: Record<string, string> = {
       otp_code: otp,
       expiry_minutes: String(expiryMinutes),
-      app_name: "DropX Connect"
+      app_name: "DropX One"
     };
     const requestPayload = {
       messaging_product: "whatsapp",

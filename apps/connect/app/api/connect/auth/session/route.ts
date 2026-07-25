@@ -23,7 +23,14 @@ export async function GET() {
     }
     await supabaseAdmin.from("connect_login_sessions").update({ last_seen_at: new Date().toISOString() }).eq("id", session.id);
     const accounts = await findConnectAccounts(session.country_code, session.mobile_number);
-    return NextResponse.json({ authenticated: true, accounts });
+    return NextResponse.json({
+      authenticated: true,
+      accounts,
+      countryCode: session.country_code,
+      mobile: session.mobile_number.startsWith(session.country_code)
+        ? session.mobile_number.slice(session.country_code.length)
+        : session.mobile_number
+    });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to load session." }, { status: 500 });
   }

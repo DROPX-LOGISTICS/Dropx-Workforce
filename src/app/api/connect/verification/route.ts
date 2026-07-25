@@ -317,7 +317,7 @@ export async function POST(request: NextRequest) {
         verified: nameMatched && !expired,
         manualReview: apiSuccess && !nameMatched,
         blockSubmit: expired,
-        inputKey: inputKey([dlNumber, dob]),
+        inputKey: inputKey([dlNumber, normalizeDate(payload.dateOfBirth)]),
         name: apiName,
         nameMatchPercent: Math.round(score * 100),
         expiryDate,

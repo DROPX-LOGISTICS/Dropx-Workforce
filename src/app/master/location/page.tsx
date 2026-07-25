@@ -353,6 +353,17 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         scopeValues: scopeEmails.length ? scopeEmails : [normalizeEmail(user.email)]
       };
     });
+  const hierarchyUserOptions = users
+    .filter((user) => user.email)
+    .map((user) => ({
+      value: user.email ?? "",
+      label: user.full_name || user.email || "Unnamed user",
+      helper: [userRoles.find((item) => item.id === user.role_id)?.name || user.role, user.email].filter(Boolean).join(" - ")
+    }));
+  const hierarchyUserEmail = (value: string | null) => {
+    const normalized = String(value ?? "").trim().toLowerCase();
+    return users.find((user) => normalizeEmail(user.email) === normalized || String(user.full_name ?? "").trim().toLowerCase() === normalized)?.email ?? "";
+  };
 
   return (
     <AppShell active="Locations" pageCode="master_locations">
@@ -403,14 +414,12 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               <label>City<input className="field" name="city" placeholder="Enter city" /></label>
               <label>State<input className="field" name="state" placeholder="Enter full state name" required /></label>
               <label>Region<input className="field" name="region" placeholder="Example: KL, AP, ODCG" required /></label>
-              <label>AOM<input className="field" name="aom" placeholder="Enter Area Operations Manager" /></label>
-              <label>Cluster Manager<input className="field" name="cluster_manager" placeholder="Enter cluster manager" /></label>
-              <label>Cluster<input className="field" name="cluster" placeholder="Enter operational cluster" required /></label>
+              <label>AOM<SearchableSelect name="aom_email" options={hierarchyUserOptions} placeholder="Select AOM" /></label>
+              <label>Cluster Manager<SearchableSelect name="cluster_manager_email" options={hierarchyUserOptions} placeholder="Select cluster manager" required /></label>
               <label>Postal code<input className="field" name="postal_code" placeholder="Enter postal code" /></label>
               <label>Latitude<input className="field" name="latitude" placeholder="Enter latitude" step="any" type="number" min="-90" max="90" /></label>
               <label>Longitude<input className="field" name="longitude" placeholder="Enter longitude" step="any" type="number" min="-180" max="180" /></label>
               <label>Location email<input className="field" name="station_email" placeholder="Enter location email" /></label>
-              <label>Manager<SearchableSelect name="station_manager_email" options={managerOptions} placeholder="Search manager" required /></label>
               <label className="check-row span-3">
                 <input name="hide_from_location_list" type="checkbox" />
                 <span>Hide from location list</span>
@@ -444,16 +453,12 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               <label>City<input className="field" name="city" defaultValue={editLocation.city ?? ""} /></label>
               <label>State<input className="field" name="state" defaultValue={editLocation.state ?? ""} required /></label>
               <label>Region<input className="field" name="region" defaultValue={editLocation.region ?? ""} required /></label>
-              <label>AOM<input className="field" name="aom" defaultValue={editLocation.aom ?? ""} /></label>
-              <label>Cluster Manager<input className="field" name="cluster_manager" defaultValue={editLocation.cluster_manager ?? ""} /></label>
-              <label>Cluster<input className="field" name="cluster" defaultValue={editLocation.cluster ?? ""} required /></label>
+              <label>AOM<SearchableSelect name="aom_email" options={hierarchyUserOptions} defaultValue={hierarchyUserEmail(editLocation.aom)} placeholder="Select AOM" /></label>
+              <label>Cluster Manager<SearchableSelect name="cluster_manager_email" options={hierarchyUserOptions} defaultValue={hierarchyUserEmail(editLocation.cluster_manager) || editLocation.station_manager_email} placeholder="Select cluster manager" required /></label>
               <label>Postal code<input className="field" name="postal_code" defaultValue={editLocation.postal_code ?? ""} /></label>
               <label>Latitude<input className="field" name="latitude" defaultValue={editLocation.latitude ?? ""} step="any" type="number" min="-90" max="90" /></label>
               <label>Longitude<input className="field" name="longitude" defaultValue={editLocation.longitude ?? ""} step="any" type="number" min="-180" max="180" /></label>
               <label>Location email<input className="field" name="station_email" defaultValue={editLocation.station_email ?? ""} /></label>
-              <label>Manager
-                <SearchableSelect name="station_manager_email" options={managerOptions} defaultValue={editLocation.station_manager_email} placeholder="Search manager" required />
-              </label>
               <label>Status
                 <select className="select" name="is_active" defaultValue={editLocation.is_active ? "active" : "inactive"}>
                   <option value="active">Active</option>

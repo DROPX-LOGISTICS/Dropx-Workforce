@@ -113,7 +113,8 @@ export const navItems: NavItem[] = [
       { code: "master_payment_heads", label: "Payment Heads", href: "/master/payment-heads" },
       { code: "designations", label: "Designations", href: "/master/designations" },
       { code: "biometric_devices", label: "Device Master", href: "/master/biometric-devices" },
-      { code: "master_documents", label: "Documents", href: "/master/documents" }
+      { code: "master_documents", label: "Documents", href: "/master/documents" },
+      { code: "imports", label: "Import Master", href: "/master/imports" }
     ]
   },
   {

@@ -10541,3 +10541,24 @@ td strong,
     grid-template-columns: 1fr;
   }
 }
+.compact-upload-row {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.5fr) auto;
+}
+
+.compact-upload-row label {
+  display: grid;
+  gap: 6px;
+}
+
+.compact-date {
+  min-width: 160px;
+}
+
+@media (max-width: 760px) {
+  .compact-upload-row {
+    grid-template-columns: 1fr;
+  }
+}

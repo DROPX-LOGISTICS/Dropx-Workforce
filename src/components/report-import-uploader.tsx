@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
 
-export function ReportImportUploader({ reports }: { reports: ReportImportMaster[] }) {
+export function ReportImportUploader({ reports, compact = false }: { reports: ReportImportMaster[]; compact?: boolean }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const sourceOptions = reports.filter((report) => report.is_active);
@@ -53,7 +53,7 @@ export function ReportImportUploader({ reports }: { reports: ReportImportMaster[
 
   return (
     <div className="panel-body stacked">
-      <div className="import-source-grid">
+      {!compact ? <div className="import-source-grid">
         {sourceOptions.map((option) => (
           <button
             className={`import-source-card ${sourceType === option.source_code ? "active" : ""}`}
@@ -66,21 +66,26 @@ export function ReportImportUploader({ reports }: { reports: ReportImportMaster[
             <small>{reportSchedule(option)}</small>
           </button>
         ))}
-      </div>
+      </div> : null}
 
-      <div className="form-grid three">
+      <div className={compact ? "compact-upload-row" : "form-grid three"}>
         <label>
           <span>Import type</span>
           <select className="select" value={sourceType} onChange={(event) => setSourceType(event.target.value)}>
             {sourceOptions.map((option) => <option key={option.source_code} value={option.source_code}>{option.name} · {reportSchedule(option)}</option>)}
           </select>
         </label>
-        <label style={{ gridColumn: "span 2" }}>
+        <label style={compact ? undefined : { gridColumn: "span 2" }}>
           <span>File</span>
           <input ref={fileRef} className="field" type="file" accept={accepted} />
         </label>
+        {compact ? (
+          <button className={`button ${isPending ? "loading" : ""}`} disabled={isPending} onClick={upload} type="button">
+            {isPending ? "Importing..." : "Upload"}
+          </button>
+        ) : null}
       </div>
-      <div className="dropzone" style={{ minHeight: 120 }}>
+      {!compact ? <div className="dropzone" style={{ minHeight: 120 }}>
         <div>
           <h2>{selected?.name ?? "No active reports"}</h2>
           <p className="subtle" style={{ marginTop: 8 }}>{selected?.description}</p>
@@ -89,7 +94,7 @@ export function ReportImportUploader({ reports }: { reports: ReportImportMaster[
             {isPending ? "Importing..." : "Import file"}
           </button>
         </div>
-      </div>
+      </div> : null}
       {message ? <div className="message-panel success"><strong>{message}</strong></div> : null}
       {summary ? (
         <div className="report-import-summary">

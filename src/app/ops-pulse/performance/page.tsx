@@ -2,6 +2,8 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import { PerformanceStationFilter } from "@/components/performance-station-filter";
+import { AmazonWeekNavigator } from "@/components/amazon-week-navigator";
+import { PerformanceSortControl } from "@/components/performance-sort-control";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
@@ -10,7 +12,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = { view?: string; week?: string; from?: string; to?: string; stations?: string };
+type SearchParams = { view?: string; week?: string; from?: string; to?: string; stations?: string; sort?: string };
 type MetricFact = {
   batch_id: string;
   source_type: string;
@@ -173,9 +175,6 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
   const selectedWeek = Number(searchParams?.week) || availableWeeks[0] || 1;
   const stationQuery = selectedCodes.length === permittedCodes.length ? "" : `&stations=${encodeURIComponent(selectedCodes.join(","))}`;
   const currentWeek = amazonWeekNumber(today());
-  const weekOptions = Array.from({ length: currentWeek }, (_, index) => currentWeek - index);
-  const olderWeek = selectedWeek > 1 ? selectedWeek - 1 : null;
-  const newerWeek = selectedWeek < currentWeek ? selectedWeek + 1 : null;
   const slsRows = scopedFacts.filter((row) => {
     const values = metricValues(row);
     return row.source_type === "edsp_sls_scorecard" && Number(row.report_week) === selectedWeek && row.station_code && selectedCodes.includes(row.station_code) && values.length > 2 && values[1] > 0 && values[1] <= 1;
@@ -184,6 +183,21 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
     const values = metricValues(row);
     return row.source_type === "daily_edsp_metrics" && row.station_code && selectedCodes.includes(row.station_code) && values.length > 5;
   });
+  const dailySort = searchParams?.sort || "station_asc";
+  const sortedDailyRows = [...dailyRows].sort((a, b) => {
+    if (dailySort === "station_desc") return String(b.station_code).localeCompare(String(a.station_code));
+    if (dailySort === "dsr_low") return (metricValues(a)[20] ?? 0) - (metricValues(b)[20] ?? 0);
+    if (dailySort === "dsr_high") return (metricValues(b)[20] ?? 0) - (metricValues(a)[20] ?? 0);
+    return String(a.station_code).localeCompare(String(b.station_code));
+  });
+  const slsSort = searchParams?.sort || "score_desc";
+  const sortedSlsRows = [...slsRows].sort((a, b) => {
+    if (slsSort === "station_asc") return String(a.station_code).localeCompare(String(b.station_code));
+    if (slsSort === "station_desc") return String(b.station_code).localeCompare(String(a.station_code));
+    if (slsSort === "score_asc") return metricValues(a)[1] - metricValues(b)[1];
+    return metricValues(b)[1] - metricValues(a)[1];
+  });
+  const missingDsrStations = dailyRows.filter((row) => Number(metricValues(row)[20] ?? 0) === 0).length;
   const shipments = (shipmentResult.data ?? []) as ShipmentFact[];
   const shipmentMap = new Map<string, { delivered: number; cReturn: number; mfn: number; mfnReturn: number; total: number }>();
   shipments.forEach((row) => {
@@ -230,13 +244,14 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
               <article><span>MFN</span><strong>{totalMfn.toLocaleString("en-IN")}</strong><small>MFN activity</small></article>
               <article><span>Stations reported</span><strong>{dailyRows.length}</strong><small>Daily EDSP metric rows</small></article>
             </section>
+            {missingDsrStations ? <section className="performance-data-warning"><div><strong>DSR/PSR source value is zero for {missingDsrStations} station{missingDsrStations === 1 ? "" : "s"}.</strong><span>The dashboard is preserving the uploaded report value. Upload a corrected Daily EDSP report containing the metric; the system will not manufacture a replacement percentage.</span></div><a href="https://dashboard.dropxlogistics.com/imports">Open report imports</a></section> : null}
             <section className="panel performance-matrix-panel">
-              <div className="panel-head"><div><h2>Daily station metric matrix</h2><p className="subtle">All 20 fields extracted from the Amazon Daily EDSP report. Scroll horizontally for the complete scorecard.</p></div><strong>{dailyRows.length} stations</strong></div>
+              <div className="panel-head"><div><h2>Daily station metric matrix</h2><p className="subtle">All 20 fields extracted from the Amazon Daily EDSP report. Scroll horizontally for the complete scorecard.</p></div><div className="panel-head-tools"><strong>{dailyRows.length} stations</strong><PerformanceSortControl value={dailySort} options={[{ label: "Station A–Z", value: "station_asc" }, { label: "Station Z–A", value: "station_desc" }, { label: "Lowest DSR first", value: "dsr_low" }, { label: "Highest DSR first", value: "dsr_high" }]} /></div></div>
               <div className="performance-matrix-wrap">
                 <table className="performance-matrix">
                   <thead><tr><th className="sticky-rank">#</th><th className="sticky-station">Station</th><th>Delivered</th><th>C-Return</th><th>MFN</th>{dailyMetricDefinitions.map((metric) => <th key={metric.label} title={metric.label}>{metric.short}</th>)}</tr></thead>
                   <tbody>
-                    {dailyRows.map((row, index) => {
+                    {sortedDailyRows.map((row, index) => {
                       const shipment = shipmentMap.get(row.station_code ?? "") ?? { delivered: 0, cReturn: 0, mfn: 0, mfnReturn: 0, total: 0 };
                       const values = metricValues(row);
                       return <tr key={`${row.batch_id}-${row.station_code}`}>
@@ -260,11 +275,7 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
           <>
             <section className="ops-control-strip">
               <div className="ops-context-summary"><span>Amazon SLS review</span><strong>Week {selectedWeek}</strong><small>{weekRange.start} to {weekRange.end} · Sunday–Saturday</small></div>
-              <div className="week-navigator">
-                {olderWeek ? <Link aria-label={`Previous available week ${olderWeek}`} href={`/ops-pulse/performance?view=sls&week=${olderWeek}${stationQuery}`}>‹</Link> : <span className="disabled">‹</span>}
-                <form><input type="hidden" name="view" value="sls" />{selectedCodes.length !== permittedCodes.length ? <input type="hidden" name="stations" value={selectedCodes.join(",")} /> : null}<label><span>AMAZON WEEK</span><select aria-label="Amazon week" name="week" defaultValue={selectedWeek}>{weekOptions.map((week) => <option key={week} value={week}>Week {week}{availableWeeks.includes(week) ? " · imported" : ""}</option>)}</select><small>{weekRange.start} – {weekRange.end}</small></label><button>Go</button></form>
-                {newerWeek ? <Link aria-label={`Next available week ${newerWeek}`} href={`/ops-pulse/performance?view=sls&week=${newerWeek}${stationQuery}`}>›</Link> : <span className="disabled">›</span>}
-              </div>
+              <AmazonWeekNavigator selectedWeek={selectedWeek} currentWeek={currentWeek} stations={selectedCodes.length === permittedCodes.length ? "" : selectedCodes.join(",")} />
             </section>
             <section className="performance-summary-grid">
               <article><span>Average SLS score</span><strong>{percent(averageSls)}</strong><small>{slsRows.length} station scores</small></article>
@@ -276,19 +287,19 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
                 <div className="performance-standing-chart">{standingCounts.map((entry) => <div key={entry.label}><span>{entry.label}</span><i><b style={{ width: `${Math.max(3, entry.count / maxStanding * 100)}%` }} /></i><strong>{entry.count}</strong></div>)}</div>
               </article>
               <article className="ops-visual-card sls-ranking-card">
-                <header><div><span>SLS SCORECARD</span><h2>Station ranking</h2></div><strong>{weekRange.start}–{weekRange.end}</strong></header>
+                <header><div><span>SLS SCORECARD</span><h2>Station ranking</h2></div><div className="panel-head-tools"><strong>{weekRange.start}–{weekRange.end}</strong><PerformanceSortControl value={slsSort} options={[{ label: "Highest SLS first", value: "score_desc" }, { label: "Lowest SLS first", value: "score_asc" }, { label: "Station A–Z", value: "station_asc" }, { label: "Station Z–A", value: "station_desc" }]} /></div></header>
                 <div className="table-wrap"><table><thead><tr><th>Rank</th><th>Station</th><th>City</th><th>Standing</th><th>SLS score</th><th>Metrics achieved</th></tr></thead><tbody>
-                  {slsRows.sort((a, b) => metricValues(b)[1] - metricValues(a)[1]).map((row, index) => {
+                  {sortedSlsRows.map((row, index) => {
                     const values = metricValues(row);
                     const targetMetrics = slsMetricDefinitions.filter((metric) => metric.target != null);
                     const achieved = targetMetrics.filter((metric) => ragStatus(values[metric.index] ?? 0, metric.target, metric.direction) === "green").length;
                     return <tr key={`${row.batch_id}-${row.station_code}`}><td>{index + 1}</td><td><strong>{row.station_code}</strong></td><td>{row.row_label || "—"}</td><td><span className={`performance-standing ${standing(row.raw_text).toLowerCase()}`}>{standing(row.raw_text)}</span></td><td><strong>{percent(values[1])}</strong></td><td><strong>{Math.round(achieved / targetMetrics.length * 100)}%</strong><small className="achievement-count">{achieved}/{targetMetrics.length} targets</small></td></tr>;
                   })}
-                  {!slsRows.length ? <tr><td colSpan={6} className="empty-cell">No SLS scorecard was imported for this week and scope.</td></tr> : null}
+                  {!slsRows.length ? <tr><td colSpan={6} className="empty-cell">Data not available for Week {selectedWeek}.</td></tr> : null}
                 </tbody></table></div>
               </article>
               <section className="sls-station-scorecards">
-                {slsRows.map((row) => {
+                {sortedSlsRows.map((row) => {
                   const values = metricValues(row);
                   const targetMetrics = slsMetricDefinitions.filter((metric) => metric.target != null);
                   const achieved = targetMetrics.filter((metric) => ragStatus(values[metric.index] ?? 0, metric.target, metric.direction) === "green").length;

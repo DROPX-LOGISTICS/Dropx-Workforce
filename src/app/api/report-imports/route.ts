@@ -192,6 +192,13 @@ function rowHash(raw: RawRecord) {
   return crypto.createHash("sha256").update(JSON.stringify(stableRaw)).digest("hex");
 }
 
+function dedupeHash(raw: RawRecord, dedupeFields: string[]) {
+  if (!dedupeFields.length) return rowHash(raw);
+  const values = dedupeFields.map((field) => clean(findValue(raw, [field])));
+  if (values.some((value) => !value)) return rowHash(raw);
+  return crypto.createHash("sha256").update(JSON.stringify(values)).digest("hex");
+}
+
 function readWorkbookRows(buffer: ArrayBuffer) {
   const workbook = XLSX.read(buffer, { type: "array", raw: false, cellDates: false });
   const sheetName = workbook.SheetNames[0];
@@ -487,6 +494,30 @@ function parseFile(sourceType: CoreSourceType, rows: SheetRow[]) {
   });
 }
 
+function parseGenericFile(rows: SheetRow[]) {
+  const headerIndex = rows.findIndex((row) => row.map(clean).filter(Boolean).length >= 2);
+  if (headerIndex < 0) throw new Error("Could not find a usable header row in this file.");
+  return rowsToRecords(rows, headerIndex).map(({ raw, rowNumber }) => {
+    const workDate = parseDate(findValue(raw, [
+      "report_date", "date", "invitation_date", "cash_with_associate_dt", "created_at"
+    ]));
+    const stationCode = normalizeStation(findValue(raw, ["station_code", "station", "location", "hub"]));
+    const externalWorkerId = clean(findValue(raw, [
+      "transporter_id", "tracking_id", "employee_id", "associate_id", "rabbit_id"
+    ]));
+    return {
+      normalized: {
+        externalWorkerId: externalWorkerId || undefined,
+        normalizedData: { ...raw },
+        stationCode: stationCode || undefined,
+        workDate: workDate || undefined
+      },
+      raw,
+      rowNumber
+    };
+  });
+}
+
 async function mapFuelStations(companyId: string, rows: Array<{ normalized: NormalizedImport | null }>) {
   if (!supabaseAdmin) return;
   const vehicles = Array.from(new Set(rows.map((row) => clean(row.normalized?.normalizedData.vehicle_no)).filter(Boolean)));
@@ -666,8 +697,8 @@ async function loadExistingImportHashes(companyId: string, sourceType: SourceTyp
   return existing;
 }
 
-async function auditParsedRows(companyId: string, sourceType: SourceType, parsed: Array<{ normalized: NormalizedImport | null; raw: RawRecord; rowNumber: number }>) {
-  const rows = parsed.map((row) => ({ ...row, hash: rowHash(row.raw) }));
+async function auditParsedRows(companyId: string, sourceType: SourceType, parsed: Array<{ normalized: NormalizedImport | null; raw: RawRecord; rowNumber: number }>, dedupeFields: string[] = []) {
+  const rows = parsed.map((row) => ({ ...row, hash: dedupeHash(row.raw, dedupeFields) }));
   const existingHashes = await loadExistingImportHashes(companyId, sourceType, Array.from(new Set(rows.map((row) => row.hash))));
   const seenInFile = new Set<string>();
 
@@ -745,17 +776,18 @@ export async function POST(request: Request) {
   const sourceType = clean(formData.get("source_type")) as SourceType;
   const file = formData.get("file");
   const master = await db.from("report_import_master")
-    .select("source_code, name, file_types, parser_type, is_active")
+    .select("source_code, name, file_types, parser_type, dedupe_fields, is_active")
     .eq("company_id", companyId)
     .eq("source_code", sourceType)
     .eq("is_active", true)
     .maybeSingle();
   if (master.error) return databaseSetupError(master.error.message);
   if (!master.data) return Response.json({ error: "Select an active report from Import Master." }, { status: 400 });
+  const masterData = master.data;
   if (!(file instanceof File)) return Response.json({ error: "Upload a report file." }, { status: 400 });
   const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
-  if (!(master.data.file_types as string[]).includes(extension)) {
-    return Response.json({ error: `${master.data.name} accepts ${(master.data.file_types as string[]).map((item) => `.${item}`).join(", ")} files.` }, { status: 400 });
+  if (!(masterData.file_types as string[]).includes(extension)) {
+    return Response.json({ error: `${masterData.name} accepts ${(masterData.file_types as string[]).map((item) => `.${item}`).join(", ")} files.` }, { status: 400 });
   }
 
   const batch = await importStep("Create import batch", async () => db.from("report_import_batches").insert({
@@ -770,7 +802,7 @@ export async function POST(request: Request) {
 
   try {
     const fileBuffer = await importStep("Read uploaded file", () => file.arrayBuffer());
-    if (master.data.parser_type === "pdf_scorecard" || master.data.parser_type === "pdf_daily_metrics") {
+    if (masterData.parser_type === "pdf_scorecard" || masterData.parser_type === "pdf_daily_metrics") {
       const pdf = await importStep("Convert PDF to metric rows", () => readPdfMetricRows(fileBuffer));
       const metricRows = pdf.rows.map((row) => {
         const hash = crypto.createHash("sha256").update(JSON.stringify({
@@ -829,10 +861,18 @@ export async function POST(request: Request) {
       return Response.json({ duplicateRows, imported: validMetrics.length, message, skipped: duplicateRows, totalRows: metricRows.length });
     }
 
-    const parsed = await importStep("Parse uploaded report rows", async () => parseFile(sourceType as CoreSourceType, readWorkbookRows(fileBuffer)));
+    const workbookRows = readWorkbookRows(fileBuffer);
+    const parsed = await importStep("Parse uploaded report rows", async () => masterData.parser_type === "generic_table"
+      ? parseGenericFile(workbookRows)
+      : parseFile(sourceType as CoreSourceType, workbookRows));
     if (sourceType === "iocl_fuel" || sourceType === "bpcl_fuel") await importStep("Map fuel vehicles to stations", () => mapFuelStations(companyId, parsed));
 
-    const audited = await importStep("Audit duplicate rows", () => auditParsedRows(companyId, sourceType, parsed));
+    const audited = await importStep("Audit duplicate rows", () => auditParsedRows(
+      companyId,
+      sourceType,
+      parsed,
+      (masterData.dedupe_fields as string[] | null) ?? []
+    ));
     const valid = audited.filter((row) => row.status === "Imported" && row.normalized);
     const skipped = audited.length - valid.length;
     const duplicateRows = audited.filter((row) => row.isDuplicate).length;
@@ -915,7 +955,7 @@ export async function POST(request: Request) {
       : "";
     const message = sourceType === "amazon_shipments"
       ? `${factRowCount} station/date/associate shipment total${factRowCount === 1 ? "" : "s"} refreshed from ${factRows.length} weekly row${factRows.length === 1 ? "" : "s"}.${amazonWeekMessage} ${skipped} raw rows skipped, including ${duplicateRows} duplicate${duplicateRows === 1 ? "" : "s"}.`
-      : `${valid.length} ${sourceLabels[sourceType] ?? master.data.name} row${valid.length === 1 ? "" : "s"} imported. ${skipped} skipped, including ${duplicateRows} duplicate${duplicateRows === 1 ? "" : "s"}.`;
+      : `${valid.length} ${sourceLabels[sourceType] ?? masterData.name} row${valid.length === 1 ? "" : "s"} imported. ${skipped} skipped, including ${duplicateRows} duplicate${duplicateRows === 1 ? "" : "s"}.`;
 
     const update = await importStep("Mark import completed", async () => db.from("report_import_batches").update({
       completed_at: new Date().toISOString(),

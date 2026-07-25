@@ -6,7 +6,7 @@ const supabaseAuthKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env
 const COOKIE_CHUNK_SIZE = 3000;
 const MAX_COOKIE_CHUNKS = 8;
 const ENCODED_COOKIE_PREFIX = "b64-";
-const CLEAN_OPS_ROOTS = ["/daily-submission", "/performance", "/cod", "/reports", "/client", "/access"];
+const CLEAN_OPS_ROOTS = ["/daily-submission", "/performance", "/capacity", "/cod", "/reports", "/client", "/access"];
 
 function cleanOpsPath(path: string) {
   if (path === "/ops-pulse") return "/";

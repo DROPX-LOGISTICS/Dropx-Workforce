@@ -4,6 +4,7 @@ import { PageHead } from "@/components/page-head";
 import { PerformanceStationFilter } from "@/components/performance-station-filter";
 import { AmazonWeekNavigator } from "@/components/amazon-week-navigator";
 import { PerformanceSortControl } from "@/components/performance-sort-control";
+import { PerformanceWorkspaceTabs } from "@/components/performance-workspace-tabs";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
@@ -288,10 +289,7 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
     <AppShell active="Performance" pageCode="cod_reports">
       <div className="ops-command-center performance-workspace">
         <PageHead eyebrow="Performance" title="Station Performance" subtitle="Daily metrics, weekly scorecards and delivery data." />
-        <nav className="performance-tabs">
-          <Link className={view === "daily" ? "active" : ""} href={`/ops-pulse/performance?view=daily&from=${from}&to=${to}${stationQuery}`}>Daily EDSP</Link>
-          <Link className={view === "sls" ? "active" : ""} href={`/ops-pulse/performance?view=sls&week=${selectedWeek}${stationQuery}`}>Amazon SLS</Link>
-        </nav>
+        <PerformanceWorkspaceTabs active={view} />
         <div className="performance-local-filter-row">
           <PerformanceStationFilter stations={permittedLocations.map((location) => ({ code: location.station_code, name: location.station_name || location.city || location.station_code }))} selectedCodes={selectedCodes} view={view} from={from} to={to} week={selectedWeek} />
         </div>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
+import { PerformanceWorkspaceTabs } from "@/components/performance-workspace-tabs";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
@@ -101,6 +102,7 @@ export default async function DeliveryDataPage({ searchParams }: { searchParams?
     <AppShell active="Performance" pageCode="cps_shipments">
       <div className="ops-command-center shipment-workspace">
         <PageHead eyebrow="Performance" title="Delivery Data" subtitle="Station, day and delivery-associate detail." />
+        <PerformanceWorkspaceTabs active="delivery" />
         <section className="ops-control-strip">
           <div className="ops-context-summary"><span>{selectedDay ? "DA detail" : selectedStation ? "Daily detail" : "Station overview"}</span><strong>{selectedDay || selectedStation || `${stationRows.length} stations`}</strong><small>{from} to {to}</small></div>
           <form className="ops-date-controls"><label>From<input name="from" type="date" defaultValue={from} /></label><label>To<input name="to" type="date" defaultValue={to} /></label><button>Apply range</button></form>

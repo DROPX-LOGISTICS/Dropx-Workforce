@@ -4980,6 +4980,19 @@ tbody tr:hover td {
 .metric-sort-heading { display:flex; align-items:flex-start; justify-content:center; gap:3px; }
 .metric-sort-heading > a { display:inline-grid; place-items:center; width:15px; height:15px; border-radius:4px; color:#98a2b3; font-size:10px; line-height:1; }
 .metric-sort-heading > a:hover,.metric-sort-heading > a.active { background:#fff0e8; color:#e94f1d; }
+.performance-workspace-tabs { margin-bottom:14px; }
+.capacity-master-table td small,.capacity-table td small { display:block; margin-top:3px; color:#667085; }
+.capacity-master-row { display:flex; align-items:center; gap:8px; min-width:860px; }
+.capacity-master-row > form:first-child { flex:1; display:grid; grid-template-columns:110px 130px 125px 110px 105px 90px; gap:8px; align-items:center; }
+.capacity-master-row input { width:100%; padding:8px 9px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; }
+.capacity-table { min-width:1550px; }
+.capacity-table th,.capacity-table td { vertical-align:top; }
+.capacity-reason { min-width:280px; max-width:360px; color:#475467; font-size:11px; line-height:1.45; }
+.capacity-decision { display:inline-flex; padding:5px 8px; border-radius:999px; font-size:10px; font-weight:850; white-space:nowrap; }
+.capacity-decision.hire,.capacity-decision.risk { background:#fee4e2; color:#b42318; }
+.capacity-decision.surplus { background:#fff4e5; color:#b54708; }
+.capacity-decision.balanced { background:#dcfae6; color:#067647; }
+.capacity-decision.unconfigured { background:#f2f4f7; color:#475467; }
 
 @media (max-width: 1080px) {
   body.mobile-nav-open {

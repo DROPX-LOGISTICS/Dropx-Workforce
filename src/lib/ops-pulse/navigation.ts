@@ -4,17 +4,8 @@ import type { OperatingMode } from "@/lib/ops-pulse/operating-context";
 const commonStart: NavItem[] = [
   { code: "ops_pulse", label: "Command Center", href: "/", icon: "#" },
   { code: "daily_submission", label: "Daily Operations", href: "/daily-submission", icon: "D" },
-  {
-    code: "cod_reports",
-    label: "Performance",
-    icon: "P",
-    children: [
-      { code: "cod_reports", label: "Daily EDSP", href: "/performance?view=daily" },
-      { code: "cod_reports", label: "Amazon SLS", href: "/performance?view=sls" },
-      { code: "cps_shipments", label: "Delivery Data", href: "/performance/shipments" },
-      { code: "cod_reports", label: "DA In-App Onboarding", href: "/performance/onboarding" }
-    ]
-  }
+  { code: "cod_reports", label: "Performance", href: "/performance", icon: "P" },
+  { code: "cps_associates", label: "Capacity", href: "/capacity", icon: "A" }
 ];
 
 const cps: NavItem = {
@@ -44,6 +35,7 @@ const administration: NavItem[] = [
       { code: "master_providers", label: "Client / Provider Master", href: "/master/providers" },
       { code: "master_models", label: "Operation Models", href: "/master/models" }
       ,{ code: "cod_master", label: "Performance Master", href: "/master/performance-targets" }
+      ,{ code: "cod_master", label: "Capacity Master", href: "/master/capacity" }
     ]
   },
   {

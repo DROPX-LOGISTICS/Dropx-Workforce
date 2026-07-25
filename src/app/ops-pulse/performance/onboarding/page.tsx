@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { OnboardingScopeFilter } from "@/components/onboarding-scope-filter";
 import { PageHead } from "@/components/page-head";
+import { PerformanceWorkspaceTabs } from "@/components/performance-workspace-tabs";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
@@ -77,6 +78,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams?: 
 
   return <AppShell active="Performance" pageCode="cod_reports"><div className="ops-command-center onboarding-workspace">
     <PageHead eyebrow="Performance" title="DA In-App Onboarding" subtitle="Daily pending list and action closure." />
+    <PerformanceWorkspaceTabs active="onboarding" />
     <div className="onboarding-toolbar">
       <OnboardingScopeFilter stations={permitted.map((location) => ({ code: location.station_code, name: location.station_name || location.city || location.station_code, cluster: location.cluster || "Unassigned" }))} selectedStations={selectedCodes} selectedClusters={requestedClusters} status={status}/>
       <form className="onboarding-status-filter"><label>Status<select name="status" defaultValue={status}><option value="pending">Pending</option><option value="cleared">Cleared</option><option value="all">All</option></select></label>{selectedCodes.length !== permittedCodes.length ? <input type="hidden" name="stations" value={selectedCodes.join(",")}/> : null}<button>Apply</button></form>

@@ -10,7 +10,8 @@ const commonStart: NavItem[] = [
     icon: "P",
     children: [
       { code: "cod_reports", label: "Daily EDSP", href: "/ops-pulse/performance?view=daily" },
-      { code: "cod_reports", label: "Amazon SLS", href: "/ops-pulse/performance?view=sls" }
+      { code: "cod_reports", label: "Amazon SLS", href: "/ops-pulse/performance?view=sls" },
+      { code: "cps_shipments", label: "Shipment Activity", href: "/ops-pulse/performance/shipments" }
     ]
   }
 ];

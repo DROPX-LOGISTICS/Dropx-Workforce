@@ -43,6 +43,28 @@ function displayDate(value: string) {
   }).format(new Date(`${value}T00:00:00Z`));
 }
 
+function displayDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Asia/Kolkata"
+  }).format(new Date(value));
+}
+
+function addDays(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function previousWeekday(value: string, weekday: number) {
+  const date = new Date(`${value}T00:00:00Z`);
+  const daysBack = (date.getUTCDay() - weekday + 7) % 7 || 7;
+  return addDays(value, -daysBack);
+}
+
 function reportIsDue(report: ReportImportMaster, date: string) {
   if (report.frequency === "weekly" && report.weekday !== null) {
     return new Date(`${date}T00:00:00Z`).getUTCDay() === report.weekday;
@@ -103,10 +125,24 @@ export async function ReportUploadPageContent({
   const date = validDate(selectedDate);
   const { rows: reports, error: masterError } = await loadImportMaster(companyId);
   const { rows: batches, error: batchError } = await loadBatches(companyId);
+  const dueReports = reports.filter((report) => reportIsDue(report, date));
+  const reportBySource = new Map(reports.map((report) => [report.source_code, report]));
   const latestBySource = new Map<string, ImportBatch>();
   batches.filter((batch) => batchMatchesDate(batch, date)).forEach((batch) => {
     if (!latestBySource.has(batch.source_type)) latestBySource.set(batch.source_type, batch);
   });
+  const today = todayInIndia();
+  const missedWeekly = reports.flatMap((report) => {
+    if (report.frequency !== "weekly" || report.weekday === null) return [];
+    const dueDate = previousWeekday(today, report.weekday);
+    const nextDueDate = addDays(dueDate, 7);
+    const uploaded = batches.some((batch) => batch.source_type === report.source_code
+      && createdDateInIndia(batch.created_at) >= dueDate
+      && createdDateInIndia(batch.created_at) < nextDueDate
+      && batch.status.toLowerCase() !== "failed");
+    return uploaded ? [] : [{ report, dueDate }];
+  });
+  const recentBatches = batches.slice(0, 10);
 
   return (
     <AppShell active={active} pageCode={pageCode}>
@@ -147,10 +183,10 @@ export async function ReportUploadPageContent({
               <tr><th>Report</th><th>Upload time</th><th>Frequency</th><th>Report day</th><th>Status</th><th>File</th><th>Rows</th></tr>
             </thead>
             <tbody>
-              {reports.map((report) => {
+              {dueReports.map((report) => {
                 const batch = latestBySource.get(report.source_code);
                 const schedule = reportSchedule(report).split(" · ");
-                const status = batch?.status ?? (reportIsDue(report, date) ? "Pending" : "Not due");
+                const status = batch?.status ?? "Pending";
                 return (
                   <tr key={report.id}>
                     <td><strong>{report.name}</strong></td>
@@ -163,7 +199,52 @@ export async function ReportUploadPageContent({
                   </tr>
                 );
               })}
-              {!reports.length ? <tr><td className="empty-cell" colSpan={7}>No active reports configured.</td></tr> : null}
+              {!dueReports.length ? <tr><td className="empty-cell" colSpan={7}>No reports due on this date.</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>Upload log</h2>
+            <p className="subtle">Latest activity and missed weekly uploads.</p>
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Uploaded</th><th>Report</th><th>Report period</th><th>Result</th><th>Rows</th><th>File</th></tr></thead>
+            <tbody>
+              {missedWeekly.map(({ report, dueDate }) => (
+                <tr key={`missed-${report.id}-${dueDate}`}>
+                  <td>-</td>
+                  <td><strong>{report.name}</strong></td>
+                  <td>{displayDate(dueDate)}</td>
+                  <td><StatusPill status="Missed" /></td>
+                  <td>-</td>
+                  <td>-</td>
+                </tr>
+              ))}
+              {recentBatches.map((batch) => {
+                const report = reportBySource.get(batch.source_type);
+                const period = batch.report_from
+                  ? batch.report_to && batch.report_to !== batch.report_from
+                    ? `${displayDate(batch.report_from)} – ${displayDate(batch.report_to)}`
+                    : displayDate(batch.report_from)
+                  : "-";
+                return (
+                  <tr key={batch.id}>
+                    <td>{displayDateTime(batch.created_at)}</td>
+                    <td><strong>{report?.name ?? batch.source_type}</strong></td>
+                    <td>{period}</td>
+                    <td><StatusPill status={batch.status} /></td>
+                    <td>{batch.status.toLowerCase() === "failed" ? "-" : `${batch.imported_row_count} imported · ${batch.skipped_row_count} skipped`}</td>
+                    <td>{batch.file_name}</td>
+                  </tr>
+                );
+              })}
+              {!missedWeekly.length && !recentBatches.length ? <tr><td className="empty-cell" colSpan={6}>No upload activity yet.</td></tr> : null}
             </tbody>
           </table>
         </div>

@@ -35,6 +35,18 @@ function normalizeEmail(value: string | null | undefined) {
   return String(value ?? "").trim().toLowerCase();
 }
 
+async function hierarchyUserName(email: string | null, companyId: string) {
+  if (!email || !supabaseAdmin) return null;
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("full_name,email")
+    .eq("company_id", companyId)
+    .ilike("email", email)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return clean(data?.full_name) ?? clean(data?.email);
+}
+
 function isMissingSchemaError(message: string) {
   const normalized = message.toLowerCase();
   return normalized.includes("does not exist") || normalized.includes("could not find") || normalized.includes("schema cache");
@@ -531,14 +543,17 @@ export async function createLocation(formData: FormData) {
   const city = clean(formData.get("city"));
   const state = clean(formData.get("state"));
   const region = required(formData.get("region"), "Region").toUpperCase();
-  const aom = clean(formData.get("aom"));
-  const clusterManager = clean(formData.get("cluster_manager"));
-  const cluster = required(formData.get("cluster"), "Cluster");
+  const aomEmail = clean(formData.get("aom_email"))?.toLowerCase() ?? null;
+  const clusterManagerEmail = required(formData.get("cluster_manager_email"), "Cluster Manager").toLowerCase();
+  const [aom, clusterManager] = await Promise.all([
+    hierarchyUserName(aomEmail, companyId),
+    hierarchyUserName(clusterManagerEmail, companyId)
+  ]);
   const postalCode = clean(formData.get("postal_code"));
   const latitude = optionalCoordinate(formData.get("latitude"), "Latitude", -90, 90);
   const longitude = optionalCoordinate(formData.get("longitude"), "Longitude", -180, 180);
   const stationEmail = clean(formData.get("station_email"));
-  const stationManagerEmail = required(formData.get("station_manager_email"), "Manager").toLowerCase();
+  const stationManagerEmail = clusterManagerEmail;
   const hideFromLocationList = formData.get("hide_from_location_list") === "on";
   const address = [addressLine1, addressLine2, city, state, postalCode].filter(Boolean).join(", ");
   const accessProfiles = await locationAccessProfiles(stationManagerEmail, companyId);
@@ -556,7 +571,7 @@ export async function createLocation(formData: FormData) {
     region,
     aom,
     cluster_manager: clusterManager,
-    cluster,
+    cluster: null,
     postal_code: postalCode,
     latitude,
     longitude,
@@ -593,14 +608,17 @@ export async function updateLocation(formData: FormData) {
   const city = clean(formData.get("city"));
   const state = clean(formData.get("state"));
   const region = required(formData.get("region"), "Region").toUpperCase();
-  const aom = clean(formData.get("aom"));
-  const clusterManager = clean(formData.get("cluster_manager"));
-  const cluster = required(formData.get("cluster"), "Cluster");
+  const aomEmail = clean(formData.get("aom_email"))?.toLowerCase() ?? null;
+  const clusterManagerEmail = required(formData.get("cluster_manager_email"), "Cluster Manager").toLowerCase();
+  const [aom, clusterManager] = await Promise.all([
+    hierarchyUserName(aomEmail, companyId),
+    hierarchyUserName(clusterManagerEmail, companyId)
+  ]);
   const postalCode = clean(formData.get("postal_code"));
   const latitude = optionalCoordinate(formData.get("latitude"), "Latitude", -90, 90);
   const longitude = optionalCoordinate(formData.get("longitude"), "Longitude", -180, 180);
   const stationEmail = clean(formData.get("station_email"));
-  const stationManagerEmail = required(formData.get("station_manager_email"), "Manager").toLowerCase();
+  const stationManagerEmail = clusterManagerEmail;
   const isActive = formData.get("is_active") !== "inactive";
   const hideFromLocationList = formData.get("hide_from_location_list") === "on";
   const address = [addressLine1, addressLine2, city, state, postalCode].filter(Boolean).join(", ");
@@ -628,7 +646,7 @@ export async function updateLocation(formData: FormData) {
       region,
       aom,
       cluster_manager: clusterManager,
-      cluster,
+      cluster: null,
       postal_code: postalCode,
       latitude,
       longitude,

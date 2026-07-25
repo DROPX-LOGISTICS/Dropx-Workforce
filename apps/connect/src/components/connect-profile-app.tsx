@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  BadgeCheck, BriefcaseBusiness, CalendarDays, Download, Fingerprint, Mail,
-  MapPin, Phone, ShieldCheck, UserRound, WalletCards
+  BadgeCheck, BriefcaseBusiness, CalendarDays, CircleX, Download, Fingerprint,
+  Mail, MapPin, Phone, ShieldCheck, TriangleAlert, UserRound, WalletCards
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 
@@ -115,21 +115,23 @@ function expired(value?: string) {
   return end.getTime() < Date.now();
 }
 
-function VerifyField({ label, name, value, onChange, onVerify, running, verified, disabled }: {
+function VerifyField({ label, name, value, onChange, onVerify, running, checked, verified, disabled }: {
   label: string;
   name: string;
   value: string;
   onChange: (value: string) => void;
   onVerify?: () => void;
   running?: boolean;
+  checked?: boolean;
   verified?: boolean;
   disabled?: boolean;
 }) {
+  const verificationCompleted = checked ?? verified;
   return <label className="dx-field">
     <span>{label}</span>
     <div className="dx-input-action">
       <input disabled={disabled} name={name} onChange={(event) => onChange(event.target.value)} value={value} />
-      {onVerify && !verified ? <button disabled={disabled || running} onClick={onVerify} type="button">{running ? <i className="mini-spin" /> : "Verify"}</button> : null}
+      {onVerify && !verificationCompleted ? <button disabled={disabled || running} onClick={onVerify} type="button">{running ? <i className="mini-spin" /> : "Verify"}</button> : null}
       {verified ? <BadgeCheck className="dx-verified-icon" /> : null}
     </div>
   </label>;
@@ -489,7 +491,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
       {dateField("date_of_birth","Date of birth")}
       {enabled.has("aadhaar_number") ? <label className="dx-field"><span>Aadhaar number{required.has("aadhaar_number") ? " *" : ""}</span><input name="aadhaar_number" onChange={(event) => set("aadhaarNumber", event.target.value.replace(/\D/g, ""), ["pan_aadhaar"])} required={required.has("aadhaar_number")} value={values.aadhaarNumber || ""} /></label> : null}
       {enabled.has("pan_number") ? <>
-        <VerifyField label={`PAN${required.has("pan_number") ? " *" : ""}`} name="pan_number" onChange={(value) => set("panNumber", value.toUpperCase(), ["pan","pan_aadhaar"])} onVerify={() => verify("pan")} running={running === "pan" || running === "pan_aadhaar"} value={values.panNumber || ""} verified={verified("pan") && (!enabled.has("aadhaar_number") || verified("pan_aadhaar"))} />
+        <VerifyField label={`PAN${required.has("pan_number") ? " *" : ""}`} name="pan_number" onChange={(value) => set("panNumber", value.toUpperCase(), ["pan","pan_aadhaar"])} onVerify={() => verify("pan")} running={running === "pan" || running === "pan_aadhaar"} value={values.panNumber || ""} checked={attempted("pan")} verified={verified("pan") && (!enabled.has("aadhaar_number") || verified("pan_aadhaar"))} />
         <VerificationText checks={[currentCheck("pan"), currentCheck("pan_aadhaar")]} />
       </> : null}
       {input("eshram_uan","eShram UAN")}
@@ -509,7 +511,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
     </ProfileSection>
     {!executive ? <ProfileSection title="Statutory details">
       {profile.statutoryApplicability?.includes("pf") && enabled.has("pf_uan") ? <>
-        <VerifyField label={`PF UAN${required.has("pf_uan") ? " *" : ""}`} name="pf_uan" onChange={(value) => set("pfUan", value.replace(/\D/g, ""), ["pf_uan"])} onVerify={() => verify("pf_uan")} running={running === "pf_uan"} value={values.pfUan || ""} verified={verified("pf_uan")} />
+        <VerifyField label={`PF UAN${required.has("pf_uan") ? " *" : ""}`} name="pf_uan" onChange={(value) => set("pfUan", value.replace(/\D/g, ""), ["pf_uan"])} onVerify={() => verify("pf_uan")} running={running === "pf_uan"} value={values.pfUan || ""} checked={attempted("pf_uan")} verified={verified("pf_uan")} />
         <VerificationText checks={[currentCheck("pf_uan")]} />
       </> : null}
       {profile.statutoryApplicability?.includes("pf") ? input("pf_account_no","PF Account No") : null}
@@ -517,7 +519,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
     </ProfileSection> : null}
     {executive && drivingEnabled ? <ProfileSection title="Driving and vehicle">
       {enabled.has("driving_license_no") ? <>
-        <VerifyField label={`Driving license no${required.has("driving_license_no") ? " *" : ""}`} name="driving_license_no" onChange={(value) => set("drivingLicenseNo", value.toUpperCase(), ["dl"])} onVerify={() => verify("dl")} running={running === "dl"} value={values.drivingLicenseNo || ""} verified={verified("dl")} />
+        <VerifyField label={`Driving license no${required.has("driving_license_no") ? " *" : ""}`} name="driving_license_no" onChange={(value) => set("drivingLicenseNo", value.toUpperCase(), ["dl"])} onVerify={() => verify("dl")} running={running === "dl"} value={values.drivingLicenseNo || ""} checked={attempted("dl")} verified={verified("dl")} />
         <VerificationText checks={[dlCheck]} />
       </> : null}
       {dateField("driving_license_exp_date","DL expiry date",{ readOnly: Boolean(dlCheck?.expiryDate), warning: expired(values.drivingLicenseExpiry) ? "Driving licence has expired." : "" })}
@@ -550,11 +552,20 @@ function ProfileSection({ title: heading, children }: { title: string; children:
 function VerificationText({ checks }: { checks: Array<Verification | undefined> }) {
   return <>{checks.filter(Boolean).map((check) => {
     const holder = check!.name || check!.accountName || check!.ownerName;
-    const status = check!.message || (check!.verified ? "Verified" : "Verification failed");
+    const status = check!.message || (check!.verified ? "Verified." : "Verification failed.");
+    const tone = check!.verified ? "ok" : check!.manualReview ? "review" : "fail";
+    const Icon = check!.verified ? ShieldCheck : check!.manualReview ? TriangleAlert : CircleX;
+    const identityCheck = ["pan", "dl", "pf_uan"].includes(check!.kind);
+    if (identityCheck) {
+      const label = holder || status;
+      return <div className={`dx-verification ${tone}`} key={check!.kind}>
+        <Icon />
+        <span><strong>{label}</strong>{holder ? <small>{status}</small> : null}</span>
+      </div>;
+    }
     const message = holder
       ? `${holder}${check!.fuelType ? ` | Fuel type: ${check!.fuelType}` : ""}${check!.verified ? "" : ` | ${status}`}`
       : status;
-    const tone = check!.verified ? "ok" : check!.manualReview ? "review" : "fail";
-    return <p className={`dx-verification ${tone}`} key={check!.kind}><ShieldCheck />{message}</p>;
+    return <p className={`dx-verification ${tone}`} key={check!.kind}><Icon />{message}</p>;
   })}</>;
 }

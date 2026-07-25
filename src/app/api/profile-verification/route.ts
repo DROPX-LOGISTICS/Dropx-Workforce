@@ -261,12 +261,12 @@ export async function POST(request: NextRequest) {
         nameMatchStatus: nameMatch.status,
         nameMatchPercent: nameMatch.percent,
         message: verified
-          ? ""
+          ? "PAN verified."
           : partial
-            ? "PAN name partially matched. Profile will be sent for review."
+            ? "PAN name partially matched. Profile will be sent to review."
             : apiSuccess
-              ? "PAN name does not match. Registration is blocked."
-              : text(body?.message) || "PAN verification failed. Registration is blocked.",
+              ? "PAN name mismatch."
+              : "PAN verification failed.",
         rawStatus: body?.status ?? null
       };
       return verifiedResponse(result);
@@ -328,10 +328,10 @@ export async function POST(request: NextRequest) {
           : nameMatched
             ? "DL verified."
             : partial
-              ? "DL name partially matched. Profile will be sent for review."
+              ? "DL name partially matched. Profile will be sent to review."
               : apiSuccess
-                ? "DL name does not match. Registration is blocked."
-                : text(body?.message) || "DL verification failed. Registration is blocked."
+                ? "DL name mismatch."
+                : "DL verification failed."
       };
       return verifiedResponse(result);
     }
@@ -392,10 +392,10 @@ export async function POST(request: NextRequest) {
         message: verified
           ? "PF UAN verified."
           : partial
-            ? "PF UAN name partially matched. Profile will be sent for review."
+            ? "PF UAN name partially matched. Profile will be sent to review."
             : apiSuccess
-              ? "PF UAN name does not match. Registration is blocked."
-              : text(body?.message) || "PF UAN verification failed. Registration is blocked.",
+              ? "PF UAN name mismatch."
+              : "PF UAN verification failed.",
         rawStatus: body?.status ?? null
       };
       return verifiedResponse(result);

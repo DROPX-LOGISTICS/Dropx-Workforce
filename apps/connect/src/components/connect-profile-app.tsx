@@ -228,7 +228,16 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
   const completed = statusReadOnly(profile?.status);
 
   const set = (key: string, value: string, clear: string[] = []) => {
-    setValues((current) => ({ ...current, [key]: value }));
+    setValues((current) => ({
+      ...current,
+      [key]: value,
+      ...(["drivingLicenseNo", "dateOfBirth"].includes(key) ? { drivingLicenseExpiry: "" } : {}),
+      ...(key === "vehicleRegistrationNo" ? {
+        registrationExpiry: "",
+        insuranceExpiry: "",
+        pollutionExpiry: ""
+      } : {})
+    }));
     if (clear.length) {
       setVerifications((current) => Object.fromEntries(Object.entries(current).filter(([kind]) => !clear.includes(kind))));
     }

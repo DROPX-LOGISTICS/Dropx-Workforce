@@ -55,8 +55,23 @@ function standing(raw: string | null) {
   return raw?.match(/\b(FANTASTIC|GREAT|FAIR|POOR)\b/i)?.[1]?.toUpperCase() ?? "—";
 }
 
+function stationCode(value: string | null) {
+  return String(value ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
 function metricValues(row: MetricFact) {
-  return Array.isArray(row.values_json) ? row.values_json.map(number) : [];
+  if (Array.isArray(row.values_json)) return row.values_json.map(number);
+  if (row.values_json && typeof row.values_json === "object") {
+    const payload = row.values_json as Record<string, unknown>;
+    const nested = payload.values ?? payload.metrics ?? payload.data;
+    if (Array.isArray(nested)) return nested.map(number);
+    const numbered = Object.entries(payload)
+      .filter(([key]) => /^\d+$/.test(key))
+      .sort(([left], [right]) => Number(left) - Number(right))
+      .map(([, value]) => number(value));
+    if (numbered.length) return numbered;
+  }
+  return [];
 }
 
 const dailyMetricDefinitions = [
@@ -170,23 +185,31 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
     ]);
 
   const allFacts = (metricResult.data ?? []) as MetricFact[];
-  const scopedFacts = allFacts.filter((row) => !row.station_code || selectedCodes.includes(row.station_code));
+  const scopedFacts = allFacts.filter((row) => !row.station_code || selectedCodes.includes(stationCode(row.station_code)));
   const availableWeeks = [...new Set(scopedFacts.filter((row) => row.source_type === "edsp_sls_scorecard" && row.report_week).map((row) => Number(row.report_week)))].sort((a, b) => b - a);
   const selectedWeek = Number(searchParams?.week) || availableWeeks[0] || 1;
   const stationQuery = selectedCodes.length === permittedCodes.length ? "" : `&stations=${encodeURIComponent(selectedCodes.join(","))}`;
   const currentWeek = amazonWeekNumber(today());
   const slsRows = scopedFacts.filter((row) => {
     const values = metricValues(row);
-    return row.source_type === "edsp_sls_scorecard" && Number(row.report_week) === selectedWeek && row.station_code && selectedCodes.includes(row.station_code) && values.length > 2 && values[1] > 0 && values[1] <= 1;
+    return row.source_type === "edsp_sls_scorecard" && Number(row.report_week) === selectedWeek && row.station_code && selectedCodes.includes(stationCode(row.station_code)) && values.length > 2 && values[1] > 0 && values[1] <= 1;
   });
   const dailyCandidates = scopedFacts.filter((row) => {
     const values = metricValues(row);
-    return row.source_type === "daily_edsp_metrics" && row.station_code && selectedCodes.includes(row.station_code) && values.length > 5;
+    return row.source_type === "daily_edsp_metrics" && row.station_code && selectedCodes.includes(stationCode(row.station_code)) && values.length > 5;
   });
   const reportDay = (row: MetricFact) => row.report_date || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(row.created_at));
   const exactDailyCandidates = dailyCandidates.filter((row) => reportDay(row) >= from && reportDay(row) <= to);
-  const selectedDailyBatch = exactDailyCandidates[0]?.batch_id ?? null;
-  const dailyRows = selectedDailyBatch ? exactDailyCandidates.filter((row) => row.batch_id === selectedDailyBatch) : [];
+  const datedFallbackCandidates = dailyCandidates.filter((row) => reportDay(row) <= to);
+  const resolvedDailyCandidates = exactDailyCandidates.length
+    ? exactDailyCandidates
+    : datedFallbackCandidates.length
+      ? datedFallbackCandidates
+      : dailyCandidates;
+  const selectedDailyBatch = resolvedDailyCandidates[0]?.batch_id ?? null;
+  const dailyRows = selectedDailyBatch ? resolvedDailyCandidates.filter((row) => row.batch_id === selectedDailyBatch) : [];
+  const selectedDailyReportDate = dailyRows[0] ? reportDay(dailyRows[0]) : null;
+  const isDailyFallback = Boolean(selectedDailyReportDate && (selectedDailyReportDate < from || selectedDailyReportDate > to));
   const dailySort = searchParams?.sort || "exceptions_desc";
   const missedTargets = (row: MetricFact) => dailyMetricDefinitions.filter((metric) => metric.target != null && ragStatus(metricValues(row)[metric.index] ?? 0, metric.target, metric.direction) !== "green").length;
   const sortedDailyRows = [...dailyRows].sort((a, b) => {
@@ -248,10 +271,11 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
             </section>
             <section className="performance-summary-grid">
               <article><span>Delivered</span><strong>{totalDelivered.toLocaleString("en-IN")}</strong><small>Delivered packages</small></article>
-              <article><span>Stations reviewed</span><strong>{dailyRows.length}</strong><small>{selectedDailyBatch ? reportDay(dailyRows[0]) : "No performance data"}</small></article>
+              <article><span>Stations reviewed</span><strong>{dailyRows.length}</strong><small>{selectedDailyReportDate ?? "No performance data"}</small></article>
               <article><span>Targets achieved</span><strong>{totalDailyTargets ? `${Math.round(achievedDailyTargets / totalDailyTargets * 100)}%` : "—"}</strong><small>{achievedDailyTargets}/{totalDailyTargets} checks</small></article>
               <article><span>Attention needed</span><strong>{totalDailyTargets - achievedDailyTargets}</strong><small>Missed targets</small></article>
             </section>
+            {isDailyFallback ? <section className="performance-data-warning"><div><strong>Selected-day performance row was not found.</strong><span>Showing the nearest available EDSP batch dated {selectedDailyReportDate}. Delivery totals remain filtered to {from}–{to}.</span></div></section> : null}
             {missingDsrStations ? <section className="performance-data-warning"><div><strong>DSR/PSR source value is zero for {missingDsrStations} station{missingDsrStations === 1 ? "" : "s"}.</strong><span>The dashboard is preserving the uploaded report value. Upload a corrected Daily EDSP report containing the metric; the system will not manufacture a replacement percentage.</span></div><a href="https://dashboard.dropxlogistics.com/imports">Open report imports</a></section> : null}
             <section className="panel performance-matrix-panel">
               <div className="panel-head"><div><h2>Daily performance review</h2><p className="subtle">Red needs action, amber is near target, and green is achieved. Targets are shown in every metric header.</p></div><div className="panel-head-tools"><strong>{dailyRows.length} stations</strong><PerformanceSortControl value={dailySort} options={[{ label: "Most misses first", value: "exceptions_desc" }, { label: "Station A–Z", value: "station_asc" }, { label: "Station Z–A", value: "station_desc" }, { label: "Lowest DSR first", value: "dsr_low" }, { label: "Highest DSR first", value: "dsr_high" }]} /></div></div>
@@ -260,11 +284,12 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
                   <thead><tr><th className="sticky-rank">#</th><th className="sticky-station">Station</th><th>Review</th><th>Delivered</th><th>C-Return</th><th>MFN</th>{dailyMetricDefinitions.map((metric) => <th key={metric.label} title={metric.label}><span>{metric.short}</span><small>{targetLabel(metric.target, metric.direction)}</small></th>)}</tr></thead>
                   <tbody>
                     {sortedDailyRows.map((row, index) => {
-                      const shipment = shipmentMap.get(row.station_code ?? "") ?? { delivered: 0, cReturn: 0, mfn: 0, mfnReturn: 0, total: 0 };
+                      const normalizedCode = stationCode(row.station_code);
+                      const shipment = shipmentMap.get(normalizedCode) ?? { delivered: 0, cReturn: 0, mfn: 0, mfnReturn: 0, total: 0 };
                       const values = metricValues(row);
                       return <tr key={`${row.batch_id}-${row.station_code}`}>
                         <td className="sticky-rank">{index + 1}</td>
-                        <td className="sticky-station"><strong>{row.station_code}</strong><small>{row.row_label || "—"}</small></td>
+                        <td className="sticky-station"><strong>{normalizedCode}</strong><small>{row.row_label || "—"}</small></td>
                         <td><strong className={missedTargets(row) ? "metric-bad-text" : "metric-good-text"}>{missedTargets(row)} missed</strong></td><td>{shipment.delivered.toLocaleString("en-IN")}</td><td>{shipment.cReturn.toLocaleString("en-IN")}</td><td>{shipment.mfn.toLocaleString("en-IN")}</td>
                         {dailyMetricDefinitions.map((metric) => {
                           const value = values[metric.index] ?? 0;

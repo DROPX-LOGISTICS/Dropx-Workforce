@@ -181,6 +181,7 @@ const statusOptions = [
 
 function fieldExecutiveStatus(executive: Pick<ExecutiveRow, "is_active" | "onboarding_status">) {
   if (!executive.is_active) return "Inactive";
+  if (executive.onboarding_status === "under_review") return "Under review";
   return executive.onboarding_status === "active" ? "Active" : "Pending";
 }
 

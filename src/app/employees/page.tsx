@@ -105,6 +105,7 @@ function statutoryLabel(values: string[] | null | undefined) {
 function employeeStatus(employee: EmployeeRow) {
   if (!employee.is_active) return "Inactive";
   if (employee.profile_completion_status === "active") return "Active";
+  if (employee.profile_completion_status === "under_review") return "Under review";
   if (employee.profile_completion_status === "submitted") return "Submitted";
   if (employee.profile_completion_status === "rejected") return "Rejected";
   const hasCompletedProfile = [

@@ -3,7 +3,16 @@ import type { OperatingMode } from "@/lib/ops-pulse/operating-context";
 
 const commonStart: NavItem[] = [
   { code: "ops_pulse", label: "Dashboard", href: "/ops-pulse", icon: "#" },
-  { code: "daily_submission", label: "Daily Operations", href: "/ops-pulse/daily-submission", icon: "D" }
+  { code: "daily_submission", label: "Daily Operations", href: "/ops-pulse/daily-submission", icon: "D" },
+  {
+    code: "cod_reports",
+    label: "Performance",
+    icon: "P",
+    children: [
+      { code: "cod_reports", label: "Daily EDSP", href: "/ops-pulse/performance?view=daily" },
+      { code: "cod_reports", label: "Amazon SLS", href: "/ops-pulse/performance?view=sls" }
+    ]
+  }
 ];
 
 const cps: NavItem = {

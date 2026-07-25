@@ -254,6 +254,10 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const employeeId = String(formData.get("employee_id") ?? "");
     const account = await requireEmployeeAccess(employeeId);
+    const currentEmployee = await loadEmployee(account.id, account.companyId);
+    if (String(currentEmployee.profile_completion_status ?? "pending").trim().toLowerCase() !== "pending") {
+      throw new Error("Profile cannot be edited after submission.");
+    }
     const manualReviewRequired = String(formData.get("manual_review_required") ?? "") === "true";
 
     const uploads = await Promise.all([

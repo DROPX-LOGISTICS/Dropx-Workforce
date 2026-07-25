@@ -102,8 +102,8 @@ function formatDateTyping(value: string, appendSeparator = true) {
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 }
 
-function statusActive(value?: string | null) {
-  return ["active", "submitted", "under_review"].includes(String(value).toLowerCase());
+function statusReadOnly(value?: string | null) {
+  return String(value ?? "pending").trim().toLowerCase() !== "pending";
 }
 
 function expired(value?: string) {
@@ -220,7 +220,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
     return new Set(Array.isArray(configured) ? configured : executive ? defaultExecutive : defaultEmployee);
   }, [executive, profile]);
   const required = useMemo(() => new Set(profile?.fieldRules?.required ?? []), [profile]);
-  const completed = statusActive(profile?.status);
+  const completed = statusReadOnly(profile?.status);
 
   const set = (key: string, value: string, clear: string[] = []) => {
     setValues((current) => ({ ...current, [key]: value }));

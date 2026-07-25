@@ -290,6 +290,9 @@ export async function POST(request: Request) {
     const account = await requireExecutiveAccess(executiveId);
     const manualReviewRequired = String(formData.get("manual_review_required") ?? "") === "true";
     const currentExecutive = await loadExecutive(account.id, account.companyId);
+    if (String(currentExecutive.onboarding_status ?? "pending").trim().toLowerCase() !== "pending") {
+      throw new Error("Profile cannot be edited after submission.");
+    }
     const designationResult = currentExecutive.designation
       ? await supabaseAdmin
         .from("designations")

@@ -1944,9 +1944,51 @@ h3 {
 .performance-standing-chart > div { display: grid; grid-template-columns: 75px 1fr 25px; align-items: center; gap: 9px; color: #64748b; font-size: 10px; font-weight: 800; }
 .performance-standing-chart i { height: 8px; overflow: hidden; border-radius: 99px; background: #eef2f7; }
 .performance-standing-chart b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #f97316, #fb923c); }
+.performance-local-filter-row { display: flex; align-items: center; gap: 12px; }
+.performance-local-filter-row > span { color: #64748b; font-size: 11px; }
+.performance-station-filter { position: relative; z-index: 12; width: min(235px, 100%); }
+.performance-station-filter > summary { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; min-height: 46px; padding: 6px 11px; border: 1px solid #e5eaf0; border-radius: 10px; background: #fff; cursor: pointer; list-style: none; }
+.performance-station-filter > summary span { color: #64748b; font-size: 9px; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; }
+.performance-station-filter > summary strong { font-size: 12px; }
+.performance-station-filter > summary i { grid-column: 2; grid-row: 1 / span 2; }
+.performance-station-popover { position: absolute; top: calc(100% + 6px); left: 0; display: grid; gap: 8px; width: 320px; padding: 10px; border: 1px solid #e5eaf0; border-radius: 12px; background: #fff; box-shadow: 0 18px 45px rgba(15, 23, 42, .16); }
+.performance-station-popover > input { padding: 9px 10px; border: 1px solid #e5eaf0; border-radius: 8px; }
+.performance-station-actions { display: flex; gap: 6px; }
+.performance-station-actions button { padding: 6px 9px; border: 1px solid #e5eaf0; border-radius: 7px; background: #f6f7f9; color: #172033; }
+.performance-station-options { display: grid; max-height: 250px; overflow: auto; }
+.performance-station-options label { display: flex; align-items: center; gap: 9px; padding: 7px; border-radius: 7px; cursor: pointer; }
+.performance-station-options label:hover { background: #f7f8fa; }
+.performance-station-options label span { display: grid; color: #64748b; font-size: 11px; }
+.performance-station-options label strong { color: #172033; font-size: 11px; }
+.performance-station-apply { padding: 9px; border: 0; border-radius: 8px; background: #f4511e; color: #fff; font-weight: 800; }
+.performance-station-apply:disabled { cursor: not-allowed; opacity: .45; }
+.daily-station-scorecards { display: grid; gap: 14px; }
+.daily-station-scorecard { overflow: hidden; border: 1px solid #e5eaf0; border-radius: 14px; background: #fff; }
+.daily-station-scorecard > header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #e5eaf0; }
+.daily-station-scorecard > header span { color: #64748b; font-size: 10px; font-weight: 800; }
+.daily-station-scorecard > header h2 { margin: 2px 0 0; font-size: 18px; }
+.daily-volume-strip { display: flex; gap: 18px; }
+.daily-volume-strip span { display: grid; gap: 2px; }
+.daily-volume-strip strong { color: #172033; font-size: 14px; }
+.daily-metric-grid { display: grid; grid-template-columns: repeat(7, minmax(120px, 1fr)); }
+.daily-metric-grid > div { display: grid; gap: 4px; min-height: 94px; padding: 12px; border-top: 1px solid #e5eaf0; border-right: 1px solid #e5eaf0; }
+.daily-metric-grid > div span { color: #64748b; font-size: 9px; font-weight: 850; line-height: 1.35; text-transform: uppercase; }
+.daily-metric-grid > div strong { font-size: 20px; }
+.daily-metric-grid > div small { color: #94a3b8; font-size: 9px; }
+.daily-metric-grid > .achieved strong { color: #15803d; }
+.daily-metric-grid > .missed { background: #fff8f7; }
+.daily-metric-grid > .missed strong { color: #dc2626; }
 
 @media (max-width: 900px) {
   .performance-summary-grid { grid-template-columns: 1fr 1fr; }
+  .daily-metric-grid { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+}
+
+@media (max-width: 650px) {
+  .performance-local-filter-row, .daily-station-scorecard > header { align-items: stretch; flex-direction: column; }
+  .performance-station-popover { max-width: calc(100vw - 42px); }
+  .daily-volume-strip { display: grid; grid-template-columns: 1fr 1fr; }
+  .daily-metric-grid { grid-template-columns: 1fr 1fr; }
 }
 
 .panel-foot {

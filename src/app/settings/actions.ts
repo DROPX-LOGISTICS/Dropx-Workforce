@@ -531,6 +531,8 @@ export async function createLocation(formData: FormData) {
   const city = clean(formData.get("city"));
   const state = clean(formData.get("state"));
   const region = required(formData.get("region"), "Region").toUpperCase();
+  const aom = clean(formData.get("aom"));
+  const clusterManager = clean(formData.get("cluster_manager"));
   const cluster = required(formData.get("cluster"), "Cluster");
   const postalCode = clean(formData.get("postal_code"));
   const latitude = optionalCoordinate(formData.get("latitude"), "Latitude", -90, 90);
@@ -552,6 +554,8 @@ export async function createLocation(formData: FormData) {
     city,
     state,
     region,
+    aom,
+    cluster_manager: clusterManager,
     cluster,
     postal_code: postalCode,
     latitude,
@@ -589,6 +593,8 @@ export async function updateLocation(formData: FormData) {
   const city = clean(formData.get("city"));
   const state = clean(formData.get("state"));
   const region = required(formData.get("region"), "Region").toUpperCase();
+  const aom = clean(formData.get("aom"));
+  const clusterManager = clean(formData.get("cluster_manager"));
   const cluster = required(formData.get("cluster"), "Cluster");
   const postalCode = clean(formData.get("postal_code"));
   const latitude = optionalCoordinate(formData.get("latitude"), "Latitude", -90, 90);
@@ -620,6 +626,8 @@ export async function updateLocation(formData: FormData) {
       city,
       state,
       region,
+      aom,
+      cluster_manager: clusterManager,
       cluster,
       postal_code: postalCode,
       latitude,

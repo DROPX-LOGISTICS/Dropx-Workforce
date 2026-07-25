@@ -25,12 +25,16 @@ type CpsFact = {
   target_gap: number | string | null;
   target_impact: number | string | null;
 };
-type ScorecardFact = {
-  report_type: "daily_report" | "weekly_sla";
-  period_from: string;
-  period_to: string;
-  overall_score: number | string | null;
-  station_code: string;
+type PerformanceFact = {
+  source_type: "daily_edsp_metrics" | "edsp_sls_scorecard";
+  report_year: number | null;
+  report_week: number | null;
+  report_date: string | null;
+  station_code: string | null;
+  row_label: string | null;
+  raw_text: string | null;
+  values_json: unknown;
+  created_at: string;
 };
 
 export const dynamic = "force-dynamic";
@@ -61,10 +65,11 @@ function addDays(value: string, days: number) {
 function amazonWeek(value: string) {
   const date = new Date(`${value}T00:00:00Z`);
   const day = date.getUTCDay();
-  const start = addDays(value, -((day + 1) % 7));
+  const start = addDays(value, -day);
   const end = addDays(start, 6);
   const yearStart = `${value.slice(0, 4)}-01-01`;
-  const week = Math.floor((Date.parse(`${start}T00:00:00Z`) - Date.parse(`${yearStart}T00:00:00Z`)) / 604800000) + 1;
+  const firstWeekStart = addDays(yearStart, -new Date(`${yearStart}T00:00:00Z`).getUTCDay());
+  const week = Math.floor((Date.parse(`${start}T00:00:00Z`) - Date.parse(`${firstWeekStart}T00:00:00Z`)) / 604800000) + 1;
   return { end, start, week: Math.max(1, week) };
 }
 
@@ -157,7 +162,7 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
   const [cpsResult, scorecardResult, executivesResult] = !supabaseAdmin || !selectedLocations.length
     ? [
       { data: [] as CpsFact[], error: null },
-      { data: [] as ScorecardFact[], error: null },
+      { data: [] as PerformanceFact[], error: null },
       { data: [] as Array<{ id: string; onboarding_status: string | null; is_active: boolean }>, error: null }
     ]
     : await Promise.all([
@@ -165,11 +170,12 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
         .select("work_date,total_delivery,overall_cps,target_cps,target_gap,target_impact")
         .eq("company_id", companyId).in("station_code", stationCodes)
         .gte("work_date", queryStart).lte("work_date", range.to),
-      supabaseAdmin.from("ops_amazon_scorecards")
-        .select("report_type,period_from,period_to,overall_score,station_code")
+      supabaseAdmin.from("report_metric_facts")
+        .select("source_type,report_year,report_week,report_date,station_code,row_label,raw_text,values_json,created_at")
         .eq("company_id", companyId).in("station_code", stationCodes)
-        .lte("period_from", range.to).gte("period_to", range.from)
-        .order("period_to", { ascending: false }),
+        .in("source_type", ["daily_edsp_metrics", "edsp_sls_scorecard"])
+        .order("created_at", { ascending: false })
+        .limit(5000),
       supabaseAdmin.from("field_executives")
         .select("id,onboarding_status,is_active")
         .in("location_id", locationIds).eq("is_active", true)
@@ -211,12 +217,14 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
   const previousCps = weightedCps(previousCpsRows);
   const cpsDeficit = Math.max(0, mtdCps - targetCps);
   const cpsImpact = mtdCpsRows.reduce((total, row) => total + Number(row.target_impact ?? 0), 0);
-  const scorecards = (scorecardResult.data ?? []) as ScorecardFact[];
-  const weeklyScorecards = scorecards.filter((row) => row.report_type === "weekly_sla");
-  const dailyScorecards = scorecards.filter((row) => row.report_type === "daily_report");
-  const averageScore = (rows: ScorecardFact[]) => rows.length
-    ? rows.reduce((total, row) => total + Number(row.overall_score ?? 0), 0) / rows.length
-    : 0;
+  const performanceFacts = (scorecardResult.data ?? []) as PerformanceFact[];
+  const latestSlsWeek = Math.max(...performanceFacts.filter((row) => row.source_type === "edsp_sls_scorecard").map((row) => Number(row.report_week ?? 0)), 0);
+  const weeklyScorecards = performanceFacts.filter((row) => row.source_type === "edsp_sls_scorecard" && Number(row.report_week) === latestSlsWeek);
+  const dailyScorecards = performanceFacts.filter((row) => row.source_type === "daily_edsp_metrics");
+  const slsScores = weeklyScorecards
+    .map((row) => Array.isArray(row.values_json) ? Number(row.values_json[1]) : 0)
+    .filter((value) => value > 0 && value <= 1);
+  const averageSlsScore = slsScores.length ? slsScores.reduce((total, value) => total + value, 0) / slsScores.length : 0;
   const week = amazonWeek(range.to);
   const executives = executivesResult.data ?? [];
   const onboardingPending = executives.filter((row) => row.onboarding_status !== "active").length;
@@ -267,11 +275,11 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
 
         <section className="ops-dashboard-modules">
           <article className="ops-module">
-            <header><div><span>STATION PERFORMANCE</span><h2>Amazon performance</h2></div><Link href="/ops-pulse/reports/amazon">Reports →</Link></header>
+            <header><div><span>STATION PERFORMANCE</span><h2>Amazon EDSP performance</h2></div><Link href="/ops-pulse/reports/amazon">Reports →</Link></header>
             <div className="ops-stat-list">
-              <div><small>Daily performance</small><strong>{dailyScorecards.length ? `${averageScore(dailyScorecards).toFixed(1)}%` : "Awaiting import"}</strong><span>{dailyScorecards.length} reports in range</span></div>
-              <div><small>Weekly SLA</small><strong>{weeklyScorecards.length ? `${averageScore(weeklyScorecards).toFixed(1)}%` : "Awaiting import"}</strong><span>{weeklyScorecards.length} scorecards</span></div>
-              <div><small>Amazon week {week.week}</small><strong>{week.start}</strong><span>Saturday–Friday · ends {week.end}</span></div>
+              <div><small>Daily EDSP Metrics</small><strong>{dailyScorecards.length ? `${new Set(dailyScorecards.map((row) => row.station_code).filter(Boolean)).size} stations` : "Awaiting import"}</strong><span>{dailyScorecards.length ? "Latest uploaded daily performance report" : "No daily EDSP Metrics rows found"}</span></div>
+              <div><small>Amazon SLS Scorecard</small><strong>{weeklyScorecards.length ? `Week ${latestSlsWeek} · ${(averageSlsScore * 100).toFixed(1)}%` : "Awaiting import"}</strong><span>{weeklyScorecards.length ? `${slsScores.length} station scores loaded` : "No weekly SLS rows found"}</span></div>
+              <div><small>Amazon week {week.week}</small><strong>{week.start}</strong><span>Sunday–Saturday · ends {week.end}</span></div>
             </div>
           </article>
 

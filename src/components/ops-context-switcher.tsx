@@ -57,7 +57,8 @@ export function OpsContextSwitcher({
   const [regions, setRegions] = useState(unique(selectedRows.map((location) => location.region)));
   const [aoms, setAoms] = useState(unique(selectedRows.map((location) => location.aom)));
   const [managers, setManagers] = useState(unique(selectedRows.map((location) => location.cluster_manager)));
-  const [clusters, setClusters] = useState(unique(selectedRows.map((location) => location.cluster)));
+  const [selectedIds, setSelectedIds] = useState(selectedLocationIds);
+  const [autoSelectAll, setAutoSelectAll] = useState(false);
   const modeLocations = useMemo(
     () => locations.filter((location) => locationModes[location.id] === selectedMode),
     [locationModes, locations, selectedMode]
@@ -67,9 +68,7 @@ export function OpsContextSwitcher({
   const aomOptions = unique(regionLocations.map((location) => location.aom));
   const aomLocations = aoms.length ? regionLocations.filter((location) => aoms.includes(String(location.aom))) : regionLocations;
   const managerOptions = unique(aomLocations.map((location) => location.cluster_manager));
-  const managerLocations = managers.length ? aomLocations.filter((location) => managers.includes(String(location.cluster_manager))) : aomLocations;
-  const clusterOptions = unique(managerLocations.map((location) => location.cluster));
-  const filteredLocations = clusters.length ? managerLocations.filter((location) => clusters.includes(String(location.cluster))) : managerLocations;
+  const filteredLocations = managers.length ? aomLocations.filter((location) => managers.includes(String(location.cluster_manager))) : aomLocations;
   const selectedCount = selectedLocationIds.filter((id) => modeLocations.some((location) => location.id === id)).length || 1;
 
   function changeMode(next: OperatingMode) {
@@ -77,7 +76,20 @@ export function OpsContextSwitcher({
     setRegions([]);
     setAoms([]);
     setManagers([]);
-    setClusters([]);
+    setSelectedIds([]);
+    setAutoSelectAll(true);
+  }
+
+  function selectHierarchy(next: () => void) {
+    next();
+    setSelectedIds([]);
+    setAutoSelectAll(true);
+  }
+
+  function toggleLocation(id: string) {
+    const current = autoSelectAll ? filteredLocations.map((location) => location.id) : selectedIds;
+    setSelectedIds(toggle(current, id));
+    setAutoSelectAll(false);
   }
 
   if (locations.length === 1) {
@@ -96,17 +108,16 @@ export function OpsContextSwitcher({
               {availableModes.map((entry) => <label key={entry.code}><input type="radio" name="mode" value={entry.code} checked={selectedMode === entry.code} onChange={() => changeMode(entry.code)} /><span>{entry.label}</span></label>)}
             </div>
           </fieldset>
-          <MultiFilter label="Region" options={regionOptions} values={regions} onChange={(value) => { setRegions(value); setAoms([]); setManagers([]); setClusters([]); }} />
-          <MultiFilter label="AOM" options={aomOptions} values={aoms} onChange={(value) => { setAoms(value); setManagers([]); setClusters([]); }} />
-          <MultiFilter label="Cluster Manager" options={managerOptions} values={managers} onChange={(value) => { setManagers(value); setClusters([]); }} />
-          <MultiFilter label="Cluster" options={clusterOptions} values={clusters} onChange={setClusters} />
+          <MultiFilter label="Region" options={regionOptions} values={regions} onChange={(value) => selectHierarchy(() => { setRegions(value); setAoms([]); setManagers([]); })} />
+          <MultiFilter label="AOM" options={aomOptions} values={aoms} onChange={(value) => selectHierarchy(() => { setAoms(value); setManagers([]); })} />
+          <MultiFilter label="Cluster Manager" options={managerOptions} values={managers} onChange={(value) => selectHierarchy(() => setManagers(value))} />
         </div>
         <fieldset className="ops-location-picker">
           <legend>Locations</legend>
           <div className="ops-scope-options">
             {filteredLocations.map((location) => (
               <label key={location.id}>
-                <input name="locations" type="checkbox" value={location.id} defaultChecked={selectedLocationIds.includes(location.id) || (selectedLocationIds.length === 0 && location.id === locationId)} />
+                <input name="locations" type="checkbox" value={location.id} checked={autoSelectAll || selectedIds.includes(location.id) || (selectedIds.length === 0 && !autoSelectAll && location.id === locationId)} onChange={() => toggleLocation(location.id)} />
                 <span>{locationLabel(location)}</span>
               </label>
             ))}

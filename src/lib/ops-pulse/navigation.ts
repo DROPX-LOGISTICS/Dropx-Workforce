@@ -11,7 +11,8 @@ const commonStart: NavItem[] = [
     children: [
       { code: "cod_reports", label: "Daily EDSP", href: "/ops-pulse/performance?view=daily" },
       { code: "cod_reports", label: "Amazon SLS", href: "/ops-pulse/performance?view=sls" },
-      { code: "cps_shipments", label: "Shipment Activity", href: "/ops-pulse/performance/shipments" }
+      { code: "cps_shipments", label: "Delivery Data", href: "/ops-pulse/performance/shipments" },
+      { code: "cod_reports", label: "DA In-App Onboarding", href: "/ops-pulse/performance/onboarding" }
     ]
   }
 ];

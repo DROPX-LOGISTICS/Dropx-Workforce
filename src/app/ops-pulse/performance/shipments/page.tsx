@@ -43,7 +43,7 @@ function add(total: Totals, row: ShipmentRow) {
 function fmt(value: number) { return value.toLocaleString("en-IN", { maximumFractionDigits: 0 }); }
 function deliveryRate(row: Totals) { return row.assigned ? row.totalDelivery / row.assigned : 0; }
 
-export default async function ShipmentActivityPage({ searchParams }: { searchParams?: SearchParams }) {
+export default async function DeliveryDataPage({ searchParams }: { searchParams?: SearchParams }) {
   const authorization = await requirePagePermission("cps_shipments", "access");
   const companyId = requireCompanyId(authorization);
   const locationsResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
@@ -80,7 +80,7 @@ export default async function ShipmentActivityPage({ searchParams }: { searchPar
   return (
     <AppShell active="Performance" pageCode="cps_shipments">
       <div className="ops-command-center shipment-workspace">
-        <PageHead eyebrow="Amazon shipment facts" title="Shipment Activity" subtitle="Station, day and delivery-associate drill-down from the imported Amazon Daily Shipment Count." />
+        <PageHead eyebrow="Performance" title="Delivery Data" subtitle="Station, day and delivery-associate detail." />
         <section className="ops-control-strip">
           <div className="ops-context-summary"><span>{selectedDay ? "DA detail" : selectedStation ? "Daily detail" : "Station overview"}</span><strong>{selectedDay || selectedStation || `${stationRows.length} stations`}</strong><small>{from} to {to}</small></div>
           <form className="ops-date-controls"><label>From<input name="from" type="date" defaultValue={from} /></label><label>To<input name="to" type="date" defaultValue={to} /></label><button>Apply range</button></form>
@@ -88,10 +88,10 @@ export default async function ShipmentActivityPage({ searchParams }: { searchPar
         <nav className="shipment-breadcrumbs"><Link href={`/ops-pulse/performance/shipments?${base}`}>All stations</Link>{selectedStation ? <><span>›</span><Link href={`/ops-pulse/performance/shipments?${base}&station=${selectedStation}`}>{selectedStation}</Link></> : null}{selectedDay ? <><span>›</span><strong>{selectedDay}</strong></> : null}</nav>
         {result.error ? <section className="panel message-panel error"><div className="panel-body">{result.error.message}</div></section> : null}
         <section className="performance-summary-grid shipment-summary-grid">
-          <article><span>Assigned</span><strong>{fmt(grandTotal.assigned)}</strong><small>Available after assigned-count import</small></article>
-          <article><span>Delivered</span><strong>{fmt(grandTotal.delivery)}</strong><small>Amazon delivery</small></article>
+          <article><span>Assigned</span><strong>{fmt(grandTotal.assigned)}</strong><small>Assigned packages</small></article>
+          <article><span>Delivered</span><strong>{fmt(grandTotal.delivery)}</strong><small>Delivered packages</small></article>
           <article><span>SWA</span><strong>{fmt(grandTotal.swa)}</strong><small>Ship With Amazon</small></article>
-          <article><span>Total activity</span><strong>{fmt(grandTotal.totalActivity)}</strong><small>All shipment actors</small></article>
+          <article><span>Total activity</span><strong>{fmt(grandTotal.totalActivity)}</strong><small>All package activity</small></article>
         </section>
 
         {!selectedStation ? <section className="panel"><div className="panel-head"><div><h2>Station shipment table</h2><p className="subtle">Select a station to open its day-level activity.</p></div></div><div className="performance-matrix-wrap"><table className="shipment-table"><thead><tr><th>Station</th><th>{sortable("Assigned", "assigned")}</th><th>{sortable("Delivered", "delivery")}</th><th>{sortable("SWA", "swa")}</th><th>{sortable("C-Return", "cReturn")}</th><th>{sortable("MFN", "mfn")}</th><th>{sortable("MFN Return", "mfnReturn")}</th><th>{sortable("Total delivery", "totalDelivery")}</th><th>{sortable("Total activity", "totalActivity")}</th><th>Delivery rate</th></tr></thead><tbody>{stationRows.map((row) => <tr key={row.code}><td><Link href={`/ops-pulse/performance/shipments?${base}&station=${row.code}`}><strong>{row.code}</strong><small>{row.name}</small></Link></td><td>{fmt(row.assigned)}</td><td>{fmt(row.delivery)}</td><td>{fmt(row.swa)}</td><td>{fmt(row.cReturn)}</td><td>{fmt(row.mfn)}</td><td>{fmt(row.mfnReturn)}</td><td>{fmt(row.totalDelivery)}</td><td>{fmt(row.totalActivity)}</td><td>{row.assigned ? `${(deliveryRate(row) * 100).toFixed(1)}%` : "—"}</td></tr>)}</tbody></table></div></section> : null}

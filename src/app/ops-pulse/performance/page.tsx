@@ -179,12 +179,18 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
     const values = metricValues(row);
     return row.source_type === "edsp_sls_scorecard" && Number(row.report_week) === selectedWeek && row.station_code && selectedCodes.includes(row.station_code) && values.length > 2 && values[1] > 0 && values[1] <= 1;
   });
-  const dailyRows = scopedFacts.filter((row) => {
+  const dailyCandidates = scopedFacts.filter((row) => {
     const values = metricValues(row);
     return row.source_type === "daily_edsp_metrics" && row.station_code && selectedCodes.includes(row.station_code) && values.length > 5;
   });
-  const dailySort = searchParams?.sort || "station_asc";
+  const reportDay = (row: MetricFact) => row.report_date || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(row.created_at));
+  const exactDailyCandidates = dailyCandidates.filter((row) => reportDay(row) >= from && reportDay(row) <= to);
+  const selectedDailyBatch = exactDailyCandidates[0]?.batch_id ?? null;
+  const dailyRows = selectedDailyBatch ? exactDailyCandidates.filter((row) => row.batch_id === selectedDailyBatch) : [];
+  const dailySort = searchParams?.sort || "exceptions_desc";
+  const missedTargets = (row: MetricFact) => dailyMetricDefinitions.filter((metric) => metric.target != null && ragStatus(metricValues(row)[metric.index] ?? 0, metric.target, metric.direction) !== "green").length;
   const sortedDailyRows = [...dailyRows].sort((a, b) => {
+    if (dailySort === "exceptions_desc") return missedTargets(b) - missedTargets(a);
     if (dailySort === "station_desc") return String(b.station_code).localeCompare(String(a.station_code));
     if (dailySort === "dsr_low") return (metricValues(a)[20] ?? 0) - (metricValues(b)[20] ?? 0);
     if (dailySort === "dsr_high") return (metricValues(b)[20] ?? 0) - (metricValues(a)[20] ?? 0);
@@ -216,18 +222,20 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
   const totalDelivered = shipments.reduce((total, row) => total + number(row.amazon_delivery), 0);
   const totalCReturn = shipments.reduce((total, row) => total + number(row.c_return), 0);
   const totalMfn = shipments.reduce((total, row) => total + number(row.mfn), 0);
+  const dailyTargets = dailyMetricDefinitions.filter((metric) => metric.target != null);
+  const achievedDailyTargets = dailyRows.reduce((sum, row) => sum + dailyTargets.filter((metric) => ragStatus(metricValues(row)[metric.index] ?? 0, metric.target, metric.direction) === "green").length, 0);
+  const totalDailyTargets = dailyRows.length * dailyTargets.length;
 
   return (
     <AppShell active="Performance" pageCode="cod_reports">
       <div className="ops-command-center performance-workspace">
-        <PageHead eyebrow="Amazon EDSP" title="Station Performance" subtitle="Imported Daily EDSP Metrics, SLS scorecards and shipment activity in one review workspace." />
+        <PageHead eyebrow="Performance" title="Station Performance" subtitle="Daily metrics, weekly scorecards and delivery data." />
         <nav className="performance-tabs">
           <Link className={view === "daily" ? "active" : ""} href={`/ops-pulse/performance?view=daily&from=${from}&to=${to}${stationQuery}`}>Daily EDSP</Link>
           <Link className={view === "sls" ? "active" : ""} href={`/ops-pulse/performance?view=sls&week=${selectedWeek}${stationQuery}`}>Amazon SLS</Link>
         </nav>
         <div className="performance-local-filter-row">
           <PerformanceStationFilter stations={permittedLocations.map((location) => ({ code: location.station_code, name: location.station_name || location.city || location.station_code }))} selectedCodes={selectedCodes} view={view} from={from} to={to} week={selectedWeek} />
-          <span>This selection applies only to Performance and does not change your saved operating scope.</span>
         </div>
 
         {metricResult.error || shipmentResult.error ? <section className="panel message-panel error"><div className="panel-body">{metricResult.error?.message ?? shipmentResult.error?.message}</div></section> : null}
@@ -239,17 +247,17 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
               <form className="ops-date-controls"><input type="hidden" name="view" value="daily" />{selectedCodes.length !== permittedCodes.length ? <input type="hidden" name="stations" value={selectedCodes.join(",")} /> : null}<label>From<input type="date" name="from" defaultValue={from} /></label><label>To<input type="date" name="to" defaultValue={to} /></label><button>Apply range</button></form>
             </section>
             <section className="performance-summary-grid">
-              <article><span>Delivered</span><strong>{totalDelivered.toLocaleString("en-IN")}</strong><small>Amazon delivery count</small></article>
-              <article><span>C-Return</span><strong>{totalCReturn.toLocaleString("en-IN")}</strong><small>Customer return activity</small></article>
-              <article><span>MFN</span><strong>{totalMfn.toLocaleString("en-IN")}</strong><small>MFN activity</small></article>
-              <article><span>Stations reported</span><strong>{dailyRows.length}</strong><small>Daily EDSP metric rows</small></article>
+              <article><span>Delivered</span><strong>{totalDelivered.toLocaleString("en-IN")}</strong><small>Delivered packages</small></article>
+              <article><span>Stations reviewed</span><strong>{dailyRows.length}</strong><small>{selectedDailyBatch ? reportDay(dailyRows[0]) : "No performance data"}</small></article>
+              <article><span>Targets achieved</span><strong>{totalDailyTargets ? `${Math.round(achievedDailyTargets / totalDailyTargets * 100)}%` : "—"}</strong><small>{achievedDailyTargets}/{totalDailyTargets} checks</small></article>
+              <article><span>Attention needed</span><strong>{totalDailyTargets - achievedDailyTargets}</strong><small>Missed targets</small></article>
             </section>
             {missingDsrStations ? <section className="performance-data-warning"><div><strong>DSR/PSR source value is zero for {missingDsrStations} station{missingDsrStations === 1 ? "" : "s"}.</strong><span>The dashboard is preserving the uploaded report value. Upload a corrected Daily EDSP report containing the metric; the system will not manufacture a replacement percentage.</span></div><a href="https://dashboard.dropxlogistics.com/imports">Open report imports</a></section> : null}
             <section className="panel performance-matrix-panel">
-              <div className="panel-head"><div><h2>Daily station metric matrix</h2><p className="subtle">All 20 fields extracted from the Amazon Daily EDSP report. Scroll horizontally for the complete scorecard.</p></div><div className="panel-head-tools"><strong>{dailyRows.length} stations</strong><PerformanceSortControl value={dailySort} options={[{ label: "Station A–Z", value: "station_asc" }, { label: "Station Z–A", value: "station_desc" }, { label: "Lowest DSR first", value: "dsr_low" }, { label: "Highest DSR first", value: "dsr_high" }]} /></div></div>
+              <div className="panel-head"><div><h2>Daily performance review</h2><p className="subtle">Red needs action, amber is near target, and green is achieved. Targets are shown in every metric header.</p></div><div className="panel-head-tools"><strong>{dailyRows.length} stations</strong><PerformanceSortControl value={dailySort} options={[{ label: "Most misses first", value: "exceptions_desc" }, { label: "Station A–Z", value: "station_asc" }, { label: "Station Z–A", value: "station_desc" }, { label: "Lowest DSR first", value: "dsr_low" }, { label: "Highest DSR first", value: "dsr_high" }]} /></div></div>
               <div className="performance-matrix-wrap">
                 <table className="performance-matrix">
-                  <thead><tr><th className="sticky-rank">#</th><th className="sticky-station">Station</th><th>Delivered</th><th>C-Return</th><th>MFN</th>{dailyMetricDefinitions.map((metric) => <th key={metric.label} title={metric.label}>{metric.short}</th>)}</tr></thead>
+                  <thead><tr><th className="sticky-rank">#</th><th className="sticky-station">Station</th><th>Review</th><th>Delivered</th><th>C-Return</th><th>MFN</th>{dailyMetricDefinitions.map((metric) => <th key={metric.label} title={metric.label}><span>{metric.short}</span><small>{targetLabel(metric.target, metric.direction)}</small></th>)}</tr></thead>
                   <tbody>
                     {sortedDailyRows.map((row, index) => {
                       const shipment = shipmentMap.get(row.station_code ?? "") ?? { delivered: 0, cReturn: 0, mfn: 0, mfnReturn: 0, total: 0 };
@@ -257,15 +265,15 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
                       return <tr key={`${row.batch_id}-${row.station_code}`}>
                         <td className="sticky-rank">{index + 1}</td>
                         <td className="sticky-station"><strong>{row.station_code}</strong><small>{row.row_label || "—"}</small></td>
-                        <td>{shipment.delivered.toLocaleString("en-IN")}</td><td>{shipment.cReturn.toLocaleString("en-IN")}</td><td>{shipment.mfn.toLocaleString("en-IN")}</td>
+                        <td><strong className={missedTargets(row) ? "metric-bad-text" : "metric-good-text"}>{missedTargets(row)} missed</strong></td><td>{shipment.delivered.toLocaleString("en-IN")}</td><td>{shipment.cReturn.toLocaleString("en-IN")}</td><td>{shipment.mfn.toLocaleString("en-IN")}</td>
                         {dailyMetricDefinitions.map((metric) => {
                           const value = values[metric.index] ?? 0;
-                          const achieved = metric.target == null ? null : metric.direction === "higher" ? value >= metric.target : value <= metric.target;
-                          return <td key={metric.label} className={achieved == null ? "" : achieved ? "metric-good" : "metric-bad"} title={`${metric.label}${metric.target == null ? "" : ` · target ${metric.direction === "higher" ? "≥" : "≤"} ${percent(metric.target)}`}`}>{percent(value)}</td>;
+                          const status = ragStatus(value, metric.target, metric.direction);
+                          return <td key={metric.label} className={status === "neutral" ? "" : `metric-${status}`} title={`${metric.label} · Target ${targetLabel(metric.target, metric.direction)}`}>{percent(value)}</td>;
                         })}
                       </tr>;
                     })}
-                    {!dailyRows.length ? <tr><td colSpan={25} className="empty-cell">No Daily EDSP Metrics were found for the selected stations.</td></tr> : null}
+                    {!dailyRows.length ? <tr><td colSpan={26} className="empty-cell">Daily performance data is not available for the selected date and stations. Delivery data remains available separately.</td></tr> : null}
                   </tbody>
                 </table>
               </div>

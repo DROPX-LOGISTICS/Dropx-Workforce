@@ -26,7 +26,7 @@ export async function switchOperatingContext(formData: FormData) {
   const permitted = locationsForMode(locations, mode);
   const requestedLocations = formData.getAll("locations").map(String);
   const selectedLocations = permitted.filter((entry) => requestedLocations.includes(entry.id));
-  const scopedLocations = selectedLocations.length ? selectedLocations : permitted.slice(0, 1);
+  const scopedLocations = selectedLocations.length ? selectedLocations : permitted;
   const location = scopedLocations[0];
   const options = {
     httpOnly: true,

@@ -10,31 +10,30 @@ function unique(values: Array<string | null | undefined>) {
   return [...new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean))].sort();
 }
 
-function HierarchyField({
-  label,
-  onChange,
-  options,
-  value
-}: {
+function toggle(values: string[], value: string) {
+  return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
+}
+
+function MultiFilter({ label, options, values, onChange }: {
   label: string;
-  onChange: (value: string) => void;
   options: string[];
-  value: string;
+  values: string[];
+  onChange: (values: string[]) => void;
 }) {
-  if (!options.length) {
-    return (
-      <div className="ops-context-fixed">
-        <small>{label}</small>
-        <strong>Not configured</strong>
-      </div>
-    );
-  }
-  if (options.length === 1) return <div className="ops-context-fixed"><small>{label}</small><strong>{options[0]}</strong></div>;
+  if (!options.length) return <div className="ops-scope-fixed"><small>{label}</small><strong>Not configured</strong></div>;
+  if (options.length === 1) return <div className="ops-scope-fixed"><small>{label}</small><strong>{options[0]}</strong></div>;
   return (
-    <label><small>{label}</small><select value={value} onChange={(event) => onChange(event.target.value)}>
-      <option value="">All {label.toLowerCase()}s</option>
-      {options.map((option) => <option key={option}>{option}</option>)}
-    </select></label>
+    <fieldset>
+      <legend>{label}</legend>
+      <div className="ops-scope-options">
+        {options.map((option) => (
+          <label key={option}>
+            <input type="checkbox" checked={values.includes(option)} onChange={() => onChange(toggle(values, option))} />
+            <span>{option}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 
@@ -43,58 +42,78 @@ export function OpsContextSwitcher({
   locationId,
   locationModes,
   locations,
-  mode
+  mode,
+  selectedLocationIds
 }: {
   availableModes: Array<{ code: OperatingMode; label: string }>;
   locationId: string;
   locationModes: Record<string, OperatingMode | null>;
   locations: CodLocationRow[];
   mode: OperatingMode;
+  selectedLocationIds: string[];
 }) {
-  const initial = locations.find((location) => location.id === locationId);
+  const selectedRows = locations.filter((location) => selectedLocationIds.includes(location.id));
   const [selectedMode, setSelectedMode] = useState(mode);
-  const [region, setRegion] = useState(initial?.region ?? "");
-  const [aom, setAom] = useState(initial?.aom ?? "");
-  const [clusterManager, setClusterManager] = useState(initial?.cluster_manager ?? "");
-  const [cluster, setCluster] = useState(initial?.cluster ?? "");
-  const modeLocations = useMemo(() => locations.filter((location) => locationModes[location.id] === selectedMode), [locationModes, locations, selectedMode]);
-  const regions = unique(modeLocations.map((location) => location.region));
-  const regionLocations = region ? modeLocations.filter((location) => location.region === region) : modeLocations;
-  const aoms = unique(regionLocations.map((location) => location.aom));
-  const aomLocations = aom ? regionLocations.filter((location) => location.aom === aom) : regionLocations;
-  const managers = unique(aomLocations.map((location) => location.cluster_manager));
-  const managerLocations = clusterManager ? aomLocations.filter((location) => location.cluster_manager === clusterManager) : aomLocations;
-  const clusters = unique(managerLocations.map((location) => location.cluster));
-  const filteredLocations = cluster ? managerLocations.filter((location) => location.cluster === cluster) : managerLocations;
-  const selectedLocation = filteredLocations.some((location) => location.id === locationId) ? locationId : filteredLocations[0]?.id;
-  const canSwitch = availableModes.length > 1 || modeLocations.length > 1;
+  const [regions, setRegions] = useState(unique(selectedRows.map((location) => location.region)));
+  const [aoms, setAoms] = useState(unique(selectedRows.map((location) => location.aom)));
+  const [managers, setManagers] = useState(unique(selectedRows.map((location) => location.cluster_manager)));
+  const [clusters, setClusters] = useState(unique(selectedRows.map((location) => location.cluster)));
+  const modeLocations = useMemo(
+    () => locations.filter((location) => locationModes[location.id] === selectedMode),
+    [locationModes, locations, selectedMode]
+  );
+  const regionOptions = unique(modeLocations.map((location) => location.region));
+  const regionLocations = regions.length ? modeLocations.filter((location) => regions.includes(String(location.region))) : modeLocations;
+  const aomOptions = unique(regionLocations.map((location) => location.aom));
+  const aomLocations = aoms.length ? regionLocations.filter((location) => aoms.includes(String(location.aom))) : regionLocations;
+  const managerOptions = unique(aomLocations.map((location) => location.cluster_manager));
+  const managerLocations = managers.length ? aomLocations.filter((location) => managers.includes(String(location.cluster_manager))) : aomLocations;
+  const clusterOptions = unique(managerLocations.map((location) => location.cluster));
+  const filteredLocations = clusters.length ? managerLocations.filter((location) => clusters.includes(String(location.cluster))) : managerLocations;
+  const selectedCount = selectedLocationIds.filter((id) => modeLocations.some((location) => location.id === id)).length || 1;
 
   function changeMode(next: OperatingMode) {
     setSelectedMode(next);
-    setRegion("");
-    setAom("");
-    setClusterManager("");
-    setCluster("");
+    setRegions([]);
+    setAoms([]);
+    setManagers([]);
+    setClusters([]);
+  }
+
+  if (locations.length === 1) {
+    return <div className="ops-scope-single"><small>OPS SCOPE</small><strong>{locationLabel(locations[0])}</strong></div>;
   }
 
   return (
-    <form action={switchOperatingContext} className="ops-context-switcher">
-      <span>OPSPULSE SCOPE</span>
-      {availableModes.length > 1 ? (
-        <label><small>Model</small><select name="mode" value={selectedMode} onChange={(event) => changeMode(event.target.value as OperatingMode)}>
-          {availableModes.map((entry) => <option key={entry.code} value={entry.code}>{entry.label}</option>)}
-        </select></label>
-      ) : <><input type="hidden" name="mode" value={selectedMode} /><div className="ops-context-fixed"><small>Model</small><strong>{availableModes[0]?.label}</strong></div></>}
-      <HierarchyField label="Region" options={regions} value={region} onChange={(value) => { setRegion(value); setAom(""); setClusterManager(""); setCluster(""); }} />
-      <HierarchyField label="AOM" options={aoms} value={aom} onChange={(value) => { setAom(value); setClusterManager(""); setCluster(""); }} />
-      <HierarchyField label="Cluster Manager" options={managers} value={clusterManager} onChange={(value) => { setClusterManager(value); setCluster(""); }} />
-      <HierarchyField label="Cluster" options={clusters} value={cluster} onChange={setCluster} />
-      {filteredLocations.length > 1 ? (
-        <label><small>Location</small><select name="location" defaultValue={selectedLocation} key={`${selectedMode}-${region}-${aom}-${clusterManager}-${cluster}`}>
-          {filteredLocations.map((location) => <option key={location.id} value={location.id}>{locationLabel(location)}</option>)}
-        </select></label>
-      ) : <><input type="hidden" name="location" value={selectedLocation ?? locationId} /><div className="ops-context-fixed"><small>Location</small><strong>{filteredLocations[0] ? locationLabel(filteredLocations[0]) : "No location"}</strong></div></>}
-      {canSwitch ? <button type="submit">Apply Ops scope</button> : null}
-    </form>
+    <details className="ops-scope-menu">
+      <summary><span>Scope</span><strong>{selectedCount} location{selectedCount === 1 ? "" : "s"}</strong><i>⌄</i></summary>
+      <form action={switchOperatingContext} className="ops-scope-popover">
+        <header><div><small>OPSPULSE FILTER</small><strong>Select operational scope</strong></div><span>{filteredLocations.length} available</span></header>
+        <div className="ops-scope-grid">
+          <fieldset>
+            <legend>Model</legend>
+            <div className="ops-scope-options">
+              {availableModes.map((entry) => <label key={entry.code}><input type="radio" name="mode" value={entry.code} checked={selectedMode === entry.code} onChange={() => changeMode(entry.code)} /><span>{entry.label}</span></label>)}
+            </div>
+          </fieldset>
+          <MultiFilter label="Region" options={regionOptions} values={regions} onChange={(value) => { setRegions(value); setAoms([]); setManagers([]); setClusters([]); }} />
+          <MultiFilter label="AOM" options={aomOptions} values={aoms} onChange={(value) => { setAoms(value); setManagers([]); setClusters([]); }} />
+          <MultiFilter label="Cluster Manager" options={managerOptions} values={managers} onChange={(value) => { setManagers(value); setClusters([]); }} />
+          <MultiFilter label="Cluster" options={clusterOptions} values={clusters} onChange={setClusters} />
+        </div>
+        <fieldset className="ops-location-picker">
+          <legend>Locations</legend>
+          <div className="ops-scope-options">
+            {filteredLocations.map((location) => (
+              <label key={location.id}>
+                <input name="locations" type="checkbox" value={location.id} defaultChecked={selectedLocationIds.includes(location.id) || (selectedLocationIds.length === 0 && location.id === locationId)} />
+                <span>{locationLabel(location)}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <footer><small>Only locations assigned to your user are shown.</small><button type="submit">Apply scope</button></footer>
+      </form>
+    </details>
   );
 }

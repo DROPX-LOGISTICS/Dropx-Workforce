@@ -298,11 +298,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
           return next;
         });
       }
-      const result = await requestVerification(kind);
-      if (kind === "pan" && !result.blockSubmit && enabled.has("aadhaar_number")) {
-        setRunning("pan_aadhaar");
-        await requestVerification("pan_aadhaar");
-      }
+      await requestVerification(kind);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Verification failed.");
     } finally {
@@ -489,10 +485,23 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
     <ProfileSection title="Personal details">
       {input("gender","Gender",{ choices: ["Male","Female","Other"] })}
       {dateField("date_of_birth","Date of birth")}
-      {enabled.has("aadhaar_number") ? <label className="dx-field"><span>Aadhaar number{required.has("aadhaar_number") ? " *" : ""}</span><input name="aadhaar_number" onChange={(event) => set("aadhaarNumber", event.target.value.replace(/\D/g, ""), ["pan_aadhaar"])} required={required.has("aadhaar_number")} value={values.aadhaarNumber || ""} /></label> : null}
+      {enabled.has("aadhaar_number") ? <>
+        <VerifyField
+          label={`Aadhaar number${required.has("aadhaar_number") ? " *" : ""}`}
+          name="aadhaar_number"
+          onChange={(value) => set("aadhaarNumber", value.replace(/\D/g, ""), ["pan_aadhaar"])}
+          onVerify={() => verify("pan_aadhaar")}
+          running={running === "pan_aadhaar"}
+          value={values.aadhaarNumber || ""}
+          checked={attempted("pan_aadhaar")}
+          verified={verified("pan_aadhaar")}
+          disabled={!attempted("pan") || Boolean(currentCheck("pan")?.blockSubmit)}
+        />
+        <VerificationText checks={[currentCheck("pan_aadhaar")]} />
+      </> : null}
       {enabled.has("pan_number") ? <>
-        <VerifyField label={`PAN${required.has("pan_number") ? " *" : ""}`} name="pan_number" onChange={(value) => set("panNumber", value.toUpperCase(), ["pan","pan_aadhaar"])} onVerify={() => verify("pan")} running={running === "pan" || running === "pan_aadhaar"} value={values.panNumber || ""} checked={attempted("pan")} verified={verified("pan") && (!enabled.has("aadhaar_number") || verified("pan_aadhaar"))} />
-        <VerificationText checks={[currentCheck("pan"), currentCheck("pan_aadhaar")]} />
+        <VerifyField label={`PAN${required.has("pan_number") ? " *" : ""}`} name="pan_number" onChange={(value) => set("panNumber", value.toUpperCase(), ["pan","pan_aadhaar"])} onVerify={() => verify("pan")} running={running === "pan"} value={values.panNumber || ""} checked={attempted("pan")} verified={verified("pan")} />
+        <VerificationText checks={[currentCheck("pan")]} />
       </> : null}
       {input("eshram_uan","eShram UAN")}
       {input("father_name","Father name")}

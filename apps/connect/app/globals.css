@@ -7726,3 +7726,9 @@ tr:last-child td {
   color: #d66b72;
   opacity: 0.75;
 }
+
+.dx-field-error {
+  color: #c32e3c;
+  font-size: 10px;
+  line-height: 1.3;
+}

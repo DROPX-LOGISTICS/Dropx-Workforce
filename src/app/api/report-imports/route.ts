@@ -169,6 +169,15 @@ function amazonWeekInfo(workDate: string) {
   };
 }
 
+function amazonWeekRange(year: number, week: number) {
+  const weekOneStart = startOfAmazonWeek(`${year}-01-01`);
+  const weekStart = addUtcDays(weekOneStart, (week - 1) * 7);
+  return {
+    from: formatDateUtc(weekStart),
+    to: formatDateUtc(addUtcDays(weekStart, 6))
+  };
+}
+
 function findValue(raw: RawRecord, aliases: string[]) {
   const normalizedAliases = aliases.map(key);
   const entry = Object.entries(raw).find(([label]) => normalizedAliases.includes(key(label)));
@@ -870,12 +879,15 @@ export async function POST(request: Request) {
       await importStep("Save PDF metric facts", () => insertInChunks("report_metric_facts", validMetrics, 250));
       const duplicateRows = metricRows.length - validMetrics.length;
       const message = `${validMetrics.length} table row${validMetrics.length === 1 ? "" : "s"} extracted from ${file.name}. ${duplicateRows} duplicate${duplicateRows === 1 ? "" : "s"} ignored.`;
+      const scorecardPeriod = masterData.parser_type === "pdf_scorecard" && pdf.reportYear && pdf.reportWeek
+        ? amazonWeekRange(pdf.reportYear, pdf.reportWeek)
+        : null;
       await db.from("report_import_batches").update({
         completed_at: new Date().toISOString(),
         imported_row_count: validMetrics.length,
         message,
-        report_from: pdf.reportDate,
-        report_to: pdf.reportDate,
+        report_from: pdf.reportDate ?? scorecardPeriod?.from ?? null,
+        report_to: pdf.reportDate ?? scorecardPeriod?.to ?? null,
         row_count: metricRows.length,
         skipped_row_count: duplicateRows,
         status: "Completed"

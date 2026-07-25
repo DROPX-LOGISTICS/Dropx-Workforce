@@ -210,6 +210,7 @@ type PdfMetricRow = {
 };
 
 async function readPdfMetricRows(buffer: ArrayBuffer) {
+  await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const document = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
   const rows: PdfMetricRow[] = [];

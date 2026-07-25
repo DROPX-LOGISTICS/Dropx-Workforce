@@ -2,17 +2,17 @@ import type { NavItem } from "@/lib/app-navigation";
 import type { OperatingMode } from "@/lib/ops-pulse/operating-context";
 
 const commonStart: NavItem[] = [
-  { code: "ops_pulse", label: "Dashboard", href: "/ops-pulse", icon: "#" },
-  { code: "daily_submission", label: "Daily Operations", href: "/ops-pulse/daily-submission", icon: "D" },
+  { code: "ops_pulse", label: "Command Center", href: "/", icon: "#" },
+  { code: "daily_submission", label: "Daily Operations", href: "/daily-submission", icon: "D" },
   {
     code: "cod_reports",
     label: "Performance",
     icon: "P",
     children: [
-      { code: "cod_reports", label: "Daily EDSP", href: "/ops-pulse/performance?view=daily" },
-      { code: "cod_reports", label: "Amazon SLS", href: "/ops-pulse/performance?view=sls" },
-      { code: "cps_shipments", label: "Delivery Data", href: "/ops-pulse/performance/shipments" },
-      { code: "cod_reports", label: "DA In-App Onboarding", href: "/ops-pulse/performance/onboarding" }
+      { code: "cod_reports", label: "Daily EDSP", href: "/performance?view=daily" },
+      { code: "cod_reports", label: "Amazon SLS", href: "/performance?view=sls" },
+      { code: "cps_shipments", label: "Delivery Data", href: "/performance/shipments" },
+      { code: "cod_reports", label: "DA In-App Onboarding", href: "/performance/onboarding" }
     ]
   }
 ];
@@ -51,7 +51,7 @@ const administration: NavItem[] = [
     label: "Users & Access",
     icon: "@",
     children: [
-      { code: "users", label: "Ops Users & Scope", href: "/ops-pulse/access" },
+      { code: "users", label: "Ops Users & Scope", href: "/access" },
       { code: "users", label: "Manage Roles", href: "/users?section=roles" }
     ]
   }
@@ -64,11 +64,11 @@ function modelOperations(mode: OperatingMode): NavItem {
       label: "Live Operations",
       icon: "L",
       children: [
-        { code: "ops_pulse", label: "Shift Control", href: "/ops-pulse?view=shift" },
-        { code: "ops_pulse", label: "Hourly Performance", href: "/ops-pulse?view=hourly" },
-        { code: "daily_submission", label: "Attendance & Reporting", href: "/ops-pulse/daily-submission" },
-        { code: "cod_reports", label: "Exceptions", href: "/ops-pulse/cod/reports?client=amazon" },
-        { code: "cod_reports", label: "Performance Reports", href: "/ops-pulse/reports/amazon" }
+        { code: "ops_pulse", label: "Shift Control", href: "/?view=shift" },
+        { code: "ops_pulse", label: "Hourly Performance", href: "/?view=hourly" },
+        { code: "daily_submission", label: "Attendance & Reporting", href: "/daily-submission" },
+        { code: "cod_reports", label: "Exceptions", href: "/cod/reports?client=amazon" },
+        { code: "cod_reports", label: "Performance Reports", href: "/reports/amazon" }
       ]
     };
   }
@@ -78,9 +78,9 @@ function modelOperations(mode: OperatingMode): NavItem {
       label: "Operations",
       icon: "O",
       children: [
-        { code: "cod_submission", label: "COD Submission", href: "/ops-pulse/cod/submission?client=flipkart" },
-        { code: "cod_validation", label: "Deposit Validation", href: "/ops-pulse/cod/validation?client=flipkart" },
-        { code: "cod_reports", label: "COD Reports", href: "/ops-pulse/cod/reports?client=flipkart" }
+        { code: "cod_submission", label: "COD Submission", href: "/cod/submission?client=flipkart" },
+        { code: "cod_validation", label: "Deposit Validation", href: "/cod/validation?client=flipkart" },
+        { code: "cod_reports", label: "COD Reports", href: "/cod/reports?client=flipkart" }
       ]
     };
   }
@@ -89,12 +89,12 @@ function modelOperations(mode: OperatingMode): NavItem {
     label: "Operations",
     icon: "O",
     children: [
-      { code: "cod_executive_reconciliation", label: "Executive Reconciliation", href: "/ops-pulse/cod/executive-reconciliation?client=amazon" },
-      { code: "cod_submission", label: "COD Submission", href: "/ops-pulse/cod/submission?client=amazon" },
-      { code: "cod_validation", label: "Validation & Closure", href: "/ops-pulse/cod/validation?client=amazon" },
-      { code: "cod_portal_checks", label: "SCC Portal Checks", href: "/ops-pulse/cod/portal-checks" },
-      { code: "cod_reports", label: "COD Reports", href: "/ops-pulse/cod/reports?client=amazon" }
-      ,{ code: "cod_reports", label: "Performance Reports", href: "/ops-pulse/reports/amazon" }
+      { code: "cod_executive_reconciliation", label: "Executive Reconciliation", href: "/cod/executive-reconciliation?client=amazon" },
+      { code: "cod_submission", label: "COD Submission", href: "/cod/submission?client=amazon" },
+      { code: "cod_validation", label: "Validation & Closure", href: "/cod/validation?client=amazon" },
+      { code: "cod_portal_checks", label: "SCC Portal Checks", href: "/cod/portal-checks" },
+      { code: "cod_reports", label: "COD Reports", href: "/cod/reports?client=amazon" }
+      ,{ code: "cod_reports", label: "Performance Reports", href: "/reports/amazon" }
     ]
   };
 }

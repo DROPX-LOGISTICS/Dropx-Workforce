@@ -182,6 +182,31 @@ a {
   object-position: left center;
 }
 
+.ops-brand-lockup {
+  min-width: 0;
+  padding-left: 11px;
+  border-left: 1px solid #e4e7ec;
+  display: grid;
+  gap: 2px;
+  line-height: 1;
+}
+
+.ops-brand-lockup strong {
+  color: #172033;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.ops-brand-lockup span {
+  color: #f15a24;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .brand-title {
   font-weight: 700;
   line-height: 1.1;

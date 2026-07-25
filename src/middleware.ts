@@ -6,6 +6,16 @@ const supabaseAuthKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env
 const COOKIE_CHUNK_SIZE = 3000;
 const MAX_COOKIE_CHUNKS = 8;
 const ENCODED_COOKIE_PREFIX = "b64-";
+const CLEAN_OPS_ROOTS = ["/daily-submission", "/performance", "/cod", "/reports", "/client", "/access"];
+
+function cleanOpsPath(path: string) {
+  if (path === "/ops-pulse") return "/";
+  return path.startsWith("/ops-pulse/") ? path.slice("/ops-pulse".length) : path;
+}
+
+function isCleanOpsPath(path: string) {
+  return path === "/" || CLEAN_OPS_ROOTS.some((root) => path === root || path.startsWith(`${root}/`));
+}
 
 function encodeCookieValue(value: string) {
   const bytes = new TextEncoder().encode(value);
@@ -39,19 +49,19 @@ export async function middleware(request: NextRequest) {
 
   const opsAppUrl = process.env.OPS_APP_URL?.trim();
   if (isDashboardHost && opsAppUrl && (path === "/ops-pulse" || path.startsWith("/ops-pulse/"))) {
-    return NextResponse.redirect(new URL(path + request.nextUrl.search, opsAppUrl));
+    return NextResponse.redirect(new URL(cleanOpsPath(path) + request.nextUrl.search, opsAppUrl));
   }
 
-  if (isOpsHost && path === "/") {
+  if (isOpsHost && (path === "/ops-pulse" || path.startsWith("/ops-pulse/"))) {
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/ops-pulse";
+    redirectUrl.pathname = cleanOpsPath(path);
     return NextResponse.redirect(redirectUrl);
   }
 
   if (
     isOpsHost &&
     path !== "/login" &&
-    !path.startsWith("/ops-pulse") &&
+    !isCleanOpsPath(path) &&
     !path.startsWith("/cps") &&
     !path.startsWith("/master/") &&
     !path.startsWith("/users") &&
@@ -147,6 +157,14 @@ export async function middleware(request: NextRequest) {
     const rewriteUrl = request.nextUrl.clone();
     rewriteUrl.pathname = "/platform-admin";
     return NextResponse.rewrite(rewriteUrl);
+  }
+
+  if (isOpsHost && isCleanOpsPath(path)) {
+    const rewriteUrl = request.nextUrl.clone();
+    rewriteUrl.pathname = path === "/" ? "/ops-pulse" : `/ops-pulse${path}`;
+    const rewriteResponse = NextResponse.rewrite(rewriteUrl);
+    response.cookies.getAll().forEach((cookie) => rewriteResponse.cookies.set(cookie));
+    return rewriteResponse;
   }
 
   return response;

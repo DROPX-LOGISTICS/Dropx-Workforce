@@ -80,7 +80,12 @@ export async function AppShell({ children, active, pageCode }: { children: React
         <aside className="sidebar">
           <div className="brand">
             <img className="brand-logo" src="/dropx-logo.png" alt="DropX" />
-            {isOpsHost ? <span className="count-badge">OPS PULSE</span> : null}
+            {isOpsHost ? (
+              <div className="ops-brand-lockup">
+                <strong>Operations</strong>
+                <span>Control Center</span>
+              </div>
+            ) : null}
           </div>
 
           <SidebarNav active={active} items={visibleNavItems} />
@@ -93,7 +98,7 @@ export async function AppShell({ children, active, pageCode }: { children: React
         </aside>
       )}
     >
-      <DocumentTitle pageName={active} />
+      <DocumentTitle pageName={active} productName={isOpsHost ? "DropX Operations" : "DropX Dashboard"} />
       <InboxNotificationListener enabled={inboxNotificationsEnabled} />
       {children}
     </AppShellFrame>

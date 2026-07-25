@@ -8,6 +8,7 @@ import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { resolveOperatingContext } from "@/lib/ops-pulse/operating-context";
+import { loadPerformanceTargets, resolvePerformanceTargets, type PerformanceTarget } from "@/lib/ops-pulse/performance-targets";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -78,53 +79,6 @@ function metricValues(row: MetricFact) {
   return [];
 }
 
-const dailyMetricDefinitions = [
-  { label: "AFN Premium LMC DEA", short: "AFN Prem LMC DEA", index: 1, direction: "lower", target: 0.0064 },
-  { label: "AFN Standard LMC DEA", short: "AFN Std LMC DEA", index: 2, direction: "lower", target: 0.0038 },
-  { label: "MFN Premium LMC DEA", short: "MFN Prem LMC DEA", index: 3, direction: "lower", target: 0.0077 },
-  { label: "MFN Standard LMC DEA", short: "MFN Std LMC DEA", index: 4, direction: "lower", target: 0.0053 },
-  { label: "AFN Premium DOT", short: "AFN Prem DOT", index: 5, direction: "higher", target: 0.965 },
-  { label: "AFN Standard DOT", short: "AFN Std DOT", index: 6, direction: "higher", target: 0.942 },
-  { label: "MFN Premium DOT", short: "MFN Prem DOT", index: 7, direction: "higher", target: 0.965 },
-  { label: "MFN Standard DOT", short: "MFN Std DOT", index: 8, direction: "higher", target: 0.942 },
-  { label: "DOT Premium (AFN + MFN)", short: "DOT Premium", index: 9, direction: "higher", target: null },
-  { label: "DOT Standard (AFN + MFN)", short: "DOT Standard", index: 10, direction: "higher", target: null },
-  { label: "Premium (AFN + MFN) DDS", short: "Premium DDS", index: 11, direction: "higher", target: 0.94 },
-  { label: "Standard (AFN + MFN) DDS", short: "Standard DDS", index: 12, direction: "higher", target: 0.89 },
-  { label: "Good Scan – Non-Delivery", short: "Good Scan Non-Del", index: 13, direction: "higher", target: 0.9 },
-  { label: "Good Scan – Not Picked", short: "Good Scan Not Picked", index: 14, direction: "higher", target: 0.85 },
-  { label: "SMD 2.0 Slot Adherence", short: "Slot Adherence", index: 15, direction: "higher", target: 0.987 },
-  { label: "LM Contacts per Shipment", short: "LM CPS", index: 16, direction: "lower", target: null },
-  { label: "LM Reverse Contacts per Shipment", short: "LM RCPS", index: 17, direction: "lower", target: null },
-  { label: "Open COD (>7 Days)", short: "Open COD >7D", index: 18, direction: "lower", target: null },
-  { label: "%DNR Within 48 Hours", short: "DNR <48H", index: 19, direction: "lower", target: null },
-  { label: "Delivery Success Rate", short: "DSR", index: 20, direction: "higher", target: null }
-] as const;
-
-const slsMetricDefinitions: Array<{ label: string; index: number | null; target: number; direction: "higher" | "lower"; weight: number; unit?: "dpmo" | "ratio" }> = [
-  { label: "%GST Pendency", index: 9, target: .001, direction: "lower", weight: 2.5 },
-  { label: "Helmet Adherence", index: 2, target: .985, direction: "higher", weight: 10 },
-  { label: "DOT – Standard", index: 4, target: .935, direction: "higher", weight: 5 },
-  { label: "DOT – Premium", index: 3, target: .955, direction: "higher", weight: 5 },
-  { label: "DDS – Standard", index: 6, target: .89, direction: "higher", weight: 5 },
-  { label: "DDS – Premium", index: 5, target: .94, direction: "higher", weight: 5 },
-  { label: "C-Ret FDPS", index: null, target: .955, direction: "higher", weight: 5 },
-  { label: "In-Facility Losses vs Goal", index: 7, target: 1, direction: "lower", weight: 5, unit: "ratio" },
-  { label: "Short Cash", index: 8, target: .001, direction: "lower", weight: 5 },
-  { label: "Open COD (>7 Days)", index: 10, target: .001, direction: "lower", weight: 5 },
-  { label: "Non-Delivered Good Scan", index: 11, target: .9, direction: "higher", weight: 5 },
-  { label: "Unsuccessful Pickup Good Scan", index: 12, target: .83, direction: "higher", weight: 5 },
-  { label: "RTS DPMO", index: null, target: 500, direction: "lower", weight: 5, unit: "dpmo" },
-  { label: "Undel DPMO vs Goal", index: null, target: 1, direction: "lower", weight: 5, unit: "ratio" },
-  { label: "SWA COD DSR", index: 13, target: .684, direction: "higher", weight: 10 },
-  { label: "SWA Prepaid DSR", index: 14, target: .98, direction: "higher", weight: 2.5 },
-  { label: "Forward-Leg Contacts / Shipment", index: 15, target: .003, direction: "lower", weight: 5 },
-  { label: "Reverse-Leg Contacts / Shipment", index: 16, target: .0105, direction: "lower", weight: 2.5 },
-  { label: "DNR DPMO Within 48 Hours", index: null, target: 900, direction: "lower", weight: 2.5, unit: "dpmo" },
-  { label: "DNR Rescue Rate", index: 18, target: .85, direction: "higher", weight: 2.5 },
-  { label: "ReadMe OTR", index: 19, target: .95, direction: "higher", weight: 2.5 }
-];
-
 function ragStatus(value: number, target: number | null, direction: string) {
   if (target == null) return "neutral";
   if (direction === "higher") {
@@ -141,17 +95,18 @@ function targetLabel(target: number | null, direction: string) {
   return target == null ? "Reference" : `${direction === "higher" ? "≥" : "≤"} ${percent(target)}`;
 }
 
-function slsTargetLabel(metric: typeof slsMetricDefinitions[number]) {
+function slsTargetLabel(metric: PerformanceTarget) {
+  if (metric.target == null) return "Reference";
   if (metric.unit === "dpmo") return `${metric.direction === "higher" ? "≥" : "≤"} ${metric.target.toLocaleString("en-IN")} DPMO`;
   if (metric.unit === "ratio") return `${metric.direction === "higher" ? "≥" : "≤"} ${(metric.target * 100).toFixed(0)}% of goal`;
   return targetLabel(metric.target, metric.direction);
 }
 
-function slsWeightedAttainment(values: number[]) {
-  const mapped = slsMetricDefinitions.filter((metric) => metric.index != null);
+function slsWeightedAttainment(values: number[], definitions: PerformanceTarget[]) {
+  const mapped = definitions.filter((metric) => metric.sourceIndex != null && metric.target != null);
   const availableWeight = mapped.reduce((sum, metric) => sum + metric.weight, 0);
   const achievedWeight = mapped.reduce((sum, metric) => {
-    const value = values[metric.index as number] ?? 0;
+    const value = values[metric.sourceIndex as number] ?? 0;
     return sum + (ragStatus(value, metric.target, metric.direction) === "green" ? metric.weight : 0);
   }, 0);
   return { achievedWeight, availableWeight, percentage: availableWeight ? Math.round(achievedWeight / availableWeight * 100) : 0 };
@@ -179,6 +134,9 @@ function amazonWeekNumber(value: string) {
 export default async function PerformancePage({ searchParams }: { searchParams?: SearchParams }) {
   const authorization = await requirePagePermission("cod_reports", "access");
   const companyId = requireCompanyId(authorization);
+  const targetResult = await loadPerformanceTargets(companyId);
+  const dailyMetricDefinitions = resolvePerformanceTargets(targetResult.rows, "daily").filter((target) => target.sourceIndex != null).map((target) => ({ ...target, index: target.sourceIndex as number }));
+  const slsMetricDefinitions = resolvePerformanceTargets(targetResult.rows, "sls");
   const locationsResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const context = resolveOperatingContext(locationsResult.locations);
   const permittedLocations = context.selectedLocations;
@@ -327,7 +285,7 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
           <PerformanceStationFilter stations={permittedLocations.map((location) => ({ code: location.station_code, name: location.station_name || location.city || location.station_code }))} selectedCodes={selectedCodes} view={view} from={from} to={to} week={selectedWeek} />
         </div>
 
-        {metricResult.error || shipmentResult.error || dateCoverageResult.error || latestDailyResult.error ? <section className="panel message-panel error"><div className="panel-body">{metricResult.error?.message ?? shipmentResult.error?.message ?? dateCoverageResult.error?.message ?? latestDailyResult.error?.message}</div></section> : null}
+        {metricResult.error || shipmentResult.error || dateCoverageResult.error || latestDailyResult.error || targetResult.error ? <section className="panel message-panel error"><div className="panel-body">{metricResult.error?.message ?? shipmentResult.error?.message ?? dateCoverageResult.error?.message ?? latestDailyResult.error?.message ?? targetResult.error}</div></section> : null}
 
         {view === "daily" ? (
           <>
@@ -403,7 +361,7 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
                 <div className="table-wrap"><table><thead><tr><th>Rank</th><th>Station</th><th>City</th><th>Standing</th><th>SLS score</th><th>Metrics achieved</th></tr></thead><tbody>
                   {sortedSlsRows.map((row, index) => {
                     const values = metricValues(row);
-                    const weighted = slsWeightedAttainment(values);
+                    const weighted = slsWeightedAttainment(values, slsMetricDefinitions);
                     const code = stationCode(row.station_code);
                     const location = locationByCode.get(code);
                     return <tr key={`${row.batch_id}-${code}`}><td>{index + 1}</td><td><strong>{code}</strong></td><td>{location?.station_name || location?.city || row.row_label || "—"}</td><td><span className={`performance-standing ${standing(row.raw_text).toLowerCase()}`}>{standing(row.raw_text)}</span></td><td><strong>{percent(values[1])}</strong></td><td><strong>{weighted.percentage}%</strong><small className="achievement-count">{weighted.achievedWeight.toFixed(1)}/{weighted.availableWeight.toFixed(1)} mapped weight</small></td></tr>;
@@ -417,13 +375,13 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
                   const values = metricValues(row);
                   const code = stationCode(row.station_code);
                   const location = locationByCode.get(code);
-                  const weighted = slsWeightedAttainment(values);
+                  const weighted = slsWeightedAttainment(values, slsMetricDefinitions);
                   const achievement = weighted.percentage;
                   return <details className="sls-station-scorecard" key={`detail-${row.batch_id}-${code}`} open={slsRows.length === 1}>
                     <summary><div><span>{code}</span><strong>{location?.station_name || location?.city || row.row_label || code}</strong></div><div className="sls-score-summary"><span className={`performance-standing ${standing(row.raw_text).toLowerCase()}`}>{standing(row.raw_text)}</span><b>{percent(values[1])} SLS</b><i className={achievement >= 90 ? "green" : achievement >= 70 ? "amber" : "red"}>{achievement}% weighted attainment</i></div><em>⌄</em></summary>
                     <div className="sls-target-legend"><span><i className="green" /> Achieved</span><span><i className="amber" /> Near target</span><span><i className="red" /> Missed</span></div>
                     <div className="sls-target-grid">{slsMetricDefinitions.map((metric) => {
-                      const value = metric.index == null ? null : values[metric.index] ?? 0;
+                      const value = metric.sourceIndex == null ? null : values[metric.sourceIndex] ?? 0;
                       const status = value == null ? "neutral" : ragStatus(value, metric.target, metric.direction);
                       return <article className={status} key={metric.label}><span>{metric.label}</span><strong>{value == null ? "Not mapped" : metric.unit === "dpmo" ? value.toLocaleString("en-IN") : value <= 1 ? percent(value) : value.toLocaleString("en-IN")}</strong><small>Target {slsTargetLabel(metric)} · Weight {metric.weight}%</small></article>;
                     })}</div>

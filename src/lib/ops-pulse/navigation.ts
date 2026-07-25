@@ -43,6 +43,7 @@ const administration: NavItem[] = [
       { code: "master_locations", label: "Station Master", href: "/master/location" },
       { code: "master_providers", label: "Client / Provider Master", href: "/master/providers" },
       { code: "master_models", label: "Operation Models", href: "/master/models" }
+      ,{ code: "cod_master", label: "Performance Target Master", href: "/master/performance-targets" }
     ]
   },
   {

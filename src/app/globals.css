@@ -4912,6 +4912,9 @@ tbody tr:hover td {
 .onboarding-filter-columns label span { display:grid; font-size:11px; color:#64748b; }.onboarding-filter-columns label strong { color:#172033; }
 .onboarding-action-form { min-width:360px; }.onboarding-action-form input { min-width:170px; padding:9px; border:1px solid #cbd5e1; border-radius:8px; }
 .performance-data-note { margin:-4px 2px 2px; color:#64748b; font-size:11px; text-align:right; }
+.performance-target-row { display:grid; grid-template-columns:minmax(220px,1.8fr) 95px 130px 75px 105px 90px 95px 70px; gap:8px; align-items:center; }
+.performance-target-row label { display:grid; gap:4px; }.performance-target-row input,.performance-target-row select { width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; }
+.performance-target-row label input:first-child { font-weight:800; }.performance-target-row label input:last-child { color:#64748b; font-size:11px; }
 
 @media (max-width: 1080px) {
   body.mobile-nav-open {

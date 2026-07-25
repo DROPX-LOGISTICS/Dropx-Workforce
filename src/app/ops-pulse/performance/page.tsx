@@ -98,6 +98,14 @@ function weekDates(year: number, week: number) {
   return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
 }
 
+function amazonWeekNumber(value: string) {
+  const date = new Date(`${value}T00:00:00Z`);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const firstSunday = new Date(yearStart);
+  firstSunday.setUTCDate(firstSunday.getUTCDate() - firstSunday.getUTCDay());
+  return Math.floor((date.getTime() - firstSunday.getTime()) / 604800000) + 1;
+}
+
 export default async function PerformancePage({ searchParams }: { searchParams?: SearchParams }) {
   const authorization = await requirePagePermission("cod_reports", "access");
   const companyId = requireCompanyId(authorization);
@@ -131,8 +139,10 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
   const availableWeeks = [...new Set(scopedFacts.filter((row) => row.source_type === "edsp_sls_scorecard" && row.report_week).map((row) => Number(row.report_week)))].sort((a, b) => b - a);
   const selectedWeek = Number(searchParams?.week) || availableWeeks[0] || 1;
   const stationQuery = selectedCodes.length === permittedCodes.length ? "" : `&stations=${encodeURIComponent(selectedCodes.join(","))}`;
-  const olderWeek = [...availableWeeks].filter((week) => week < selectedWeek).sort((a, b) => b - a)[0];
-  const newerWeek = [...availableWeeks].filter((week) => week > selectedWeek).sort((a, b) => a - b)[0];
+  const currentWeek = amazonWeekNumber(today());
+  const weekOptions = Array.from({ length: currentWeek }, (_, index) => currentWeek - index);
+  const olderWeek = selectedWeek > 1 ? selectedWeek - 1 : null;
+  const newerWeek = selectedWeek < currentWeek ? selectedWeek + 1 : null;
   const slsRows = scopedFacts.filter((row) => {
     const values = metricValues(row);
     return row.source_type === "edsp_sls_scorecard" && Number(row.report_week) === selectedWeek && row.station_code && selectedCodes.includes(row.station_code) && values.length > 2 && values[1] > 0 && values[1] <= 1;
@@ -219,7 +229,7 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
               <div className="ops-context-summary"><span>Amazon SLS review</span><strong>Week {selectedWeek}</strong><small>{weekRange.start} to {weekRange.end} · Sunday–Saturday</small></div>
               <div className="week-navigator">
                 {olderWeek ? <Link aria-label={`Previous available week ${olderWeek}`} href={`/ops-pulse/performance?view=sls&week=${olderWeek}${stationQuery}`}>‹</Link> : <span className="disabled">‹</span>}
-                <form><input type="hidden" name="view" value="sls" />{selectedCodes.length !== permittedCodes.length ? <input type="hidden" name="stations" value={selectedCodes.join(",")} /> : null}<label><span>AMAZON WEEK</span><select aria-label="Amazon week" name="week" defaultValue={selectedWeek}>{availableWeeks.map((week) => <option key={week} value={week}>Week {week}</option>)}</select><small>{weekRange.start} – {weekRange.end}</small></label><button>Go</button></form>
+                <form><input type="hidden" name="view" value="sls" />{selectedCodes.length !== permittedCodes.length ? <input type="hidden" name="stations" value={selectedCodes.join(",")} /> : null}<label><span>AMAZON WEEK</span><select aria-label="Amazon week" name="week" defaultValue={selectedWeek}>{weekOptions.map((week) => <option key={week} value={week}>Week {week}{availableWeeks.includes(week) ? " · imported" : ""}</option>)}</select><small>{weekRange.start} – {weekRange.end}</small></label><button>Go</button></form>
                 {newerWeek ? <Link aria-label={`Next available week ${newerWeek}`} href={`/ops-pulse/performance?view=sls&week=${newerWeek}${stationQuery}`}>›</Link> : <span className="disabled">›</span>}
               </div>
             </section>

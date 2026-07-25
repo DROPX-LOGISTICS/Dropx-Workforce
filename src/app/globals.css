@@ -4973,6 +4973,13 @@ tbody tr:hover td {
 .performance-target-row { display:grid; grid-template-columns:minmax(220px,1.8fr) 95px 130px 75px 105px 90px 95px 70px; gap:8px; align-items:center; }
 .performance-target-row label { display:grid; gap:4px; }.performance-target-row input,.performance-target-row select { width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; }
 .performance-target-row label input:first-child { font-weight:800; }.performance-target-row label input:last-child { color:#64748b; font-size:11px; }
+.performance-target-row-wrap { display:flex; align-items:center; gap:8px; min-width:1100px; }
+.performance-target-row-wrap .performance-target-row { flex:1; }
+.performance-add-metric { display:flex; align-items:center; gap:8px; }
+.performance-add-metric select { min-width:240px; padding:9px 34px 9px 10px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; }
+.metric-sort-heading { display:flex; align-items:flex-start; justify-content:center; gap:3px; }
+.metric-sort-heading > a { display:inline-grid; place-items:center; width:15px; height:15px; border-radius:4px; color:#98a2b3; font-size:10px; line-height:1; }
+.metric-sort-heading > a:hover,.metric-sort-heading > a.active { background:#fff0e8; color:#e94f1d; }
 
 @media (max-width: 1080px) {
   body.mobile-nav-open {

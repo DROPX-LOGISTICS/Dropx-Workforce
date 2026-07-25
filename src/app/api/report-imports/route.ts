@@ -225,7 +225,7 @@ type PdfMetricRow = {
   values: Array<string | number>;
 };
 
-async function readPdfMetricRows(buffer: ArrayBuffer, alignDailyMetrics = false) {
+async function readPdfMetricRows(buffer: ArrayBuffer, alignDailyMetrics = false, alignScorecardMetrics = false) {
   await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const document = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
@@ -267,6 +267,32 @@ async function readPdfMetricRows(buffer: ArrayBuffer, alignDailyMetrics = false)
             aligned[column] = Number(cell.text.replace(/[,%]/g, "")) / 100;
           }
         });
+        values = [serial, ...aligned];
+      }
+      if (alignScorecardMetrics && /^\d+\s+[A-Z0-9]{4}\b/.test(rawText)) {
+        const serial = Number(cells[0] ?? 0);
+        const centersAtReferenceWidth = [125.998, 141.173, 155.874, 169.372, 183.577, 199.374, 215.878, 231.7, 247.928, 263.528, 280.132, 296.577, 311.374, 327.3, 346.225, 368.124, 387.325, 403.924, 423.126, 444.974, 466.0, 487.0, 506.776, 527.582];
+        const scale = viewport.width / 595.303937007874;
+        const aligned = Array<number>(24).fill(0);
+        line.cells
+          .filter((cell) => /^-?[\d,.]+%?$/.test(cell.text) && cell.x > viewport.width * .18)
+          .forEach((cell) => {
+            const center = cell.x + cell.width / 2;
+            let bestIndex = -1;
+            let bestDistance = Number.POSITIVE_INFINITY;
+            centersAtReferenceWidth.forEach((referenceCenter, index) => {
+              const distance = Math.abs(center - referenceCenter * scale);
+              if (distance < bestDistance) {
+                bestDistance = distance;
+                bestIndex = index;
+              }
+            });
+            if (bestIndex >= 0 && bestDistance <= 9 * scale) {
+              aligned[bestIndex] = cell.text.endsWith("%")
+                ? Number(cell.text.replace(/[,%]/g, "")) / 100
+                : Number(cell.text.replace(/,/g, ""));
+            }
+          });
         values = [serial, ...aligned];
       }
       rows.push({
@@ -835,7 +861,11 @@ export async function POST(request: Request) {
   try {
     const fileBuffer = await importStep("Read uploaded file", () => file.arrayBuffer());
     if (masterData.parser_type === "pdf_scorecard" || masterData.parser_type === "pdf_daily_metrics") {
-      const pdf = await importStep("Convert PDF to metric rows", () => readPdfMetricRows(fileBuffer, masterData.parser_type === "pdf_daily_metrics"));
+      const pdf = await importStep("Convert PDF to metric rows", () => readPdfMetricRows(
+        fileBuffer,
+        masterData.parser_type === "pdf_daily_metrics",
+        masterData.parser_type === "pdf_scorecard"
+      ));
       const metricRows = pdf.rows.map((row) => {
         const hash = crypto.createHash("sha256").update(JSON.stringify({
           sourceType,
@@ -844,7 +874,8 @@ export async function POST(request: Request) {
           reportYear: pdf.reportYear,
           page: row.pageNumber,
           row: row.rowNumber,
-          text: row.rawText
+          text: row.rawText,
+          parserVersion: masterData.parser_type === "pdf_scorecard" ? 2 : 1
         })).digest("hex");
         return {
           batch_id: batch.data.id,

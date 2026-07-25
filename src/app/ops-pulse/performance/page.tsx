@@ -229,8 +229,13 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
   const sourceReportExists = dateCoverageRows.length > 0;
   const latestAvailableDate = latestDailyResult.data?.[0]?.report_date ?? null;
   const dailySort = searchParams?.sort || "exceptions_desc";
+  const metricSort = dailySort.match(/^metric_(\d+)_(asc|desc)$/);
   const missedTargets = (row: MetricFact) => dailyMetricDefinitions.filter((metric) => metric.target != null && ragStatus(metricValues(row)[metric.index] ?? 0, metric.target, metric.direction) !== "green").length;
   const sortedDailyRows = [...dailyRows].sort((a, b) => {
+    if (metricSort) {
+      const difference = (metricValues(a)[Number(metricSort[1])] ?? 0) - (metricValues(b)[Number(metricSort[1])] ?? 0);
+      return metricSort[2] === "asc" ? difference : -difference;
+    }
     if (dailySort === "exceptions_desc") return missedTargets(b) - missedTargets(a);
     if (dailySort === "station_desc") return String(b.station_code).localeCompare(String(a.station_code));
     if (dailySort === "dsr_low") return (metricValues(a)[20] ?? 0) - (metricValues(b)[20] ?? 0);
@@ -245,6 +250,12 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
     return metricValues(b)[1] - metricValues(a)[1];
   });
   const missingDsrStations = dailyRows.filter((row) => Number(metricValues(row)[20] ?? 0) === 0).length;
+  const metricSortHref = (index: number) => {
+    const nextDirection = dailySort === `metric_${index}_asc` ? "desc" : "asc";
+    const params = new URLSearchParams({ view: "daily", from, to, sort: `metric_${index}_${nextDirection}` });
+    if (selectedCodes.length !== permittedCodes.length) params.set("stations", selectedCodes.join(","));
+    return `/performance?${params.toString()}`;
+  };
   const shipments = (shipmentResult.data ?? []) as ShipmentFact[];
   const locationByCode = new Map(permittedLocations.map((location) => [location.station_code, location]));
   const shipmentMap = new Map<string, { delivered: number; cReturn: number; mfn: number; mfnReturn: number; total: number }>();
@@ -318,7 +329,7 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
               <div className="panel-head"><div><h2>Daily performance review</h2><p className="subtle">Red needs action, amber is near target, and green is achieved. Targets are shown in every metric header.</p></div><div className="panel-head-tools"><strong>{dailyRows.length} stations</strong><PerformanceSortControl value={dailySort} options={[{ label: "Most misses first", value: "exceptions_desc" }, { label: "Station A–Z", value: "station_asc" }, { label: "Station Z–A", value: "station_desc" }, { label: "Lowest DSR first", value: "dsr_low" }, { label: "Highest DSR first", value: "dsr_high" }]} /></div></div>
               <div className="performance-matrix-wrap">
                 <table className="performance-matrix">
-                  <thead><tr><th className="sticky-rank">#</th><th className="sticky-station">Station</th><th>Review</th><th>Delivered</th><th>C-Return</th><th>MFN</th>{dailyMetricDefinitions.map((metric) => <th key={metric.label} title={metric.label}><span>{metric.short}</span><small>{targetLabel(metric.target, metric.direction)}</small></th>)}</tr></thead>
+                  <thead><tr><th className="sticky-rank">#</th><th className="sticky-station">Station</th><th>Review</th><th>Delivered</th><th>C-Return</th><th>MFN</th>{dailyMetricDefinitions.map((metric) => <th key={metric.label} title={metric.label}><span className="metric-sort-heading"><span>{metric.short}</span><Link aria-label={`Sort ${metric.label} ${dailySort === `metric_${metric.index}_asc` ? "descending" : "ascending"}`} className={dailySort.startsWith(`metric_${metric.index}_`) ? "active" : ""} href={metricSortHref(metric.index)} title={`Sort ${dailySort === `metric_${metric.index}_asc` ? "descending" : "ascending"}`}>{dailySort === `metric_${metric.index}_asc` ? "↑" : dailySort === `metric_${metric.index}_desc` ? "↓" : "↕"}</Link></span><small>{targetLabel(metric.target, metric.direction)}</small></th>)}</tr></thead>
                   <tbody>
                     {sortedDailyRows.map((row, index) => {
                       const normalizedCode = stationCode(row.station_code);

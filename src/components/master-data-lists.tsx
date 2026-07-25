@@ -412,7 +412,6 @@ export function MasterDataLists({
         location.region,
         location.aom,
         location.cluster_manager,
-        location.cluster,
         location.postal_code,
         location.latitude?.toString(),
         location.longitude?.toString(),
@@ -479,7 +478,7 @@ export function MasterDataLists({
             <MultiCheckFilter allLabel="All providers" label="Provider" onChange={updateLocationProviders} options={locationProviderOptions} selected={locationProviders} />
             <MultiCheckFilter allLabel="All models" label="Model" onChange={updateLocationModels} options={locationModelOptions} selected={locationModels} />
             <MultiCheckFilter allLabel="All regions" label="Region" onChange={updateLocationRegions} options={locationRegionOptions} selected={locationRegions} />
-            <MultiCheckFilter allLabel="All managers" label="Manager" onChange={updateLocationManagers} options={locationManagerOptions} selected={locationManagers} />
+            <MultiCheckFilter allLabel="All cluster managers" label="Cluster Manager" onChange={updateLocationManagers} options={locationManagerOptions} selected={locationManagers} />
             {canAdd ? <Link className="button" href="/master/location?add=location" scroll={false}>Add location</Link> : null}
           </div>
         </div>
@@ -492,7 +491,6 @@ export function MasterDataLists({
                 <th>Region</th>
                 <th>AOM</th>
                 <th>Cluster Manager</th>
-                <th>Cluster</th>
                 <th>Provider</th>
                 <th>Model</th>
                 <th>Address</th>
@@ -509,7 +507,6 @@ export function MasterDataLists({
                   <td>{row.region || "-"}</td>
                   <td>{row.aom || "-"}</td>
                   <td>{row.cluster_manager || "-"}</td>
-                  <td>{row.cluster || "-"}</td>
                   <td>{row.providers?.name || "-"}</td>
                   <td>{row.location_models?.code || "-"}</td>
                   <td>
@@ -544,7 +541,7 @@ export function MasterDataLists({
                   {canEdit ? <td className="action-cell"><EditButton href={editHref("location", row.id)} label={`Edit ${row.station_code}`} /></td> : null}
                 </tr>
               )) : (
-                <tr><td colSpan={canEdit ? 12 : 11} className="empty-cell">No locations found.</td></tr>
+                <tr><td colSpan={canEdit ? 11 : 10} className="empty-cell">No locations found.</td></tr>
               )}
             </tbody>
           </table>

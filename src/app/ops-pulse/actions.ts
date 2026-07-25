@@ -24,8 +24,10 @@ export async function switchOperatingContext(formData: FormData) {
     ? requestedMode
     : "amazon_edsp";
   const permitted = locationsForMode(locations, mode);
-  const requestedLocation = String(formData.get("location") ?? "");
-  const location = permitted.find((entry) => entry.id === requestedLocation) ?? permitted[0];
+  const requestedLocations = formData.getAll("locations").map(String);
+  const selectedLocations = permitted.filter((entry) => requestedLocations.includes(entry.id));
+  const scopedLocations = selectedLocations.length ? selectedLocations : permitted.slice(0, 1);
+  const location = scopedLocations[0];
   const options = {
     httpOnly: true,
     maxAge: 60 * 60 * 24 * 90,
@@ -34,6 +36,9 @@ export async function switchOperatingContext(formData: FormData) {
     secure: process.env.NODE_ENV === "production"
   };
   cookies().set("dropx-ops-mode", mode, options);
-  if (location) cookies().set("dropx-ops-location", location.id, options);
+  if (location) {
+    cookies().set("dropx-ops-location", location.id, options);
+    cookies().set("dropx-ops-locations", scopedLocations.map((entry) => entry.id).join(","), options);
+  }
   redirect("/ops-pulse");
 }

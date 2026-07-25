@@ -165,6 +165,22 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
     const delivered = rows.reduce((sum, row) => sum + num(row.total_delivery), 0);
     return { date, associates, delivered, spr: associates ? delivered / associates : 0 };
   });
+  const associateIds = [...new Set(selectedRows.map((row) => row.provider_employee_id).filter(Boolean))];
+  const associateDetail = associateIds.map((associateId) => {
+    const rows = selectedRows.filter((row) => row.provider_employee_id === associateId);
+    const dates = [...new Set(rows.map((row) => row.work_date))].sort();
+    const dailyAllocations = dates.map((date) => rows.filter((row) => row.work_date === date).reduce((sum, row) => sum + num(row.total_delivery), 0));
+    const delivered = dailyAllocations.reduce((sum, value) => sum + value, 0);
+    return {
+      associateId,
+      daysWorked: dates.length,
+      delivered,
+      averageAllocation: dates.length ? delivered / dates.length : 0,
+      peakAllocation: Math.max(0, ...dailyAllocations),
+      latestDate: dates.at(-1) ?? null,
+      latestAllocation: dailyAllocations.at(-1) ?? 0
+    };
+  }).sort((a, b) => b.averageAllocation - a.averageAllocation);
   const maxDailyDelivery = Math.max(1, ...dailyDetail.map((day) => day.delivered));
   const totalRoster = views.reduce((sum, row) => sum + row.activeRoster, 0);
   const totalReported = views.reduce((sum, row) => sum + row.reportedHeadcount, 0);
@@ -193,6 +209,11 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
         <div className="capacity-trend" aria-label="Daily delivery trend">{dailyDetail.map((day) => <div className="capacity-trend-column" key={day.date} title={`${day.date}: ${fmt(day.delivered)} delivered, ${day.associates} associates, ${fmt(day.spr, 1)} SPR`}><span>{fmt(day.delivered)}</span><i style={{ height: `${Math.max(4, day.delivered / maxDailyDelivery * 100)}%` }}/><small>{day.date.slice(8)}</small></div>)}</div>
         <div className="table-wrap"><table className="capacity-daily-table"><thead><tr><th>Date</th><th>Associates worked</th><th>Delivered</th><th>SPR</th></tr></thead><tbody>{dailyDetail.map((day) => <tr key={day.date}><td>{day.date.split("-").reverse().join("/")}</td><td>{day.associates}</td><td>{fmt(day.delivered)}</td><td><strong>{fmt(day.spr, 1)}</strong></td></tr>)}</tbody></table></div>
       </div> : <div className="empty-state">No shipment activity is available for this station and date range.</div>}
+      {associateDetail.length ? <div className="capacity-associate-section"><div className="capacity-section-title"><div><h3>Associate allocation</h3><p>Productivity for each shipment-active associate in the selected period.</p></div><span>{associateDetail.length} associates</span></div>
+        <div className="table-wrap"><table className="capacity-daily-table capacity-associate-table"><thead><tr><th>Associate ID</th><th>Days worked</th><th>Total delivered</th><th>Average allocation/day</th><th>Peak allocation</th><th>Latest allocation</th></tr></thead><tbody>
+          {associateDetail.map((associate) => <tr key={associate.associateId}><td><strong>{associate.associateId}</strong></td><td>{associate.daysWorked}</td><td>{fmt(associate.delivered)}</td><td><strong>{fmt(associate.averageAllocation, 1)}</strong></td><td>{fmt(associate.peakAllocation)}</td><td>{fmt(associate.latestAllocation)}<small>{associate.latestDate ? associate.latestDate.split("-").reverse().join("/") : ""}</small></td></tr>)}
+        </tbody></table></div>
+      </div> : null}
     </section> : null}
   </div></AppShell>;
 }

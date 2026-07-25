@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
+import { PerformanceStationFilter } from "@/components/performance-station-filter";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
@@ -9,7 +10,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = { view?: string; week?: string; from?: string; to?: string };
+type SearchParams = { view?: string; week?: string; from?: string; to?: string; stations?: string };
 type MetricFact = {
   batch_id: string;
   source_type: string;
@@ -56,6 +57,23 @@ function metricValues(row: MetricFact) {
   return Array.isArray(row.values_json) ? row.values_json.map(number) : [];
 }
 
+const dailyMetricDefinitions = [
+  { label: "AFN Premium LM DEA", index: 1, direction: "lower", target: 0.0064 },
+  { label: "AFN Standard LM DEA", index: 2, direction: "lower", target: 0.0038 },
+  { label: "MFN Premium LM DEA", index: 3, direction: "lower", target: 0.0077 },
+  { label: "MFN Standard LM DEA", index: 4, direction: "lower", target: 0.0053 },
+  { label: "AFN Premium DOT", index: 5, direction: "higher", target: 0.965 },
+  { label: "AFN Standard DOT", index: 6, direction: "higher", target: 0.942 },
+  { label: "MFN Premium DOT", index: 7, direction: "higher", target: 0.965 },
+  { label: "MFN Standard DOT", index: 8, direction: "higher", target: 0.942 },
+  { label: "Premium (AFN + MFN) DDS", index: 9, direction: "higher", target: 0.94 },
+  { label: "Standard (AFN + MFN) DDS", index: 10, direction: "higher", target: 0.89 },
+  { label: "Good Scan – Non-Delivery", index: 11, direction: "higher", target: 0.9 },
+  { label: "Good Scan – Not Picked", index: 12, direction: "higher", target: 0.85 },
+  { label: "SMD 2.0 Slot Adherence", index: 13, direction: "higher", target: 0.987 },
+  { label: "C-return Contacts / Shipment", index: 14, direction: "lower", target: 0.023 }
+] as const;
+
 function weekDates(year: number, week: number) {
   const yearStart = new Date(Date.UTC(year, 0, 1));
   const firstSunday = new Date(yearStart);
@@ -72,7 +90,10 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
   const companyId = requireCompanyId(authorization);
   const locationsResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const context = resolveOperatingContext(locationsResult.locations);
-  const selectedCodes = context.selectedLocations.map((location) => location.station_code);
+  const permittedLocations = context.selectedLocations;
+  const permittedCodes = permittedLocations.map((location) => location.station_code);
+  const requestedCodes = String(searchParams?.stations ?? "").split(",").map((code) => code.trim().toUpperCase()).filter((code) => permittedCodes.includes(code));
+  const selectedCodes = requestedCodes.length ? [...new Set(requestedCodes)] : permittedCodes;
   const view = searchParams?.view === "sls" ? "sls" : "daily";
   const to = validDate(searchParams?.to, today());
   const from = validDate(searchParams?.from, `${to.slice(0, 7)}-01`);
@@ -131,6 +152,10 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
           <Link className={view === "daily" ? "active" : ""} href={`/ops-pulse/performance?view=daily&from=${from}&to=${to}`}>Daily EDSP</Link>
           <Link className={view === "sls" ? "active" : ""} href={`/ops-pulse/performance?view=sls&week=${selectedWeek}`}>Amazon SLS</Link>
         </nav>
+        <div className="performance-local-filter-row">
+          <PerformanceStationFilter stations={permittedLocations.map((location) => ({ code: location.station_code, name: location.station_name || location.city || location.station_code }))} selectedCodes={selectedCodes} view={view} from={from} to={to} week={selectedWeek} />
+          <span>This selection applies only to Performance and does not change your saved operating scope.</span>
+        </div>
 
         {metricResult.error || shipmentResult.error ? <section className="panel message-panel error"><div className="panel-body">{metricResult.error?.message ?? shipmentResult.error?.message}</div></section> : null}
 
@@ -146,12 +171,27 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
               <article><span>MFN</span><strong>{totalMfn.toLocaleString("en-IN")}</strong><small>MFN activity</small></article>
               <article><span>Stations reported</span><strong>{dailyRows.length}</strong><small>Daily EDSP metric rows</small></article>
             </section>
-            <section className="panel">
-              <div className="panel-head"><div><h2>Station daily performance</h2><p className="subtle">Shipment counts follow the selected date range. EDSP metrics are from the latest imported Daily EDSP report.</p></div></div>
-              <div className="table-wrap"><table><thead><tr><th>Station</th><th>City</th><th>Delivered</th><th>C-Return</th><th>MFN</th><th>MFN Return</th><th>Total delivery</th><th>EDSP metrics captured</th></tr></thead><tbody>
-                {dailyRows.map((row) => { const shipment = shipmentMap.get(row.station_code ?? "") ?? { delivered: 0, cReturn: 0, mfn: 0, mfnReturn: 0, total: 0 }; const values = metricValues(row); return <tr key={`${row.batch_id}-${row.station_code}`}><td><strong>{row.station_code}</strong></td><td>{row.row_label || "—"}</td><td>{shipment.delivered.toLocaleString("en-IN")}</td><td>{shipment.cReturn.toLocaleString("en-IN")}</td><td>{shipment.mfn.toLocaleString("en-IN")}</td><td>{shipment.mfnReturn.toLocaleString("en-IN")}</td><td>{shipment.total.toLocaleString("en-IN")}</td><td><span className="metric-capture">{values.slice(1).map((value) => value <= 1 ? percent(value) : value.toLocaleString("en-IN")).join(" · ")}</span></td></tr>; })}
-                {!dailyRows.length ? <tr><td colSpan={8} className="empty-cell">No Daily EDSP Metrics were found for the selected scope.</td></tr> : null}
-              </tbody></table></div>
+            <section className="daily-station-scorecards">
+              {dailyRows.map((row) => {
+                const shipment = shipmentMap.get(row.station_code ?? "") ?? { delivered: 0, cReturn: 0, mfn: 0, mfnReturn: 0, total: 0 };
+                const values = metricValues(row);
+                return (
+                  <article className="daily-station-scorecard" key={`${row.batch_id}-${row.station_code}`}>
+                    <header>
+                      <div><span>{row.station_code}</span><h2>{row.row_label || row.station_code}</h2></div>
+                      <div className="daily-volume-strip"><span>Delivered <strong>{shipment.delivered.toLocaleString("en-IN")}</strong></span><span>C-Return <strong>{shipment.cReturn.toLocaleString("en-IN")}</strong></span><span>MFN <strong>{shipment.mfn.toLocaleString("en-IN")}</strong></span><span>Total <strong>{shipment.total.toLocaleString("en-IN")}</strong></span></div>
+                    </header>
+                    <div className="daily-metric-grid">
+                      {dailyMetricDefinitions.map((metric) => {
+                        const value = values[metric.index] ?? 0;
+                        const achieved = metric.direction === "higher" ? value >= metric.target : value <= metric.target;
+                        return <div key={metric.label} className={achieved ? "achieved" : "missed"}><span>{metric.label}</span><strong>{percent(value)}</strong><small>Target {metric.direction === "higher" ? "≥" : "≤"} {percent(metric.target)}</small></div>;
+                      })}
+                    </div>
+                  </article>
+                );
+              })}
+              {!dailyRows.length ? <section className="panel"><div className="panel-body empty-cell">No Daily EDSP Metrics were found for the selected stations.</div></section> : null}
             </section>
           </>
         ) : (

@@ -15,11 +15,11 @@ export async function updateOnboardingStatus(formData: FormData) {
   const status = String(formData.get("status") ?? "");
   const actionItem = String(formData.get("action_item") ?? "").trim().slice(0, 500);
   if (!id || !locations.some((location) => location.station_code === stationCode) || !["pending", "cleared"].includes(status)) {
-    redirect("/ops-pulse/performance/onboarding?error=Invalid+update");
+    redirect("/executive-id-onboarding?error=Invalid+update");
   }
-  if (!supabaseAdmin) redirect("/ops-pulse/performance/onboarding?error=Service+unavailable");
+  if (!supabaseAdmin) redirect("/executive-id-onboarding?error=Service+unavailable");
   const existing = await supabaseAdmin.from("report_import_rows").select("normalized_data").eq("company_id", companyId).eq("id", id).single();
-  if (existing.error) redirect(`/ops-pulse/performance/onboarding?error=${encodeURIComponent(existing.error.message)}`);
+  if (existing.error) redirect(`/executive-id-onboarding?error=${encodeURIComponent(existing.error.message)}`);
   const normalized = existing.data?.normalized_data && typeof existing.data.normalized_data === "object" ? existing.data.normalized_data : {};
   const { error } = await supabaseAdmin.from("report_import_rows").update({
     normalized_data: {
@@ -30,5 +30,5 @@ export async function updateOnboardingStatus(formData: FormData) {
       ops_updated_by: authorization.userId
     }
   }).eq("company_id", companyId).eq("id", id);
-  redirect(`/ops-pulse/performance/onboarding?${error ? `error=${encodeURIComponent(error.message)}` : "saved=1"}`);
+  redirect(`/executive-id-onboarding?${error ? `error=${encodeURIComponent(error.message)}` : "saved=1"}`);
 }

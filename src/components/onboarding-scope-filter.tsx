@@ -27,7 +27,7 @@ export function OnboardingScopeFilter({ stations, selectedStations, selectedClus
     const params = new URLSearchParams({ status });
     if (stationCodes.length && stationCodes.length !== stations.length) params.set("stations", stationCodes.join(","));
     if (clusterNames.length) params.set("clusters", clusterNames.join(","));
-    router.push(`/ops-pulse/performance/onboarding?${params.toString()}`);
+    router.push(`/executive-id-onboarding?${params.toString()}`);
     setOpen(false);
   }
 

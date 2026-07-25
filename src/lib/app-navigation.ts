@@ -30,13 +30,13 @@ export const navItems: NavItem[] = [
     icon: "+",
     children: [
       { code: "delivery_associates", label: "Field Executive", href: "/field-executive" },
-      { code: "delivery_associates", label: "Associate ID Readiness", href: "https://ops.dropxlogistics.com/performance/onboarding" },
       { code: "employees", label: "Employees", href: "/employees" },
       { code: "contractors", label: "Independent Contractor", href: "/contractors" },
       { code: "vendors", label: "Vendors" },
       { code: "workers", label: "Workers" }
     ]
   },
+  { code: "cod_reports", label: "Executive ID Onboarding", href: "/executive-id-onboarding", icon: "ID" },
   { code: "provider_mapping", label: "ID Mapping", href: "/provider-mapping", icon: "<>" },
   {
     code: "fleet",

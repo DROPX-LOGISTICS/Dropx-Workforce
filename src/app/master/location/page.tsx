@@ -416,6 +416,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               <label>Region<input className="field" name="region" placeholder="Example: KL, AP, ODCG" required /></label>
               <label>AOM<SearchableSelect name="aom_email" options={hierarchyUserOptions} placeholder="Select AOM" /></label>
               <label>Cluster Manager<SearchableSelect name="cluster_manager_email" options={hierarchyUserOptions} placeholder="Select cluster manager" required /></label>
+              <label>Station Manager / TL<SearchableSelect name="station_manager_email" options={hierarchyUserOptions} placeholder="Select station manager or TL" /></label>
               <label>Postal code<input className="field" name="postal_code" placeholder="Enter postal code" /></label>
               <label>Latitude<input className="field" name="latitude" placeholder="Enter latitude" step="any" type="number" min="-90" max="90" /></label>
               <label>Longitude<input className="field" name="longitude" placeholder="Enter longitude" step="any" type="number" min="-180" max="180" /></label>
@@ -454,7 +455,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               <label>State<input className="field" name="state" defaultValue={editLocation.state ?? ""} required /></label>
               <label>Region<input className="field" name="region" defaultValue={editLocation.region ?? ""} required /></label>
               <label>AOM<SearchableSelect name="aom_email" options={hierarchyUserOptions} defaultValue={hierarchyUserEmail(editLocation.aom)} placeholder="Select AOM" /></label>
-              <label>Cluster Manager<SearchableSelect name="cluster_manager_email" options={hierarchyUserOptions} defaultValue={hierarchyUserEmail(editLocation.cluster_manager) || editLocation.station_manager_email} placeholder="Select cluster manager" required /></label>
+              <label>Cluster Manager<SearchableSelect name="cluster_manager_email" options={hierarchyUserOptions} defaultValue={hierarchyUserEmail(editLocation.cluster_manager)} placeholder="Select cluster manager" required /></label>
+              <label>Station Manager / TL<SearchableSelect name="station_manager_email" options={hierarchyUserOptions} defaultValue={editLocation.station_manager_email ?? ""} placeholder="Select station manager or TL" /></label>
               <label>Postal code<input className="field" name="postal_code" defaultValue={editLocation.postal_code ?? ""} /></label>
               <label>Latitude<input className="field" name="latitude" defaultValue={editLocation.latitude ?? ""} step="any" type="number" min="-90" max="90" /></label>
               <label>Longitude<input className="field" name="longitude" defaultValue={editLocation.longitude ?? ""} step="any" type="number" min="-180" max="180" /></label>

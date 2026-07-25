@@ -553,10 +553,11 @@ export async function createLocation(formData: FormData) {
   const latitude = optionalCoordinate(formData.get("latitude"), "Latitude", -90, 90);
   const longitude = optionalCoordinate(formData.get("longitude"), "Longitude", -180, 180);
   const stationEmail = clean(formData.get("station_email"));
-  const stationManagerEmail = clusterManagerEmail;
+  const stationManagerEmail = clean(formData.get("station_manager_email"))?.toLowerCase() ?? null;
+  const stationReportingEmail = stationManagerEmail ?? clusterManagerEmail;
   const hideFromLocationList = formData.get("hide_from_location_list") === "on";
   const address = [addressLine1, addressLine2, city, state, postalCode].filter(Boolean).join(", ");
-  const accessProfiles = await locationAccessProfiles(stationManagerEmail, companyId);
+  const accessProfiles = await locationAccessProfiles(stationReportingEmail, companyId);
 
   const { data: location, error } = await supabaseAdmin.from("stations").insert(withCompany({
     station_code: stationCode,
@@ -583,7 +584,7 @@ export async function createLocation(formData: FormData) {
 
   if (error) throw new Error(error.message);
   await addLocationAccess(location.id, accessProfiles, companyId);
-  const syncError = await trySyncLocationEmailProfile(location.id, stationEmail, stationName, stationManagerEmail, companyId);
+  const syncError = await trySyncLocationEmailProfile(location.id, stationEmail, stationName, stationReportingEmail, companyId);
   revalidatePath("/master/location");
   revalidatePath("/users");
   if (syncError) {
@@ -618,11 +619,12 @@ export async function updateLocation(formData: FormData) {
   const latitude = optionalCoordinate(formData.get("latitude"), "Latitude", -90, 90);
   const longitude = optionalCoordinate(formData.get("longitude"), "Longitude", -180, 180);
   const stationEmail = clean(formData.get("station_email"));
-  const stationManagerEmail = clusterManagerEmail;
+  const stationManagerEmail = clean(formData.get("station_manager_email"))?.toLowerCase() ?? null;
+  const stationReportingEmail = stationManagerEmail ?? clusterManagerEmail;
   const isActive = formData.get("is_active") !== "inactive";
   const hideFromLocationList = formData.get("hide_from_location_list") === "on";
   const address = [addressLine1, addressLine2, city, state, postalCode].filter(Boolean).join(", ");
-  const accessProfiles = await locationAccessProfiles(stationManagerEmail, companyId);
+  const accessProfiles = await locationAccessProfiles(stationReportingEmail, companyId);
   const { data: existingLocation, error: existingLocationError } = await supabaseAdmin
     .from("stations")
     .select("station_email")
@@ -664,7 +666,7 @@ export async function updateLocation(formData: FormData) {
     await removeLocationEmailProfileScope(id, existingLocation?.station_email ?? null, companyId);
   }
   if (isActive) {
-    const syncError = await trySyncLocationEmailProfile(id, stationEmail, stationName, stationManagerEmail, companyId);
+    const syncError = await trySyncLocationEmailProfile(id, stationEmail, stationName, stationReportingEmail, companyId);
     if (syncError) {
       revalidatePath("/master/location");
       revalidatePath("/users");

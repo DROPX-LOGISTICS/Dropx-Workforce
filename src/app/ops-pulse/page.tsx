@@ -12,12 +12,14 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type SearchParams = { date?: string; from?: string; to?: string; shift?: string; view?: string };
 type ShipmentFact = {
+  station_code: string;
   shipment_type: string | null;
   total_activity: number | string | null;
   total_delivery: number | string | null;
   work_date: string;
 };
 type CpsFact = {
+  station_code: string;
   work_date: string;
   total_delivery: number | string | null;
   overall_cps: number | string | null;
@@ -121,7 +123,7 @@ async function shipmentFacts(companyId: string, stationCodes: string[], from: st
   if (!supabaseAdmin) return { error: "Supabase connection is unavailable.", rows: [] as ShipmentFact[] };
   const { data, error } = await supabaseAdmin
     .from("cps_shipment_daily")
-    .select("shipment_type,total_activity,total_delivery,work_date")
+    .select("station_code,shipment_type,total_activity,total_delivery,work_date")
     .eq("company_id", companyId)
     .in("station_code", stationCodes)
     .gte("work_date", from)
@@ -167,7 +169,7 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
     ]
     : await Promise.all([
       supabaseAdmin.from("cps_station_daily")
-        .select("work_date,total_delivery,overall_cps,target_cps,target_gap,target_impact")
+        .select("station_code,work_date,total_delivery,overall_cps,target_cps,target_gap,target_impact")
         .eq("company_id", companyId).in("station_code", stationCodes)
         .gte("work_date", queryStart).lte("work_date", range.to),
       supabaseAdmin.from("report_metric_facts")
@@ -229,6 +231,29 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
   const executives = executivesResult.data ?? [];
   const onboardingPending = executives.filter((row) => row.onboarding_status !== "active").length;
   const onboardingActive = executives.filter((row) => row.onboarding_status === "active").length;
+  const stationComparison = selectedLocations.map((location) => {
+    const stationCpsRows = mtdCpsRows.filter((row) => row.station_code === location.station_code);
+    const stationShipmentRows = facts.filter((row) => row.station_code === location.station_code && row.work_date >= range.from && row.work_date <= range.to);
+    const stationDaily = dailyScorecards.find((row) => row.station_code === location.station_code);
+    const stationSls = weeklyScorecards.find((row) => row.station_code === location.station_code);
+    const dailyValues = Array.isArray(stationDaily?.values_json) ? stationDaily.values_json.map(Number) : [];
+    const measuredDaily = [5, 6, 7, 8, 11, 12, 13, 14, 15, 20].filter((index) => Number(dailyValues[index] ?? 0) > 0);
+    const dailyHealthy = measuredDaily.filter((index) => {
+      const value = Number(dailyValues[index] ?? 0);
+      const targets: Record<number, number> = { 5: .965, 6: .942, 7: .965, 8: .942, 11: .94, 12: .89, 13: .9, 14: .85, 15: .987 };
+      return index === 20 ? value >= .9 : value >= (targets[index] ?? 0);
+    }).length;
+    const cps = weightedCps(stationCpsRows);
+    const target = weightedTarget(stationCpsRows);
+    const gap = cps - target;
+    const sls = Array.isArray(stationSls?.values_json) ? Number(stationSls.values_json[1] ?? 0) : 0;
+    const volume = stationShipmentRows.reduce((total, row) => total + Number(row.total_delivery ?? 0), 0);
+    const issues = (gap > 0 ? 1 : 0) + (sls > 0 && sls < .8 ? 1 : 0) + (measuredDaily.length && dailyHealthy < measuredDaily.length ? 1 : 0);
+    return { code: location.station_code, name: location.station_name || location.city || location.station_code, volume, cps, target, gap, sls, dailyHealthy, dailyMeasured: measuredDaily.length, issues };
+  }).sort((a, b) => b.issues - a.issues || b.gap - a.gap);
+  const stationsAboveTarget = stationComparison.filter((row) => row.gap > 0).length;
+  const stationsWithSlsRisk = stationComparison.filter((row) => row.sls > 0 && row.sls < .8).length;
+  const latestPerformanceImport = performanceFacts.map((row) => row.created_at).sort().at(-1) ?? null;
   const scopeLabel = selectedLocations.length > 1
     ? `${selectedLocations.length} selected locations`
     : context.location ? locationLabel(context.location) : "No mapped location";
@@ -301,6 +326,31 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
             </div>
             <small className="ops-module-note">Live from field executive onboarding status for the selected locations.</small>
           </article>
+        </section>
+
+        <section className="ops-module station-command-matrix">
+          <header><div><span>SCOPE-AWARE REVIEW</span><h2>{selectedLocations.length === 1 ? "Station operating scorecard" : `${selectedLocations.length}-station control matrix`}</h2></div><Link href="/ops-pulse/performance">Open detailed performance →</Link></header>
+          <div className="station-matrix-summary">
+            <span><strong>{stationsAboveTarget}</strong>CPS above target</span>
+            <span><strong>{stationsWithSlsRisk}</strong>SLS below 80%</span>
+            <span><strong>{stationComparison.filter((row) => row.issues === 0).length}</strong>No flagged variance</span>
+            <span><strong>{latestPerformanceImport ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" }).format(new Date(latestPerformanceImport)) : "—"}</strong>Performance freshness</span>
+          </div>
+          <div className="performance-matrix-wrap">
+            <table className="station-overview-table">
+              <thead><tr><th>Station</th><th>Range volume</th><th>MTD CPS</th><th>Target</th><th>Gap / deficit</th><th>Latest SLS</th><th>Daily metrics met</th><th>Attention</th></tr></thead>
+              <tbody>{stationComparison.map((row) => <tr key={row.code}>
+                <td><strong>{row.code}</strong><small>{row.name}</small></td>
+                <td>{count(row.volume)}</td>
+                <td>₹ {row.cps.toFixed(2)}</td>
+                <td>₹ {row.target.toFixed(2)}</td>
+                <td className={row.gap > 0 ? "metric-bad" : "metric-good"}>{row.target ? `${row.gap > 0 ? "+" : ""}₹ ${row.gap.toFixed(2)}` : "—"}</td>
+                <td className={row.sls && row.sls < .8 ? "metric-bad" : row.sls ? "metric-good" : ""}>{row.sls ? `${(row.sls * 100).toFixed(1)}%` : "—"}</td>
+                <td>{row.dailyMeasured ? `${row.dailyHealthy}/${row.dailyMeasured}` : "—"}</td>
+                <td><span className={`station-attention ${row.issues ? "risk" : "clear"}`}>{row.issues ? `${row.issues} flag${row.issues === 1 ? "" : "s"}` : "Clear"}</span></td>
+              </tr>)}</tbody>
+            </table>
+          </div>
         </section>
 
         <section className="ops-visual-grid">

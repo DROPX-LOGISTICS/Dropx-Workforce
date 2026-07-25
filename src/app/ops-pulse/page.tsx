@@ -10,12 +10,27 @@ import {
 } from "@/lib/ops-pulse/operating-context";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
-type SearchParams = { date?: string; shift?: string; view?: string };
+type SearchParams = { date?: string; from?: string; to?: string; shift?: string; view?: string };
 type ShipmentFact = {
   shipment_type: string | null;
   total_activity: number | string | null;
   total_delivery: number | string | null;
   work_date: string;
+};
+type CpsFact = {
+  work_date: string;
+  total_delivery: number | string | null;
+  overall_cps: number | string | null;
+  target_cps: number | string | null;
+  target_gap: number | string | null;
+  target_impact: number | string | null;
+};
+type ScorecardFact = {
+  report_type: "daily_report" | "weekly_sla";
+  period_from: string;
+  period_to: string;
+  overall_score: number | string | null;
+  station_code: string;
 };
 
 export const dynamic = "force-dynamic";
@@ -28,6 +43,49 @@ function todayIst() {
 
 function selectedDate(value?: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value ?? "") ? String(value) : todayIst();
+}
+
+function selectedRange(fromValue: string | undefined, toValue: string | undefined, fallback: string) {
+  const to = selectedDate(toValue || fallback);
+  const defaultFrom = `${to.slice(0, 7)}-01`;
+  const from = selectedDate(fromValue || defaultFrom);
+  return from <= to ? { from, to } : { from: to, to: from };
+}
+
+function addDays(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function amazonWeek(value: string) {
+  const date = new Date(`${value}T00:00:00Z`);
+  const day = date.getUTCDay();
+  const start = addDays(value, -((day + 1) % 7));
+  const end = addDays(start, 6);
+  const yearStart = `${value.slice(0, 4)}-01-01`;
+  const week = Math.floor((Date.parse(`${start}T00:00:00Z`) - Date.parse(`${yearStart}T00:00:00Z`)) / 604800000) + 1;
+  return { end, start, week: Math.max(1, week) };
+}
+
+function previousMonth(value: string) {
+  const date = new Date(`${value.slice(0, 7)}-01T00:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() - 1);
+  const start = date.toISOString().slice(0, 10);
+  const endDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
+  return { start, end: endDate.toISOString().slice(0, 10) };
+}
+
+function weightedCps(rows: CpsFact[]) {
+  const deliveries = rows.reduce((total, row) => total + Number(row.total_delivery ?? 0), 0);
+  if (!deliveries) return 0;
+  return rows.reduce((total, row) => total + Number(row.overall_cps ?? 0) * Number(row.total_delivery ?? 0), 0) / deliveries;
+}
+
+function weightedTarget(rows: CpsFact[]) {
+  const deliveries = rows.reduce((total, row) => total + Number(row.total_delivery ?? 0), 0);
+  if (!deliveries) return 0;
+  return rows.reduce((total, row) => total + Number(row.target_cps ?? 0) * Number(row.total_delivery ?? 0), 0) / deliveries;
 }
 
 function ranges(date: string) {
@@ -78,9 +136,14 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
   const context = resolveOperatingContext(locationsResult.locations);
   const selectedLocations = context.selectedLocations;
   const date = selectedDate(searchParams?.date);
+  const range = selectedRange(searchParams?.from, searchParams?.to, date);
   const { monthEnd, monthStart, yearStart } = ranges(date);
+  const priorMonth = previousMonth(range.to);
+  const queryStart = [yearStart, priorMonth.start, range.from].sort()[0];
+  const stationCodes = selectedLocations.map((location) => location.station_code);
+  const locationIds = selectedLocations.map((location) => location.id);
   const factsResult = selectedLocations.length
-    ? await shipmentFacts(companyId, selectedLocations.map((location) => location.station_code), yearStart, monthEnd)
+    ? await shipmentFacts(companyId, stationCodes, queryStart, monthEnd)
     : { error: null, rows: [] as ShipmentFact[] };
   const facts = factsResult.rows;
   const attendanceResult = isNaN(Date.parse(`${date}T00:00:00Z`)) || !context.location || !supabaseAdmin
@@ -91,8 +154,29 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
       .in("location_id", selectedLocations.map((location) => location.id))
       .eq("punch_date", date)
       .order("in_time", { ascending: true });
+  const [cpsResult, scorecardResult, executivesResult] = !supabaseAdmin || !selectedLocations.length
+    ? [
+      { data: [] as CpsFact[], error: null },
+      { data: [] as ScorecardFact[], error: null },
+      { data: [] as Array<{ id: string; onboarding_status: string | null; is_active: boolean }>, error: null }
+    ]
+    : await Promise.all([
+      supabaseAdmin.from("cps_station_daily")
+        .select("work_date,total_delivery,overall_cps,target_cps,target_gap,target_impact")
+        .eq("company_id", companyId).in("station_code", stationCodes)
+        .gte("work_date", queryStart).lte("work_date", range.to),
+      supabaseAdmin.from("ops_amazon_scorecards")
+        .select("report_type,period_from,period_to,overall_score,station_code")
+        .eq("company_id", companyId).in("station_code", stationCodes)
+        .lte("period_from", range.to).gte("period_to", range.from)
+        .order("period_to", { ascending: false }),
+      supabaseAdmin.from("field_executives")
+        .select("id,onboarding_status,is_active")
+        .in("location_id", locationIds).eq("is_active", true)
+    ]);
   const attendance = attendanceResult.data ?? [];
   const dayVolume = sum(facts, date, date);
+  const rangeVolume = sum(facts, range.from, range.to);
   const dayActivity = sum(facts, date, date, "total_activity");
   const monthVolume = sum(facts, monthStart, monthEnd);
   const mtdVolume = sum(facts, monthStart, date);
@@ -117,6 +201,26 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
     return hour * 60 + minute > shiftStartHour * 60 + 15;
   }).length;
   const completedShift = attendance.filter((row) => row.out_time && Number(row.work_minutes ?? 0) >= 600).length;
+  const cpsRows = (cpsResult.data ?? []) as CpsFact[];
+  const rangeCpsRows = cpsRows.filter((row) => row.work_date >= range.from && row.work_date <= range.to);
+  const mtdCpsRows = cpsRows.filter((row) => row.work_date >= monthStart && row.work_date <= range.to);
+  const previousCpsRows = cpsRows.filter((row) => row.work_date >= priorMonth.start && row.work_date <= priorMonth.end);
+  const rangeCps = weightedCps(rangeCpsRows);
+  const mtdCps = weightedCps(mtdCpsRows);
+  const targetCps = weightedTarget(mtdCpsRows);
+  const previousCps = weightedCps(previousCpsRows);
+  const cpsDeficit = Math.max(0, mtdCps - targetCps);
+  const cpsImpact = mtdCpsRows.reduce((total, row) => total + Number(row.target_impact ?? 0), 0);
+  const scorecards = (scorecardResult.data ?? []) as ScorecardFact[];
+  const weeklyScorecards = scorecards.filter((row) => row.report_type === "weekly_sla");
+  const dailyScorecards = scorecards.filter((row) => row.report_type === "daily_report");
+  const averageScore = (rows: ScorecardFact[]) => rows.length
+    ? rows.reduce((total, row) => total + Number(row.overall_score ?? 0), 0) / rows.length
+    : 0;
+  const week = amazonWeek(range.to);
+  const executives = executivesResult.data ?? [];
+  const onboardingPending = executives.filter((row) => row.onboarding_status !== "active").length;
+  const onboardingActive = executives.filter((row) => row.onboarding_status === "active").length;
   const scopeLabel = selectedLocations.length > 1
     ? `${selectedLocations.length} selected locations`
     : context.location ? locationLabel(context.location) : "No mapped location";
@@ -133,8 +237,8 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
           action={<span className="ops-live-badge"><i /> {isNow ? "LIVE MODE" : "OPERATIONAL"}</span>}
         />
 
-        {locationsResult.error || factsResult.error || attendanceResult.error ? (
-          <section className="panel message-panel error"><div className="panel-body"><strong>Data connection issue</strong><p className="subtle">{locationsResult.error ?? factsResult.error ?? attendanceResult.error?.message}</p></div></section>
+        {locationsResult.error || factsResult.error || attendanceResult.error || cpsResult.error || scorecardResult.error || executivesResult.error ? (
+          <section className="panel message-panel error"><div className="panel-body"><strong>Data connection issue</strong><p className="subtle">{locationsResult.error ?? factsResult.error ?? attendanceResult.error?.message ?? cpsResult.error?.message ?? scorecardResult.error?.message ?? executivesResult.error?.message}</p></div></section>
         ) : null}
 
         <section className="ops-control-strip">
@@ -144,18 +248,51 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
             <small>{selectedLocations.length > 1 ? `${selectedLocations.length} permitted locations combined` : context.location ? `${context.location.station_code} · ${context.location.station_name} · ${locationModelName(context.location)}` : "No permitted mapped station"}</small>
           </div>
           <form action="/ops-pulse" className="ops-date-controls">
-            <label>Business date<input name="date" type="date" defaultValue={date} /></label>
+            <label>From<input name="from" type="date" defaultValue={range.from} /></label>
+            <label>To<input name="to" type="date" defaultValue={range.to} /></label>
             {isNow ? <label>Shift<select name="shift" defaultValue={selectedShift}><option value="current">Current shift</option><option value="day">09:00–21:00</option><option value="night">21:00–09:00</option></select></label> : null}
             <button type="submit">Refresh view</button>
           </form>
         </section>
 
-        <section className="ops-kpi-grid">
-          <article><div className="ops-kpi-icon">D</div><span>Day volume</span><strong>{count(dayVolume)}</strong><small>{date}</small></article>
-          <article><div className="ops-kpi-icon">M</div><span>MTD volume</span><strong>{count(mtdVolume)}</strong><small>Month total {count(monthVolume)}</small></article>
-          <article><div className="ops-kpi-icon">Y</div><span>YTD volume</span><strong>{count(ytdVolume)}</strong><small>{activeDays} active days</small></article>
-          <article><div className="ops-kpi-icon">Ø</div><span>Daily average</span><strong>{count(average)}</strong><small>Across active days</small></article>
-          <article className={dayActivity ? "healthy" : "attention"}><div className="ops-kpi-icon">A</div><span>Activity</span><strong>{count(dayActivity)}</strong><small>{dayActivity ? "Import received" : "Awaiting daily import"}</small></article>
+        <section className="ops-module">
+          <header><div><span>VOLUME</span><h2>Shipment movement</h2></div><Link href="/cps?view=shipments">View shipment data →</Link></header>
+          <div className="ops-kpi-grid">
+            <article><div className="ops-kpi-icon">R</div><span>Selected range</span><strong>{count(rangeVolume)}</strong><small>{range.from} to {range.to}</small></article>
+            <article><div className="ops-kpi-icon">D</div><span>Latest day</span><strong>{count(dayVolume)}</strong><small>{date}</small></article>
+            <article><div className="ops-kpi-icon">M</div><span>MTD volume</span><strong>{count(mtdVolume)}</strong><small>Month total {count(monthVolume)}</small></article>
+            <article><div className="ops-kpi-icon">Y</div><span>YTD volume</span><strong>{count(ytdVolume)}</strong><small>{activeDays} active days</small></article>
+          </div>
+        </section>
+
+        <section className="ops-dashboard-modules">
+          <article className="ops-module">
+            <header><div><span>STATION PERFORMANCE</span><h2>Amazon performance</h2></div><Link href="/ops-pulse/reports/amazon">Reports →</Link></header>
+            <div className="ops-stat-list">
+              <div><small>Daily performance</small><strong>{dailyScorecards.length ? `${averageScore(dailyScorecards).toFixed(1)}%` : "Awaiting import"}</strong><span>{dailyScorecards.length} reports in range</span></div>
+              <div><small>Weekly SLA</small><strong>{weeklyScorecards.length ? `${averageScore(weeklyScorecards).toFixed(1)}%` : "Awaiting import"}</strong><span>{weeklyScorecards.length} scorecards</span></div>
+              <div><small>Amazon week {week.week}</small><strong>{week.start}</strong><span>Saturday–Friday · ends {week.end}</span></div>
+            </div>
+          </article>
+
+          <article className="ops-module">
+            <header><div><span>CPS CONTROL</span><h2>Cost per shipment</h2></div><Link href="/cps">Open CPS →</Link></header>
+            <div className="ops-stat-list">
+              <div><small>Range CPS</small><strong>₹ {rangeCps.toFixed(2)}</strong><span>{range.from} to {range.to}</span></div>
+              <div><small>MTD / Target</small><strong>₹ {mtdCps.toFixed(2)} / ₹ {targetCps.toFixed(2)}</strong><span>{cpsDeficit ? `₹ ${cpsDeficit.toFixed(2)} above target` : "On or below target"}</span></div>
+              <div><small>Previous month</small><strong>₹ {previousCps.toFixed(2)}</strong><span>Deficit impact ₹ {count(cpsImpact)}</span></div>
+            </div>
+          </article>
+
+          <article className="ops-module">
+            <header><div><span>DA ONBOARDING</span><h2>In-app completion</h2></div><Link href="/field-executive">Open onboarding →</Link></header>
+            <div className="ops-onboarding-figure">
+              <div><strong>{onboardingPending}</strong><span>Pending</span></div>
+              <div><strong>{onboardingActive}</strong><span>Completed</span></div>
+              <div><strong>{executives.length}</strong><span>Active DAs</span></div>
+            </div>
+            <small className="ops-module-note">Live from field executive onboarding status for the selected locations.</small>
+          </article>
         </section>
 
         <section className="ops-visual-grid">

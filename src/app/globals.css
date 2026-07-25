@@ -2457,64 +2457,6 @@ h3 {
   justify-content: flex-end;
 }
 
-.profile-review-panel {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto minmax(320px, 1.4fr);
-  gap: 16px;
-  align-items: end;
-  margin: 18px 0 0;
-  padding: 16px;
-  border: 1px solid #f1c9a7;
-  border-radius: 8px;
-  background: #fffaf5;
-}
-
-.profile-review-panel h3,
-.profile-review-panel p {
-  margin: 0;
-}
-
-.profile-review-panel p {
-  margin-top: 4px;
-  color: #6b6560;
-  font-size: 13px;
-}
-
-.profile-review-approve,
-.profile-review-return,
-.profile-review-return label {
-  display: grid;
-  gap: 7px;
-}
-
-.profile-review-return {
-  grid-template-columns: 1fr auto;
-  align-items: end;
-}
-
-.profile-review-return label span {
-  color: #625d57;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.profile-review-return textarea {
-  min-height: 74px;
-  resize: vertical;
-  padding: 10px 12px;
-  border: 1px solid #dcd6ce;
-  border-radius: 7px;
-  font: inherit;
-}
-
-@media (max-width: 900px) {
-  .profile-review-panel,
-  .profile-review-return {
-    grid-template-columns: 1fr;
-  }
-}
-
 .compact-field {
   min-height: 38px;
   padding: 8px 10px;
@@ -8260,6 +8202,23 @@ tbody tr:hover td {
 .ops-context-switcher label {
   display: grid;
   gap: 4px;
+}
+
+.ops-context-fixed {
+  display: grid;
+  gap: 4px;
+}
+
+.ops-context-fixed small {
+  color: #9a3412;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.ops-context-fixed strong {
+  color: #172033;
+  font-size: 12px;
 }
 
 .ops-context-switcher select,

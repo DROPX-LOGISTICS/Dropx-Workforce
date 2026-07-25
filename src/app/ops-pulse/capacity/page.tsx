@@ -4,7 +4,7 @@ import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCapacityRules } from "@/lib/ops-pulse/capacity";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
-import { resolveOperatingContext } from "@/lib/ops-pulse/operating-context";
+import { operatingModeForLocation, resolveOperatingContext } from "@/lib/ops-pulse/operating-context";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -59,7 +59,7 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
   const authorization = await requirePagePermission("cps_associates", "access");
   const companyId = requireCompanyId(authorization);
   const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
-  const locations = resolveOperatingContext(locationResult.locations).selectedLocations;
+  const locations = resolveOperatingContext(locationResult.locations).selectedLocations.filter((location) => operatingModeForLocation(location) !== "amazon_now");
   const codes = locations.map((location) => location.station_code);
   const period = ["day", "month"].includes(String(searchParams?.period)) ? String(searchParams?.period) : "week";
   const end = today();

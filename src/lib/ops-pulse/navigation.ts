@@ -92,7 +92,8 @@ function modelOperations(mode: OperatingMode): NavItem {
 }
 
 export function opsNavItemsForMode(mode: OperatingMode): NavItem[] {
-  return [...commonStart, modelOperations(mode), cps, ...administration];
+  const start = mode === "amazon_now" ? commonStart.filter((item) => item.label !== "Capacity") : commonStart;
+  return [...start, modelOperations(mode), cps, ...administration];
 }
 
 export function normalizeOpsClient(value: string | null | undefined) {

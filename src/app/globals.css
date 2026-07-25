@@ -4993,6 +4993,9 @@ tbody tr:hover td {
 .capacity-decision.surplus { background:#fff4e5; color:#b54708; }
 .capacity-decision.balanced { background:#dcfae6; color:#067647; }
 .capacity-decision.unconfigured { background:#f2f4f7; color:#475467; }
+.capacity-bulk-form { display:flex; align-items:flex-end; gap:8px; }
+.capacity-bulk-form label { display:grid; gap:4px; color:#667085; font-size:9px; font-weight:800; text-transform:uppercase; }
+.capacity-bulk-form input { width:92px; padding:8px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#172033; font-size:12px; }
 
 @media (max-width: 1080px) {
   body.mobile-nav-open {

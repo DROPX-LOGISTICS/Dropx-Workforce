@@ -25,7 +25,7 @@ const cps: NavItem = {
 const administration: NavItem[] = [
   {
     code: "master_data",
-    label: "Master Data",
+    label: "Ops Masters",
     icon: "*",
     children: [
       { code: "cod_master", label: "COD Master", href: "/master/cod-master" },
@@ -39,8 +39,8 @@ const administration: NavItem[] = [
     label: "Users & Access",
     icon: "@",
     children: [
-      { code: "users", label: "Users", href: "/users?section=users" },
-      { code: "users", label: "Roles & Permissions", href: "/users?section=roles" }
+      { code: "users", label: "Ops Users & Scope", href: "/ops-pulse/access" },
+      { code: "users", label: "Manage Roles", href: "/users?section=roles" }
     ]
   }
 ];

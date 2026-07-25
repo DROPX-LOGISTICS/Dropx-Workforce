@@ -586,9 +586,32 @@ export async function bulkImportFieldExecutives(formData: FormData) {
   const authorization = await requirePagePermission(pageCodeForReturnPath(returnPath), "add");
   const companyId = requireCompanyId(authorization);
   if (!supabaseAdmin) fieldExecutiveRedirect({ error: "Supabase service role key is not configured." }, returnPath);
+  const inserted: { id: string; locationId: string; biometricId: string | null; dateOfJoin: string }[] = [];
 
   try {
     const rows = await parseBulkWorkbook(formData.get("bulk_file"));
+    const explicitDropxIds = new Map<string, number>();
+    for (const [index, row] of rows.entries()) {
+      if (!row.dropxId) continue;
+      const previousRow = explicitDropxIds.get(row.dropxId);
+      if (previousRow) {
+        throw new Error(`Rows ${previousRow} and ${index + 2}: DropX ID ${row.dropxId} is duplicated in the Excel file.`);
+      }
+      explicitDropxIds.set(row.dropxId, index + 2);
+    }
+    if (explicitDropxIds.size) {
+      const existingIds = await supabaseAdmin
+        .from("field_executives")
+        .select("dropx_id")
+        .eq("company_id", companyId)
+        .in("dropx_id", Array.from(explicitDropxIds.keys()));
+      if (existingIds.error) throw new Error(existingIds.error.message);
+      const existingId = String(existingIds.data?.[0]?.dropx_id ?? "");
+      if (existingId) {
+        throw new Error(`Row ${explicitDropxIds.get(existingId)}: DropX ID ${existingId} is already registered.`);
+      }
+    }
+
     const locationCodes = Array.from(new Set(rows.map((row) => row.locationCode)));
     const designationCodes = Array.from(new Set(rows.map((row) => row.designationCode)));
     const [locationsResult, designationsResult] = await Promise.all([
@@ -604,7 +627,6 @@ export async function bulkImportFieldExecutives(formData: FormData) {
       name: String(designation.name),
       workerCategory: workerCategoryFromDesignationCategories((designation as { onboarding_categories?: unknown }).onboarding_categories)
     }]));
-    const inserted: { id: string; locationId: string; biometricId: string | null; dateOfJoin: string }[] = [];
 
     for (const [index, row] of rows.entries()) {
       const rowNumber = index + 2;
@@ -667,6 +689,11 @@ export async function bulkImportFieldExecutives(formData: FormData) {
     fieldExecutiveRedirect({ notice: `${inserted.length} ${entityLabel.toLowerCase()} records imported successfully.` }, returnPath);
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
+    if (inserted.length) {
+      const insertedIds = inserted.map((row) => row.id);
+      await supabaseAdmin.from("biometric_enrolments").delete().in("field_executive_id", insertedIds);
+      await supabaseAdmin.from("field_executives").delete().eq("company_id", companyId).in("id", insertedIds);
+    }
     fieldExecutiveRedirect({ error: error instanceof Error ? friendlyFieldExecutiveError(error.message) : "Unable to import field executives." }, returnPath);
   }
 }

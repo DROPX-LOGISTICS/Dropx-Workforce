@@ -80,12 +80,45 @@ const dailyMetricDefinitions = [
   { label: "Delivery Success Rate", short: "DSR", index: 20, direction: "higher", target: null }
 ] as const;
 
-const slsDetailLabels = [
-  "Overall score", "Helmet adherence", "DOT Premium", "DOT Standard", "DDS Premium", "DDS Standard",
-  "In-facility performance", "Open COD", "Short cash", "GST pendency", "Non-delivered good scan",
-  "Unsuccessful pickup good scan", "SWA COD DSR", "SWA prepaid DSR", "Forward-leg CPS",
-  "Reverse-leg CPS", "DNR rescue / supporting value", "ReadMe OTR", "Supporting rate", "Supporting volume", "Supporting exception"
-];
+const slsMetricDefinitions = [
+  { label: "Overall score", index: 1, target: null, direction: "higher" },
+  { label: "Helmet adherence", index: 2, target: .985, direction: "higher" },
+  { label: "DOT Premium", index: 3, target: .955, direction: "higher" },
+  { label: "DOT Standard", index: 4, target: .935, direction: "higher" },
+  { label: "DDS Premium", index: 5, target: .94, direction: "higher" },
+  { label: "DDS Standard", index: 6, target: .89, direction: "higher" },
+  { label: "In-facility loss vs goal", index: 7, target: 1, direction: "lower" },
+  { label: "Short cash", index: 8, target: .001, direction: "lower" },
+  { label: "GST pendency", index: 9, target: .001, direction: "lower" },
+  { label: "Open COD (>7 days)", index: 10, target: .001, direction: "lower" },
+  { label: "Non-delivered good scan", index: 11, target: .9, direction: "higher" },
+  { label: "Unsuccessful pickup good scan", index: 12, target: .83, direction: "higher" },
+  { label: "SWA COD DSR", index: 13, target: .684, direction: "higher" },
+  { label: "SWA prepaid DSR", index: 14, target: .98, direction: "higher" },
+  { label: "Forward-leg contacts / shipment", index: 15, target: .003, direction: "lower" },
+  { label: "Reverse-leg contacts / shipment", index: 16, target: .0105, direction: "lower" },
+  { label: "DNR supporting volume", index: 17, target: null, direction: "higher" },
+  { label: "DNR rescue rate", index: 18, target: .85, direction: "higher" },
+  { label: "ReadMe OTR", index: 19, target: .95, direction: "higher" },
+  { label: "Supporting volume", index: 20, target: null, direction: "higher" },
+  { label: "Supporting exception", index: 21, target: null, direction: "lower" }
+] as const;
+
+function ragStatus(value: number, target: number | null, direction: string) {
+  if (target == null) return "neutral";
+  if (direction === "higher") {
+    if (value >= target) return "green";
+    if (value >= target * .95) return "amber";
+    return "red";
+  }
+  if (value <= target) return "green";
+  if (value <= Math.max(target * 2, target + .005)) return "amber";
+  return "red";
+}
+
+function targetLabel(target: number | null, direction: string) {
+  return target == null ? "Reference" : `${direction === "higher" ? "≥" : "≤"} ${percent(target)}`;
+}
 
 function weekDates(year: number, week: number) {
   const yearStart = new Date(Date.UTC(year, 0, 1));
@@ -237,21 +270,40 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
               <article><span>Average SLS score</span><strong>{percent(averageSls)}</strong><small>{slsRows.length} station scores</small></article>
               {standingCounts.slice(0, 3).map((entry) => <article key={entry.label}><span>{entry.label}</span><strong>{entry.count}</strong><small>Stations</small></article>)}
             </section>
-            <section className="ops-visual-grid">
-              <article className="ops-visual-card">
+            <section className="sls-review-stack">
+              <article className="ops-visual-card sls-standing-card">
                 <header><div><span>STANDING MIX</span><h2>Week {selectedWeek} distribution</h2></div></header>
                 <div className="performance-standing-chart">{standingCounts.map((entry) => <div key={entry.label}><span>{entry.label}</span><i><b style={{ width: `${Math.max(3, entry.count / maxStanding * 100)}%` }} /></i><strong>{entry.count}</strong></div>)}</div>
               </article>
-              <article className="ops-visual-card wide">
+              <article className="ops-visual-card sls-ranking-card">
                 <header><div><span>SLS SCORECARD</span><h2>Station ranking</h2></div><strong>{weekRange.start}–{weekRange.end}</strong></header>
-                <div className="table-wrap"><table><thead><tr><th>Rank</th><th>Station</th><th>City</th><th>Standing</th><th>SLS score</th><th>Performance detail</th></tr></thead><tbody>
+                <div className="table-wrap"><table><thead><tr><th>Rank</th><th>Station</th><th>City</th><th>Standing</th><th>SLS score</th><th>Metrics achieved</th></tr></thead><tbody>
                   {slsRows.sort((a, b) => metricValues(b)[1] - metricValues(a)[1]).map((row, index) => {
                     const values = metricValues(row);
-                    return <tr key={`${row.batch_id}-${row.station_code}`}><td>{index + 1}</td><td><strong>{row.station_code}</strong></td><td>{row.row_label || "—"}</td><td><span className={`performance-standing ${standing(row.raw_text).toLowerCase()}`}>{standing(row.raw_text)}</span></td><td><strong>{percent(values[1])}</strong></td><td><details className="sls-metric-detail"><summary>View all {Math.max(0, values.length - 1)} fields</summary><div className="sls-metric-grid">{values.slice(1).map((value, valueIndex) => <div key={valueIndex}><span>{slsDetailLabels[valueIndex] || `Source field ${valueIndex + 1}`}</span><strong>{value <= 1 ? percent(value) : value.toLocaleString("en-IN")}</strong></div>)}</div><small>Source row: {row.raw_text}</small></details></td></tr>;
+                    const targetMetrics = slsMetricDefinitions.filter((metric) => metric.target != null);
+                    const achieved = targetMetrics.filter((metric) => ragStatus(values[metric.index] ?? 0, metric.target, metric.direction) === "green").length;
+                    return <tr key={`${row.batch_id}-${row.station_code}`}><td>{index + 1}</td><td><strong>{row.station_code}</strong></td><td>{row.row_label || "—"}</td><td><span className={`performance-standing ${standing(row.raw_text).toLowerCase()}`}>{standing(row.raw_text)}</span></td><td><strong>{percent(values[1])}</strong></td><td><strong>{Math.round(achieved / targetMetrics.length * 100)}%</strong><small className="achievement-count">{achieved}/{targetMetrics.length} targets</small></td></tr>;
                   })}
                   {!slsRows.length ? <tr><td colSpan={6} className="empty-cell">No SLS scorecard was imported for this week and scope.</td></tr> : null}
                 </tbody></table></div>
               </article>
+              <section className="sls-station-scorecards">
+                {slsRows.map((row) => {
+                  const values = metricValues(row);
+                  const targetMetrics = slsMetricDefinitions.filter((metric) => metric.target != null);
+                  const achieved = targetMetrics.filter((metric) => ragStatus(values[metric.index] ?? 0, metric.target, metric.direction) === "green").length;
+                  const achievement = Math.round(achieved / targetMetrics.length * 100);
+                  return <details className="sls-station-scorecard" key={`detail-${row.batch_id}-${row.station_code}`} open={slsRows.length === 1}>
+                    <summary><div><span>{row.station_code}</span><strong>{row.row_label || row.station_code}</strong></div><div className="sls-score-summary"><span className={`performance-standing ${standing(row.raw_text).toLowerCase()}`}>{standing(row.raw_text)}</span><b>{percent(values[1])} SLS</b><i className={achievement >= 90 ? "green" : achievement >= 70 ? "amber" : "red"}>{achievement}% targets achieved</i></div><em>⌄</em></summary>
+                    <div className="sls-target-legend"><span><i className="green" /> Achieved</span><span><i className="amber" /> Near target</span><span><i className="red" /> Missed</span></div>
+                    <div className="sls-target-grid">{slsMetricDefinitions.map((metric) => {
+                      const value = values[metric.index] ?? 0;
+                      const status = ragStatus(value, metric.target, metric.direction);
+                      return <article className={status} key={metric.label}><span>{metric.label}</span><strong>{value <= 1 ? percent(value) : value.toLocaleString("en-IN")}</strong><small>Target {targetLabel(metric.target, metric.direction)}</small></article>;
+                    })}</div>
+                  </details>;
+                })}
+              </section>
             </section>
           </>
         )}

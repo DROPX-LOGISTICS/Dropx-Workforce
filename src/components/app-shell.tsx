@@ -56,6 +56,16 @@ export async function AppShell({ children, active, pageCode }: { children: React
   };
   const topActions = (
     <>
+      {isOpsHost && opsContext.location ? (
+        <OpsContextSwitcher
+          availableModes={opsContext.availableModes}
+          locationId={opsContext.location.id}
+          locationModes={Object.fromEntries(opsLocationsResult.locations.map((location) => [location.id, operatingModeForLocation(location)]))}
+          locations={opsLocationsResult.locations}
+          mode={opsContext.mode}
+          selectedLocationIds={opsContext.selectedLocations.map((location) => location.id)}
+        />
+      ) : null}
       <PaymentNotificationBell />
       <UserMenu {...userMenuProps} />
     </>
@@ -72,16 +82,6 @@ export async function AppShell({ children, active, pageCode }: { children: React
             <img className="brand-logo" src="/dropx-logo.png" alt="DropX" />
             {isOpsHost ? <span className="count-badge">OPS PULSE</span> : null}
           </div>
-
-          {isOpsHost && opsContext.location ? (
-            <OpsContextSwitcher
-              availableModes={opsContext.availableModes}
-              locationId={opsContext.location.id}
-              locationModes={Object.fromEntries(opsLocationsResult.locations.map((location) => [location.id, operatingModeForLocation(location)]))}
-              locations={opsLocationsResult.locations}
-              mode={opsContext.mode}
-            />
-          ) : null}
 
           <SidebarNav active={active} items={visibleNavItems} />
 

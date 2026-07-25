@@ -7,7 +7,8 @@ import { getAuthorization, hasPermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
-type SourceType = "amazon_shipments" | "iocl_fuel" | "bpcl_fuel" | "cashbook";
+type SourceType = string;
+type CoreSourceType = "amazon_shipments" | "iocl_fuel" | "bpcl_fuel" | "cashbook";
 type SheetRow = Array<string | number | boolean | null | undefined>;
 type RawRecord = Record<string, string>;
 type NormalizedImport = {
@@ -47,7 +48,9 @@ const sourceLabels: Record<SourceType, string> = {
   amazon_shipments: "Amazon shipment count",
   bpcl_fuel: "BPCL fuel",
   cashbook: "Cashbook",
-  iocl_fuel: "IOC fuel"
+  iocl_fuel: "IOC fuel",
+  edsp_sls_scorecard: "EDSP SLS scorecard",
+  daily_edsp_metrics: "Daily EDSP metrics"
 };
 const HASH_LOOKUP_CHUNK_SIZE = 25;
 
@@ -189,12 +192,96 @@ function rowHash(raw: RawRecord) {
   return crypto.createHash("sha256").update(JSON.stringify(stableRaw)).digest("hex");
 }
 
+function dedupeHash(raw: RawRecord, dedupeFields: string[]) {
+  if (!dedupeFields.length) return rowHash(raw);
+  const values = dedupeFields.map((field) => clean(findValue(raw, [field])));
+  if (values.some((value) => !value)) return rowHash(raw);
+  return crypto.createHash("sha256").update(JSON.stringify(values)).digest("hex");
+}
+
 function readWorkbookRows(buffer: ArrayBuffer) {
   const workbook = XLSX.read(buffer, { type: "array", raw: false, cellDates: false });
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) throw new Error("The workbook has no sheets.");
   const sheet = workbook.Sheets[sheetName];
   return XLSX.utils.sheet_to_json<SheetRow>(sheet, { header: 1, raw: false, defval: "" });
+}
+
+type PdfMetricRow = {
+  pageNumber: number;
+  rowNumber: number;
+  rawText: string;
+  rowLabel: string | null;
+  stationCode: string | null;
+  values: Array<string | number>;
+};
+
+async function readPdfMetricRows(buffer: ArrayBuffer, alignDailyMetrics = false) {
+  await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const document = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
+  const rows: PdfMetricRow[] = [];
+  let fullText = "";
+  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+    const page = await document.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const viewport = page.getViewport({ scale: 1 });
+    const items = (content.items as Array<{ str?: string; transform?: number[]; width?: number }>)
+      .filter((item) => clean(item.str))
+      .map((item) => ({ text: clean(item.str), width: Number(item.width ?? 0), x: Number(item.transform?.[4] ?? 0), y: Number(item.transform?.[5] ?? 0) }))
+      .sort((a, b) => Math.abs(b.y - a.y) > 2 ? b.y - a.y : a.x - b.x);
+    const lines: Array<{ y: number; cells: typeof items }> = [];
+    items.forEach((item) => {
+      const line = lines.find((candidate) => Math.abs(candidate.y - item.y) <= 2);
+      if (line) line.cells.push(item);
+      else lines.push({ y: item.y, cells: [item] });
+    });
+    lines.forEach((line, index) => {
+      const cells = line.cells.sort((a, b) => a.x - b.x).map((item) => item.text);
+      const rawText = cells.join(" ").replace(/\s+/g, " ").trim();
+      if (!rawText || rawText.length < 2) return;
+      fullText += `${rawText}\n`;
+      const stationMatch = rawText.match(/(?:^|\s)([A-Z0-9]{4})(?:\s|$)/);
+      let values = cells
+        .filter((cell) => /^-?[\d,.]+%?$/.test(cell))
+        .map((cell) => cell.endsWith("%") ? Number(cell.replace(/[,%]/g, "")) / 100 : Number(cell.replace(/,/g, "")))
+        .filter((value) => Number.isFinite(value));
+      if (alignDailyMetrics && /^\d+\s+[A-Z0-9]{4}\b/.test(rawText)) {
+        const serial = Number(cells[0] ?? 0);
+        const aligned = Array<number>(21).fill(0);
+        const firstCenter = viewport.width * .211;
+        const columnStep = viewport.width * .03445;
+        line.cells.filter((cell) => cell.text.endsWith("%")).forEach((cell) => {
+          const center = cell.x + cell.width / 2;
+          const column = Math.round((center - firstCenter) / columnStep);
+          if (column >= 0 && column < aligned.length) {
+            aligned[column] = Number(cell.text.replace(/[,%]/g, "")) / 100;
+          }
+        });
+        values = [serial, ...aligned];
+      }
+      rows.push({
+        pageNumber,
+        rowNumber: index + 1,
+        rawText,
+        rowLabel: cells.find((cell) => /[A-Za-z]/.test(cell) && !/^[A-Z0-9]{4}$/.test(cell)) ?? null,
+        stationCode: stationMatch?.[1] ?? null,
+        values
+      });
+    });
+  }
+  const week = fullText.match(/\bWeek\s+(\d{1,2})\b/i);
+  const isoDate = fullText.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
+  const localDate = fullText.match(/\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b/);
+  const reportDate = isoDate
+    ? `${isoDate[1]}-${isoDate[2]}-${isoDate[3]}`
+    : localDate ? parseDate(`${localDate[1]}/${localDate[2]}/${localDate[3]}`) : null;
+  return {
+    rows,
+    reportDate,
+    reportWeek: week ? Number(week[1]) : null,
+    reportYear: reportDate ? Number(reportDate.slice(0, 4)) : Number(fullText.match(/\b(20\d{2})\b/)?.[1] ?? 0) || null
+  };
 }
 
 function locateHeader(rows: SheetRow[], requiredAny: string[]) {
@@ -411,7 +498,7 @@ function parseCashbook(raw: RawRecord): NormalizedImport | null {
   };
 }
 
-function parseFile(sourceType: SourceType, rows: SheetRow[]) {
+function parseFile(sourceType: CoreSourceType, rows: SheetRow[]) {
   const headerIndex = locateHeader(rows, sourceType === "amazon_shipments"
     ? ["holder_employee_id", "Station Code", "Delivered"]
     : sourceType === "cashbook"
@@ -427,6 +514,30 @@ function parseFile(sourceType: SourceType, rows: SheetRow[]) {
           ? parseFuel(raw, rowNumber, "BPCL")
           : parseCashbook(raw);
     return { normalized, raw, rowNumber };
+  });
+}
+
+function parseGenericFile(rows: SheetRow[]) {
+  const headerIndex = rows.findIndex((row) => row.map(clean).filter(Boolean).length >= 2);
+  if (headerIndex < 0) throw new Error("Could not find a usable header row in this file.");
+  return rowsToRecords(rows, headerIndex).map(({ raw, rowNumber }) => {
+    const workDate = parseDate(findValue(raw, [
+      "report_date", "date", "invitation_date", "cash_with_associate_dt", "created_at"
+    ]));
+    const stationCode = normalizeStation(findValue(raw, ["station_code", "station", "location", "hub"]));
+    const externalWorkerId = clean(findValue(raw, [
+      "transporter_id", "tracking_id", "employee_id", "associate_id", "rabbit_id"
+    ]));
+    return {
+      normalized: {
+        externalWorkerId: externalWorkerId || undefined,
+        normalizedData: { ...raw },
+        stationCode: stationCode || undefined,
+        workDate: workDate || undefined
+      },
+      raw,
+      rowNumber
+    };
   });
 }
 
@@ -609,8 +720,8 @@ async function loadExistingImportHashes(companyId: string, sourceType: SourceTyp
   return existing;
 }
 
-async function auditParsedRows(companyId: string, sourceType: SourceType, parsed: Array<{ normalized: NormalizedImport | null; raw: RawRecord; rowNumber: number }>) {
-  const rows = parsed.map((row) => ({ ...row, hash: rowHash(row.raw) }));
+async function auditParsedRows(companyId: string, sourceType: SourceType, parsed: Array<{ normalized: NormalizedImport | null; raw: RawRecord; rowNumber: number }>, dedupeFields: string[] = []) {
+  const rows = parsed.map((row) => ({ ...row, hash: dedupeHash(row.raw, dedupeFields) }));
   const existingHashes = await loadExistingImportHashes(companyId, sourceType, Array.from(new Set(rows.map((row) => row.hash))));
   const seenInFile = new Set<string>();
 
@@ -687,8 +798,20 @@ export async function POST(request: Request) {
   const formData = await importStep("Read uploaded form", () => request.formData());
   const sourceType = clean(formData.get("source_type")) as SourceType;
   const file = formData.get("file");
-  if (!sourceLabels[sourceType]) return Response.json({ error: "Select a valid import type." }, { status: 400 });
-  if (!(file instanceof File)) return Response.json({ error: "Upload an Excel or CSV file." }, { status: 400 });
+  const master = await db.from("report_import_master")
+    .select("source_code, name, file_types, parser_type, dedupe_fields, is_active")
+    .eq("company_id", companyId)
+    .eq("source_code", sourceType)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (master.error) return databaseSetupError(master.error.message);
+  if (!master.data) return Response.json({ error: "Select an active report from Import Master." }, { status: 400 });
+  const masterData = master.data;
+  if (!(file instanceof File)) return Response.json({ error: "Upload a report file." }, { status: 400 });
+  const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
+  if (!(masterData.file_types as string[]).includes(extension)) {
+    return Response.json({ error: `${masterData.name} accepts ${(masterData.file_types as string[]).map((item) => `.${item}`).join(", ")} files.` }, { status: 400 });
+  }
 
   const batch = await importStep("Create import batch", async () => db.from("report_import_batches").insert({
     company_id: companyId,
@@ -702,10 +825,76 @@ export async function POST(request: Request) {
 
   try {
     const fileBuffer = await importStep("Read uploaded file", () => file.arrayBuffer());
-    const parsed = await importStep("Parse uploaded report rows", async () => parseFile(sourceType, readWorkbookRows(fileBuffer)));
+    if (masterData.parser_type === "pdf_scorecard" || masterData.parser_type === "pdf_daily_metrics") {
+      const pdf = await importStep("Convert PDF to metric rows", () => readPdfMetricRows(fileBuffer, masterData.parser_type === "pdf_daily_metrics"));
+      const metricRows = pdf.rows.map((row) => {
+        const hash = crypto.createHash("sha256").update(JSON.stringify({
+          sourceType,
+          reportDate: pdf.reportDate,
+          reportWeek: pdf.reportWeek,
+          reportYear: pdf.reportYear,
+          page: row.pageNumber,
+          row: row.rowNumber,
+          text: row.rawText
+        })).digest("hex");
+        return {
+          batch_id: batch.data.id,
+          company_id: companyId,
+          page_number: row.pageNumber,
+          raw_text: row.rawText,
+          report_date: pdf.reportDate,
+          report_week: pdf.reportWeek,
+          report_year: pdf.reportYear,
+          row_hash: hash,
+          row_label: row.rowLabel,
+          row_number: row.rowNumber,
+          source_type: sourceType,
+          station_code: row.stationCode,
+          values_json: row.values
+        };
+      });
+      const hashes = metricRows.map((row) => row.row_hash);
+      const existing = new Set<string>();
+      for (let index = 0; index < hashes.length; index += HASH_LOOKUP_CHUNK_SIZE) {
+        const result = await db.from("report_metric_facts").select("row_hash")
+          .eq("company_id", companyId).eq("source_type", sourceType).in("row_hash", hashes.slice(index, index + HASH_LOOKUP_CHUNK_SIZE));
+        if (result.error) throw result.error;
+        (result.data ?? []).forEach((row) => existing.add(row.row_hash));
+      }
+      const seen = new Set<string>();
+      const validMetrics = metricRows.filter((row) => {
+        if (existing.has(row.row_hash) || seen.has(row.row_hash)) return false;
+        seen.add(row.row_hash);
+        return true;
+      });
+      await importStep("Save PDF metric facts", () => insertInChunks("report_metric_facts", validMetrics, 250));
+      const duplicateRows = metricRows.length - validMetrics.length;
+      const message = `${validMetrics.length} table row${validMetrics.length === 1 ? "" : "s"} extracted from ${file.name}. ${duplicateRows} duplicate${duplicateRows === 1 ? "" : "s"} ignored.`;
+      await db.from("report_import_batches").update({
+        completed_at: new Date().toISOString(),
+        imported_row_count: validMetrics.length,
+        message,
+        report_from: pdf.reportDate,
+        report_to: pdf.reportDate,
+        row_count: metricRows.length,
+        skipped_row_count: duplicateRows,
+        status: "Completed"
+      }).eq("id", batch.data.id).eq("company_id", companyId);
+      return Response.json({ duplicateRows, imported: validMetrics.length, message, skipped: duplicateRows, totalRows: metricRows.length });
+    }
+
+    const workbookRows = readWorkbookRows(fileBuffer);
+    const parsed = await importStep("Parse uploaded report rows", async () => masterData.parser_type === "generic_table"
+      ? parseGenericFile(workbookRows)
+      : parseFile(sourceType as CoreSourceType, workbookRows));
     if (sourceType === "iocl_fuel" || sourceType === "bpcl_fuel") await importStep("Map fuel vehicles to stations", () => mapFuelStations(companyId, parsed));
 
-    const audited = await importStep("Audit duplicate rows", () => auditParsedRows(companyId, sourceType, parsed));
+    const audited = await importStep("Audit duplicate rows", () => auditParsedRows(
+      companyId,
+      sourceType,
+      parsed,
+      (masterData.dedupe_fields as string[] | null) ?? []
+    ));
     const valid = audited.filter((row) => row.status === "Imported" && row.normalized);
     const skipped = audited.length - valid.length;
     const duplicateRows = audited.filter((row) => row.isDuplicate).length;
@@ -788,7 +977,7 @@ export async function POST(request: Request) {
       : "";
     const message = sourceType === "amazon_shipments"
       ? `${factRowCount} station/date/associate shipment total${factRowCount === 1 ? "" : "s"} refreshed from ${factRows.length} weekly row${factRows.length === 1 ? "" : "s"}.${amazonWeekMessage} ${skipped} raw rows skipped, including ${duplicateRows} duplicate${duplicateRows === 1 ? "" : "s"}.`
-      : `${valid.length} ${sourceLabels[sourceType]} row${valid.length === 1 ? "" : "s"} imported. ${skipped} skipped, including ${duplicateRows} duplicate${duplicateRows === 1 ? "" : "s"}.`;
+      : `${valid.length} ${sourceLabels[sourceType] ?? masterData.name} row${valid.length === 1 ? "" : "s"} imported. ${skipped} skipped, including ${duplicateRows} duplicate${duplicateRows === 1 ? "" : "s"}.`;
 
     const update = await importStep("Mark import completed", async () => db.from("report_import_batches").update({
       completed_at: new Date().toISOString(),

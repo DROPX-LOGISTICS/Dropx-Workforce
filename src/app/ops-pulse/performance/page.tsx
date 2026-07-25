@@ -175,6 +175,7 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
       supabaseAdmin.from("report_metric_facts")
         .select("batch_id,source_type,report_year,report_week,report_date,station_code,row_label,raw_text,values_json,created_at")
         .eq("company_id", companyId)
+        .in("station_code", selectedCodes)
         .in("source_type", ["daily_edsp_metrics", "edsp_sls_scorecard"])
         .order("created_at", { ascending: false })
         .limit(10000),
@@ -198,18 +199,16 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
     const values = metricValues(row);
     return row.source_type === "daily_edsp_metrics" && row.station_code && selectedCodes.includes(stationCode(row.station_code)) && values.length > 5;
   });
-  const reportDay = (row: MetricFact) => row.report_date || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(row.created_at));
-  const exactDailyCandidates = dailyCandidates.filter((row) => reportDay(row) >= from && reportDay(row) <= to);
-  const datedFallbackCandidates = dailyCandidates.filter((row) => reportDay(row) <= to);
-  const resolvedDailyCandidates = exactDailyCandidates.length
-    ? exactDailyCandidates
-    : datedFallbackCandidates.length
-      ? datedFallbackCandidates
-      : dailyCandidates;
-  const selectedDailyBatch = resolvedDailyCandidates[0]?.batch_id ?? null;
-  const dailyRows = selectedDailyBatch ? resolvedDailyCandidates.filter((row) => row.batch_id === selectedDailyBatch) : [];
+  const reportDay = (row: MetricFact) => row.report_date;
+  const exactDailyCandidates = dailyCandidates.filter((row) => {
+    const day = reportDay(row);
+    return Boolean(day && day >= from && day <= to);
+  });
+  const selectedDailyBatch = exactDailyCandidates[0]?.batch_id ?? null;
+  const dailyRows = selectedDailyBatch ? exactDailyCandidates.filter((row) => row.batch_id === selectedDailyBatch) : [];
   const selectedDailyReportDate = dailyRows[0] ? reportDay(dailyRows[0]) : null;
-  const isDailyFallback = Boolean(selectedDailyReportDate && (selectedDailyReportDate < from || selectedDailyReportDate > to));
+  const availableDailyDates = [...new Set(dailyCandidates.map(reportDay).filter(Boolean) as string[])].sort().reverse();
+  const latestAvailableDate = availableDailyDates[0] ?? null;
   const dailySort = searchParams?.sort || "exceptions_desc";
   const missedTargets = (row: MetricFact) => dailyMetricDefinitions.filter((metric) => metric.target != null && ragStatus(metricValues(row)[metric.index] ?? 0, metric.target, metric.direction) !== "green").length;
   const sortedDailyRows = [...dailyRows].sort((a, b) => {
@@ -248,6 +247,11 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
   const dailyTargets = dailyMetricDefinitions.filter((metric) => metric.target != null);
   const achievedDailyTargets = dailyRows.reduce((sum, row) => sum + dailyTargets.filter((metric) => ragStatus(metricValues(row)[metric.index] ?? 0, metric.target, metric.direction) === "green").length, 0);
   const totalDailyTargets = dailyRows.length * dailyTargets.length;
+  const coveredStationCodes = new Set(dailyRows.map((row) => stationCode(row.station_code)));
+  const missingStationCodes = selectedCodes.filter((code) => !coveredStationCodes.has(code));
+  const latestLoadAt = dailyRows.map((row) => row.created_at).sort().at(-1) ?? null;
+  const actionRows = [...dailyRows].filter((row) => missedTargets(row) > 0).sort((a, b) => missedTargets(b) - missedTargets(a)).slice(0, 5);
+  const dateLink = (value: string) => `/ops-pulse/performance?view=daily&from=${value}&to=${value}${stationQuery}`;
 
   return (
     <AppShell active="Performance" pageCode="cod_reports">
@@ -269,14 +273,26 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
               <div className="ops-context-summary"><span>Daily review</span><strong>{from} to {to}</strong><small>{selectedCodes.length} permitted stations</small></div>
               <form className="ops-date-controls"><input type="hidden" name="view" value="daily" />{selectedCodes.length !== permittedCodes.length ? <input type="hidden" name="stations" value={selectedCodes.join(",")} /> : null}<label>From<input type="date" name="from" defaultValue={from} /></label><label>To<input type="date" name="to" defaultValue={to} /></label><button>Apply range</button></form>
             </section>
+            <section className="performance-source-strip">
+              <div><span>Source date</span><strong>{selectedDailyReportDate ?? "Not available"}</strong></div>
+              <div><span>Loaded</span><strong>{latestLoadAt ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(new Date(latestLoadAt)) : "—"}</strong></div>
+              <div><span>Coverage</span><strong>{coveredStationCodes.size}/{selectedCodes.length} stations</strong></div>
+              <nav>
+                {latestAvailableDate ? <Link href={dateLink(latestAvailableDate)}>Latest report</Link> : null}
+                <Link href={dateLink(today())}>Today</Link>
+                <Link href={dateLink(new Date(Date.now() - 86400000).toISOString().slice(0, 10))}>Yesterday</Link>
+              </nav>
+            </section>
             <section className="performance-summary-grid">
               <article><span>Delivered</span><strong>{totalDelivered.toLocaleString("en-IN")}</strong><small>Delivered packages</small></article>
-              <article><span>Stations reviewed</span><strong>{dailyRows.length}</strong><small>{selectedDailyReportDate ?? "No performance data"}</small></article>
+              <article><span>Data coverage</span><strong>{selectedCodes.length ? `${Math.round(coveredStationCodes.size / selectedCodes.length * 100)}%` : "—"}</strong><small>{coveredStationCodes.size}/{selectedCodes.length} selected stations</small></article>
               <article><span>Targets achieved</span><strong>{totalDailyTargets ? `${Math.round(achievedDailyTargets / totalDailyTargets * 100)}%` : "—"}</strong><small>{achievedDailyTargets}/{totalDailyTargets} checks</small></article>
               <article><span>Attention needed</span><strong>{totalDailyTargets - achievedDailyTargets}</strong><small>Missed targets</small></article>
             </section>
-            {isDailyFallback ? <section className="performance-data-warning"><div><strong>Selected-day performance row was not found.</strong><span>Showing the nearest available EDSP batch dated {selectedDailyReportDate}. Delivery totals remain filtered to {from}–{to}.</span></div></section> : null}
+            {!dailyRows.length ? <section className="performance-data-warning"><div><strong>No Daily EDSP source report exists for {from === to ? from : `${from} to ${to}`}.</strong><span>{latestAvailableDate ? `Latest available report is ${latestAvailableDate}. Delivery totals remain available for the selected range.` : "Upload a dated Daily EDSP report to populate performance metrics."}</span></div>{latestAvailableDate ? <Link href={dateLink(latestAvailableDate)}>Open latest report</Link> : <a href="https://dashboard.dropxlogistics.com/imports">Open imports</a>}</section> : null}
             {missingDsrStations ? <section className="performance-data-warning"><div><strong>DSR/PSR source value is zero for {missingDsrStations} station{missingDsrStations === 1 ? "" : "s"}.</strong><span>The dashboard is preserving the uploaded report value. Upload a corrected Daily EDSP report containing the metric; the system will not manufacture a replacement percentage.</span></div><a href="https://dashboard.dropxlogistics.com/imports">Open report imports</a></section> : null}
+            {missingStationCodes.length && dailyRows.length ? <section className="performance-coverage-gap"><div><span>Missing stations</span><strong>{missingStationCodes.join(", ")}</strong></div><small>Selected stations absent from this source report.</small></section> : null}
+            {actionRows.length ? <section className="panel performance-action-queue"><div className="panel-head"><div><h2>Action queue</h2><p className="subtle">Highest target misses in the selected report.</p></div><strong>{actionRows.length} priorities</strong></div><div className="table-wrap"><table><thead><tr><th>Station</th><th>City</th><th>Missed targets</th><th>Lowest DSR</th></tr></thead><tbody>{actionRows.map((row) => <tr key={`action-${row.batch_id}-${row.station_code}`}><td><strong>{stationCode(row.station_code)}</strong></td><td>{row.row_label || "—"}</td><td><span className="station-attention risk">{missedTargets(row)} misses</span></td><td>{percent(metricValues(row)[20] ?? 0)}</td></tr>)}</tbody></table></div></section> : null}
             <section className="panel performance-matrix-panel">
               <div className="panel-head"><div><h2>Daily performance review</h2><p className="subtle">Red needs action, amber is near target, and green is achieved. Targets are shown in every metric header.</p></div><div className="panel-head-tools"><strong>{dailyRows.length} stations</strong><PerformanceSortControl value={dailySort} options={[{ label: "Most misses first", value: "exceptions_desc" }, { label: "Station A–Z", value: "station_asc" }, { label: "Station Z–A", value: "station_desc" }, { label: "Lowest DSR first", value: "dsr_low" }, { label: "Highest DSR first", value: "dsr_high" }]} /></div></div>
               <div className="performance-matrix-wrap">

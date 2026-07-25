@@ -148,27 +148,34 @@ export async function ReportUploadPageContent({
   const dueReports = reports.filter((report) => reportIsDue(report, date));
   const reportBySource = new Map(reports.map((report) => [report.source_code, report]));
   const latestBySource = new Map<string, ImportBatch>();
-  batches.filter((batch) => batchMatchesDate(batch, date)).forEach((batch) => {
-    if (!latestBySource.has(batch.source_type)) latestBySource.set(batch.source_type, batch);
+  dueReports.forEach((report) => {
+    const reportDate = addDays(date, report.day_offset);
+    const batch = batches.find((candidate) =>
+      candidate.source_type === report.source_code && batchMatchesDate(candidate, reportDate));
+    if (batch) latestBySource.set(report.source_code, batch);
   });
   const today = todayInIndia();
   const coverageGaps = reports.flatMap((report) => {
     if (report.frequency === "adhoc" || report.frequency === "monthly") return [];
-    const expectedDates: string[] = [];
+    const expectedPeriods: { dueDate: string; reportDate: string }[] = [];
     if (report.frequency === "daily") {
       for (let daysBack = 14; daysBack >= 0; daysBack -= 1) {
-        const expectedDate = addDays(today, -daysBack);
-        if (dueTimePassed(report, expectedDate, today)) expectedDates.push(expectedDate);
+        const dueDate = addDays(today, -daysBack);
+        if (dueTimePassed(report, dueDate, today)) {
+          expectedPeriods.push({ dueDate, reportDate: addDays(dueDate, report.day_offset) });
+        }
       }
     } else if (report.weekday !== null) {
       let dueDate = previousWeekday(addDays(today, 1), report.weekday);
       for (let week = 0; week < 6; week += 1) {
-        if (dueTimePassed(report, dueDate, today)) expectedDates.push(dueDate);
+        if (dueTimePassed(report, dueDate, today)) {
+          expectedPeriods.push({ dueDate, reportDate: addDays(dueDate, report.day_offset) });
+        }
         dueDate = addDays(dueDate, -7);
       }
     }
-    const missing = expectedDates.filter((expectedDate) =>
-      !batches.some((batch) => successfulBatchCoversDate(batch, report.source_code, expectedDate)));
+    const missing = expectedPeriods.filter(({ reportDate }) =>
+      !batches.some((batch) => successfulBatchCoversDate(batch, report.source_code, reportDate)));
     return missing.length ? [{ report, missing }] : [];
   });
   const recentBatches = batches.slice(0, 10);
@@ -211,8 +218,8 @@ export async function ReportUploadPageContent({
                   <tr key={`coverage-${report.id}`}>
                     <td><strong>{report.name}</strong></td>
                     <td>{report.frequency}</td>
-                    <td>{missing.slice(-8).map(displayDate).join(", ")}{missing.length > 8 ? ` · +${missing.length - 8} earlier` : ""}</td>
-                    <td><Link className="button secondary compact" href={`/imports?date=${missing[missing.length - 1]}`}>Review</Link></td>
+                    <td>{missing.slice(-8).map(({ reportDate }) => displayDate(reportDate)).join(", ")}{missing.length > 8 ? ` · +${missing.length - 8} earlier` : ""}</td>
+                    <td><Link className="button secondary compact" href={`/imports?date=${missing[missing.length - 1].dueDate}`}>Review</Link></td>
                   </tr>
                 ))}
               </tbody>

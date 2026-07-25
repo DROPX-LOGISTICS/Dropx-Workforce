@@ -10783,6 +10783,112 @@ td strong,
   color: #e94f16;
 }
 
+.capacity-basis-strip {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  color: #64748b;
+  display: flex;
+  font-size: 12px;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+}
+
+.capacity-basis-strip strong {
+  color: #0f172a;
+}
+
+.capacity-station-toolbar {
+  align-items: end;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.capacity-station-toolbar form {
+  align-items: end;
+  display: flex;
+  gap: 8px;
+}
+
+.capacity-station-toolbar label {
+  color: #64748b;
+  display: grid;
+  font-size: 10px;
+  font-weight: 700;
+  gap: 3px;
+}
+
+.capacity-station-toolbar input {
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  padding: 8px 9px;
+}
+
+.capacity-station-columns {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(360px, .65fr);
+  margin-top: 14px;
+}
+
+.capacity-request-form {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  padding: 0 18px 16px;
+}
+
+.capacity-request-form label {
+  color: #64748b;
+  display: grid;
+  font-size: 11px;
+  font-weight: 700;
+  gap: 4px;
+}
+
+.capacity-request-form .wide,
+.capacity-request-form button {
+  grid-column: 1 / -1;
+}
+
+.capacity-request-form input,
+.capacity-request-form textarea {
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  font: inherit;
+  padding: 9px 10px;
+}
+
+.capacity-request-form textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+
+.capacity-request-log {
+  border-top: 1px solid #edf0f4;
+  padding: 10px 18px 16px;
+}
+
+.capacity-request-log article {
+  border-bottom: 1px solid #edf0f4;
+  display: grid;
+  gap: 3px;
+  padding: 9px 0;
+}
+
+.capacity-request-log article strong,
+.capacity-request-log article span {
+  font-size: 12px;
+}
+
+.capacity-request-log article small {
+  color: #64748b;
+  font-size: 10px;
+}
+
 .capacity-detail {
   margin-top: 16px;
 }
@@ -10940,6 +11046,10 @@ td strong,
 
 @media (max-width: 1100px) {
   .capacity-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .capacity-station-columns {
     grid-template-columns: 1fr;
   }
 }

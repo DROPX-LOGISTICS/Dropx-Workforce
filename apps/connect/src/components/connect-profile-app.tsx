@@ -29,6 +29,7 @@ type Profile = {
   uploadUrls: Record<string, string>;
   profilePhotoUrl?: string;
   status: string;
+  returnRemarks?: string;
 };
 
 type Verification = {
@@ -103,7 +104,7 @@ function formatDateTyping(value: string, appendSeparator = true) {
 }
 
 function statusReadOnly(value?: string | null) {
-  return String(value ?? "pending").trim().toLowerCase() !== "pending";
+  return !["pending", "returned"].includes(String(value ?? "pending").trim().toLowerCase());
 }
 
 function expired(value?: string) {
@@ -469,6 +470,12 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
 
   return <form className="dx-profile-form" onSubmit={save}>
     <p className="dx-company">{account.companyName}</p>
+    {profile.status.trim().toLowerCase() === "returned" && profile.returnRemarks ? (
+      <aside className="dx-return-notice">
+        <strong>Profile returned for correction</strong>
+        <p>{profile.returnRemarks}</p>
+      </aside>
+    ) : null}
     <ProfileSection title={executive ? "Profile details" : "Employee details"}>
       {Object.entries(profile.readOnly).map(([label, value]) => <div className="dx-readonly" key={label}><span>{title(label)}</span><strong>{value || "-"}</strong></div>)}
     </ProfileSection>

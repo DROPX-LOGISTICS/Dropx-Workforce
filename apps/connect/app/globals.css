@@ -7678,3 +7678,25 @@ tr:last-child td {
     font-size: 16px;
   }
 }
+
+.dx-return-notice {
+  padding: 14px 15px;
+  color: #8b2d35;
+  background: #fff3f2;
+  border: 1px solid #f0c4c2;
+  border-left: 4px solid #d94742;
+  border-radius: 8px;
+}
+
+.dx-return-notice strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dx-return-notice p {
+  margin: 5px 0 0;
+  color: #6f393d;
+  font-size: 13px;
+  line-height: 1.45;
+}

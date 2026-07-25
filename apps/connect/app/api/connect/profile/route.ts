@@ -41,6 +41,7 @@ type EmployeeProfileRow = {
   aadhaar_back_path: string | null;
   pan_upload_path: string | null;
   profile_completion_status: string | null;
+  profile_return_remarks?: string | null;
   stations?: { station_code: string | null; station_name: string | null } | { station_code: string | null; station_name: string | null }[] | null;
   designations?: { code: string | null; name: string | null; profile_field_rules?: unknown } | { code: string | null; name: string | null; profile_field_rules?: unknown }[] | null;
 };
@@ -137,14 +138,14 @@ async function loadEmployee(employeeId: string, companyId: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const result = await supabaseAdmin
     .from("employees")
-    .select("id, company_id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, gender, date_of_birth, aadhaar_number, pan_number, address, state, pincode, landmark, state_code, father_name, blood_group, bank_account_no, ifsc, statutory_applicability, pf_uan, pf_account_no, esi_no, emergency_contact_name, emergency_contact_number, emergency_contact_relation, profile_photo_path, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_completion_status, stations (station_code, station_name), designations (code, name, profile_field_rules)")
+    .select("id, company_id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, gender, date_of_birth, aadhaar_number, pan_number, address, state, pincode, landmark, state_code, father_name, blood_group, bank_account_no, ifsc, statutory_applicability, pf_uan, pf_account_no, esi_no, emergency_contact_name, emergency_contact_number, emergency_contact_relation, profile_photo_path, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_completion_status, profile_return_remarks, stations (station_code, station_name), designations (code, name, profile_field_rules)")
     .eq("id", employeeId)
     .eq("company_id", companyId)
     .maybeSingle();
   if (result.error && /pf_uan|esi_no|column/i.test(result.error.message)) {
     const fallbackResult = await supabaseAdmin
       .from("employees")
-      .select("id, company_id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, gender, date_of_birth, aadhaar_number, pan_number, address, state, pincode, landmark, state_code, father_name, blood_group, bank_account_no, ifsc, statutory_applicability, emergency_contact_name, emergency_contact_number, emergency_contact_relation, profile_photo_path, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_completion_status, stations (station_code, station_name), designations (code, name)")
+      .select("id, company_id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, gender, date_of_birth, aadhaar_number, pan_number, address, state, pincode, landmark, state_code, father_name, blood_group, bank_account_no, ifsc, statutory_applicability, emergency_contact_name, emergency_contact_number, emergency_contact_relation, profile_photo_path, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_completion_status, profile_return_remarks, stations (station_code, station_name), designations (code, name)")
       .eq("id", employeeId)
       .eq("company_id", companyId)
       .maybeSingle();
@@ -218,7 +219,8 @@ async function serializeEmployee(row: EmployeeProfileRow) {
       profilePhoto: await signedProfileUrl(row.profile_photo_path)
     },
     profilePhotoUrl: await signedProfileUrl(row.profile_photo_path),
-    status: row.profile_completion_status ?? "pending"
+    status: row.profile_completion_status ?? "pending",
+    returnRemarks: row.profile_return_remarks ?? ""
   };
 }
 
@@ -255,7 +257,8 @@ export async function POST(request: Request) {
     const employeeId = String(formData.get("employee_id") ?? "");
     const account = await requireEmployeeAccess(employeeId);
     const currentEmployee = await loadEmployee(account.id, account.companyId);
-    if (String(currentEmployee.profile_completion_status ?? "pending").trim().toLowerCase() !== "pending") {
+    const currentStatus = String(currentEmployee.profile_completion_status ?? "pending").trim().toLowerCase();
+    if (!["pending", "returned"].includes(currentStatus)) {
       throw new Error("Profile cannot be edited after submission.");
     }
     const manualReviewRequired = String(formData.get("manual_review_required") ?? "") === "true";
@@ -285,6 +288,8 @@ export async function POST(request: Request) {
       emergency_contact_number: cleanDigits(formData.get("emergency_contact_number")),
       emergency_contact_relation: cleanText(formData.get("emergency_contact_relation")),
       profile_completion_status: manualReviewRequired ? "under_review" : "active",
+      profile_return_remarks: null,
+      profile_returned_at: null,
       profile_completed_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };

@@ -495,6 +495,70 @@ export async function updateFieldExecutive(formData: FormData) {
   fieldExecutiveRedirect({ notice: `${entityLabel} updated successfully.` }, returnPath);
 }
 
+export async function reviewFieldExecutiveProfile(formData: FormData) {
+  const returnPath = safeReturnPath(formData);
+  const entityLabel = entityLabelForReturnPath(returnPath);
+  const authorization = await requirePagePermission(pageCodeForReturnPath(returnPath), "edit");
+  const companyId = requireCompanyId(authorization);
+  if (!supabaseAdmin) fieldExecutiveRedirect({ error: "Supabase service role key is not configured." }, returnPath);
+
+  const id = String(formData.get("id") ?? "").trim();
+  const action = String(formData.get("review_action") ?? "").trim().toLowerCase();
+  const remarks = String(formData.get("return_remarks") ?? "").trim();
+
+  try {
+    if (!id) throw new Error(`${entityLabel} is required.`);
+    if (!["approve", "return"].includes(action)) throw new Error("Choose a valid review action.");
+    if (action === "return" && !remarks) throw new Error("Return remarks are required.");
+
+    const current = await supabaseAdmin
+      .from("field_executives")
+      .select("onboarding_status")
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (current.error) throw new Error(current.error.message);
+    if (!current.data) throw new Error(`${entityLabel} was not found.`);
+    if (String(current.data.onboarding_status ?? "").toLowerCase() !== "under_review") {
+      throw new Error("Only profiles under review can be approved or returned.");
+    }
+
+    const update = action === "approve"
+      ? {
+          onboarding_status: "active",
+          profile_return_remarks: null,
+          profile_returned_at: null,
+          updated_at: new Date().toISOString()
+        }
+      : {
+          onboarding_status: "returned",
+          profile_return_remarks: remarks,
+          profile_returned_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+    const result = await supabaseAdmin
+      .from("field_executives")
+      .update(update)
+      .eq("id", id)
+      .eq("company_id", companyId);
+    if (result.error) throw new Error(result.error.message);
+
+    revalidatePath("/field-executive");
+    revalidatePath("/contractors");
+    fieldExecutiveRedirect({
+      notice: action === "approve"
+        ? `${entityLabel} profile approved.`
+        : `${entityLabel} profile returned for correction.`
+    }, returnPath);
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    fieldExecutiveRedirect({
+      edit: id,
+      error: error instanceof Error ? error.message : `Unable to review ${entityLabel.toLowerCase()} profile.`
+    }, returnPath);
+  }
+}
+
 type BulkImportRow = {
   dropxId: string | null;
   biometricId: string | null;

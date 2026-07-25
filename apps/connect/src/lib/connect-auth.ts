@@ -143,7 +143,15 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
     employee_id: employee.employee_code,
     biometric_id: employee.biometric_id ?? null,
     role: "Employee",
-    status: employee.profile_completion_status === "active" ? "Active" : employee.profile_completion_status === "submitted" ? "Submitted" : "Pending",
+    status: employee.profile_completion_status === "active"
+      ? "Active"
+      : employee.profile_completion_status === "under_review"
+        ? "Under review"
+        : employee.profile_completion_status === "returned"
+          ? "Returned"
+          : employee.profile_completion_status === "submitted"
+            ? "Submitted"
+            : "Pending",
     profile_type: "employee" as const,
     profile_photo_path: employee.profile_photo_path ?? null,
   }));
@@ -165,7 +173,13 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       dropx_id: executive.dropx_id,
       biometric_id: executive.biometric_id,
       role: executive.designation,
-      status: executive.onboarding_status === "active" ? "Active" : "Pending",
+      status: executive.onboarding_status === "active"
+        ? "Active"
+        : executive.onboarding_status === "under_review"
+          ? "Under review"
+          : executive.onboarding_status === "returned"
+            ? "Returned"
+            : "Pending",
       profile_photo_path: executive.profile_photo_path ?? null,
       profile_type: "field_executive" as const
     }))),

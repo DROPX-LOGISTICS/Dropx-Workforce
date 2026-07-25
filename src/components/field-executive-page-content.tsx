@@ -1,4 +1,4 @@
-import { bulkImportFieldExecutives, createFieldExecutive, updateFieldExecutive } from "@/app/field-executive/actions";
+import { bulkImportFieldExecutives, createFieldExecutive, reviewFieldExecutiveProfile, updateFieldExecutive } from "@/app/field-executive/actions";
 import { AppShell } from "@/components/app-shell";
 import { FieldExecutiveList, type FieldExecutiveListRow } from "@/components/field-executive-list";
 import { PageHead } from "@/components/page-head";
@@ -48,6 +48,7 @@ type ExecutiveRow = {
   date_of_join: string;
   is_active: boolean;
   onboarding_status?: string | null;
+  profile_return_remarks?: string | null;
   location_id: string;
   designation: string | null;
   gender: string | null;
@@ -182,6 +183,7 @@ const statusOptions = [
 function fieldExecutiveStatus(executive: Pick<ExecutiveRow, "is_active" | "onboarding_status">) {
   if (!executive.is_active) return "Inactive";
   if (executive.onboarding_status === "under_review") return "Under review";
+  if (executive.onboarding_status === "returned") return "Returned";
   return executive.onboarding_status === "active" ? "Active" : "Pending";
 }
 
@@ -575,6 +577,7 @@ async function loadFieldExecutiveData(
         date_of_join,
         is_active,
         onboarding_status,
+        profile_return_remarks,
         location_id,
         designation,
         gender,
@@ -817,6 +820,30 @@ export async function FieldExecutivePageContent({
               mode="edit"
               returnPath={returnPath}
             />
+            {editExecutive.onboarding_status === "under_review" ? (
+              <section className="profile-review-panel">
+                <div>
+                  <h3>Profile review</h3>
+                  <p>Approve this profile or return it for correction.</p>
+                </div>
+                <form action={reviewFieldExecutiveProfile} className="profile-review-approve">
+                  <input name="id" type="hidden" value={editExecutive.id} />
+                  <input name="return_path" type="hidden" value={returnPath} />
+                  <input name="review_action" type="hidden" value="approve" />
+                  <SubmitButton pendingText="Approving...">Approve profile</SubmitButton>
+                </form>
+                <form action={reviewFieldExecutiveProfile} className="profile-review-return">
+                  <input name="id" type="hidden" value={editExecutive.id} />
+                  <input name="return_path" type="hidden" value={returnPath} />
+                  <input name="review_action" type="hidden" value="return" />
+                  <label>
+                    <span>Return remarks</span>
+                    <textarea name="return_remarks" placeholder="Explain what must be corrected" required rows={3} />
+                  </label>
+                  <SubmitButton pendingText="Returning...">Return profile</SubmitButton>
+                </form>
+              </section>
+            ) : null}
           </section>
         </div>
       ) : null}

@@ -12,7 +12,7 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { normalizeProfileFieldRules } from "@/lib/profile-field-rules";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
-import { bulkImportEmployees, createEmployee, updateEmployee } from "./actions";
+import { bulkImportEmployees, createEmployee, reviewEmployeeProfile, updateEmployee } from "./actions";
 
 type LocationRow = {
   id: string;
@@ -56,6 +56,7 @@ type EmployeeRow = {
   emergency_contact_relation?: string | null;
   statutory_applicability: string[] | null;
   profile_completion_status?: string | null;
+  profile_return_remarks?: string | null;
   profile_completed_at?: string | null;
   aadhaar_number?: string | null;
   pan_number?: string | null;
@@ -106,6 +107,7 @@ function employeeStatus(employee: EmployeeRow) {
   if (!employee.is_active) return "Inactive";
   if (employee.profile_completion_status === "active") return "Active";
   if (employee.profile_completion_status === "under_review") return "Under review";
+  if (employee.profile_completion_status === "returned") return "Returned";
   if (employee.profile_completion_status === "submitted") return "Submitted";
   if (employee.profile_completion_status === "rejected") return "Rejected";
   const hasCompletedProfile = [
@@ -278,7 +280,7 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
   const [initialEmployeesResult, locationsResult, designationsResult] = await Promise.all([
     supabaseAdmin
       .from("employees")
-      .select("id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, location_id, designation_id, statutory_applicability, profile_completion_status, profile_completed_at, gender, date_of_birth, aadhaar_number, pan_number, father_name, blood_group, address, state_code, pincode, landmark, emergency_contact_name, emergency_contact_number, emergency_contact_relation, bank_account_no, ifsc, pf_uan, pf_account_no, esi_no, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_photo_path, is_active, stations (station_code, station_name), designations (code, name)")
+      .select("id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, location_id, designation_id, statutory_applicability, profile_completion_status, profile_return_remarks, profile_completed_at, gender, date_of_birth, aadhaar_number, pan_number, father_name, blood_group, address, state_code, pincode, landmark, emergency_contact_name, emergency_contact_number, emergency_contact_relation, bank_account_no, ifsc, pf_uan, pf_account_no, esi_no, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_photo_path, is_active, stations (station_code, station_name), designations (code, name)")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false }),
     supabaseAdmin
@@ -510,6 +512,28 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
               <PendingLink className="icon-button" href="/employees" scroll={false} aria-label="Close edit employee">x</PendingLink>
             </div>
             <EmployeeForm action={updateEmployee} designationOptions={designationOptions} employee={editEmployee} locationOptions={locationOptions} mode="edit" />
+            {editEmployee.profile_completion_status === "under_review" ? (
+              <section className="profile-review-panel">
+                <div>
+                  <h3>Profile review</h3>
+                  <p>Approve this profile or return it to the employee with correction remarks.</p>
+                </div>
+                <form action={reviewEmployeeProfile} className="profile-review-approve">
+                  <input name="id" type="hidden" value={editEmployee.id} />
+                  <input name="review_action" type="hidden" value="approve" />
+                  <SubmitButton pendingText="Approving...">Approve profile</SubmitButton>
+                </form>
+                <form action={reviewEmployeeProfile} className="profile-review-return">
+                  <input name="id" type="hidden" value={editEmployee.id} />
+                  <input name="review_action" type="hidden" value="return" />
+                  <label>
+                    <span>Return remarks</span>
+                    <textarea name="return_remarks" placeholder="Explain what must be corrected" required rows={3} />
+                  </label>
+                  <SubmitButton pendingText="Returning...">Return profile</SubmitButton>
+                </form>
+              </section>
+            ) : null}
           </section>
         </div>
       ) : null}

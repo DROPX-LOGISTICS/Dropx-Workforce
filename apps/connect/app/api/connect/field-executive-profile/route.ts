@@ -48,6 +48,7 @@ type FieldExecutiveRow = {
   dl_back_path: string | null;
   profile_photo_path: string | null;
   onboarding_status: string | null;
+  profile_return_remarks?: string | null;
   stations?: { station_code: string | null; station_name: string | null } | { station_code: string | null; station_name: string | null }[] | null;
 };
 
@@ -156,14 +157,14 @@ async function loadExecutive(executiveId: string, companyId: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const result = await supabaseAdmin
     .from("field_executives")
-    .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, eshram_uan, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, stations (station_code, station_name)")
+    .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, eshram_uan, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, profile_return_remarks, stations (station_code, station_name)")
     .eq("id", executiveId)
     .eq("company_id", companyId)
     .maybeSingle();
   if (result.error && /eshram_uan|column/i.test(result.error.message)) {
     const fallbackResult = await supabaseAdmin
       .from("field_executives")
-      .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, stations (station_code, station_name)")
+      .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, profile_return_remarks, stations (station_code, station_name)")
       .eq("id", executiveId)
       .eq("company_id", companyId)
       .maybeSingle();
@@ -252,7 +253,8 @@ async function serializeExecutive(row: FieldExecutiveRow) {
       profilePhoto: await signedProfileUrl(row.profile_photo_path)
     },
     profilePhotoUrl: await signedProfileUrl(row.profile_photo_path),
-    status: row.onboarding_status ?? "pending"
+    status: row.onboarding_status ?? "pending",
+    returnRemarks: row.profile_return_remarks ?? ""
   };
 }
 
@@ -290,7 +292,8 @@ export async function POST(request: Request) {
     const account = await requireExecutiveAccess(executiveId);
     const manualReviewRequired = String(formData.get("manual_review_required") ?? "") === "true";
     const currentExecutive = await loadExecutive(account.id, account.companyId);
-    if (String(currentExecutive.onboarding_status ?? "pending").trim().toLowerCase() !== "pending") {
+    const currentStatus = String(currentExecutive.onboarding_status ?? "pending").trim().toLowerCase();
+    if (!["pending", "returned"].includes(currentStatus)) {
       throw new Error("Profile cannot be edited after submission.");
     }
     const designationResult = currentExecutive.designation
@@ -336,6 +339,8 @@ export async function POST(request: Request) {
       vehicle_insurance_exp_date: dateValue("vehicle_insurance_exp_date", "Vehicle Insurance expiry"),
       vehicle_pollution_exp_date: dateValue("vehicle_pollution_exp_date", "Pollution expiry date"),
       onboarding_status: manualReviewRequired ? "under_review" : "active",
+      profile_return_remarks: null,
+      profile_returned_at: null,
       is_active: true,
       updated_at: new Date().toISOString()
     };

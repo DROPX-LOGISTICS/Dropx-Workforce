@@ -345,6 +345,61 @@ export async function updateEmployee(formData: FormData) {
   }
 }
 
+export async function reviewEmployeeProfile(formData: FormData) {
+  const authorization = await requirePagePermission("employees", "edit");
+  const companyId = requireCompanyId(authorization);
+  if (!supabaseAdmin) employeesRedirect({ error: "Supabase service role key is not configured." });
+
+  const id = String(formData.get("id") ?? "").trim();
+  const action = String(formData.get("review_action") ?? "").trim().toLowerCase();
+  const remarks = String(formData.get("return_remarks") ?? "").trim();
+
+  try {
+    if (!id) throw new Error("Employee is required.");
+    if (!["approve", "return"].includes(action)) throw new Error("Choose a valid review action.");
+    if (action === "return" && !remarks) throw new Error("Return remarks are required.");
+
+    const current = await supabaseAdmin
+      .from("employees")
+      .select("profile_completion_status")
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (current.error) throw new Error(current.error.message);
+    if (!current.data) throw new Error("Employee was not found.");
+    if (String(current.data.profile_completion_status ?? "").toLowerCase() !== "under_review") {
+      throw new Error("Only profiles under review can be approved or returned.");
+    }
+
+    const update = action === "approve"
+      ? {
+          profile_completion_status: "active",
+          profile_return_remarks: null,
+          profile_returned_at: null,
+          profile_completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      : {
+          profile_completion_status: "returned",
+          profile_return_remarks: remarks,
+          profile_returned_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+    const result = await supabaseAdmin
+      .from("employees")
+      .update(update)
+      .eq("id", id)
+      .eq("company_id", companyId);
+    if (result.error) throw new Error(result.error.message);
+
+    revalidatePath("/employees");
+    employeesRedirect({ notice: action === "approve" ? "Employee profile approved." : "Employee profile returned for correction." });
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    employeesRedirect({ edit: id, error: error instanceof Error ? error.message : "Unable to review employee profile." });
+  }
+}
+
 function normalizeHeader(value: unknown) {
   return String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
 }

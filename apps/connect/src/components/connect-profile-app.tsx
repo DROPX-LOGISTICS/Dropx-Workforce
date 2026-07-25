@@ -38,6 +38,7 @@ type Verification = {
   verified: boolean;
   manualReview?: boolean;
   blockSubmit?: boolean;
+  nameMatchStatus?: "exact" | "partial" | "none";
   name?: string;
   accountName?: string;
   ownerName?: string;
@@ -266,8 +267,9 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
-    const result = await response.json() as Verification & { error?: string };
-    if (!response.ok) throw new Error(result.error || "Verification failed.");
+    const payload = await response.json() as Verification & { error?: string };
+    if (!response.ok) throw new Error(payload.error || "Verification failed.");
+    const result = { ...payload, kind };
     setVerifications((current) => ({ ...current, [kind]: result }));
     if (kind === "dl" && result.expiryDate) {
       setValues((current) => ({ ...current, drivingLicenseExpiry: result.expiryDate! }));
@@ -295,7 +297,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
         });
       }
       const result = await requestVerification(kind);
-      if (kind === "pan" && result.verified && enabled.has("aadhaar_number")) {
+      if (kind === "pan" && !result.blockSubmit && enabled.has("aadhaar_number")) {
         setRunning("pan_aadhaar");
         await requestVerification("pan_aadhaar");
       }
@@ -312,7 +314,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
     setNotice("");
     const mandatory = [
       ...(enabled.has("pan_number") ? ["pan"] : []),
-      ...(enabled.has("pan_number") && enabled.has("aadhaar_number") && verified("pan") ? ["pan_aadhaar"] : []),
+      ...(enabled.has("pan_number") && enabled.has("aadhaar_number") && attempted("pan") && !currentCheck("pan")?.blockSubmit ? ["pan_aadhaar"] : []),
       ...(enabled.has("bank_account_no") && enabled.has("ifsc") ? ["bank"] : []),
       ...(!executive && enabled.has("pf_uan") && profile?.statutoryApplicability?.includes("pf") ? ["pf_uan"] : []),
       ...(executive && enabled.has("driving_license_no") ? ["dl"] : []),
@@ -322,8 +324,11 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
       setError("Complete every applicable verification before saving.");
       return;
     }
-    if (currentCheck("dl")?.blockSubmit) {
-      setError("Driving licence is expired. Registration cannot be submitted.");
+    const blockedCheck = ["pan", "dl", "pf_uan"]
+      .map((kind) => currentCheck(kind))
+      .find((item) => item?.blockSubmit);
+    if (blockedCheck) {
+      setError(blockedCheck.message || "A required identity verification did not match. Registration cannot be submitted.");
       return;
     }
 
@@ -549,6 +554,7 @@ function VerificationText({ checks }: { checks: Array<Verification | undefined> 
     const message = holder
       ? `${holder}${check!.fuelType ? ` | Fuel type: ${check!.fuelType}` : ""}${check!.verified ? "" : ` | ${status}`}`
       : status;
-    return <p className={`dx-verification ${check!.verified ? "ok" : "fail"}`} key={check!.kind}><ShieldCheck />{message}</p>;
+    const tone = check!.verified ? "ok" : check!.manualReview ? "review" : "fail";
+    return <p className={`dx-verification ${tone}`} key={check!.kind}><ShieldCheck />{message}</p>;
   })}</>;
 }

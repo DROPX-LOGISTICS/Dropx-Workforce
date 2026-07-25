@@ -2,11 +2,11 @@ import { createHash } from "crypto";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { connectSessionCookieName, normalizeConnectMobile } from "@/lib/connect-auth";
+import { matchNames } from "@/lib/name-match";
 import { isMissingVerificationTable } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const IDSPAY_BASE_URL = "https://javabackend.idspay.in/api/v1/prod";
-const NAME_MATCH_THRESHOLD = 0.7;
 
 type VerificationKind = "pan" | "pan_aadhaar" | "dl" | "vehicle" | "bank" | "pf_uan";
 
@@ -104,14 +104,6 @@ function idspayDob(value: unknown) {
 function isElectricFuel(value: unknown) {
   const fuel = text(value).toLowerCase();
   return fuel.includes("electric") || fuel === "ev";
-}
-
-function nameScore(left: string, right: string) {
-  const a = compact(left).toUpperCase().replace(/[^A-Z0-9 ]/g, "").split(" ").filter(Boolean);
-  const b = compact(right).toUpperCase().replace(/[^A-Z0-9 ]/g, "").split(" ").filter(Boolean);
-  if (!a.length || !b.length) return 0;
-  const common = a.filter((part) => b.includes(part)).length;
-  return common / Math.max(a.length, b.length);
 }
 
 function ok(data: Record<string, unknown>) {
@@ -258,16 +250,24 @@ export async function POST(request: NextRequest) {
       const { body } = await callIdspay("/pan/verification", { ...credentials, pan_number: panNumber });
       const apiName = compact(findFirstString(body, ["full_name", "fullName", "name", "pan_name", "panName"]));
       const apiSuccess = body?.data?.success === true || body?.status?.type === "success";
-      const score = nameScore(registeredName, apiName);
-      const verified = Boolean(apiSuccess && score >= NAME_MATCH_THRESHOLD);
-      const mismatch = Boolean(apiSuccess && !verified);
+      const nameMatch = apiSuccess ? matchNames(registeredName, apiName) : { status: "none" as const, percent: 0 };
+      const verified = apiSuccess && nameMatch.status === "exact";
+      const partial = apiSuccess && nameMatch.status === "partial";
       const result = {
         verified,
-        manualReview: !verified,
+        manualReview: partial,
+        blockSubmit: !apiSuccess || nameMatch.status === "none",
         inputKey: inputKey([panNumber]),
         name: apiName,
-        nameMatchPercent: Math.round(score * 100),
-        message: verified ? `PAN verified. PAN name: ${apiName || "-"}` : (mismatch ? `PAN name mismatch. PAN name: ${apiName || "-"}` : text(body?.message) || "PAN verification failed."),
+        nameMatchStatus: nameMatch.status,
+        nameMatchPercent: nameMatch.percent,
+        message: verified
+          ? `PAN verified. PAN name: ${apiName || "-"}`
+          : partial
+            ? "PAN name partially matched. Profile will be sent for review."
+            : apiSuccess
+              ? "PAN name does not match. Registration is blocked."
+              : text(body?.message) || "PAN verification failed. Registration is blocked.",
         rawStatus: body?.status ?? null
       };
       return verifiedResponse(result);
@@ -305,23 +305,34 @@ export async function POST(request: NextRequest) {
       const { body } = await callIdspay("/srv2/validation/dl", { ...credentials, dlNumber, dob });
       const details = body?.data?.details_of_driving_licence ?? {};
       const apiName = compact(details?.name || findFirstString(body, ["name", "full_name", "fullName"]));
-      const score = nameScore(registeredName, apiName);
       const transportExpiry = normalizeDate(body?.data?.dl_validity?.transport?.to);
       const nonTransportExpiry = normalizeDate(body?.data?.dl_validity?.non_transport?.to);
       const expiryDate = transportExpiry && transportExpiry.toUpperCase() !== "NA" ? transportExpiry : nonTransportExpiry;
       const parsedExpiry = parseDate(expiryDate);
       const expired = parsedExpiry ? parsedExpiry.getTime() < Date.now() : false;
       const apiSuccess = body?.status?.type === "success" || text(body?.message).toLowerCase().includes("validated");
-      const nameMatched = Boolean(apiSuccess && score >= NAME_MATCH_THRESHOLD);
+      const nameMatch = apiSuccess ? matchNames(registeredName, apiName) : { status: "none" as const, percent: 0 };
+      const nameMatched = apiSuccess && nameMatch.status === "exact";
+      const partial = apiSuccess && nameMatch.status === "partial";
+      const blocked = expired || !apiSuccess || nameMatch.status === "none";
       const result = {
         verified: nameMatched && !expired,
-        manualReview: apiSuccess && !nameMatched,
-        blockSubmit: expired,
+        manualReview: partial && !expired,
+        blockSubmit: blocked,
         inputKey: inputKey([dlNumber, normalizeDate(payload.dateOfBirth)]),
         name: apiName,
-        nameMatchPercent: Math.round(score * 100),
+        nameMatchStatus: nameMatch.status,
+        nameMatchPercent: nameMatch.percent,
         expiryDate,
-        message: expired ? "DL is expired." : nameMatched ? "DL verified." : (apiSuccess ? "DL name needs manual review." : text(body?.message) || "DL verification failed.")
+        message: expired
+          ? "DL is expired. Registration is blocked."
+          : nameMatched
+            ? "DL verified."
+            : partial
+              ? "DL name partially matched. Profile will be sent for review."
+              : apiSuccess
+                ? "DL name does not match. Registration is blocked."
+                : text(body?.message) || "DL verification failed. Registration is blocked."
       };
       return verifiedResponse(result);
     }
@@ -368,16 +379,24 @@ export async function POST(request: NextRequest) {
       const { body } = await callIdspay("/srv3/uan-direct", { ...credentials, uan });
       const apiName = uanName(body);
       const apiSuccess = body?.status?.type === "success" || text(body?.message).toLowerCase() === "success";
-      const score = nameScore(registeredName, apiName);
-      const verified = Boolean(apiSuccess && score >= NAME_MATCH_THRESHOLD);
-      const mismatch = Boolean(apiSuccess && !verified);
+      const nameMatch = apiSuccess ? matchNames(registeredName, apiName) : { status: "none" as const, percent: 0 };
+      const verified = apiSuccess && nameMatch.status === "exact";
+      const partial = apiSuccess && nameMatch.status === "partial";
       const result = {
         verified,
-        manualReview: !verified,
+        manualReview: partial,
+        blockSubmit: !apiSuccess || nameMatch.status === "none",
         inputKey: inputKey([uan]),
         name: apiName,
-        nameMatchPercent: Math.round(score * 100),
-        message: verified ? "PF UAN verified." : (mismatch ? `PF UAN name mismatch. PF UAN name: ${apiName || "-"}` : text(body?.message) || "PF UAN verification failed."),
+        nameMatchStatus: nameMatch.status,
+        nameMatchPercent: nameMatch.percent,
+        message: verified
+          ? "PF UAN verified."
+          : partial
+            ? "PF UAN name partially matched. Profile will be sent for review."
+            : apiSuccess
+              ? "PF UAN name does not match. Registration is blocked."
+              : text(body?.message) || "PF UAN verification failed. Registration is blocked.",
         rawStatus: body?.status ?? null
       };
       return verifiedResponse(result);

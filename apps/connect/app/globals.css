@@ -7700,3 +7700,7 @@ tr:last-child td {
   font-size: 13px;
   line-height: 1.45;
 }
+
+.dx-verification.review {
+  color: #9a6700;
+}

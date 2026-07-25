@@ -10468,7 +10468,11 @@ td strong,
   color: #15803d;
 }
 
-.profile-verification-inline.warn > span,
+.profile-verification-inline.warn > span {
+  color: #9a6700;
+}
+
+.profile-verification-inline.error > span,
 .profile-verification-error {
   color: #b91c1c;
 }

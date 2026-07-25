@@ -8,6 +8,9 @@ type VerificationResult = {
   kind: VerificationKind;
   inputKey?: string;
   verified?: boolean;
+  manualReview?: boolean;
+  blockSubmit?: boolean;
+  nameMatchStatus?: "exact" | "partial" | "none";
   name?: string;
   accountName?: string;
   ownerName?: string;
@@ -131,7 +134,7 @@ export function ProfileVerificationPanel({ accountId, kind, profileType, pageCod
   function missingMessage(target = kind, fields = currentFields()) {
     if (target === "pan" && (!fields.panNumber || !fields.aadhaarNumber)) return "PAN and Aadhaar are required.";
     if (target === "pan_aadhaar" && (!fields.panNumber || !fields.aadhaarNumber)) return "PAN and Aadhaar are required.";
-    if (target === "pan_aadhaar" && !results.pan?.verified) return "Verify PAN first.";
+    if (target === "pan_aadhaar" && (!results.pan || results.pan.blockSubmit)) return "Verify PAN first.";
     if (target === "dl" && (!fields.drivingLicenseNo || !fields.dateOfBirth)) return "DL and DOB are required.";
     if (target === "vehicle" && !fields.vehicleRegNo) return "Vehicle number is required.";
     if (target === "bank" && (!fields.bankAccountNo || !fields.ifsc)) return "Bank account and IFSC are required.";
@@ -170,7 +173,7 @@ export function ProfileVerificationPanel({ accountId, kind, profileType, pageCod
       const next = { ...results, [kind]: result };
       if (kind === "pan") {
         delete next.pan_aadhaar;
-        if (result.verified) {
+        if (!result.blockSubmit) {
           const aadhaarMissing = !fields.panNumber || !fields.aadhaarNumber ? "PAN and Aadhaar are required." : "";
           if (aadhaarMissing) {
             setError(aadhaarMissing);
@@ -252,8 +255,9 @@ export function ProfileVerificationPanel({ accountId, kind, profileType, pageCod
   const missing = missingMessage(kind, fields);
   const message = kind === "pan" ? panGroupMessage(result, panAadhaarResult) : resultMessage(result);
   const hiddenResults = kind === "pan" ? [result, panAadhaarResult].filter(Boolean) : [result].filter(Boolean);
+  const resultTone = isVerified ? "ok" : result?.manualReview ? "warn" : result ? "error" : "";
   return (
-    <div className={`profile-verification-inline ${isVerified ? "ok" : result ? "warn" : ""} ${isVerified ? "" : "needs-button"}`} ref={hostRef}>
+    <div className={`profile-verification-inline ${resultTone} ${isVerified ? "" : "needs-button"}`} ref={hostRef}>
       {hiddenResults.length ? (
         <input name="profile_verification_results" type="hidden" value={JSON.stringify(hiddenResults)} />
       ) : null}

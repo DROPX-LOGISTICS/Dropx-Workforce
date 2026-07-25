@@ -25,6 +25,7 @@ type ShipmentRow = {
   total_activity: number | string | null;
 };
 type Totals = { assigned: number; delivery: number; swa: number; cReturn: number; mfn: number; mfnReturn: number; totalDelivery: number; totalActivity: number };
+const shipmentPageSize = 1000;
 
 function today() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
@@ -43,6 +44,27 @@ function add(total: Totals, row: ShipmentRow) {
 function fmt(value: number) { return value.toLocaleString("en-IN", { maximumFractionDigits: 0 }); }
 function deliveryRate(row: Totals) { return row.assigned ? row.totalDelivery / row.assigned : 0; }
 
+async function loadShipmentRows(companyId: string, stationCodes: string[], from: string, to: string) {
+  const rows: ShipmentRow[] = [];
+  for (let start = 0; ; start += shipmentPageSize) {
+    const result = await supabaseAdmin!
+      .from("cps_shipment_daily")
+      .select("work_date,station_code,provider_employee_id,provider_employee_name,assigned_count,amazon_delivery,swa_delivery,c_return,mfn,mfn_return,total_delivery,total_activity")
+      .eq("company_id", companyId)
+      .in("station_code", stationCodes)
+      .gte("work_date", from)
+      .lte("work_date", to)
+      .order("work_date", { ascending: false })
+      .order("station_code")
+      .order("provider_employee_id")
+      .range(start, start + shipmentPageSize - 1);
+    if (result.error) return { data: rows, error: result.error };
+    const page = (result.data ?? []) as ShipmentRow[];
+    rows.push(...page);
+    if (page.length < shipmentPageSize) return { data: rows, error: null };
+  }
+}
+
 export default async function DeliveryDataPage({ searchParams }: { searchParams?: SearchParams }) {
   const authorization = await requirePagePermission("cps_shipments", "access");
   const companyId = requireCompanyId(authorization);
@@ -57,11 +79,9 @@ export default async function DeliveryDataPage({ searchParams }: { searchParams?
   const sort = searchParams?.sort || "totalDelivery";
   const direction = searchParams?.dir === "asc" ? 1 : -1;
 
-  const result = !supabaseAdmin || !permittedCodes.length ? { data: [] as ShipmentRow[], error: null } : await supabaseAdmin
-    .from("cps_shipment_daily")
-    .select("work_date,station_code,provider_employee_id,provider_employee_name,assigned_count,amazon_delivery,swa_delivery,c_return,mfn,mfn_return,total_delivery,total_activity")
-    .eq("company_id", companyId).in("station_code", permittedCodes).gte("work_date", from).lte("work_date", to)
-    .order("work_date", { ascending: false }).limit(20000);
+  const result = !supabaseAdmin || !permittedCodes.length
+    ? { data: [] as ShipmentRow[], error: null }
+    : await loadShipmentRows(companyId, permittedCodes, from, to);
   const rows = (result.data ?? []) as ShipmentRow[];
   const locationMap = new Map(permitted.map((location) => [location.station_code, location]));
   const stationMap = new Map<string, Totals>();

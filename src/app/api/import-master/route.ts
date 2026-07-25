@@ -38,7 +38,7 @@ export async function GET() {
   try {
     const { authorization, companyId, db } = await context();
     if (!hasPermission(authorization, "imports", "access")) return Response.json({ error: "Permission denied." }, { status: 403 });
-    const { data, error } = await db.from("report_import_master").select(fields).eq("company_id", companyId).order("name");
+    const { data, error } = await db.from("report_import_master").select(fields).eq("company_id", companyId).neq("parser_type", "performance_target").order("name");
     if (error) throw error;
     return Response.json({ reports: data ?? [] });
   } catch (error) {

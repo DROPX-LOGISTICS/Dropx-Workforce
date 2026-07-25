@@ -16,6 +16,7 @@ export default async function ImportMasterPage() {
       .from("report_import_master")
       .select("id, source_code, name, description, file_types, day_offset, upload_time, frequency, weekday, parser_type, dedupe_fields, is_active")
       .eq("company_id", companyId)
+      .neq("parser_type", "performance_target")
       .order("name")
     : { data: null, error: { message: "Supabase service key is not configured." } };
 

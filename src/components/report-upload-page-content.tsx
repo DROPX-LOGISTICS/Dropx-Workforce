@@ -65,6 +65,19 @@ function previousWeekday(value: string, weekday: number) {
   return addDays(value, -daysBack);
 }
 
+function dueTimePassed(report: ReportImportMaster, date: string, today: string) {
+  if (date < today) return true;
+  if (date > today) return false;
+  if (!report.upload_time) return false;
+  const now = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(new Date());
+  return now >= report.upload_time.slice(0, 5);
+}
+
 function reportIsDue(report: ReportImportMaster, date: string) {
   if (report.frequency === "weekly" && report.weekday !== null) {
     return new Date(`${date}T00:00:00Z`).getUTCDay() === report.weekday;
@@ -87,6 +100,12 @@ function batchMatchesDate(batch: ImportBatch, date: string) {
   return createdDateInIndia(batch.created_at) === date;
 }
 
+function successfulBatchCoversDate(batch: ImportBatch, sourceCode: string, date: string) {
+  return batch.source_type === sourceCode
+    && batch.status.toLowerCase() !== "failed"
+    && batchMatchesDate(batch, date);
+}
+
 async function loadImportMaster(companyId: string | null) {
   if (!companyId || !supabaseAdmin) return { rows: [] as ReportImportMaster[], error: null as string | null };
   const { data, error } = await supabaseAdmin
@@ -94,6 +113,7 @@ async function loadImportMaster(companyId: string | null) {
     .select("id, source_code, name, description, file_types, day_offset, upload_time, frequency, weekday, parser_type, dedupe_fields, is_active")
     .eq("company_id", companyId)
     .eq("is_active", true)
+    .neq("parser_type", "performance_target")
     .order("name");
   if (error) return { rows: [] as ReportImportMaster[], error: error.message };
   return { rows: (data ?? []) as ReportImportMaster[], error: null };
@@ -132,15 +152,24 @@ export async function ReportUploadPageContent({
     if (!latestBySource.has(batch.source_type)) latestBySource.set(batch.source_type, batch);
   });
   const today = todayInIndia();
-  const missedWeekly = reports.flatMap((report) => {
-    if (report.frequency !== "weekly" || report.weekday === null) return [];
-    const dueDate = previousWeekday(today, report.weekday);
-    const nextDueDate = addDays(dueDate, 7);
-    const uploaded = batches.some((batch) => batch.source_type === report.source_code
-      && createdDateInIndia(batch.created_at) >= dueDate
-      && createdDateInIndia(batch.created_at) < nextDueDate
-      && batch.status.toLowerCase() !== "failed");
-    return uploaded ? [] : [{ report, dueDate }];
+  const coverageGaps = reports.flatMap((report) => {
+    if (report.frequency === "adhoc" || report.frequency === "monthly") return [];
+    const expectedDates: string[] = [];
+    if (report.frequency === "daily") {
+      for (let daysBack = 14; daysBack >= 0; daysBack -= 1) {
+        const expectedDate = addDays(today, -daysBack);
+        if (dueTimePassed(report, expectedDate, today)) expectedDates.push(expectedDate);
+      }
+    } else if (report.weekday !== null) {
+      let dueDate = previousWeekday(addDays(today, 1), report.weekday);
+      for (let week = 0; week < 6; week += 1) {
+        if (dueTimePassed(report, dueDate, today)) expectedDates.push(dueDate);
+        dueDate = addDays(dueDate, -7);
+      }
+    }
+    const missing = expectedDates.filter((expectedDate) =>
+      !batches.some((batch) => successfulBatchCoversDate(batch, report.source_code, expectedDate)));
+    return missing.length ? [{ report, missing }] : [];
   });
   const recentBatches = batches.slice(0, 10);
 
@@ -164,6 +193,37 @@ export async function ReportUploadPageContent({
         </div>
         <ReportImportUploader reports={reports} compact />
       </section>
+
+      {coverageGaps.length ? (
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>Coverage gaps</h2>
+              <p className="subtle">Missing daily dates from the last 14 days and weekly due dates from the last 6 weeks.</p>
+            </div>
+            <StatusPill status={`${coverageGaps.length} reports need attention`} />
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Report</th><th>Frequency</th><th>Missing periods</th><th>Action</th></tr></thead>
+              <tbody>
+                {coverageGaps.map(({ report, missing }) => (
+                  <tr key={`coverage-${report.id}`}>
+                    <td><strong>{report.name}</strong></td>
+                    <td>{report.frequency}</td>
+                    <td>{missing.slice(-8).map(displayDate).join(", ")}{missing.length > 8 ? ` · +${missing.length - 8} earlier` : ""}</td>
+                    <td><Link className="button secondary compact" href={`/imports?date=${missing[missing.length - 1]}`}>Review</Link></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : (
+        <section className="panel message-panel success">
+          <div className="panel-body"><strong>Report coverage is complete for the monitored daily and weekly periods.</strong></div>
+        </section>
+      )}
 
       <section className="panel">
         <div className="panel-head toolbar">
@@ -209,23 +269,13 @@ export async function ReportUploadPageContent({
         <div className="panel-head">
           <div>
             <h2>Upload log</h2>
-            <p className="subtle">Latest activity and missed weekly uploads.</p>
+            <p className="subtle">Latest upload activity.</p>
           </div>
         </div>
         <div className="table-wrap">
           <table>
             <thead><tr><th>Uploaded</th><th>Report</th><th>Report period</th><th>Result</th><th>Rows</th><th>File</th></tr></thead>
             <tbody>
-              {missedWeekly.map(({ report, dueDate }) => (
-                <tr key={`missed-${report.id}-${dueDate}`}>
-                  <td>-</td>
-                  <td><strong>{report.name}</strong></td>
-                  <td>{displayDate(dueDate)}</td>
-                  <td><StatusPill status="Missed" /></td>
-                  <td>-</td>
-                  <td>-</td>
-                </tr>
-              ))}
               {recentBatches.map((batch) => {
                 const report = reportBySource.get(batch.source_type);
                 const period = batch.report_from
@@ -244,7 +294,7 @@ export async function ReportUploadPageContent({
                   </tr>
                 );
               })}
-              {!missedWeekly.length && !recentBatches.length ? <tr><td className="empty-cell" colSpan={6}>No upload activity yet.</td></tr> : null}
+              {!recentBatches.length ? <tr><td className="empty-cell" colSpan={6}>No upload activity yet.</td></tr> : null}
             </tbody>
           </table>
         </div>

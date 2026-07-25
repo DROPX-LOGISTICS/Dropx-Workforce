@@ -7724,6 +7724,7 @@ tr:last-child td {
 
 .dx-input-action.dx-verify-disabled input::placeholder {
   color: #d66b72;
+  font-size: 11px;
   opacity: 0.75;
 }
 

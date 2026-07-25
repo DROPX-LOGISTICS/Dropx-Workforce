@@ -82,8 +82,15 @@ export async function AppShell({ children, active, pageCode }: { children: React
             <img className="brand-logo" src="/dropx-logo.png" alt="DropX" />
             {isOpsHost ? (
               <div className="ops-brand-lockup">
-                <strong>Operations</strong>
-                <span>Control Center</span>
+                <span className="ops-brand-mark" aria-hidden="true">
+                  <svg viewBox="0 0 32 32" role="img">
+                    <path d="M4 17h5l2.7-7 4.2 14 3.4-10 2.2 3H28" />
+                  </svg>
+                </span>
+                <span className="ops-brand-copy">
+                  <strong>Ops<span>Pulse</span></strong>
+                  <small>Operations intelligence</small>
+                </span>
               </div>
             ) : null}
           </div>
@@ -98,7 +105,7 @@ export async function AppShell({ children, active, pageCode }: { children: React
         </aside>
       )}
     >
-      <DocumentTitle pageName={active} productName={isOpsHost ? "DropX Operations" : "DropX Dashboard"} />
+      <DocumentTitle pageName={active} productName={isOpsHost ? "OpsPulse · DropX" : "DropX Dashboard"} />
       <InboxNotificationListener enabled={inboxNotificationsEnabled} />
       {children}
     </AppShellFrame>

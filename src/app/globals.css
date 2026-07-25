@@ -176,7 +176,7 @@ a {
 }
 
 .brand-logo {
-  width: 118px;
+  width: 86px;
   height: 42px;
   object-fit: contain;
   object-position: left center;
@@ -184,25 +184,58 @@ a {
 
 .ops-brand-lockup {
   min-width: 0;
-  padding-left: 11px;
+  padding-left: 10px;
   border-left: 1px solid #e4e7ec;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ops-brand-mark {
+  width: 27px;
+  height: 27px;
+  flex: 0 0 27px;
   display: grid;
-  gap: 2px;
+  place-items: center;
+  border-radius: 8px;
+  background: linear-gradient(145deg, #ff7a2f 0%, #e9481b 100%);
+  box-shadow: 0 5px 12px rgba(233, 72, 27, 0.22);
+}
+
+.ops-brand-mark svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ops-brand-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
   line-height: 1;
 }
 
-.ops-brand-lockup strong {
+.ops-brand-copy strong {
   color: #172033;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
+  font-size: 14px;
+  font-weight: 850;
+  letter-spacing: -0.045em;
+  white-space: nowrap;
 }
 
-.ops-brand-lockup span {
-  color: #f15a24;
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.11em;
+.ops-brand-copy strong span {
+  color: #ed5724;
+}
+
+.ops-brand-copy small {
+  color: #7b8495;
+  font-size: 6.5px;
+  font-weight: 750;
+  letter-spacing: 0.065em;
   text-transform: uppercase;
   white-space: nowrap;
 }

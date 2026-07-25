@@ -275,7 +275,7 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
 
         <section className="ops-dashboard-modules">
           <article className="ops-module">
-            <header><div><span>STATION PERFORMANCE</span><h2>Amazon EDSP performance</h2></div><Link href="/ops-pulse/reports/amazon">Reports →</Link></header>
+            <header><div><span>STATION PERFORMANCE</span><h2>Amazon EDSP performance</h2></div><Link href="/ops-pulse/performance">Open workspace →</Link></header>
             <div className="ops-stat-list">
               <div><small>Daily EDSP Metrics</small><strong>{dailyScorecards.length ? `${new Set(dailyScorecards.map((row) => row.station_code).filter(Boolean)).size} stations` : "Awaiting import"}</strong><span>{dailyScorecards.length ? "Latest uploaded daily performance report" : "No daily EDSP Metrics rows found"}</span></div>
               <div><small>Amazon SLS Scorecard</small><strong>{weeklyScorecards.length ? `Week ${latestSlsWeek} · ${(averageSlsScore * 100).toFixed(1)}%` : "Awaiting import"}</strong><span>{weeklyScorecards.length ? `${slsScores.length} station scores loaded` : "No weekly SLS rows found"}</span></div>

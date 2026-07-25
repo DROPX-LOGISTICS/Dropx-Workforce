@@ -54,13 +54,13 @@ function modelAccent(mode: string) {
   return "amazon";
 }
 
-async function shipmentFacts(companyId: string, stationCode: string, from: string, to: string) {
+async function shipmentFacts(companyId: string, stationCodes: string[], from: string, to: string) {
   if (!supabaseAdmin) return { error: "Supabase connection is unavailable.", rows: [] as ShipmentFact[] };
   const { data, error } = await supabaseAdmin
     .from("cps_shipment_daily")
     .select("shipment_type,total_activity,total_delivery,work_date")
     .eq("company_id", companyId)
-    .eq("station_code", stationCode)
+    .in("station_code", stationCodes)
     .gte("work_date", from)
     .lte("work_date", to)
     .order("work_date");
@@ -76,10 +76,11 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
     authorization.hasAllLocationAccess
   );
   const context = resolveOperatingContext(locationsResult.locations);
+  const selectedLocations = context.selectedLocations;
   const date = selectedDate(searchParams?.date);
   const { monthEnd, monthStart, yearStart } = ranges(date);
-  const factsResult = context.location
-    ? await shipmentFacts(companyId, context.location.station_code, yearStart, monthEnd)
+  const factsResult = selectedLocations.length
+    ? await shipmentFacts(companyId, selectedLocations.map((location) => location.station_code), yearStart, monthEnd)
     : { error: null, rows: [] as ShipmentFact[] };
   const facts = factsResult.rows;
   const attendanceResult = isNaN(Date.parse(`${date}T00:00:00Z`)) || !context.location || !supabaseAdmin
@@ -87,7 +88,7 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
     : await supabaseAdmin.from("attendance_daily")
       .select("enrolment_id,worker_name,employee_code,in_time,out_time,punch_count,work_minutes,status,remark")
       .eq("company_id", companyId)
-      .eq("location_id", context.location.id)
+      .in("location_id", selectedLocations.map((location) => location.id))
       .eq("punch_date", date)
       .order("in_time", { ascending: true });
   const attendance = attendanceResult.data ?? [];
@@ -116,12 +117,15 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
     return hour * 60 + minute > shiftStartHour * 60 + 15;
   }).length;
   const completedShift = attendance.filter((row) => row.out_time && Number(row.work_minutes ?? 0) >= 600).length;
+  const scopeLabel = selectedLocations.length > 1
+    ? `${selectedLocations.length} selected locations`
+    : context.location ? locationLabel(context.location) : "No mapped location";
 
   return (
     <AppShell active="Dashboard" pageCode="ops_pulse">
       <div className={`ops-command-center ${accent}`}>
         <PageHead
-          eyebrow={`${operatingModeLabel(context.mode)} · ${context.location ? locationLabel(context.location) : "No mapped location"}`}
+          eyebrow={`${operatingModeLabel(context.mode)} · ${scopeLabel}`}
           title={isNow ? "Live Shift Command Center" : "Operations Command Center"}
           subtitle={isNow
             ? "Store, attendance, shift readiness, hourly output and live exceptions in one operational view."
@@ -137,7 +141,7 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
           <div className="ops-context-summary">
             <span>Selected workspace</span>
             <strong>{operatingModeLabel(context.mode)}</strong>
-            <small>{context.location ? `${context.location.station_code} · ${context.location.station_name} · ${locationModelName(context.location)}` : "No permitted mapped station"}</small>
+            <small>{selectedLocations.length > 1 ? `${selectedLocations.length} permitted locations combined` : context.location ? `${context.location.station_code} · ${context.location.station_name} · ${locationModelName(context.location)}` : "No permitted mapped station"}</small>
           </div>
           <form action="/ops-pulse" className="ops-date-controls">
             <label>Business date<input name="date" type="date" defaultValue={date} /></label>

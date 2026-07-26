@@ -111,13 +111,15 @@ async function loadImportMaster(companyId: string | null) {
   if (!companyId || !supabaseAdmin) return { rows: [] as ReportImportMaster[], error: null as string | null };
   const { data, error } = await supabaseAdmin
     .from("report_import_master")
-    .select("id, source_code, name, description, file_types, day_offset, upload_time, frequency, weekday, parser_type, dedupe_fields, is_active")
+    .select("id, source_code, name, description, file_types, day_offset, upload_time, frequency, weekday, parser_type, dedupe_fields, is_active, requires_station, station_scope, requires_report_date, report_date_label, date_default_offset")
     .eq("company_id", companyId)
     .eq("is_active", true)
-    .in("parser_type", ["inbound_shipment_detail", "delivered_shipment_detail"])
     .order("name");
   if (error) return { rows: [] as ReportImportMaster[], error: error.message };
-  return { rows: (data ?? []) as ReportImportMaster[], error: null };
+  return {
+    rows: ((data ?? []) as ReportImportMaster[]).filter((report) => Array.isArray(report.file_types) && report.file_types.length > 0),
+    error: null
+  };
 }
 
 async function loadBatches(companyId: string | null) {
@@ -151,14 +153,11 @@ export async function ReportUploadPageContent({
       ? loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess)
       : Promise.resolve({ locations: [], error: null })
   ]);
-  const shipmentStations = locationResult.locations.filter((location) => {
-    const provider = providerName(location).toUpperCase();
-    const model = locationModelName(location).toUpperCase();
-    return provider.includes("AMAZON") && ["DSP", "EDSP", "XPD", "XPT", "AMXL"].includes(model);
-  }).map((location) => ({
+  const shipmentStations = locationResult.locations.map((location) => ({
     code: location.station_code,
     name: location.station_name || location.city || location.station_code,
-    model: locationModelName(location)
+    model: locationModelName(location),
+    provider: providerName(location)
   }));
   const dueReports = reports.filter((report) => reportIsDue(report, date));
   const reportBySource = new Map(reports.map((report) => [report.source_code, report]));

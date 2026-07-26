@@ -1017,7 +1017,7 @@ export async function POST(request: Request) {
   const selectedReportDate = parseDate(formData.get("report_date"));
   const file = formData.get("file");
   const master = await db.from("report_import_master")
-    .select("source_code, name, file_types, parser_type, dedupe_fields, is_active")
+    .select("source_code, name, file_types, parser_type, dedupe_fields, is_active, requires_station, station_scope, requires_report_date")
     .eq("company_id", companyId)
     .eq("source_code", sourceType)
     .eq("is_active", true)
@@ -1025,20 +1025,21 @@ export async function POST(request: Request) {
   if (master.error) return databaseSetupError(master.error.message);
   if (!master.data) return Response.json({ error: "Select an active report from Import Master." }, { status: 400 });
   const masterData = master.data;
-  if (masterData.parser_type === "inbound_shipment_detail" || masterData.parser_type === "delivered_shipment_detail") {
-    if (!selectedStation || !selectedReportDate) {
+  if (masterData.requires_station || masterData.requires_report_date) {
+    if ((masterData.requires_station && !selectedStation) || (masterData.requires_report_date && !selectedReportDate)) {
       return Response.json({ error: "Select the station and data date." }, { status: 400 });
     }
-    const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
+    const locationResult = masterData.requires_station
+      ? await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess)
+      : { locations: [], error: null };
     if (locationResult.error) return Response.json({ error: locationResult.error }, { status: 500 });
-    const eligible = locationResult.locations.some((location) => {
+    const eligible = !masterData.requires_station || locationResult.locations.some((location) => {
       const provider = providerName(location).toUpperCase();
       const model = locationModelName(location).toUpperCase();
       return location.station_code === selectedStation
-        && provider.includes("AMAZON")
-        && ["DSP", "EDSP", "XPD", "XPT", "AMXL"].includes(model);
+        && (masterData.station_scope !== "amazon_dsp_xpd" || (provider.includes("AMAZON") && ["DSP", "EDSP", "XPD", "XPT", "AMXL"].includes(model)));
     });
-    if (!eligible) return Response.json({ error: "Select an eligible Amazon DSP or XPD station." }, { status: 400 });
+    if (!eligible) return Response.json({ error: "Select an eligible station for this report." }, { status: 400 });
   }
   if (!(file instanceof File)) return Response.json({ error: "Upload a report file." }, { status: 400 });
   const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";

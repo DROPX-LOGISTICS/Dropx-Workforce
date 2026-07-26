@@ -14,7 +14,7 @@ export default async function ImportMasterPage() {
   const result = supabaseAdmin
     ? await supabaseAdmin
       .from("report_import_master")
-      .select("id, source_code, name, description, file_types, day_offset, upload_time, frequency, weekday, parser_type, dedupe_fields, is_active")
+      .select("id, source_code, name, description, file_types, day_offset, upload_time, frequency, weekday, parser_type, dedupe_fields, is_active, requires_station, station_scope, requires_report_date, report_date_label, date_default_offset")
       .eq("company_id", companyId)
       .neq("parser_type", "performance_target")
       .order("name")

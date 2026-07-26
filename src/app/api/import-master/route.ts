@@ -2,7 +2,7 @@ import { getAuthorization, hasPermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
-const fields = "id, source_code, name, description, file_types, day_offset, upload_time, frequency, weekday, parser_type, dedupe_fields, is_active";
+const fields = "id, source_code, name, description, file_types, day_offset, upload_time, frequency, weekday, parser_type, dedupe_fields, is_active, requires_station, station_scope, requires_report_date, report_date_label, date_default_offset";
 
 function clean(value: unknown) {
   return String(value ?? "").trim();
@@ -30,7 +30,12 @@ function payload(body: Record<string, unknown>) {
     weekday: frequency === "weekly" && body.weekday !== null && body.weekday !== "" ? Number(body.weekday) : null,
     parser_type: clean(body.parser_type),
     dedupe_fields: dedupeFields,
-    is_active: body.is_active !== false
+    is_active: body.is_active !== false,
+    requires_station: body.requires_station === true,
+    station_scope: body.requires_station === true ? clean(body.station_scope) || "all" : "none",
+    requires_report_date: body.requires_report_date === true,
+    report_date_label: body.requires_report_date === true ? clean(body.report_date_label) || "Data date" : null,
+    date_default_offset: body.requires_report_date === true ? Number(body.date_default_offset ?? 0) : 0
   };
 }
 

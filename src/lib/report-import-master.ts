@@ -11,6 +11,11 @@ export type ReportImportMaster = {
   parser_type: string;
   dedupe_fields: string[];
   is_active: boolean;
+  requires_station: boolean;
+  station_scope: "none" | "all" | "amazon_dsp_xpd";
+  requires_report_date: boolean;
+  report_date_label: string | null;
+  date_default_offset: number;
 };
 
 export const weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

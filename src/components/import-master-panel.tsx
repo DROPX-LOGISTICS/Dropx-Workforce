@@ -7,7 +7,8 @@ import { ReportImportMaster, reportSchedule, weekdayNames } from "@/lib/report-i
 const empty = {
   id: "", source_code: "", name: "", description: "", file_types: "xlsx", day_offset: 0,
   upload_time: "", frequency: "daily", weekday: "", parser_type: "generic_table",
-  dedupe_fields: "", is_active: true
+  dedupe_fields: "", is_active: true, requires_station: false, station_scope: "none",
+  requires_report_date: false, report_date_label: "Data date", date_default_offset: 0
 };
 
 export function ImportMasterPanel({ reports }: { reports: ReportImportMaster[] }) {
@@ -24,7 +25,8 @@ export function ImportMasterPanel({ reports }: { reports: ReportImportMaster[] }
       file_types: report.file_types.join(", "),
       upload_time: report.upload_time?.slice(0, 5) ?? "",
       weekday: report.weekday === null ? "" : String(report.weekday),
-      dedupe_fields: report.dedupe_fields.join(", ")
+      dedupe_fields: report.dedupe_fields.join(", "),
+      report_date_label: report.report_date_label ?? "Data date"
     } : { ...empty });
     setMessage(null);
     setError(null);
@@ -100,6 +102,10 @@ export function ImportMasterPanel({ reports }: { reports: ReportImportMaster[] }
           {editing.frequency === "weekly" ? <label><span>Weekday</span><select className="select" value={editing.weekday} onChange={(e) => set("weekday", e.target.value)}><option value="">Select</option>{weekdayNames.map((day, index) => <option key={day} value={index}>{day}</option>)}</select></label> : null}
           <label><span>Parser</span><input className="field" value={editing.parser_type} onChange={(e) => set("parser_type", e.target.value)} /></label>
           <label><span>Duplicate keys</span><input className="field" value={editing.dedupe_fields} onChange={(e) => set("dedupe_fields", e.target.value)} /></label>
+          <label><span>Station field</span><select className="select" value={editing.requires_station ? editing.station_scope : "none"} onChange={(e) => { set("requires_station", e.target.value !== "none"); set("station_scope", e.target.value); }}><option value="none">Do not show</option><option value="all">All permitted stations</option><option value="amazon_dsp_xpd">Amazon DSP / XPD only</option></select></label>
+          <label><span>Date field</span><select className="select" value={editing.requires_report_date ? "show" : "none"} onChange={(e) => set("requires_report_date", e.target.value === "show")}><option value="none">Do not show</option><option value="show">Show date selector</option></select></label>
+          {editing.requires_report_date ? <label><span>Date label</span><input className="field" value={editing.report_date_label} onChange={(e) => set("report_date_label", e.target.value)} /></label> : null}
+          {editing.requires_report_date ? <label><span>Default date</span><select className="select" value={editing.date_default_offset} onChange={(e) => set("date_default_offset", Number(e.target.value))}><option value={-1}>Yesterday</option><option value={0}>Today</option><option value={1}>Tomorrow</option></select></label> : null}
           <label style={{ gridColumn: "span 3" }}><span>Description</span><input className="field" value={editing.description} onChange={(e) => set("description", e.target.value)} /></label>
         </div>
         <label><input checked={editing.is_active} onChange={(e) => set("is_active", e.target.checked)} type="checkbox" /> Active in upload menu</label>

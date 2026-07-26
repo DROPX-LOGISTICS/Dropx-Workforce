@@ -707,7 +707,10 @@ function parseDeliveredShipmentFacts(rows: SheetRow[], companyId: string, batchI
       length_cm: lengthCm,
       package_count: Math.max(1, toNumber(findValue(raw, ["Package Count"])) || 1),
       postal_code: postalCode,
-      raw_payload: raw,
+      // Shipment facts already persist every field used by capacity, CPS and
+      // volumetric analysis. Repeating the full spreadsheet row here makes
+      // large monthly files several times larger over the database API.
+      raw_payload: {},
       source_batch_id: batchId,
       station_code: stationCode,
       tracking_id: trackingId,
@@ -765,7 +768,7 @@ function parseInboundShipmentFacts(rows: SheetRow[], companyId: string, batchId:
       length_cm: lengthCm,
       package_count: Math.max(1, toNumber(findValue(raw, ["Package Count"])) || 1),
       postal_code: postalCode,
-      raw_payload: raw,
+      raw_payload: {},
       shipment_state: clean(findValue(raw, ["State", "Shipment State"])) || null,
       snapshot_at: timestamp(findValue(raw, ["Last Updated Time", "Snapshot Time", "Report Time"])),
       source_batch_id: batchId,

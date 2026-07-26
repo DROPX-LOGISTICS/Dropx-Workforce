@@ -39,7 +39,7 @@ export type CapacityPincode = {
   average_cubic_cm3: number | string | null;
 };
 
-type ShipmentCountAssociateDay = {
+export type ShipmentCountAssociateDay = {
   client: string;
   station_code: string;
   work_date: string;
@@ -103,7 +103,7 @@ async function loadDetailedAssociateDays(companyId: string, stationCodes: string
   };
 }
 
-async function loadShipmentCountAssociateDays(companyId: string, stationCodes: string[], from: string, to: string) {
+export async function loadShipmentCountAssociateDays(companyId: string, stationCodes: string[], from: string, to: string) {
   if (!supabaseAdmin || !stationCodes.length) {
     return { data: [] as ShipmentCountAssociateDay[], error: null };
   }

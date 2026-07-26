@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { loadCapacityAssociateDays } from "@/lib/ops-pulse/capacity-shipments";
+import { loadShipmentCountAssociateDays } from "@/lib/ops-pulse/capacity-shipments";
 
 export const codFormTypes = ["amazon", "flipkart"] as const;
 export const codClients = ["Amazon", "Flipkart"] as const;
@@ -744,10 +744,10 @@ export async function loadExecutiveReconciliationRows(
   const sourceDate = new Date(`${businessDate}T00:00:00Z`);
   sourceDate.setUTCDate(sourceDate.getUTCDate() - 90);
   const sourceFrom = sourceDate.toISOString().slice(0, 10);
-  const associateSourceResult = await loadCapacityAssociateDays(companyId, stationScope, sourceFrom, businessDate);
+  const associateSourceResult = await loadShipmentCountAssociateDays(companyId, stationScope, sourceFrom, businessDate);
   const latestAssociateByKey = new Map<string, (typeof associateSourceResult.data)[number]>();
   associateSourceResult.data.forEach((associate) => {
-    const providerEmployeeId = String(associate.associate_id ?? "").trim();
+    const providerEmployeeId = String(associate.provider_employee_id ?? "").trim();
     const stationCode = String(associate.station_code ?? "").trim();
     if (!providerEmployeeId || !stationCode) return;
     const key = executiveRowKey(stationCode, providerEmployeeId);
@@ -758,16 +758,16 @@ export async function loadExecutiveReconciliationRows(
   });
   Array.from(latestAssociateByKey.values())
     .forEach((associate) => {
-    const providerEmployeeId = String(associate.associate_id ?? "").trim();
+    const providerEmployeeId = String(associate.provider_employee_id ?? "").trim();
     const stationCode = String(associate.station_code ?? "").trim();
     if (!providerEmployeeId || !stationCode) return;
     const key = executiveRowKey(stationCode, providerEmployeeId);
     const existing = rowsByKey.get(key);
     if (existing) {
-      if (!existing.source_associate_name && associate.associate_name) existing.source_associate_name = associate.associate_name;
-      if (!existing.associate_name && associate.associate_name) existing.associate_name = associate.associate_name;
-      existing.total_delivery = Number(existing.total_delivery ?? 0) || Number(associate.delivered ?? 0);
-      existing.total_activity = Number(existing.total_activity ?? 0) || Number(associate.delivered ?? 0);
+      if (!existing.source_associate_name && associate.provider_employee_name) existing.source_associate_name = associate.provider_employee_name;
+      if (!existing.associate_name && associate.provider_employee_name) existing.associate_name = associate.provider_employee_name;
+      existing.total_delivery = Number(existing.total_delivery ?? 0) || Number(associate.total_delivery ?? 0);
+      existing.total_activity = Number(existing.total_activity ?? 0) || Number(associate.total_delivery ?? 0);
       return;
     }
 
@@ -782,12 +782,12 @@ export async function loadExecutiveReconciliationRows(
       station_name: station?.station_name ?? null,
       state: station?.state ?? null,
       provider_employee_id: providerEmployeeId,
-      source_associate_name: associate.associate_name ?? reconciliation?.source_associate_name ?? null,
+      source_associate_name: associate.provider_employee_name ?? reconciliation?.source_associate_name ?? null,
       manual_associate_name: reconciliation?.manual_associate_name ?? null,
-      associate_name: associate.associate_name ?? reconciliation?.source_associate_name ?? reconciliation?.manual_associate_name ?? null,
+      associate_name: associate.provider_employee_name ?? reconciliation?.source_associate_name ?? reconciliation?.manual_associate_name ?? null,
       shipment_type: reconciliation?.shipment_type ?? "Shipment data",
-      total_delivery: reconciliation?.total_delivery ?? associate.delivered ?? 0,
-      total_activity: reconciliation?.total_activity ?? associate.delivered ?? 0,
+      total_delivery: reconciliation?.total_delivery ?? associate.total_delivery ?? 0,
+      total_activity: reconciliation?.total_activity ?? associate.total_delivery ?? 0,
       reconciliation_status: reconciliation?.reconciliation_status ?? "Pending",
       pending_amount: reconciliation?.pending_amount ?? 0,
       expected_amount: reconciliation?.expected_amount ?? 0,

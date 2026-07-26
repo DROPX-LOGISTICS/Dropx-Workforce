@@ -149,11 +149,13 @@ export async function ReportUploadPageContent({
   active = "Report Imports",
   pageCode = "imports",
   selectedDate,
+  selectedReport,
   showShipmentCoverage = false
 }: {
   active?: string;
   pageCode?: string;
   selectedDate?: string;
+  selectedReport?: string;
   showShipmentCoverage?: boolean;
 }) {
   const authorization = await getAuthorization();
@@ -238,6 +240,9 @@ export async function ReportUploadPageContent({
     if (batch) latestBySource.set(report.source_code, batch);
   });
   const today = todayInIndia();
+  const selectedReportMaster = reports.find((report) => report.source_code === selectedReport);
+  const latestShipmentDate = addDays(today, selectedReportMaster?.date_default_offset ?? 0);
+  const latestShipmentHref = `/imports?shipment=1&date=${latestShipmentDate}${selectedReport ? `&report=${encodeURIComponent(selectedReport)}` : ""}`;
   const coverageGaps = reports.flatMap((report) => {
     if (report.frequency === "adhoc" || report.frequency === "monthly") return [];
     const expectedPeriods: { dueDate: string; reportDate: string }[] = [];
@@ -292,9 +297,10 @@ export async function ReportUploadPageContent({
             </div>
             <form className="toolbar-actions" method="get">
               <input name="shipment" type="hidden" value="1" />
+              {selectedReport ? <input name="report" type="hidden" value={selectedReport} /> : null}
               <input key={date} aria-label="Shipment coverage date" className="field compact-date" defaultValue={date} name="date" type="date" />
               <button className="button secondary compact" type="submit">View</button>
-              <Link className="button secondary compact" href="/imports">Today</Link>
+              <Link className="button secondary compact" href={latestShipmentHref}>Latest</Link>
             </form>
           </div>
           <div className="table-wrap shipment-checklist-table">

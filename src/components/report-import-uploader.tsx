@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
 import { supabase } from "@/lib/supabase";
 
@@ -15,9 +15,11 @@ function indiaDate(days = 0) {
 
 export function ReportImportUploader({ reports, stations = [], compact = false }: { reports: ReportImportMaster[]; stations?: ShipmentStation[]; compact?: boolean }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const fileRef = useRef<HTMLInputElement>(null);
   const sourceOptions = reports.filter((report) => report.is_active);
-  const [sourceType, setSourceType] = useState("");
+  const requestedSource = searchParams.get("report") ?? "";
+  const [sourceType, setSourceType] = useState(sourceOptions.some((report) => report.source_code === requestedSource) ? requestedSource : "");
   const [stationCode, setStationCode] = useState(stations[0]?.code ?? "");
   const [reportDate, setReportDate] = useState(indiaDate());
   const [message, setMessage] = useState<string | null>(null);
@@ -135,6 +137,8 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
             const nextReportDate = indiaDate(next?.date_default_offset ?? 0);
             setReportDate(nextReportDate);
             const nextUrl = new URL(window.location.href);
+            if (nextType) nextUrl.searchParams.set("report", nextType);
+            else nextUrl.searchParams.delete("report");
             if (next && ["delivered_shipment_detail", "inbound_shipment_detail"].includes(next.parser_type)) {
               nextUrl.searchParams.set("shipment", "1");
               nextUrl.searchParams.set("date", nextReportDate);

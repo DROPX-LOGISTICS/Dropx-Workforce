@@ -1024,6 +1024,32 @@ async function countExistingShipmentFacts(table: "delivered_shipment_facts" | "i
   return count;
 }
 
+async function refreshShipmentCoverage(
+  companyId: string,
+  sourceType: "delivered_shipment_detail" | "inbound_shipment_detail",
+  dates: string[],
+  batchId: string,
+  chunkSize = 7
+) {
+  if (!supabaseAdmin || !dates.length) return;
+  for (let index = 0; index < dates.length; index += chunkSize) {
+    const chunk = dates.slice(index, index + chunkSize);
+    const result = await supabaseAdmin.rpc("refresh_shipment_import_coverage", {
+      p_batch_id: batchId,
+      p_company_id: companyId,
+      p_dates: chunk,
+      p_source_type: sourceType
+    });
+    if (!result.error) continue;
+    const timedOut = /statement timeout|57014|canceling statement/i.test(readableError(result.error));
+    if (timedOut && chunk.length > 1) {
+      await refreshShipmentCoverage(companyId, sourceType, chunk, batchId, Math.max(1, Math.floor(chunk.length / 2)));
+      continue;
+    }
+    throw new Error(`dates ${chunk[0]}${chunk.length > 1 ? ` to ${chunk.at(-1)}` : ""}: ${readableError(result.error)}`);
+  }
+}
+
 async function shipmentParentCodes(companyId: string, stationCodes: string[]) {
   if (!supabaseAdmin || !stationCodes.length) return [];
   const result = await supabaseAdmin.from("stations").select("id, station_code, parent_station_id")
@@ -1282,13 +1308,7 @@ export async function POST(request: Request) {
         750
       ));
       await importStep("Refresh delivered station coverage", async () => {
-        const result = await db.rpc("refresh_shipment_import_coverage", {
-          p_batch_id: batch.data.id,
-          p_company_id: companyId,
-          p_dates: dates,
-          p_source_type: "delivered_shipment_detail"
-        });
-        if (result.error) throw new Error(result.error.message);
+        await refreshShipmentCoverage(companyId, "delivered_shipment_detail", dates, batch.data.id);
       });
       const duplicateRows = parsedFacts.sourceRows - parsedFacts.rejected.length - parsedFacts.facts.length;
       const skipped = parsedFacts.rejected.length;
@@ -1355,13 +1375,7 @@ export async function POST(request: Request) {
         750
       ));
       await importStep("Refresh inbound station coverage", async () => {
-        const result = await db.rpc("refresh_shipment_import_coverage", {
-          p_batch_id: batch.data.id,
-          p_company_id: companyId,
-          p_dates: dates,
-          p_source_type: "inbound_shipment_detail"
-        });
-        if (result.error) throw new Error(result.error.message);
+        await refreshShipmentCoverage(companyId, "inbound_shipment_detail", dates, batch.data.id);
       });
       const duplicateRows = parsedFacts.sourceRows - parsedFacts.rejected.length - parsedFacts.facts.length;
       const skipped = parsedFacts.rejected.length;

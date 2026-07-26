@@ -26,7 +26,7 @@ export const navItems: NavItem[] = [
   },
   {
     code: "onboard",
-    label: "Onboard",
+    label: "People",
     icon: "+",
     children: [
       { code: "delivery_associates", label: "Field Executive", href: "/field-executive" },

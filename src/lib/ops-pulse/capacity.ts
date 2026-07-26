@@ -19,6 +19,14 @@ export type CapacityRegionMap = {
   isActive: boolean;
 };
 
+export type ShipmentSizeRule = {
+  id?: string;
+  maxLengthCm: number;
+  maxWidthCm: number;
+  maxHeightCm: number;
+  maxWeightKg: number;
+};
+
 function sourceCode(stationCode: string) {
   return `capacity_station_${stationCode.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
 }
@@ -113,6 +121,35 @@ export async function deleteCapacityRegionMap(companyId: string, id: string) {
   if (!supabaseAdmin) return "Database service is unavailable.";
   const result = await supabaseAdmin.from("report_import_master").delete()
     .eq("company_id", companyId).eq("id", id).eq("parser_type", "capacity_region_map");
+  return result.error?.message ?? null;
+}
+
+export async function loadShipmentSizeRule(companyId: string) {
+  if (!supabaseAdmin) return { rule: null as ShipmentSizeRule | null, error: "Database service is unavailable." };
+  const result = await supabaseAdmin.from("report_import_master").select("id,description")
+    .eq("company_id", companyId).eq("source_code", "capacity_shipment_size_rule").maybeSingle();
+  try {
+    return { rule: result.data ? { ...(JSON.parse(result.data.description ?? "{}") as ShipmentSizeRule), id: result.data.id } : null, error: result.error?.message ?? null };
+  } catch {
+    return { rule: null, error: "Shipment-size rule is invalid." };
+  }
+}
+
+export async function saveShipmentSizeRule(companyId: string, rule: ShipmentSizeRule) {
+  if (!supabaseAdmin) return "Database service is unavailable.";
+  const result = await supabaseAdmin.from("report_import_master").upsert({
+    company_id: companyId,
+    source_code: "capacity_shipment_size_rule",
+    name: "Capacity shipment size rule",
+    description: JSON.stringify(rule),
+    file_types: [],
+    day_offset: 0,
+    frequency: "daily",
+    parser_type: "capacity_shipment_classification",
+    dedupe_fields: ["company_id"],
+    is_active: true,
+    updated_at: new Date().toISOString()
+  }, { onConflict: "company_id,source_code" });
   return result.error?.message ?? null;
 }
 

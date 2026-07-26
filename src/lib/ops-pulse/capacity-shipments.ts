@@ -14,6 +14,9 @@ export type CapacityAssociateDay = {
   associate_id: string;
   associate_name: string | null;
   delivered: number | string;
+  volumetric: number | string;
+  small: number | string;
+  unclassified: number | string;
 };
 
 export type CapacityPincode = {
@@ -23,19 +26,24 @@ export type CapacityPincode = {
   active_days: number | string;
   weight_ready: number | string;
   dimension_ready: number | string;
+  volumetric: number | string;
+  small: number | string;
+  unclassified: number | string;
   average_weight_kg: number | string | null;
   average_cubic_cm3: number | string | null;
 };
 
 export async function loadCapacityStationDays(companyId: string, stationCodes: string[], from: string, to: string) {
   if (!supabaseAdmin || !stationCodes.length) return { data: [] as CapacityStationDay[], error: null };
-  const result = await supabaseAdmin.rpc("capacity_station_daily", {
-    p_company_id: companyId,
-    p_station_codes: stationCodes,
-    p_from: from,
-    p_to: to
-  });
-  return { data: (result.data ?? []) as CapacityStationDay[], error: result.error };
+  const chunks: string[][] = [];
+  for (let index = 0; index < stationCodes.length; index += 6) chunks.push(stationCodes.slice(index, index + 6));
+  const results = await Promise.all(chunks.map((codes) => supabaseAdmin!.rpc("capacity_station_daily", {
+    p_company_id: companyId, p_station_codes: codes, p_from: from, p_to: to
+  })));
+  return {
+    data: results.flatMap((result) => (result.data ?? []) as CapacityStationDay[]),
+    error: results.find((result) => result.error)?.error ?? null
+  };
 }
 
 export async function loadCapacityAssociateDays(companyId: string, stationCodes: string[], from: string, to: string) {

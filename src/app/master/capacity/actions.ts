@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
-import { deleteCapacityRegionMap, deleteCapacityRule, saveCapacityRegionMap, saveCapacityRule } from "@/lib/ops-pulse/capacity";
+import { deleteCapacityRegionMap, deleteCapacityRule, saveCapacityRegionMap, saveCapacityRule, saveShipmentSizeRule } from "@/lib/ops-pulse/capacity";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { operatingModeForLocation } from "@/lib/ops-pulse/operating-context";
 
@@ -93,4 +93,20 @@ export async function removeCapacityRegionMap(formData: FormData) {
   revalidatePath("/master/capacity");
   revalidatePath("/ops-pulse/capacity");
   redirect(`/master/capacity?${error ? `error=${encodeURIComponent(error)}` : "map_deleted=1"}`);
+}
+
+export async function upsertShipmentSizeRule(formData: FormData) {
+  const authorization = await requirePagePermission("cod_master", "edit");
+  const companyId = requireCompanyId(authorization);
+  const rule = {
+    maxLengthCm: Number(formData.get("max_length_cm")),
+    maxWidthCm: Number(formData.get("max_width_cm")),
+    maxHeightCm: Number(formData.get("max_height_cm")),
+    maxWeightKg: Number(formData.get("max_weight_kg"))
+  };
+  const invalid = Object.values(rule).some((value) => !Number.isFinite(value) || value <= 0);
+  const error = invalid ? "Enter valid positive shipment-size limits." : await saveShipmentSizeRule(companyId, rule);
+  revalidatePath("/master/capacity");
+  revalidatePath("/ops-pulse/capacity");
+  redirect(`/master/capacity?${error ? `error=${encodeURIComponent(error)}` : "size_saved=1"}`);
 }

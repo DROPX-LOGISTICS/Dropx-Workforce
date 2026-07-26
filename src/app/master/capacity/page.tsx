@@ -3,23 +3,24 @@ import { PageHead } from "@/components/page-head";
 import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
-import { loadCapacityRegionMaps, loadCapacityRules } from "@/lib/ops-pulse/capacity";
+import { loadCapacityRegionMaps, loadCapacityRules, loadShipmentSizeRule } from "@/lib/ops-pulse/capacity";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { operatingModeForLocation } from "@/lib/ops-pulse/operating-context";
-import { bulkInitializeCapacityRules, removeCapacityRegionMap, removeCapacityRule, upsertCapacityRegionMap, upsertCapacityRule } from "./actions";
+import { bulkInitializeCapacityRules, removeCapacityRegionMap, removeCapacityRule, upsertCapacityRegionMap, upsertCapacityRule, upsertShipmentSizeRule } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = { saved?: string; deleted?: string; initialized?: string; map_saved?: string; map_deleted?: string; error?: string };
+type SearchParams = { saved?: string; deleted?: string; initialized?: string; map_saved?: string; map_deleted?: string; size_saved?: string; error?: string };
 
 export default async function CapacityMasterPage({ searchParams }: { searchParams?: SearchParams }) {
   const authorization = await requirePagePermission("cod_master", "access");
   const companyId = requireCompanyId(authorization);
   const permission = authorization.permissions.cod_master;
-  const [ruleResult, locationResult, mapResult] = await Promise.all([
+  const [ruleResult, locationResult, mapResult, sizeResult] = await Promise.all([
     loadCapacityRules(companyId),
     loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess),
-    loadCapacityRegionMaps(companyId)
+    loadCapacityRegionMaps(companyId),
+    loadShipmentSizeRule(companyId)
   ]);
   const rules = new Map(ruleResult.rows.map((row) => [row.stationCode, row]));
   const capacityLocations = locationResult.locations.filter((location) => operatingModeForLocation(location) !== "amazon_now");
@@ -31,7 +32,8 @@ export default async function CapacityMasterPage({ searchParams }: { searchParam
     {searchParams?.deleted ? <div className="message-panel success">Capacity rule deleted. The station will remain visible as Not configured.</div> : null}
     {searchParams?.map_saved ? <div className="message-panel success">Capacity map saved.</div> : null}
     {searchParams?.map_deleted ? <div className="message-panel success">Capacity map deleted.</div> : null}
-    {searchParams?.error || ruleResult.error || locationResult.error || mapResult.error ? <div className="message-panel error">{searchParams?.error || ruleResult.error || locationResult.error || mapResult.error}</div> : null}
+    {searchParams?.size_saved ? <div className="message-panel success">Shipment-size classification saved.</div> : null}
+    {searchParams?.error || ruleResult.error || locationResult.error || mapResult.error || sizeResult.error ? <div className="message-panel error">{searchParams?.error || ruleResult.error || locationResult.error || mapResult.error || sizeResult.error}</div> : null}
     <section className="performance-summary-grid">
       <article><span>Stations</span><strong>{capacityLocations.length}</strong><small>Amazon Now excluded</small></article>
       <article><span>Configured</span><strong>{ruleResult.rows.length}</strong><small>Ready for planning</small></article>
@@ -39,6 +41,7 @@ export default async function CapacityMasterPage({ searchParams }: { searchParam
       <article><span>Model</span><strong>Station level</strong><small>Editable independently</small></article>
     </section>
     <section className="panel capacity-bulk-panel"><div className="panel-head"><div><h2>Bulk setup</h2><p className="subtle">Initialize or replace the planning assumptions for every eligible station. Amazon Now is excluded and each station remains editable afterward.</p></div><form action={bulkInitializeCapacityRules} className="capacity-bulk-form"><label>Target SPR<input name="target_spr" type="number" min="1" step=".1" defaultValue="60" required/></label><label>Maximum safe SPR<input name="max_safe_spr" type="number" min="1" step=".1" defaultValue="70" required/></label><label>Buffer %<input name="buffer_percent" type="number" min="0" step=".5" defaultValue="10" required/></label><label>Recent days<input name="recent_days" type="number" min="1" max="31" defaultValue="6" required/></label><SubmitButton confirmMessage="Apply these assumptions to every eligible station? Amazon Now locations will be skipped." confirmTitle="Initialize all capacity rules" confirmSubmitText="Apply to all" disabled={!permission.canEdit}>Apply to all stations</SubmitButton></form></div></section>
+    <section className="panel capacity-bulk-panel"><div className="panel-head"><div><h2>Shipment size classification</h2><p className="subtle">A shipment is volumetric when any dimension exceeds the configured shoe-box limit, or when actual weight exceeds the weight limit. The remaining classified shipments are small.</p></div><form action={upsertShipmentSizeRule} className="capacity-bulk-form"><label>Length cm<input name="max_length_cm" type="number" min="1" step=".1" defaultValue={sizeResult.rule?.maxLengthCm ?? 35} required/></label><label>Width cm<input name="max_width_cm" type="number" min="1" step=".1" defaultValue={sizeResult.rule?.maxWidthCm ?? 22} required/></label><label>Height cm<input name="max_height_cm" type="number" min="1" step=".1" defaultValue={sizeResult.rule?.maxHeightCm ?? 13} required/></label><label>Weight kg<input name="max_weight_kg" type="number" min=".1" step=".1" defaultValue={sizeResult.rule?.maxWeightKg ?? 5} required/></label><SubmitButton disabled={!permission.canEdit}>Save size rule</SubmitButton></form></div></section>
     <section className="panel"><div className="panel-head"><div><h2>Region Map Master</h2><p className="subtle">Attach a Google My Map to a station, region or state. Capacity resolves the map from location master data.</p></div></div>
       <form action={upsertCapacityRegionMap} className="capacity-map-master-form"><label>Map name<input name="name" placeholder="AP Region Capacity Map" required/></label><label>Match by<select name="match_field" defaultValue="region"><option value="station">Station code</option><option value="region">Region</option><option value="state">State</option></select></label><label>Match value<input name="match_value" placeholder="AP" required/></label><label className="wide">Google My Maps URL<input name="map_url" type="url" placeholder="https://www.google.com/maps/d/edit?mid=..." required/></label><SubmitButton disabled={!permission.canEdit}>Add map</SubmitButton></form>
       <div className="table-wrap"><table><thead><tr><th>Name</th><th>Match</th><th>Map</th><th>Action</th></tr></thead><tbody>{mapResult.rows.map((map) => <tr key={map.id}><td><strong>{map.name}</strong></td><td>{map.matchField} · {map.matchValue}</td><td><a href={map.mapUrl} target="_blank" rel="noreferrer">Open map</a></td><td><form action={removeCapacityRegionMap}><input type="hidden" name="id" value={map.id}/><SubmitButton className="button danger compact" confirmMessage={`Delete ${map.name}?`} confirmSubmitText="Delete map" disabled={!permission.canEdit}>Delete</SubmitButton></form></td></tr>)}{!mapResult.rows.length ? <tr><td className="empty-cell" colSpan={4}>No capacity maps configured.</td></tr> : null}</tbody></table></div>

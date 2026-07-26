@@ -39,19 +39,19 @@ export default async function DailyCapacityPage({ searchParams }: { searchParams
   const rows = locations.filter((location) => codes.includes(location.station_code)).map((location) => {
     const source = sourceMap.get(location.station_code);
     const ground = groundMap.get(location.station_code);
-    const sourceReady = Boolean(source && (Number(source.detail_active_ids) > 0 || Number(source.daily_count_active_ids) > 0 || Number(source.delivered) > 0));
     return {
       stationCode: location.station_code,
       stationName: location.station_name || location.city || location.station_code,
       region: location.region || "",
       cluster: location.cluster || "",
       inbound: Number(source?.inbound ?? 0),
-      systemIds: sourceReady ? Number(source?.active_ids ?? 0) : null,
       saved: Boolean(ground),
       assignedPackages: Number(ground?.assignedPackages ?? 0),
       regularBike: Number(ground?.regularBike ?? 0),
       regularVan: Number(ground?.regularVan ?? 0),
+      regularVanVehicle: Number(ground?.regularVanVehicle ?? 0),
       adHocBike: Number(ground?.adHocBike ?? 0),
+      adHocVanVehicle: Number(ground?.adHocVanVehicle ?? 0),
       adHocVan: Number(ground?.adHocVan ?? 0),
       updatedAt: ground?.updatedAt ?? null
     };
@@ -60,7 +60,7 @@ export default async function DailyCapacityPage({ searchParams }: { searchParams
   const returnQuery = searchParams?.stations ? `stations=${encodeURIComponent(searchParams.stations)}` : "";
 
   return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">
-    <PageHead eyebrow="Daily Capacity" title="Ground Update" subtitle="One shared station-day workspace for assigned packages and road-ID classification." />
+    <PageHead eyebrow="Daily Capacity" title="Ground Update" subtitle="Previous-day packages and actual staffing in one shared workspace." />
     <CapacityWorkspaceTabs active="daily" />
     <div className="capacity-daily-toolbar">
       <CapacityScopeFilter selectedCodes={codes} stations={scopeStations}/>
@@ -68,7 +68,8 @@ export default async function DailyCapacityPage({ searchParams }: { searchParams
     </div>
     {searchParams?.saved ? <div className="message-panel success">{searchParams.saved} station update{searchParams.saved === "1" ? "" : "s"} saved.</div> : null}
     {searchParams?.error || locationResult.error || sourceResult.error || groundResult.error ? <div className="message-panel error">{searchParams?.error || locationResult.error || sourceResult.error?.message || groundResult.error}</div> : null}
-    <section className="panel capacity-daily-entry-panel"><div className="panel-head"><div><h2>{workDate.split("-").reverse().join("/")} ground capacity</h2><p className="subtle">Inbound and IDs used are system-filled. Enter assigned packages and classify every used ID as regular/ad hoc and bike/van.</p></div></div>
+    <section className="panel capacity-daily-entry-panel"><div className="panel-head"><div><h2>{workDate.split("-").reverse().join("/")} ground capacity</h2><p className="subtle">Inbound is system-filled. Enter assigned packages and the previous day&apos;s actual staffing.</p></div></div>
+      <div className="capacity-counting-note"><strong>Counting rule</strong><span>DA columns count people. External Bike/Van DA means a temporary associate hired from outside. Van Count columns count vehicles only.</span></div>
       <CapacityDailyEditor returnQuery={returnQuery} rows={rows} workDate={workDate}/>
     </section>
   </div></AppShell>;

@@ -11471,6 +11471,28 @@ td strong,
   border-bottom: 1px solid #edf0f4;
 }
 
+.capacity-counting-note {
+  align-items: center;
+  background: #fff7ed;
+  border-bottom: 1px solid #fed7aa;
+  color: #7c2d12;
+  display: flex;
+  font-size: 11px;
+  gap: 10px;
+  padding: 9px 16px;
+}
+
+.capacity-counting-note strong {
+  background: #ffedd5;
+  border-radius: 999px;
+  color: #9a3412;
+  flex: 0 0 auto;
+  font-size: 9px;
+  letter-spacing: .04em;
+  padding: 4px 7px;
+  text-transform: uppercase;
+}
+
 .capacity-daily-status-strip {
   align-items: center;
   display: flex;

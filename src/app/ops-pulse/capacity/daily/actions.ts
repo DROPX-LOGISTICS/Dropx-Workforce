@@ -39,16 +39,18 @@ export async function saveCapacityGroundUpdates(formData: FormData) {
     const assignedPackages = integer(formData, `assigned_${stationCode}`);
     const regularBike = integer(formData, `regular_bike_${stationCode}`);
     const regularVan = integer(formData, `regular_van_${stationCode}`);
+    const regularVanVehicle = integer(formData, `regular_van_vehicle_${stationCode}`);
     const adHocBike = integer(formData, `adhoc_bike_${stationCode}`);
+    const adHocVanVehicle = integer(formData, `adhoc_van_vehicle_${stationCode}`);
     const adHocVan = integer(formData, `adhoc_van_${stationCode}`);
-    if ([assignedPackages, regularBike, regularVan, adHocBike, adHocVan].some((value) => value == null)) return null;
+    if ([assignedPackages, regularBike, regularVan, regularVanVehicle, adHocBike, adHocVanVehicle, adHocVan].some((value) => value == null)) return null;
     const source = sourceMap.get(stationCode);
     const sourceReady = Boolean(source && (Number(source.detail_active_ids) > 0 || Number(source.daily_count_active_ids) > 0 || Number(source.delivered) > 0));
     const systemIdsAtSave = sourceReady ? Number(source?.active_ids ?? 0) : null;
     const classifiedIds = regularBike! + regularVan! + adHocBike! + adHocVan!;
     const payload = {
-      stationCode, workDate, assignedPackages: assignedPackages!, regularBike: regularBike!, regularVan: regularVan!,
-      adHocBike: adHocBike!, adHocVan: adHocVan!, classifiedIds, systemIdsAtSave,
+      stationCode, workDate, assignedPackages: assignedPackages!, regularBike: regularBike!, regularVan: regularVan!, regularVanVehicle: regularVanVehicle!,
+      adHocBike: adHocBike!, adHocVanVehicle: adHocVanVehicle!, adHocVan: adHocVan!, classifiedIds, systemIdsAtSave,
       inboundAtSave: Number(source?.inbound ?? 0), updatedAt: now, updatedBy: authorization.userId
     };
     return {

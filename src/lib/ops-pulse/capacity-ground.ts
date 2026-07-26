@@ -7,7 +7,9 @@ export type CapacityGroundUpdate = {
   assignedPackages: number;
   regularBike: number;
   regularVan: number;
+  regularVanVehicle: number;
   adHocBike: number;
+  adHocVanVehicle: number;
   adHocVan: number;
   classifiedIds: number;
   systemIdsAtSave: number | null;

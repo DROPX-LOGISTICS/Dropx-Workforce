@@ -266,8 +266,8 @@ export async function ReportUploadPageContent({
     <AppShell active={active} pageCode={pageCode}>
       <PageHead
         eyebrow="Report Imports"
-        title="Daily upload status"
-        subtitle="Upload a report and track completion for the selected date."
+        title="Report imports"
+        subtitle="Upload files and check missing coverage."
         action={<span className={`status-pill ${isSupabaseAdminConfigured ? "good" : "warn"}`}>{isSupabaseAdminConfigured ? "Connected" : "Database unavailable"}</span>}
       />
 
@@ -292,7 +292,7 @@ export async function ReportUploadPageContent({
             </div>
             <form className="toolbar-actions" method="get">
               <input name="shipment" type="hidden" value="1" />
-              <input aria-label="Shipment coverage date" className="field compact-date" defaultValue={date} name="date" type="date" />
+              <input key={date} aria-label="Shipment coverage date" className="field compact-date" defaultValue={date} name="date" type="date" />
               <button className="button secondary compact" type="submit">View</button>
               <Link className="button secondary compact" href="/imports">Today</Link>
             </form>
@@ -325,14 +325,11 @@ export async function ReportUploadPageContent({
       </ShipmentCoverageVisibility>
 
       {coverageGaps.length ? (
-        <section className="panel">
-          <div className="panel-head">
-            <div>
-              <h2>Coverage gaps</h2>
-              <p className="subtle">Missing daily dates from the last 14 days and weekly due dates from the last 6 weeks.</p>
-            </div>
+        <details className="panel import-gap-panel">
+          <summary className="panel-head">
+            <div><h2>Coverage gaps</h2><p className="subtle">Missing daily and weekly reports.</p></div>
             <StatusPill status={`${coverageGaps.length} reports need attention`} />
-          </div>
+          </summary>
           <div className="table-wrap">
             <table>
               <thead><tr><th>Report</th><th>Frequency</th><th>Missing periods</th><th>Action</th></tr></thead>
@@ -348,7 +345,7 @@ export async function ReportUploadPageContent({
               </tbody>
             </table>
           </div>
-        </section>
+        </details>
       ) : (
         <section className="panel message-panel success">
           <div className="panel-body"><strong>Report coverage is complete for the monitored daily and weekly periods.</strong></div>

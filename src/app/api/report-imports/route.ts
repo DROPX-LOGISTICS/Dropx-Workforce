@@ -1066,14 +1066,13 @@ export async function POST(request: Request) {
 
   const formData = await importStep("Read uploaded form", () => request.formData());
   const sourceType = clean(formData.get("source_type")) as SourceType;
-  const selectedStation = normalizeStation(formData.get("station_code"));
-  const selectedReportDate = parseDate(formData.get("report_date"));
+  const requestedStation = normalizeStation(formData.get("station_code"));
+  const requestedReportDate = parseDate(formData.get("report_date"));
   const file = formData.get("file");
   const storageBucket = clean(formData.get("storage_bucket"));
   const storagePath = clean(formData.get("storage_path"));
   const stagedFileName = clean(formData.get("original_file_name"));
   const stagedFileSize = Number(clean(formData.get("original_file_size")) || 0);
-  const shipmentStationCodes = new Set<string>(selectedStation ? [selectedStation] : []);
   const master = await db.from("report_import_master")
     .select("source_code, name, file_types, parser_type, dedupe_fields, is_active, requires_station, station_scope, requires_report_date")
     .eq("company_id", companyId)
@@ -1084,6 +1083,11 @@ export async function POST(request: Request) {
   if (!master.data) return Response.json({ error: "Select an active report from Import Master." }, { status: 400 });
   const masterData = master.data;
   const isShipmentDetail = masterData.parser_type === "delivered_shipment_detail" || masterData.parser_type === "inbound_shipment_detail";
+  // Ignore stale/hidden browser fields when Import Master says that the file
+  // itself is authoritative for station and date detection.
+  const selectedStation = masterData.requires_station ? requestedStation : "";
+  const selectedReportDate = masterData.requires_report_date ? requestedReportDate : null;
+  const shipmentStationCodes = new Set<string>(selectedStation ? [selectedStation] : []);
   if (isShipmentDetail && !selectedStation) {
     // Report-import permission is the authority for this workflow. Auto-detection
     // must recognise every eligible company station even when the uploader's

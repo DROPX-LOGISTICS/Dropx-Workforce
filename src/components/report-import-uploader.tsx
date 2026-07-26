@@ -21,6 +21,7 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
   const [stationCode, setStationCode] = useState(stations[0]?.code ?? "");
   const [reportDate, setReportDate] = useState(indiaDate());
   const [message, setMessage] = useState<string | null>(null);
+  const [hasFile, setHasFile] = useState(false);
   const [summary, setSummary] = useState<{ duplicateRows?: number; imported?: number; refreshedExisting?: number; skipped?: number; totalRows?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -40,8 +41,8 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
     }
     const payload = new FormData();
     payload.append("source_type", sourceType);
-    payload.append("station_code", effectiveStationCode);
-    payload.append("report_date", reportDate);
+    if (requiresStation) payload.append("station_code", effectiveStationCode);
+    if (requiresReportDate) payload.append("report_date", reportDate);
     startTransition(async () => {
       if (file.size > 3.5 * 1024 * 1024) {
         const signedResponse = await fetch("/api/report-imports/upload-url", {
@@ -86,6 +87,7 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
         totalRows: Number(result.totalRows ?? 0)
       });
       if (fileRef.current) fileRef.current.value = "";
+      setHasFile(false);
       router.refresh();
     });
   }
@@ -101,6 +103,7 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
     ? stationCode
     : eligibleStations[0]?.code ?? "";
   const accepted = selected?.file_types.map((type) => `.${type}`).join(",") ?? "";
+  const isShipmentImport = selected?.parser_type === "delivered_shipment_detail" || selected?.parser_type === "inbound_shipment_detail";
 
   return (
     <div className="panel-body stacked">
@@ -121,10 +124,13 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
 
       <div className={compact ? `compact-upload-row ${hasConditionalFields ? "shipment-upload-row" : ""}` : "form-grid three"}>
         <label>
-          <span>Data</span>
+          <span>Report</span>
           <select className="select" value={sourceType} onChange={(event) => {
             const nextType = event.target.value;
             setSourceType(nextType);
+            setMessage(null);
+            setSummary(null);
+            setError(null);
             const next = sourceOptions.find((option) => option.source_code === nextType);
             const nextReportDate = indiaDate(next?.date_default_offset ?? 0);
             setReportDate(nextReportDate);
@@ -157,14 +163,15 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
         </label> : null}
         <label style={compact ? undefined : { gridColumn: "span 2" }}>
           <span>File</span>
-          <input ref={fileRef} className="field" type="file" accept={accepted} />
+          <input ref={fileRef} className="field" type="file" accept={accepted} onChange={(event) => setHasFile(Boolean(event.target.files?.length))} />
         </label>
         {compact ? (
-          <button className={`button ${isPending ? "loading" : ""}`} disabled={isPending || !sourceType || (requiresStation && !effectiveStationCode) || (requiresReportDate && !reportDate)} onClick={upload} type="button">
-            {isPending ? "Importing..." : selected?.parser_type === "delivered_shipment_detail" || selected?.parser_type === "inbound_shipment_detail" ? "Upload / refresh" : "Upload"}
+          <button className={`button ${isPending ? "loading" : ""}`} disabled={isPending || !sourceType || !hasFile || (requiresStation && !effectiveStationCode) || (requiresReportDate && !reportDate)} onClick={upload} type="button">
+            {isPending ? "Processing..." : "Upload file"}
           </button>
         ) : null}
       </div>
+      {compact && isShipmentImport ? <p className="shipment-upload-note">Station and dates are detected from the file. Existing Tracking IDs are refreshed without double-counting.</p> : null}
       {!compact ? <div className="dropzone" style={{ minHeight: 120 }}>
         <div>
           <h2>{selected?.name ?? "No active reports"}</h2>
@@ -175,7 +182,7 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
           </button>
         </div>
       </div> : null}
-      {message ? <div className="message-panel success"><strong>{message}</strong></div> : null}
+      {message ? <div className="message-panel success"><strong>Import completed.</strong> <span>{message}</span></div> : null}
       {summary ? (
         <div className="report-import-summary">
           <span>Source rows <strong>{summary.totalRows}</strong></span>

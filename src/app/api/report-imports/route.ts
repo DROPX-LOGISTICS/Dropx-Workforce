@@ -1085,7 +1085,10 @@ export async function POST(request: Request) {
   const masterData = master.data;
   const isShipmentDetail = masterData.parser_type === "delivered_shipment_detail" || masterData.parser_type === "inbound_shipment_detail";
   if (isShipmentDetail && !selectedStation) {
-    const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
+    // Report-import permission is the authority for this workflow. Auto-detection
+    // must recognise every eligible company station even when the uploader's
+    // day-to-day dashboard access is limited to a smaller location scope.
+    const locationResult = await loadCodLocations(companyId, [], true);
     if (locationResult.error) return Response.json({ error: locationResult.error }, { status: 500 });
     const parentLocations = locationResult.locations.filter((location) => {
       const provider = providerName(location).toUpperCase();
@@ -1239,6 +1242,24 @@ export async function POST(request: Request) {
       const parsedFacts = await importStep("Parse delivered shipment details", () => Promise.resolve(
         parseDeliveredShipmentFacts(workbookRows, companyId, batch.data.id, selectedStation, selectedReportDate ?? "", shipmentStationCodes)
       ));
+      if (!parsedFacts.facts.length) {
+        const issueCounts = new Map<string, number>();
+        parsedFacts.rejected.forEach((row) => issueCounts.set(row.issue, (issueCounts.get(row.issue) ?? 0) + 1));
+        const reasons = [...issueCounts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([issue, count]) => `${count.toLocaleString("en-IN")} rows: ${issue}`)
+          .join(" ");
+        const message = `No valid delivered shipments were found. ${reasons || "Required shipment columns were not recognised."}`;
+        await db.from("report_import_batches").update({
+          completed_at: new Date().toISOString(),
+          message,
+          row_count: parsedFacts.sourceRows,
+          skipped_row_count: parsedFacts.sourceRows,
+          status: "Failed"
+        }).eq("id", batch.data.id).eq("company_id", companyId);
+        return Response.json({ error: message }, { status: 400 });
+      }
       const dates = Array.from(new Set(parsedFacts.facts.map((row) => row.work_date))).sort();
       const detectedParents = await importStep("Resolve detected parent stations", () =>
         shipmentParentCodes(companyId, parsedFacts.facts.map((row) => row.station_code)));
@@ -1294,6 +1315,24 @@ export async function POST(request: Request) {
       const parsedFacts = await importStep("Parse inbound shipment details", () => Promise.resolve(
         parseInboundShipmentFacts(workbookRows, companyId, batch.data.id, selectedStation, selectedReportDate ?? "", shipmentStationCodes)
       ));
+      if (!parsedFacts.facts.length) {
+        const issueCounts = new Map<string, number>();
+        parsedFacts.rejected.forEach((row) => issueCounts.set(row.issue, (issueCounts.get(row.issue) ?? 0) + 1));
+        const reasons = [...issueCounts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([issue, count]) => `${count.toLocaleString("en-IN")} rows: ${issue}`)
+          .join(" ");
+        const message = `No valid inbound shipments were found. ${reasons || "Required shipment columns were not recognised."}`;
+        await db.from("report_import_batches").update({
+          completed_at: new Date().toISOString(),
+          message,
+          row_count: parsedFacts.sourceRows,
+          skipped_row_count: parsedFacts.sourceRows,
+          status: "Failed"
+        }).eq("id", batch.data.id).eq("company_id", companyId);
+        return Response.json({ error: message }, { status: 400 });
+      }
       const dates = Array.from(new Set(parsedFacts.facts.map((row) => row.expected_arrival_date))).sort();
       const detectedParents = await importStep("Resolve detected parent stations", () =>
         shipmentParentCodes(companyId, parsedFacts.facts.map((row) => row.station_code)));

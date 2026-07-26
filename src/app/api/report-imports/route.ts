@@ -67,6 +67,26 @@ type DeliveredShipmentFact = {
   work_date: string;
 };
 
+type InboundShipmentFact = {
+  actual_weight_kg: number | null;
+  city: string | null;
+  company_id: string;
+  cubic_volume_cm3: number | null;
+  expected_arrival_date: string;
+  height_cm: number | null;
+  length_cm: number | null;
+  package_count: number;
+  postal_code: string;
+  raw_payload: RawRecord;
+  shipment_state: string | null;
+  snapshot_at: string | null;
+  source_batch_id: string;
+  station_code: string;
+  tracking_id: string;
+  updated_at: string;
+  width_cm: number | null;
+};
+
 const sourceLabels: Record<SourceType, string> = {
   amazon_shipments: "Amazon shipment count",
   bpcl_fuel: "BPCL fuel",
@@ -677,6 +697,55 @@ function parseDeliveredShipmentFacts(rows: SheetRow[], companyId: string, batchI
   return { facts: [...byTrackingId.values()], rejected, sourceRows: records.length };
 }
 
+function parseInboundShipmentFacts(rows: SheetRow[], companyId: string, batchId: string) {
+  const headerIndex = locateHeader(rows, ["Tracking ID"]);
+  const records = rowsToRecords(rows, headerIndex);
+  const rejected: Array<{ rowNumber: number; issue: string }> = [];
+  const byTrackingId = new Map<string, InboundShipmentFact>();
+  records.forEach(({ raw, rowNumber }) => {
+    const trackingId = clean(findValue(raw, ["Tracking ID", "Tracking Number", "Shipment ID"]));
+    const stationCode = normalizeStation(findValue(raw, ["Station", "Station Code", "Delivery Station"]));
+    const expectedArrivalDate = parseDate(findValue(raw, [
+      "Estimated Arrival Date", "Expected Arrival Date", "Arrival Date",
+      "Promised Delivery Date", "Scheduled Delivery Start time"
+    ]));
+    const postalCode = clean(findValue(raw, ["Postal", "Pincode", "Postal Code"])).match(/\d{6}/)?.[0] ?? "";
+    if (!trackingId || !stationCode || !expectedArrivalDate || !postalCode) {
+      rejected.push({ rowNumber, issue: "Missing tracking ID, station, expected-arrival date or postal code." });
+      return;
+    }
+    const lengthCm = measurement(findValue(raw, ["Package Length", "Length"]), "length");
+    const widthCm = measurement(findValue(raw, ["Package Width", "Width"]), "length");
+    const heightCm = measurement(findValue(raw, ["Package Height", "Height"]), "length");
+    const actualWeightKg = measurement(findValue(raw, ["Package Weight", "Weight"]), "weight");
+    const cubicVolumeCm3 = lengthCm != null && widthCm != null && heightCm != null
+      ? lengthCm * widthCm * heightCm
+      : null;
+    const fact: InboundShipmentFact = {
+      actual_weight_kg: actualWeightKg,
+      city: clean(findValue(raw, ["City"])) || null,
+      company_id: companyId,
+      cubic_volume_cm3: cubicVolumeCm3,
+      expected_arrival_date: expectedArrivalDate,
+      height_cm: heightCm,
+      length_cm: lengthCm,
+      package_count: Math.max(1, toNumber(findValue(raw, ["Package Count"])) || 1),
+      postal_code: postalCode,
+      raw_payload: raw,
+      shipment_state: clean(findValue(raw, ["State", "Shipment State"])) || null,
+      snapshot_at: timestamp(findValue(raw, ["Last Updated Time", "Snapshot Time", "Report Time"])),
+      source_batch_id: batchId,
+      station_code: stationCode,
+      tracking_id: trackingId,
+      updated_at: new Date().toISOString(),
+      width_cm: widthCm
+    };
+    const existing = byTrackingId.get(trackingId);
+    if (!existing || (existing.snapshot_at ?? "") <= (fact.snapshot_at ?? "")) byTrackingId.set(trackingId, fact);
+  });
+  return { facts: [...byTrackingId.values()], rejected, sourceRows: records.length };
+}
+
 async function mapFuelStations(companyId: string, rows: Array<{ normalized: NormalizedImport | null }>) {
   if (!supabaseAdmin) return;
   const vehicles = Array.from(new Set(rows.map((row) => clean(row.normalized?.normalizedData.vehicle_no)).filter(Boolean)));
@@ -1044,6 +1113,40 @@ export async function POST(request: Request) {
       const volumeReady = parsedFacts.facts.filter((row) => row.cubic_volume_cm3 != null && row.actual_weight_kg != null).length;
       const message = `${parsedFacts.facts.length} tracking shipment${parsedFacts.facts.length === 1 ? "" : "s"} refreshed. ${volumeReady} have complete weight and dimensions. ${skipped} row${skipped === 1 ? "" : "s"} skipped or consolidated.`;
       const update = await importStep("Mark delivered shipment import completed", async () => db.from("report_import_batches").update({
+        completed_at: new Date().toISOString(),
+        imported_row_count: parsedFacts.facts.length,
+        message,
+        report_from: dates[0] ?? null,
+        report_to: dates.at(-1) ?? null,
+        row_count: parsedFacts.sourceRows,
+        skipped_row_count: skipped,
+        status: "Completed"
+      }).eq("id", batch.data.id).eq("company_id", companyId));
+      if (update.error) throw new Error(update.error.message);
+      return Response.json({
+        duplicateRows,
+        imported: parsedFacts.facts.length,
+        message,
+        skipped,
+        totalRows: parsedFacts.sourceRows
+      });
+    }
+    if (masterData.parser_type === "inbound_shipment_detail") {
+      const parsedFacts = await importStep("Parse inbound shipment details", () => Promise.resolve(
+        parseInboundShipmentFacts(workbookRows, companyId, batch.data.id)
+      ));
+      await importStep("Save inbound shipment facts", () => upsertInChunks(
+        "inbound_shipment_facts",
+        parsedFacts.facts,
+        "company_id,tracking_id",
+        750
+      ));
+      const dates = parsedFacts.facts.map((row) => row.expected_arrival_date).sort();
+      const duplicateRows = parsedFacts.sourceRows - parsedFacts.rejected.length - parsedFacts.facts.length;
+      const skipped = parsedFacts.rejected.length + duplicateRows;
+      const volumeReady = parsedFacts.facts.filter((row) => row.cubic_volume_cm3 != null && row.actual_weight_kg != null).length;
+      const message = `${parsedFacts.facts.length} inbound tracking shipment${parsedFacts.facts.length === 1 ? "" : "s"} refreshed. ${volumeReady} have complete weight and dimensions. ${skipped} row${skipped === 1 ? "" : "s"} skipped or consolidated.`;
+      const update = await importStep("Mark inbound shipment import completed", async () => db.from("report_import_batches").update({
         completed_at: new Date().toISOString(),
         imported_row_count: parsedFacts.facts.length,
         message,

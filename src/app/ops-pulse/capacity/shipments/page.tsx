@@ -42,7 +42,8 @@ export default async function CapacityShipmentEvidencePage({ searchParams }: { s
   const classified = ((result.data ?? []) as Fact[]).map((row) => {
     const weight = n(row.actual_weight_kg), length = n(row.length_cm), width = n(row.width_cm), height = n(row.height_cm);
     const complete = weight != null && length != null && width != null && height != null && rule;
-    const volumetric = Boolean(complete && (weight! > rule!.maxWeightKg || length! > rule!.maxLengthCm || width! > rule!.maxWidthCm || height! > rule!.maxHeightCm));
+    const dimensionalWeight = complete ? length! * width! * height! / (rule!.dimensionalDivisor || 5000) : null;
+    const volumetric = Boolean(complete && (weight! > rule!.maxWeightKg || length! > rule!.maxLengthCm || width! > rule!.maxWidthCm || height! > rule!.maxHeightCm || dimensionalWeight! > (rule!.maxDimensionalWeightKg || 5)));
     return { ...row, classification: !complete ? "Unclassified" : volumetric ? "Volumetric" : "Small" };
   }).filter((row) => !size || row.classification.toLowerCase() === size);
 

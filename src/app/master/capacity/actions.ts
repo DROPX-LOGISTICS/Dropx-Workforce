@@ -103,6 +103,8 @@ export async function upsertShipmentSizeRule(formData: FormData) {
     maxWidthCm: Number(formData.get("max_width_cm")),
     maxHeightCm: Number(formData.get("max_height_cm")),
     maxWeightKg: Number(formData.get("max_weight_kg")),
+    dimensionalDivisor: Number(formData.get("dimensional_divisor")),
+    maxDimensionalWeightKg: Number(formData.get("max_dimensional_weight_kg")),
     minActiveShipments: Number(formData.get("min_active_shipments"))
   };
   const invalid = Object.values(rule).some((value) => !Number.isFinite(value) || value <= 0);

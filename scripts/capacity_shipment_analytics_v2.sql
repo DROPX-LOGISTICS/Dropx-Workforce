@@ -68,14 +68,20 @@ insert into public.report_import_master (
   '43866344-b550-4e8a-9a2d-9d23f3d8a997',
   'capacity_shipment_size_rule',
   'Capacity shipment size rule',
-  '{"maxLengthCm":35,"maxWidthCm":22,"maxHeightCm":13,"maxWeightKg":5,"minActiveShipments":5}',
+  '{"maxLengthCm":46,"maxWidthCm":36,"maxHeightCm":20,"maxWeightKg":5,"dimensionalDivisor":5000,"maxDimensionalWeightKg":5,"minActiveShipments":5}',
   array[]::text[], 0, 'daily', 'capacity_shipment_classification',
   array['company_id'], true, now()
 ) on conflict (company_id, source_code) do update set
-  description = case
-    when report_import_master.description::jsonb ? 'minActiveShipments' then report_import_master.description
-    else jsonb_set(report_import_master.description::jsonb, '{minActiveShipments}', '5'::jsonb)::text
-  end;
+  description = (
+    report_import_master.description::jsonb
+    || '{"dimensionalDivisor":5000,"maxDimensionalWeightKg":5,"minActiveShipments":5}'::jsonb
+    || case when
+      (report_import_master.description::jsonb ->> 'maxLengthCm')::numeric = 35
+      and (report_import_master.description::jsonb ->> 'maxWidthCm')::numeric = 22
+      and (report_import_master.description::jsonb ->> 'maxHeightCm')::numeric = 13
+      then '{"maxLengthCm":46,"maxWidthCm":36,"maxHeightCm":20}'::jsonb
+      else '{}'::jsonb end
+  )::text;
 
 insert into public.capacity_station_daily_cache (
   company_id, station_code, work_date, active_ids, low_volume_ids, delivered, shipment_count, refreshed_at
@@ -171,7 +177,9 @@ as $$
       (description::jsonb ->> 'maxLengthCm')::numeric max_length_cm,
       (description::jsonb ->> 'maxWidthCm')::numeric max_width_cm,
       (description::jsonb ->> 'maxHeightCm')::numeric max_height_cm,
-      (description::jsonb ->> 'maxWeightKg')::numeric max_weight_kg
+      (description::jsonb ->> 'maxWeightKg')::numeric max_weight_kg,
+      coalesce((description::jsonb ->> 'dimensionalDivisor')::numeric, 5000) dimensional_divisor,
+      coalesce((description::jsonb ->> 'maxDimensionalWeightKg')::numeric, 5) max_dimensional_weight_kg
     from public.report_import_master
     where company_id = p_company_id and source_code = 'capacity_shipment_size_rule' and is_active
     limit 1
@@ -183,9 +191,11 @@ as $$
     max(nullif(facts.driver_name, '')) as associate_name,
     sum(greatest(facts.package_count, 1))::bigint as delivered,
     count(*) filter (where facts.actual_weight_kg > rule.max_weight_kg
-      or facts.length_cm > rule.max_length_cm or facts.width_cm > rule.max_width_cm or facts.height_cm > rule.max_height_cm)::bigint as volumetric,
+      or facts.length_cm > rule.max_length_cm or facts.width_cm > rule.max_width_cm or facts.height_cm > rule.max_height_cm
+      or facts.cubic_volume_cm3 / rule.dimensional_divisor > rule.max_dimensional_weight_kg)::bigint as volumetric,
     count(*) filter (where facts.actual_weight_kg <= rule.max_weight_kg
-      and facts.length_cm <= rule.max_length_cm and facts.width_cm <= rule.max_width_cm and facts.height_cm <= rule.max_height_cm)::bigint as small,
+      and facts.length_cm <= rule.max_length_cm and facts.width_cm <= rule.max_width_cm and facts.height_cm <= rule.max_height_cm
+      and facts.cubic_volume_cm3 / rule.dimensional_divisor <= rule.max_dimensional_weight_kg)::bigint as small,
     count(*) filter (where facts.actual_weight_kg is null or facts.length_cm is null or facts.width_cm is null or facts.height_cm is null)::bigint as unclassified
   from station_scope scope
   cross join size_rule rule
@@ -235,7 +245,9 @@ as $$
       (description::jsonb ->> 'maxLengthCm')::numeric max_length_cm,
       (description::jsonb ->> 'maxWidthCm')::numeric max_width_cm,
       (description::jsonb ->> 'maxHeightCm')::numeric max_height_cm,
-      (description::jsonb ->> 'maxWeightKg')::numeric max_weight_kg
+      (description::jsonb ->> 'maxWeightKg')::numeric max_weight_kg,
+      coalesce((description::jsonb ->> 'dimensionalDivisor')::numeric, 5000) dimensional_divisor,
+      coalesce((description::jsonb ->> 'maxDimensionalWeightKg')::numeric, 5) max_dimensional_weight_kg
     from public.report_import_master
     where company_id = p_company_id and source_code = 'capacity_shipment_size_rule' and is_active
     limit 1
@@ -248,9 +260,11 @@ as $$
     count(*) filter (where facts.actual_weight_kg is not null)::bigint as weight_ready,
     count(*) filter (where facts.cubic_volume_cm3 is not null)::bigint as dimension_ready,
     count(*) filter (where facts.actual_weight_kg > rule.max_weight_kg
-      or facts.length_cm > rule.max_length_cm or facts.width_cm > rule.max_width_cm or facts.height_cm > rule.max_height_cm)::bigint as volumetric,
+      or facts.length_cm > rule.max_length_cm or facts.width_cm > rule.max_width_cm or facts.height_cm > rule.max_height_cm
+      or facts.cubic_volume_cm3 / rule.dimensional_divisor > rule.max_dimensional_weight_kg)::bigint as volumetric,
     count(*) filter (where facts.actual_weight_kg <= rule.max_weight_kg
-      and facts.length_cm <= rule.max_length_cm and facts.width_cm <= rule.max_width_cm and facts.height_cm <= rule.max_height_cm)::bigint as small,
+      and facts.length_cm <= rule.max_length_cm and facts.width_cm <= rule.max_width_cm and facts.height_cm <= rule.max_height_cm
+      and facts.cubic_volume_cm3 / rule.dimensional_divisor <= rule.max_dimensional_weight_kg)::bigint as small,
     count(*) filter (where facts.actual_weight_kg is null or facts.length_cm is null or facts.width_cm is null or facts.height_cm is null)::bigint as unclassified,
     avg(facts.actual_weight_kg)::numeric as average_weight_kg,
     avg(facts.cubic_volume_cm3)::numeric as average_cubic_cm3

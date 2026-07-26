@@ -25,6 +25,8 @@ export type ShipmentSizeRule = {
   maxWidthCm: number;
   maxHeightCm: number;
   maxWeightKg: number;
+  dimensionalDivisor: number;
+  maxDimensionalWeightKg: number;
   minActiveShipments: number;
 };
 

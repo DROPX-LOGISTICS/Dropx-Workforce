@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
-import { deleteCapacityRule, saveCapacityRule } from "@/lib/ops-pulse/capacity";
+import { deleteCapacityRegionMap, deleteCapacityRule, saveCapacityRegionMap, saveCapacityRule } from "@/lib/ops-pulse/capacity";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { operatingModeForLocation } from "@/lib/ops-pulse/operating-context";
 
@@ -57,4 +57,40 @@ export async function bulkInitializeCapacityRules(formData: FormData) {
   revalidatePath("/master/capacity");
   revalidatePath("/ops-pulse/capacity");
   redirect(`/master/capacity?${errors.length ? `error=${encodeURIComponent(errors[0] ?? "Bulk setup failed.")}` : `initialized=${eligibleLocations.length}`}`);
+}
+
+export async function upsertCapacityRegionMap(formData: FormData) {
+  const authorization = await requirePagePermission("cod_master", "edit");
+  const companyId = requireCompanyId(authorization);
+  const name = String(formData.get("name") ?? "").trim();
+  const matchField = String(formData.get("match_field") ?? "");
+  const matchValue = String(formData.get("match_value") ?? "").trim();
+  const mapUrl = String(formData.get("map_url") ?? "").trim();
+  let validUrl = false;
+  try {
+    const parsed = new URL(mapUrl);
+    validUrl = parsed.protocol === "https:" && (parsed.hostname === "google.com" || parsed.hostname.endsWith(".google.com")) && Boolean(parsed.searchParams.get("mid"));
+  } catch {}
+  const validField = matchField === "station" || matchField === "region" || matchField === "state";
+  const error = !name || !matchValue || !validField || !validUrl
+    ? "Enter a name, matching field/value, and a valid Google My Maps sharing URL."
+    : await saveCapacityRegionMap(companyId, {
+      name,
+      matchField: matchField as "station" | "region" | "state",
+      matchValue,
+      mapUrl,
+      isActive: true
+    });
+  revalidatePath("/master/capacity");
+  revalidatePath("/ops-pulse/capacity");
+  redirect(`/master/capacity?${error ? `error=${encodeURIComponent(error)}` : "map_saved=1"}`);
+}
+
+export async function removeCapacityRegionMap(formData: FormData) {
+  const authorization = await requirePagePermission("cod_master", "edit");
+  const companyId = requireCompanyId(authorization);
+  const error = await deleteCapacityRegionMap(companyId, String(formData.get("id") ?? ""));
+  revalidatePath("/master/capacity");
+  revalidatePath("/ops-pulse/capacity");
+  redirect(`/master/capacity?${error ? `error=${encodeURIComponent(error)}` : "map_deleted=1"}`);
 }

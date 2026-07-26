@@ -4985,6 +4985,10 @@ tbody tr:hover td {
 .capacity-master-row { display:flex; align-items:center; gap:8px; min-width:860px; }
 .capacity-master-row > form:first-child { flex:1; display:grid; grid-template-columns:110px 130px 125px 110px 105px 90px; gap:8px; align-items:center; }
 .capacity-master-row input { width:100%; padding:8px 9px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; }
+.capacity-map-master-form { display:grid; grid-template-columns:1.2fr .8fr 1fr 2.2fr auto; gap:10px; align-items:end; padding:0 18px 18px; }
+.capacity-map-master-form label { display:grid; gap:5px; color:#64748b; font-size:11px; font-weight:700; }
+.capacity-map-master-form input, .capacity-map-master-form select { min-width:0; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#172033; }
+.capacity-map-meta a { color:#ea580c; font-size:11px; font-weight:700; }
 .capacity-table { min-width:1550px; }
 .capacity-table th,.capacity-table td { vertical-align:top; }
 .capacity-reason { min-width:280px; max-width:360px; color:#475467; font-size:11px; line-height:1.45; }
@@ -7413,6 +7417,8 @@ tbody tr:hover td {
 }
 
 @media (max-width: 1100px) {
+  .capacity-map-master-form { grid-template-columns:1fr 1fr; }
+  .capacity-map-master-form .wide { grid-column:1 / -1; }
   .fleet-local-filters,
   .fleet-local-filters.compact {
     grid-template-columns: repeat(2, 1fr);

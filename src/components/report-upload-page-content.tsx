@@ -103,8 +103,9 @@ function batchMatchesDate(batch: ImportBatch, date: string) {
 }
 
 function successfulBatchCoversDate(batch: ImportBatch, sourceCode: string, date: string) {
+  const status = batch.status.toLowerCase();
   return batch.source_type === sourceCode
-    && batch.status.toLowerCase() !== "failed"
+    && (status === "completed" || status === "success" || status === "succeeded")
     && batchMatchesDate(batch, date);
 }
 

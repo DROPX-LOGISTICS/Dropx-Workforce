@@ -738,15 +738,27 @@ export async function loadExecutiveReconciliationRows(
     });
   });
 
-  // Associate selection is a station roster, not a day-level report. Build one
-  // distinct list from associates seen in the station's recent Amazon shipment
-  // data. The selected date applies only to the COD entry and SCC validation.
+  // Associate selection uses the station's latest available Amazon Daily
+  // Shipment Count roster. The report arrives the next day, so the selected COD
+  // date must not require shipment rows for that exact date.
   const sourceDate = new Date(`${businessDate}T00:00:00Z`);
-  sourceDate.setUTCDate(sourceDate.getUTCDate() - 90);
+  sourceDate.setUTCDate(sourceDate.getUTCDate() - 30);
   const sourceFrom = sourceDate.toISOString().slice(0, 10);
   const associateSourceResult = await loadShipmentCountAssociateDays(companyId, stationScope, sourceFrom, businessDate);
-  const latestAssociateByKey = new Map<string, (typeof associateSourceResult.data)[number]>();
+  const latestSourceDateByStation = new Map<string, string>();
   associateSourceResult.data.forEach((associate) => {
+    const stationCode = String(associate.station_code ?? "").trim().toUpperCase();
+    const workDate = String(associate.work_date ?? "");
+    if (!stationCode || !workDate) return;
+    const current = latestSourceDateByStation.get(stationCode);
+    if (!current || workDate > current) latestSourceDateByStation.set(stationCode, workDate);
+  });
+  const latestAssociateByKey = new Map<string, (typeof associateSourceResult.data)[number]>();
+  associateSourceResult.data
+    .filter((associate) =>
+      latestSourceDateByStation.get(String(associate.station_code ?? "").trim().toUpperCase()) === String(associate.work_date ?? "")
+    )
+    .forEach((associate) => {
     const providerEmployeeId = String(associate.provider_employee_id ?? "").trim();
     const stationCode = String(associate.station_code ?? "").trim();
     if (!providerEmployeeId || !stationCode) return;

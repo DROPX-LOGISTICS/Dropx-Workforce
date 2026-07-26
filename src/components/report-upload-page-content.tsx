@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import { ReportImportUploader } from "@/components/report-import-uploader";
+import { ShipmentCoverageVisibility } from "@/components/shipment-coverage-visibility";
 import { StatusPill } from "@/components/status-pill";
 import { getAuthorization } from "@/lib/authorization";
 import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
@@ -147,11 +148,13 @@ async function loadBatches(companyId: string | null) {
 export async function ReportUploadPageContent({
   active = "Report Imports",
   pageCode = "imports",
-  selectedDate
+  selectedDate,
+  showShipmentCoverage = false
 }: {
   active?: string;
   pageCode?: string;
   selectedDate?: string;
+  showShipmentCoverage?: boolean;
 }) {
   const authorization = await getAuthorization();
   const companyId = authorization?.companyId ?? null;
@@ -280,43 +283,46 @@ export async function ReportUploadPageContent({
         <ReportImportUploader reports={reports} stations={shipmentStations} compact />
       </section>
 
-      <section className="panel">
-        <div className="panel-head toolbar">
-          <div>
-            <h2>Station upload checklist</h2>
-            <p className="subtle">{displayDate(date)} · Delivered {deliveredUploaded}/{stationCoverage.length} · Inbound {inboundUploaded}/{stationCoverage.length}</p>
+      <ShipmentCoverageVisibility defaultVisible={showShipmentCoverage}>
+        <section className="panel shipment-checklist-panel">
+          <div className="panel-head toolbar">
+            <div>
+              <h2>Station upload checklist</h2>
+              <p className="subtle">{displayDate(date)} · Delivered {deliveredUploaded}/{stationCoverage.length} · Inbound {inboundUploaded}/{stationCoverage.length}</p>
+            </div>
+            <form className="toolbar-actions" method="get">
+              <input name="shipment" type="hidden" value="1" />
+              <input aria-label="Shipment coverage date" className="field compact-date" defaultValue={date} name="date" type="date" />
+              <button className="button secondary compact" type="submit">View</button>
+              <Link className="button secondary compact" href="/imports">Today</Link>
+            </form>
           </div>
-          <form className="toolbar-actions" method="get">
-            <input aria-label="Shipment coverage date" className="field compact-date" defaultValue={date} name="date" type="date" />
-            <button className="button secondary compact" type="submit">View</button>
-            <Link className="button secondary compact" href="/imports">Today</Link>
-          </form>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th>Station</th><th>Delivered data</th><th>Inbound data</th></tr></thead>
-            <tbody>
-              {stationCoverage.map((row) => (
-                <tr key={`shipment-coverage-${row.station.id}`}>
-                  <td>
-                    <strong>{row.station.code} · {row.station.name}</strong>
-                    {row.station.childCodes.length ? <div className="subtle">Includes XPT: {row.station.childCodes.join(", ")}</div> : null}
-                  </td>
-                  <td>
-                    <StatusPill status={row.delivered.status} />
-                    {row.delivered.count ? <span className="subtle"> {row.delivered.count.toLocaleString("en-IN")} shipments</span> : null}
-                  </td>
-                  <td>
-                    <StatusPill status={row.inbound.status} />
-                    {row.inbound.count ? <span className="subtle"> {row.inbound.count.toLocaleString("en-IN")} shipments</span> : null}
-                  </td>
-                </tr>
-              ))}
-              {!stationCoverage.length ? <tr><td className="empty-cell" colSpan={3}>No eligible Amazon DSP or EDSP parent stations are available.</td></tr> : null}
-            </tbody>
-          </table>
-        </div>
-      </section>
+          <div className="table-wrap shipment-checklist-table">
+            <table>
+              <thead><tr><th>Station</th><th>Delivered data</th><th>Inbound data</th></tr></thead>
+              <tbody>
+                {stationCoverage.map((row) => (
+                  <tr key={`shipment-coverage-${row.station.id}`}>
+                    <td>
+                      <strong>{row.station.code} · {row.station.name}</strong>
+                      {row.station.childCodes.length ? <div className="subtle">Includes XPT: {row.station.childCodes.join(", ")}</div> : null}
+                    </td>
+                    <td>
+                      <StatusPill status={row.delivered.status} />
+                      {row.delivered.count ? <span className="subtle"> {row.delivered.count.toLocaleString("en-IN")} shipments</span> : null}
+                    </td>
+                    <td>
+                      <StatusPill status={row.inbound.status} />
+                      {row.inbound.count ? <span className="subtle"> {row.inbound.count.toLocaleString("en-IN")} shipments</span> : null}
+                    </td>
+                  </tr>
+                ))}
+                {!stationCoverage.length ? <tr><td className="empty-cell" colSpan={3}>No eligible Amazon DSP or EDSP parent stations are available.</td></tr> : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </ShipmentCoverageVisibility>
 
       {coverageGaps.length ? (
         <section className="panel">

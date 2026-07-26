@@ -11305,6 +11305,28 @@ td strong,
   color: #b91c1c;
 }
 
+.shipment-checklist-panel .panel-head {
+  padding: 12px 16px;
+}
+
+.shipment-checklist-table {
+  max-height: 440px;
+  overflow: auto;
+}
+
+.shipment-checklist-table th,
+.shipment-checklist-table td {
+  padding: 7px 10px;
+}
+
+.shipment-checklist-table td:first-child {
+  min-width: 220px;
+}
+
+.shipment-checklist-table .subtle {
+  font-size: 10px;
+}
+
 .profile-verification-error {
   grid-column: 1 / -1;
 }

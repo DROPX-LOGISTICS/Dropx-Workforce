@@ -127,6 +127,16 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
             setSourceType(nextType);
             const next = sourceOptions.find((option) => option.source_code === nextType);
             setReportDate(indiaDate(next?.date_default_offset ?? 0));
+            const nextUrl = new URL(window.location.href);
+            if (next && ["delivered_shipment_detail", "inbound_shipment_detail"].includes(next.parser_type)) {
+              nextUrl.searchParams.set("shipment", "1");
+            } else {
+              nextUrl.searchParams.delete("shipment");
+            }
+            window.history.replaceState(window.history.state, "", nextUrl);
+            window.dispatchEvent(new CustomEvent("report-import-source-change", {
+              detail: { parserType: next?.parser_type ?? "" }
+            }));
           }}>
             <option value="">Select report</option>
             {sourceOptions.map((option) => <option key={option.source_code} value={option.source_code}>{option.parser_type === "inbound_shipment_detail" ? "Inbound data" : option.parser_type === "delivered_shipment_detail" ? "Delivered data" : option.name}</option>)}

@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 
 type SearchParams = { lens?: string; station?: string; from?: string; to?: string };
 type ShipmentRow = { work_date: string; station_code: string; provider_employee_id: string; total_delivery: number | string | null };
+type ReviewRow = { id: string; description: string | null; updated_at: string };
 type CapacityView = {
   stationCode: string; stationName: string; latestDate: string | null; operationalHeadcount: number; consistentHeadcount: number; occasionalHeadcount: number;
   consistencyDays: number; currentHeadcount: number; averageHeadcount: number;
@@ -78,14 +79,27 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
   const selectedStationCode = codes.includes(String(searchParams?.station ?? "").toUpperCase()) ? String(searchParams?.station).toUpperCase() : null;
   const detailFrom = /^\d{4}-\d{2}-\d{2}$/.test(String(searchParams?.from)) ? String(searchParams?.from) : `${end.slice(0, 8)}01`;
   const detailTo = /^\d{4}-\d{2}-\d{2}$/.test(String(searchParams?.to)) ? String(searchParams?.to) : end;
-  const periodDays = lens === "current" ? 5 : lens === "movement" ? 7 : 30;
+  const periodDays = lens === "current" ? 6 : lens === "movement" ? 7 : 30;
   const start = dateShift(end, -(Math.max(30, periodDays) + 14));
-  const [ruleResult, shipmentResult] = await Promise.all([
+  const [ruleResult, shipmentResult, reviewResult] = await Promise.all([
     loadCapacityRules(companyId),
-    loadShipmentCapacityRows(companyId, codes, start, end)
+    loadShipmentCapacityRows(companyId, codes, start, end),
+    supabaseAdmin ? supabaseAdmin.from("report_import_master").select("id,description,updated_at")
+      .eq("company_id", companyId).eq("parser_type", "capacity_daily_review").order("updated_at", { ascending: false }).limit(5000)
+      : { data: [] as ReviewRow[], error: null }
   ]);
   const rules = new Map(ruleResult.rows.map((rule) => [rule.stationCode, rule]));
   const allRows = (shipmentResult.data ?? []) as ShipmentRow[];
+  const allReviews = ((reviewResult.data ?? []) as ReviewRow[]).map((row) => {
+    try { return { id: row.id, updatedAt: row.updated_at, ...(JSON.parse(row.description ?? "{}") as Record<string, unknown>) }; }
+    catch { return null; }
+  }).filter(Boolean) as Array<Record<string, unknown>>;
+  const latestReviewByStation = new Map<string, Record<string, unknown>>();
+  allReviews.forEach((review) => {
+    const stationCode = String(review.stationCode ?? "");
+    const current = latestReviewByStation.get(stationCode);
+    if (!current || String(review.reviewDate ?? "") > String(current.reviewDate ?? "")) latestReviewByStation.set(stationCode, review);
+  });
   const views: CapacityView[] = locations.map((location) => {
     const rule = rules.get(location.station_code);
     const rows = allRows.filter((row) => row.station_code === location.station_code);
@@ -176,16 +190,22 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
   const totalRequired = views.reduce((sum, row) => sum + (row.requiredHeadcount ?? 0), 0);
   const hiringNeed = views.reduce((sum, row) => sum + Math.max(0, row.gap ?? 0), 0);
   const overloaded = views.filter((row) => row.status === "risk").length;
+  const reviewedStations = views.filter((row) => latestReviewByStation.has(row.stationCode));
+  const actualRegular = reviewedStations.reduce((sum, row) => sum + num(latestReviewByStation.get(row.stationCode)?.regularPresent), 0);
+  const adHocTotal = reviewedStations.reduce((sum, row) => sum + num(latestReviewByStation.get(row.stationCode)?.adHocPresent), 0);
+  const regularStrength = reviewedStations.reduce((sum, row) => sum + num(latestReviewByStation.get(row.stationCode)?.regularStrength), 0);
+  const absentTotal = reviewedStations.reduce((sum, row) => sum + num(latestReviewByStation.get(row.stationCode)?.absent), 0);
+  const networkAbsenteeism = regularStrength ? absentTotal / regularStrength * 100 : 0;
 
   return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">
     <PageHead eyebrow="Workforce Planning" title="Capacity" subtitle="Headcount, allocation productivity, attrition signals and demand-based hiring recommendations." />
     <CapacityWorkspaceTabs active="overview" />
     <div className="capacity-basis-strip"><strong>Planning basis</strong><span>Latest six shipment days · unique road-active IDs · delivered packages · station master SPR and buffer</span></div>
-    {locationResult.error || ruleResult.error || shipmentResult.error ? <div className="message-panel error">{locationResult.error || ruleResult.error || shipmentResult.error?.message}</div> : null}
-    <section className="performance-summary-grid"><article><span>Road-active IDs</span><strong>{fmt(totalRoadActive)}</strong><small>IDs delivering on each station’s latest day</small></article><article><span>Consistent IDs</span><strong>{fmt(totalConsistent)}</strong><small>Active on at least 4 of latest 6 shipment days</small></article><article><span>Occasional IDs</span><strong>{fmt(totalOccasional)}</strong><small>Active on fewer than 4 of latest 6 days</small></article><article><span>Additional hiring</span><strong>{fmt(hiringNeed)}</strong><small>Demand requirement {fmt(totalRequired)}</small></article></section>
+    {locationResult.error || ruleResult.error || shipmentResult.error || reviewResult.error ? <div className="message-panel error">{locationResult.error || ruleResult.error || shipmentResult.error?.message || reviewResult.error?.message}</div> : null}
+    <section className="performance-summary-grid"><article><span>Road-active IDs</span><strong>{fmt(totalRoadActive)}</strong><small>System shipment IDs</small></article><article><span>Ops-confirmed regular</span><strong>{reviewedStations.length ? fmt(actualRegular) : "—"}</strong><small>{reviewedStations.length}/{views.length} stations reviewed</small></article><article><span>Ad hoc dependency</span><strong>{reviewedStations.length ? fmt(adHocTotal) : "—"}</strong><small>Temporary resources confirmed</small></article><article><span>Absenteeism</span><strong>{reviewedStations.length ? `${fmt(networkAbsenteeism, 1)}%` : "—"}</strong><small>Based on Ops-confirmed regular strength</small></article><article><span>Additional hiring</span><strong>{fmt(hiringNeed)}</strong><small>System demand requirement {fmt(totalRequired)}</small></article></section>
     <section className="panel"><div className="panel-head"><div><h2>Station capacity plan</h2><p className="subtle">Attrition is inferred from associate IDs active in the previous seven days but absent in the latest seven days.</p></div><a className="button secondary compact" href="/master/capacity">Capacity Master</a></div>
-      <div className="table-wrap"><table className="capacity-table"><thead><tr><th>Station</th><th>Latest road-active</th><th>Consistent IDs</th><th>Occasional IDs</th><th>Average daily HC</th><th>Average volume</th><th>SPR</th><th>Target / safe</th><th>Additions</th><th>Leavers</th><th>Required HC</th><th>Decision</th><th>Reason</th></tr></thead><tbody>
-        {views.map((row) => <tr key={row.stationCode}><td><a className="capacity-station-link" href={`/capacity/${row.stationCode}?from=${detailFrom}&to=${detailTo}`}><strong>{row.stationCode}</strong><small>{row.stationName}<br/>{row.latestDate ? `Shipment IDs · ${row.latestDate}` : "No shipment IDs"}</small></a></td><td><strong>{fmt(row.operationalHeadcount)}</strong></td><td><strong>{fmt(row.consistentHeadcount)}</strong><small>{row.consistencyDays ? `≥ ${Math.ceil(row.consistencyDays * 2 / 3)} of ${row.consistencyDays} days` : "No source days"}</small></td><td>{fmt(row.occasionalHeadcount)}</td><td>{fmt(row.averageHeadcount, 1)}</td><td>{fmt(row.averageVolume)}</td><td><strong className={row.status === "risk" ? "metric-bad-text" : ""}>{row.status === "no_data" ? "—" : fmt(row.currentSpr, 1)}</strong></td><td>{row.targetSpr == null ? "—" : `${fmt(row.targetSpr, 1)} / ${fmt(row.maxSafeSpr ?? 0, 1)}`}</td><td className="metric-good-text">+{row.additions}</td><td className={row.leavers ? "metric-bad-text" : ""}>-{row.leavers}</td><td>{row.requiredHeadcount ?? "—"}</td><td><span className={`capacity-decision ${row.status}`}>{row.status === "hire" ? `Hire ${row.gap}` : row.status === "surplus" ? `Surplus ${Math.abs(row.gap ?? 0)}` : row.status === "risk" ? "Overloaded" : row.status === "balanced" ? "Balanced" : row.status === "no_data" ? "No data" : "Configure"}</span></td><td className="capacity-reason">{generatedReasons[row.stationCode] || row.reason}</td></tr>)}
+      <div className="table-wrap"><table className="capacity-table"><thead><tr><th>Station</th><th>System IDs</th><th>Actual regular</th><th>Ad hoc</th><th>Absent</th><th>Consistent IDs</th><th>Average volume</th><th>SPR</th><th>Required HC</th><th>Decision</th><th>Reason</th></tr></thead><tbody>
+        {views.map((row) => { const review = latestReviewByStation.get(row.stationCode); const reliableHeadcount = review ? num(review.regularPresent) : row.consistentHeadcount; const reliableGap = row.requiredHeadcount == null ? null : row.requiredHeadcount - reliableHeadcount; const reliableStatus = !review ? "Review actuals" : reliableGap && reliableGap > 0 ? `Hire ${reliableGap}` : reliableGap != null && reliableGap < -1 ? `Surplus ${Math.abs(reliableGap)}` : "Balanced"; return <tr key={row.stationCode}><td><a className="capacity-station-link" href={`/capacity/${row.stationCode}?from=${detailFrom}&to=${detailTo}`}><strong>{row.stationCode}</strong><small>{row.stationName}<br/>{review ? `Ops reviewed · ${review.reviewDate}` : row.latestDate ? `Awaiting Ops review · ${row.latestDate}` : "No shipment IDs"}</small></a></td><td><strong>{fmt(row.operationalHeadcount)}</strong></td><td>{review ? fmt(num(review.regularPresent)) : "—"}</td><td>{review ? fmt(num(review.adHocPresent)) : "—"}</td><td className={num(review?.absent) ? "metric-bad-text" : ""}>{review ? fmt(num(review.absent)) : "—"}</td><td><strong>{fmt(row.consistentHeadcount)}</strong><small>{row.consistencyDays ? `≥ ${Math.ceil(row.consistencyDays * 2 / 3)} of ${row.consistencyDays} days` : "No source days"}</small></td><td>{fmt(row.averageVolume)}</td><td><strong className={row.status === "risk" ? "metric-bad-text" : ""}>{row.status === "no_data" ? "—" : fmt(row.currentSpr, 1)}</strong></td><td>{row.requiredHeadcount ?? "—"}</td><td><span className={`capacity-decision ${!review ? "unconfigured" : reliableGap && reliableGap > 0 ? "hire" : reliableGap != null && reliableGap < -1 ? "surplus" : "balanced"}`}>{reliableStatus}</span></td><td className="capacity-reason">{review ? String(review.note || generatedReasons[row.stationCode] || row.reason) : "Complete the next-day Ops review before hiring or surplus action."}</td></tr>; })}
       </tbody></table></div>
     </section>
     {selectedStation ? <section className="panel capacity-detail" id="station-detail">

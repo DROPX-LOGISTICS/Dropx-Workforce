@@ -1,10 +1,11 @@
 import { AppShell } from "@/components/app-shell";
 import { CapacityServiceMap } from "@/components/capacity-service-map";
+import { CapacityStationLayerMap } from "@/components/capacity-station-layer-map";
 import { CapacityWorkspaceTabs } from "@/components/capacity-workspace-tabs";
 import { PageHead } from "@/components/page-head";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
-import { capacityMapEmbedUrl, loadCapacityRegionMaps, loadCapacityRules, loadCapacityServiceRoutes, loadShipmentSizeRule } from "@/lib/ops-pulse/capacity";
+import { capacityMapEmbedUrl, loadCapacityRegionMaps, loadCapacityRules, loadCapacityServiceRoutes, loadGoogleMyMapsStationLayer, loadShipmentSizeRule } from "@/lib/ops-pulse/capacity";
 import { loadCapacityAssociateDays, loadCapacityPincodes, loadCapacityStationDays } from "@/lib/ops-pulse/capacity-shipments";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -138,6 +139,7 @@ export default async function CapacityStationPage({ params, searchParams }: { pa
     map.matchField === "station" ? stationCode : map.matchField === "state" ? location.state : location.region
   ));
   const capacityMapUrl = capacityMap ? capacityMapEmbedUrl(capacityMap.mapUrl) : null;
+  const stationLayer = capacityMap ? await loadGoogleMyMapsStationLayer(capacityMap.mapUrl, stationCode) : { features: [], error: null };
   const fallbackAction = !daily.length ? "No shipment-ID data is available for this date range."
     : requiredIds != null && requiredIds > averageIds ? `Average demand requires ${requiredIds} IDs including ${buffer}% buffer; current daily average is ${fmt(averageIds, 1)}.`
     : requiredIds != null ? `Average road-active capacity covers demand; validate ad hoc IDs before closing hiring requirements.` : "Configure target SPR in Capacity Master to calculate required IDs.";
@@ -174,7 +176,7 @@ export default async function CapacityStationPage({ params, searchParams }: { pa
     </section>
     <section className="panel capacity-area-pay"><div className="panel-head"><div><h2>Service-area intelligence</h2><p className="subtle">Use the approved map for service boundaries and the pincode table for actionable volume and ID demand.</p></div><a className="button secondary compact" href="/master/capacity">Manage map data</a></div>
       <div className="capacity-area-grid"><div className="capacity-map-card">
-      {capacityMapUrl ? <iframe title={capacityMap?.name || `${stationCode} service-area map`} loading="lazy" referrerPolicy="no-referrer-when-downgrade" src={capacityMapUrl}/> : latitude && longitude ? <iframe title={`${stationCode} station map`} loading="lazy" referrerPolicy="no-referrer-when-downgrade" src={`https://www.google.com/maps?q=${latitude},${longitude}&z=12&output=embed`}/> : <div className="capacity-map-empty"><strong>Map not configured</strong><span>Add a station or region map in Capacity Master.</span></div>}
+      {stationLayer.features.length ? <CapacityStationLayerMap stationCode={stationCode} features={stationLayer.features}/> : capacityMapUrl ? <iframe title={capacityMap?.name || `${stationCode} service-area map`} loading="lazy" referrerPolicy="no-referrer-when-downgrade" src={capacityMapUrl}/> : latitude && longitude ? <iframe title={`${stationCode} station map`} loading="lazy" referrerPolicy="no-referrer-when-downgrade" src={`https://www.google.com/maps?q=${latitude},${longitude}&z=12&output=embed`}/> : <div className="capacity-map-empty"><strong>Map not configured</strong><span>Add a station or region map in Capacity Master.</span></div>}
       <div className="capacity-map-meta"><strong>{capacityMap?.name || `${stationCode} service area`}</strong><span>{stationMap?.address || location.city || "Station coordinates not configured"}</span>{capacityMap ? <a href={capacityMap.mapUrl} target="_blank" rel="noreferrer">Open full map</a> : null}</div>
       </div>
       <div className="capacity-rate-list">{rateCards.flatMap((card) => (card.rate_card_lines ?? []).map((line) => <article key={`${card.id}-${line.metric_code}`}><div><strong>{line.metric_code.replace(/_/g, " ")}</strong><span>{card.name} · {card.pay_type || "Pay type not set"}</span></div><b>₹{fmt(num(line.rate), 2)} {line.unit || ""}</b></article>))}{!rateCards.length ? <div className="capacity-map-empty"><strong>No approved station rate card</strong><span>Configure bike/van and delivery rates before the hiring team uses pay guidance.</span></div> : null}<div className="capacity-source-gap"><strong>{pincodes.length} delivery pincodes detected</strong><span>{pincodeDelivered ? `${fmt(pincodeDelivered)} shipments mapped by pincode. ` : ""}{weightReady ? `${fmt(weightReady)} have weight; ` : ""}{dimensionReady ? `${fmt(dimensionReady)} have complete dimensions. ` : ""}Vehicle type is not present in the source, so bike/van capacity still requires an Area Capacity Master.</span></div></div>

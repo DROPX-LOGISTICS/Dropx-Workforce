@@ -19,6 +19,11 @@ export type CapacityRegionMap = {
   isActive: boolean;
 };
 
+export type CapacityMapLayerFeature = {
+  name: string;
+  coordinates: Array<{ lat: number; lng: number }>;
+};
+
 export type ShipmentSizeRule = {
   id?: string;
   maxLengthCm: number;
@@ -220,5 +225,44 @@ export function capacityMapEmbedUrl(mapUrl: string) {
     return `https://www.google.com/maps/d/embed?mid=${encodeURIComponent(mapId)}`;
   } catch {
     return null;
+  }
+}
+
+function decodeKmlText(value: string) {
+  return value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"").replace(/&#39;/g, "'").trim();
+}
+
+export async function loadGoogleMyMapsStationLayer(mapUrl: string, stationCode: string) {
+  try {
+    const parsed = new URL(mapUrl);
+    const mapId = parsed.searchParams.get("mid");
+    if (!mapId) return { features: [] as CapacityMapLayerFeature[], error: "Map ID is missing." };
+    const response = await fetch(`https://www.google.com/maps/d/kml?mid=${encodeURIComponent(mapId)}&forcekml=1`, {
+      next: { revalidate: 3600 }
+    });
+    if (!response.ok) return { features: [] as CapacityMapLayerFeature[], error: "The service-area map could not be read." };
+    const kml = await response.text();
+    const folders = [...kml.matchAll(/<Folder(?:\s[^>]*)?>([\s\S]*?)<\/Folder>/gi)];
+    const wanted = stationCode.trim().toUpperCase();
+    const folder = folders.map((match) => match[1]).find((body) => {
+      const name = body.match(/<name>([\s\S]*?)<\/name>/i)?.[1] ?? "";
+      return decodeKmlText(name).toUpperCase() === wanted;
+    });
+    if (!folder) return { features: [] as CapacityMapLayerFeature[], error: `No ${wanted} layer exists in this map.` };
+    const features = [...folder.matchAll(/<Placemark(?:\s[^>]*)?>([\s\S]*?)<\/Placemark>/gi)].map((match) => {
+      const body = match[1];
+      const name = decodeKmlText(body.match(/<name>([\s\S]*?)<\/name>/i)?.[1] ?? "Service point");
+      const coordinateText = body.match(/<coordinates>([\s\S]*?)<\/coordinates>/i)?.[1] ?? "";
+      const coordinates = coordinateText.trim().split(/\s+/).map((token) => {
+        const [lng, lat] = token.split(",").map(Number);
+        return { lat, lng };
+      }).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+      return { name, coordinates };
+    }).filter((feature) => feature.coordinates.length);
+    return { features, error: null as string | null };
+  } catch {
+    return { features: [] as CapacityMapLayerFeature[], error: "The service-area map URL is invalid." };
   }
 }

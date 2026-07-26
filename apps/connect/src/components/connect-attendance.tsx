@@ -1,9 +1,20 @@
 "use client";
 
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, Fingerprint, LogIn, LogOut, UserCheck, UserX } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, Fingerprint, LogIn, LogOut, Paperclip, UserCheck, UserX, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 type Account = { id: string; profileType: string };
+type Regularization = {
+  id: string;
+  requestedInTime: string;
+  requestedOutTime: string;
+  reasonCode: string;
+  remarks: string;
+  hasAttachment: boolean;
+  status: string;
+  reviewRemarks: string;
+  createdAt: string;
+};
 type Row = {
   date: string;
   status: string;
@@ -12,6 +23,7 @@ type Row = {
   workHours: string;
   punchCount: number;
   remark: string;
+  regularization: Regularization | null;
 };
 type Attendance = {
   month: string;
@@ -52,8 +64,11 @@ export function ConnectAttendance({ account }: { account: Account }) {
   const [data, setData] = useState<Attendance | null>(null);
   const [selected, setSelected] = useState<Row | null>(null);
   const [error, setError] = useState("");
+  const [regularizing, setRegularizing] = useState(false);
+  const [requestError, setRequestError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  useEffect(() => {
+  const loadAttendance = useCallback(() => {
     setData(null);
     setError("");
     fetch(`/api/connect/attendance?accountId=${encodeURIComponent(account.id)}&profileType=${encodeURIComponent(account.profileType)}&month=${month}`)
@@ -65,6 +80,10 @@ export function ConnectAttendance({ account }: { account: Account }) {
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load attendance."));
   }, [account.id, account.profileType, month]);
+
+  useEffect(() => {
+    loadAttendance();
+  }, [loadAttendance, refreshKey]);
 
   const rowsByDay = useMemo(() => new Map((data?.rows ?? []).map((row) => [Number(row.date.slice(-2)), row])), [data]);
   const [year, monthNumber] = month.split("-").map(Number);
@@ -129,8 +148,105 @@ export function ConnectAttendance({ account }: { account: Account }) {
         {tab === "calendar" && selected ? <div className="dx-selected-day">
           <header><div><CalendarDays /><strong>{selected.date.split("-").reverse().join("/")}</strong></div><em className={dayStatus(selected, false)}>{selected.status === "P" ? "Present" : "Absent"}</em></header>
           <div><span><LogIn /><small>IN</small><strong>{selected.inTime || "--:--"}</strong></span><span><LogOut /><small>OUT</small><strong>{selected.outTime || "--:--"}</strong></span><span><Clock3 /><small>WORK</small><strong>{selected.workHours || "00:00"}</strong></span><span><Fingerprint /><small>PUNCHES</small><strong>{selected.punchCount}</strong></span></div>
+          <footer>
+            {selected.regularization ? <span className={`dx-request-status ${selected.regularization.status}`}>Regularization {selected.regularization.status}</span> : null}
+            {selected.regularization?.status !== "pending" ? <button onClick={() => { setRequestError(""); setRegularizing(true); }}>Regularize</button> : null}
+          </footer>
         </div> : null}
       </> : null}
+      {regularizing && selected ? <RegularizationSheet
+        account={account}
+        row={selected}
+        onClose={() => setRegularizing(false)}
+        onSubmitted={() => {
+          setRegularizing(false);
+          setRefreshKey((value) => value + 1);
+        }}
+        error={requestError}
+        setError={setRequestError}
+      /> : null}
     </section>
   );
+}
+
+function RegularizationSheet({
+  account,
+  row,
+  onClose,
+  onSubmitted,
+  error,
+  setError
+}: {
+  account: Account;
+  row: Row;
+  onClose: () => void;
+  onSubmitted: () => void;
+  error: string;
+  setError: (message: string) => void;
+}) {
+  const [inTime, setInTime] = useState(row.regularization?.requestedInTime || row.inTime || "");
+  const [outTime, setOutTime] = useState(row.regularization?.requestedOutTime || row.outTime || "");
+  const [reason, setReason] = useState(row.regularization?.reasonCode || "");
+  const [remarks, setRemarks] = useState(row.regularization?.remarks || "");
+  const [attachment, setAttachment] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      const form = new FormData();
+      form.set("accountId", account.id);
+      form.set("profileType", account.profileType);
+      form.set("attendanceDate", row.date);
+      form.set("currentInTime", row.inTime);
+      form.set("currentOutTime", row.outTime);
+      form.set("requestedInTime", inTime);
+      form.set("requestedOutTime", outTime);
+      form.set("reasonCode", reason);
+      form.set("remarks", remarks);
+      if (attachment) form.set("attachment", attachment);
+      const response = await fetch("/api/connect/attendance", { method: "POST", body: form });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Unable to submit regularization request.");
+      onSubmitted();
+    } catch (reasonValue) {
+      setError(reasonValue instanceof Error ? reasonValue.message : "Unable to submit regularization request.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <>
+    <button aria-label="Close regularization" className="dx-sheet-scrim" onClick={onClose} />
+    <aside className="dx-regularization-sheet" role="dialog" aria-modal="true" aria-labelledby="regularization-title">
+      <header>
+        <div><strong id="regularization-title">Attendance regularization</strong><small>Request a correction for this attendance day.</small></div>
+        <button aria-label="Close" onClick={onClose}><X /></button>
+      </header>
+      <form onSubmit={submit}>
+        <div className="dx-regularization-day">
+          <span><small>DATE</small><strong>{row.date.split("-").reverse().join("/")}</strong></span>
+          <em>{row.status === "P" ? "Present" : row.status === "A" ? "Absent" : row.status}</em>
+        </div>
+        <div className="dx-time-grid">
+          <label>Requested IN<input required type="time" value={inTime} onChange={(event) => setInTime(event.target.value)} /></label>
+          <label>Requested OUT<input required type="time" value={outTime} onChange={(event) => setOutTime(event.target.value)} /></label>
+        </div>
+        <label>Reason<select required value={reason} onChange={(event) => setReason(event.target.value)}>
+          <option value="">Select reason</option>
+          <option value="missed_in">Missed IN punch</option>
+          <option value="missed_out">Missed OUT punch</option>
+          <option value="incorrect_in">Incorrect IN time</option>
+          <option value="incorrect_out">Incorrect OUT time</option>
+          <option value="other">Other</option>
+        </select></label>
+        <label>Remarks<textarea required minLength={5} placeholder="Briefly explain the correction" rows={3} value={remarks} onChange={(event) => setRemarks(event.target.value)} /></label>
+        <label className="dx-attachment"><Paperclip /><span>{attachment?.name || "Attach supporting file (optional)"}</span><input accept=".jpg,.jpeg,.png,.webp,.pdf" type="file" onChange={(event) => setAttachment(event.target.files?.[0] ?? null)} /></label>
+        {error ? <p className="dx-form-error">{error}</p> : null}
+        <div className="dx-sheet-actions"><button className="secondary" onClick={onClose} type="button">Cancel</button><button disabled={saving} type="submit">{saving ? "Submitting..." : "Submit request"}</button></div>
+      </form>
+    </aside>
+  </>;
 }

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectSessionCookieName, normalizeConnectMobile } from "@/lib/connect-auth";
 import { loadAttendanceReportRows } from "@/lib/biometric/attendance";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { isWorkforceProfileType, workforceTable } from "@/lib/workforce-profiles";
+import { isWorkforceProfileType, type WorkforceProfileType, workforceTable } from "@/lib/workforce-profiles";
 
 function monthRange(month: string | null) {
   const today = new Date();
@@ -27,6 +27,21 @@ function cleanEnrolmentId(value: unknown) {
   const digits = String(value ?? "").trim().replace(/\D/g, "");
   if (!digits) return "";
   return digits.replace(/^0+/, "") || "0";
+}
+
+function isMissingRegularizationTable(message: unknown) {
+  const text = String(message ?? "").toLowerCase();
+  return text.includes("attendance_regularization_requests") &&
+    (text.includes("does not exist") || text.includes("schema cache"));
+}
+
+function validTime(value: string) {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function fileExtension(name: string) {
+  const match = name.toLowerCase().match(/\.[a-z0-9]{1,8}$/);
+  return match?.[0] ?? "";
 }
 
 async function activeSession() {
@@ -58,10 +73,12 @@ async function resolveWorker({
   const session = await activeSession();
   const { countryCode, mobile, localMobile } = normalizeConnectMobile(session.mobile_number, session.country_code);
   if (isWorkforceProfileType(profileType)) {
-    const table = workforceTable(profileType);
+    const resolvedProfileType = profileType as WorkforceProfileType;
+    const table = workforceTable(resolvedProfileType);
+    const idColumn = resolvedProfileType === "employee" ? "employee_code" : "dropx_id";
     const result = await supabaseAdmin
       .from(table)
-      .select("id, company_id, mobile, mobile_country_code, biometric_id")
+      .select(`id, company_id, mobile, mobile_country_code, biometric_id, full_name, ${idColumn}`)
       .eq("id", accountId)
       .maybeSingle();
     if (result.error) throw new Error(result.error.message);
@@ -75,6 +92,11 @@ async function resolveWorker({
     const enrolmentId = cleanEnrolmentId(row.biometric_id);
     return {
       companyId: row.company_id as string,
+      profileId: row.id as string,
+      profileType: resolvedProfileType,
+      dropxId: String(row[idColumn as keyof typeof row] ?? ""),
+      biometricId: String(row.biometric_id ?? ""),
+      fullName: String(row.full_name ?? ""),
       filter: (item: Awaited<ReturnType<typeof loadAttendanceReportRows>>[number]) => Boolean(enrolmentId) && cleanEnrolmentId(item.enrolmentId) === enrolmentId
     };
   }
@@ -98,6 +120,34 @@ export async function GET(request: NextRequest) {
     const present = rows.filter((row) => row.status === "P").length;
     const absent = rows.filter((row) => row.status === "A").length;
     const misPunch = rows.filter((row) => row.remark.toLowerCase().includes("single") || row.remark.toLowerCase().includes("missing")).length;
+    const requestsResult = await supabaseAdmin
+      .from("attendance_regularization_requests")
+      .select("id, attendance_date, requested_in_time, requested_out_time, reason_code, remarks, attachment_path, status, review_remarks, created_at")
+      .eq("company_id", worker.companyId)
+      .eq("profile_type", worker.profileType)
+      .eq("profile_id", worker.profileId)
+      .gte("attendance_date", range.fromDate)
+      .lte("attendance_date", range.toDate)
+      .order("created_at", { ascending: false });
+    if (requestsResult.error && !isMissingRegularizationTable(requestsResult.error.message)) {
+      throw new Error(requestsResult.error.message);
+    }
+    const requestByDate = new Map<string, Record<string, unknown>>();
+    for (const item of requestsResult.data ?? []) {
+      if (!requestByDate.has(String(item.attendance_date))) {
+        requestByDate.set(String(item.attendance_date), {
+          id: item.id,
+          requestedInTime: String(item.requested_in_time ?? "").slice(0, 5),
+          requestedOutTime: String(item.requested_out_time ?? "").slice(0, 5),
+          reasonCode: item.reason_code,
+          remarks: item.remarks,
+          hasAttachment: Boolean(item.attachment_path),
+          status: item.status,
+          reviewRemarks: item.review_remarks,
+          createdAt: item.created_at
+        });
+      }
+    }
 
     return NextResponse.json({
       month: range.label,
@@ -114,11 +164,110 @@ export async function GET(request: NextRequest) {
         outTime: row.outTime,
         workHours: row.workHours,
         punchCount: row.punchCount,
-        remark: row.remark
+        remark: row.remark,
+        regularization: requestByDate.get(row.punchDate) ?? null
       }))
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load attendance.";
+    const status = message.includes("Login") ? 401 : 400;
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    const formData = await request.formData();
+    const accountId = String(formData.get("accountId") ?? "").trim();
+    const profileType = String(formData.get("profileType") ?? "").trim();
+    const attendanceDate = String(formData.get("attendanceDate") ?? "").trim();
+    const requestedInTime = String(formData.get("requestedInTime") ?? "").trim();
+    const requestedOutTime = String(formData.get("requestedOutTime") ?? "").trim();
+    const reasonCode = String(formData.get("reasonCode") ?? "").trim();
+    const remarks = String(formData.get("remarks") ?? "").trim();
+    const currentInTime = String(formData.get("currentInTime") ?? "").trim();
+    const currentOutTime = String(formData.get("currentOutTime") ?? "").trim();
+    if (!accountId) throw new Error("Account is required.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(attendanceDate)) throw new Error("Attendance date is required.");
+    if (attendanceDate > new Date().toISOString().slice(0, 10)) throw new Error("Future attendance cannot be regularized.");
+    if (!validTime(requestedInTime) || !validTime(requestedOutTime)) {
+      throw new Error("Requested IN and OUT times are required.");
+    }
+    if (requestedOutTime <= requestedInTime) throw new Error("Requested OUT time must be after IN time.");
+    if (!["missed_in", "missed_out", "incorrect_in", "incorrect_out", "other"].includes(reasonCode)) {
+      throw new Error("Select a regularization reason.");
+    }
+    if (remarks.length < 5) throw new Error("Enter a short explanation.");
+    const worker = await resolveWorker({ accountId, profileType });
+    const existingResult = await supabaseAdmin
+      .from("attendance_regularization_requests")
+      .select("id, status")
+      .eq("company_id", worker.companyId)
+      .eq("profile_type", worker.profileType)
+      .eq("profile_id", worker.profileId)
+      .eq("attendance_date", attendanceDate)
+      .in("status", ["pending", "returned"])
+      .maybeSingle();
+    if (existingResult.error) {
+      if (isMissingRegularizationTable(existingResult.error.message)) {
+        throw new Error("Attendance regularization setup is pending. Run attendance_regularization_requests_v1.sql.");
+      }
+      throw new Error(existingResult.error.message);
+    }
+    if (existingResult.data?.status === "pending") {
+      throw new Error("A regularization request is already pending for this date.");
+    }
+
+    let attachmentPath: string | null = null;
+    const attachment = formData.get("attachment");
+    if (attachment instanceof File && attachment.size > 0) {
+      if (attachment.size > 8 * 1024 * 1024) throw new Error("Attachment must be 8 MB or smaller.");
+      const safeName = attachment.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      attachmentPath = `${worker.companyId}/${worker.profileId}/attendance-regularization-${attendanceDate}-${Date.now()}${fileExtension(safeName)}`;
+      const uploadResult = await supabaseAdmin.storage
+        .from("employee-profile-documents")
+        .upload(attachmentPath, Buffer.from(await attachment.arrayBuffer()), {
+          contentType: attachment.type || "application/octet-stream",
+          upsert: false
+        });
+      if (uploadResult.error) throw new Error(uploadResult.error.message);
+    }
+
+    const payload = {
+      company_id: worker.companyId,
+      profile_type: worker.profileType,
+      profile_id: worker.profileId,
+      dropx_id: worker.dropxId || null,
+      biometric_id: worker.biometricId || null,
+      full_name: worker.fullName || null,
+      attendance_date: attendanceDate,
+      current_in_time: currentInTime || null,
+      current_out_time: currentOutTime || null,
+      requested_in_time: requestedInTime,
+      requested_out_time: requestedOutTime,
+      reason_code: reasonCode,
+      remarks,
+      attachment_path: attachmentPath,
+      status: "pending",
+      updated_at: new Date().toISOString()
+    };
+    const saveResult = existingResult.data?.id
+      ? await supabaseAdmin
+          .from("attendance_regularization_requests")
+          .update(payload)
+          .eq("id", existingResult.data.id)
+          .select("id, status")
+          .single()
+      : await supabaseAdmin
+          .from("attendance_regularization_requests")
+          .insert(payload)
+          .select("id, status")
+          .single();
+    if (saveResult.error) throw new Error(saveResult.error.message);
+    return NextResponse.json({ ok: true, request: saveResult.data });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to submit regularization request.";
     const status = message.includes("Login") ? 401 : 400;
     return NextResponse.json({ error: message }, { status });
   }

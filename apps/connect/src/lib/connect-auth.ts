@@ -65,7 +65,8 @@ export function requestIp(request: Request) {
 
 export function isMissingColumnError(error: unknown) {
   const message = String((error as { message?: unknown })?.message ?? "").toLowerCase();
-  return message.includes("column") && (message.includes("does not exist") || message.includes("schema cache"));
+  return (message.includes("column") || message.includes("relation")) &&
+    (message.includes("does not exist") || message.includes("schema cache"));
 }
 
 export function normalizeConnectMobile(mobile: unknown, countryCode: unknown) {
@@ -119,12 +120,18 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       .eq("is_active", true)
       .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
       .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`);
+    if (profileType !== "field_executive" && isMissingColumnError(result.error)) {
+      return { data: [], error: null };
+    }
     if (isMissingColumnError(result.error)) {
       result = await supabaseAdmin!
         .from(table)
         .select("id, company_id, full_name, email, dropx_id, biometric_id, designation, onboarding_status, is_active")
         .eq("is_active", true)
         .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`);
+    }
+    if (profileType !== "field_executive" && isMissingColumnError(result.error)) {
+      return { data: [], error: null };
     }
     return result;
   }

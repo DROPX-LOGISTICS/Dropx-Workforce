@@ -32,7 +32,16 @@ function messageValue(source: string | undefined, values: Record<string, string>
 
 function isMissingColumnError(error: unknown) {
   const message = String((error as { message?: unknown })?.message ?? "").toLowerCase();
-  return message.includes("column") && (message.includes("does not exist") || message.includes("schema cache"));
+  return (message.includes("column") || message.includes("relation")) &&
+    (message.includes("does not exist") || message.includes("schema cache"));
+}
+
+function ignoreMissingOptionalWorkforceTables(results: AccountMatchResult[]) {
+  return results.map((result, index) =>
+    index > 0 && isMissingColumnError(result.error)
+      ? { data: [], error: null }
+      : result
+  );
 }
 
 function buildTemplateComponents(components: WhatsAppTemplateComponent[], mappings: Record<string, string>, values: Record<string, string>) {
@@ -92,14 +101,14 @@ export async function POST(request: Request) {
         .or(`mobile.eq.${to},mobile.eq.${localMobile}`)
     ]);
     const nonEmployeeTypes: NonEmployeeProfileType[] = ["field_executive", "contractor", "vendor", "worker"];
-    let nonEmployeeMatches: AccountMatchResult[] = await Promise.all(nonEmployeeTypes.map((profileType) =>
+    let nonEmployeeMatches: AccountMatchResult[] = ignoreMissingOptionalWorkforceTables(await Promise.all(nonEmployeeTypes.map((profileType) =>
       supabaseAdmin!
         .from(workforceTable(profileType))
         .select("id, company_id, is_active, mobile_country_code")
         .eq("is_active", true)
         .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
         .or(`mobile.eq.${to},mobile.eq.${localMobile}`)
-    ));
+    )));
     if (isMissingColumnError(profileMatches.error) || isMissingColumnError(employeeMatches.error) || nonEmployeeMatches.some((result) => isMissingColumnError(result.error))) {
       [profileMatches, employeeMatches] = await Promise.all([
         supabaseAdmin
@@ -113,13 +122,13 @@ export async function POST(request: Request) {
           .eq("is_active", true)
           .or(`mobile.eq.${to},mobile.eq.${localMobile}`)
       ]);
-      nonEmployeeMatches = await Promise.all(nonEmployeeTypes.map((profileType) =>
+      nonEmployeeMatches = ignoreMissingOptionalWorkforceTables(await Promise.all(nonEmployeeTypes.map((profileType) =>
         supabaseAdmin!
           .from(workforceTable(profileType))
           .select("id, company_id, is_active")
           .eq("is_active", true)
           .or(`mobile.eq.${to},mobile.eq.${localMobile}`)
-      ));
+      )));
     }
     if (profileMatches.error) throw new Error(profileMatches.error.message);
     if (employeeMatches.error) throw new Error(employeeMatches.error.message);

@@ -4,6 +4,63 @@
 create index if not exists delivered_shipment_facts_capacity_station_date_idx
   on public.delivered_shipment_facts (company_id, station_code, work_date);
 
+create table if not exists public.capacity_station_daily_cache (
+  company_id uuid not null references public.companies(id) on delete cascade,
+  station_code text not null,
+  work_date date not null,
+  active_ids bigint not null default 0,
+  low_volume_ids bigint not null default 0,
+  delivered bigint not null default 0,
+  shipment_count bigint not null default 0,
+  refreshed_at timestamptz not null default now(),
+  primary key (company_id, station_code, work_date)
+);
+alter table public.capacity_station_daily_cache add column if not exists low_volume_ids bigint not null default 0;
+
+create or replace function public.refresh_capacity_station_daily_cache(
+  p_company_id uuid,
+  p_station_codes text[],
+  p_from date,
+  p_to date
+) returns void
+language plpgsql
+security definer
+set search_path = public
+set statement_timeout = '60s'
+as $$
+begin
+  delete from public.capacity_station_daily_cache
+  where company_id = p_company_id
+    and station_code = any(p_station_codes)
+    and work_date between p_from and p_to;
+
+  insert into public.capacity_station_daily_cache (
+    company_id, station_code, work_date, active_ids, low_volume_ids, delivered, shipment_count, refreshed_at
+  )
+  with size_rule as (
+    select coalesce((description::jsonb ->> 'minActiveShipments')::integer, 5) minimum
+    from public.report_import_master
+    where company_id = p_company_id and source_code = 'capacity_shipment_size_rule'
+    limit 1
+  ), driver_daily as (
+    select facts.company_id, facts.station_code, facts.work_date, facts.driver_id,
+      sum(greatest(facts.package_count, 1))::bigint delivered
+    from public.delivered_shipment_facts facts
+    where facts.company_id = p_company_id
+      and facts.station_code = any(p_station_codes)
+      and facts.work_date between p_from and p_to
+      and nullif(facts.driver_id, '') is not null
+    group by facts.company_id, facts.station_code, facts.work_date, facts.driver_id
+  )
+  select driver.company_id, driver.station_code, driver.work_date,
+    count(*) filter (where driver.delivered >= rule.minimum),
+    count(*) filter (where driver.delivered < rule.minimum),
+    sum(driver.delivered), sum(driver.delivered), now()
+  from driver_daily driver cross join size_rule rule
+  group by driver.company_id, driver.station_code, driver.work_date;
+end;
+$$;
+
 insert into public.report_import_master (
   company_id, source_code, name, description, file_types, day_offset,
   frequency, parser_type, dedupe_fields, is_active, updated_at
@@ -11,12 +68,43 @@ insert into public.report_import_master (
   '43866344-b550-4e8a-9a2d-9d23f3d8a997',
   'capacity_shipment_size_rule',
   'Capacity shipment size rule',
-  '{"maxLengthCm":35,"maxWidthCm":22,"maxHeightCm":13,"maxWeightKg":5}',
+  '{"maxLengthCm":35,"maxWidthCm":22,"maxHeightCm":13,"maxWeightKg":5,"minActiveShipments":5}',
   array[]::text[], 0, 'daily', 'capacity_shipment_classification',
   array['company_id'], true, now()
-) on conflict (company_id, source_code) do nothing;
+) on conflict (company_id, source_code) do update set
+  description = case
+    when report_import_master.description::jsonb ? 'minActiveShipments' then report_import_master.description
+    else jsonb_set(report_import_master.description::jsonb, '{minActiveShipments}', '5'::jsonb)::text
+  end;
 
-create or replace function public.capacity_station_daily(
+insert into public.capacity_station_daily_cache (
+  company_id, station_code, work_date, active_ids, low_volume_ids, delivered, shipment_count, refreshed_at
+)
+with rules as (
+  select company_id, coalesce((description::jsonb ->> 'minActiveShipments')::integer, 5) minimum
+  from public.report_import_master where source_code = 'capacity_shipment_size_rule'
+), driver_daily as (
+  select facts.company_id, facts.station_code, facts.work_date, facts.driver_id,
+    sum(greatest(facts.package_count, 1))::bigint delivered
+  from public.delivered_shipment_facts facts
+  where nullif(facts.driver_id, '') is not null
+  group by facts.company_id, facts.station_code, facts.work_date, facts.driver_id
+)
+select driver.company_id, driver.station_code, driver.work_date,
+  count(*) filter (where driver.delivered >= rule.minimum),
+  count(*) filter (where driver.delivered < rule.minimum),
+  sum(driver.delivered), sum(driver.delivered), now()
+from driver_daily driver join rules rule on rule.company_id = driver.company_id
+group by driver.company_id, driver.station_code, driver.work_date
+on conflict (company_id, station_code, work_date) do update set
+  active_ids = excluded.active_ids,
+  low_volume_ids = excluded.low_volume_ids,
+  delivered = excluded.delivered,
+  shipment_count = excluded.shipment_count,
+  refreshed_at = excluded.refreshed_at;
+
+drop function if exists public.capacity_station_daily(uuid, text[], date, date);
+create function public.capacity_station_daily(
   p_company_id uuid,
   p_station_codes text[],
   p_from date,
@@ -25,6 +113,7 @@ create or replace function public.capacity_station_daily(
   station_code text,
   work_date date,
   active_ids bigint,
+  low_volume_ids bigint,
   delivered bigint,
   shipment_count bigint
 )
@@ -34,28 +123,18 @@ security definer
 set search_path = public
 set statement_timeout = '30s'
 as $$
-  with station_scope as (
-    select distinct
-      station.station_code as source_station_code,
-      station.station_code as output_station_code
-    from public.stations station
-    where station.company_id = p_company_id
-      and station.station_code = any(p_station_codes)
-  )
   select
-    scope.output_station_code as station_code,
-    facts.work_date,
-    count(distinct nullif(facts.driver_id, '')) as active_ids,
-    sum(greatest(facts.package_count, 1))::bigint as delivered,
-    count(*)::bigint as shipment_count
-  from station_scope scope
-  join public.delivered_shipment_facts facts
-    on facts.company_id = p_company_id
-   and facts.station_code = scope.source_station_code
-   and facts.work_date between p_from and p_to
-  where facts.company_id = p_company_id
-  group by scope.output_station_code, facts.work_date
-  order by facts.work_date;
+    cache.station_code,
+    cache.work_date,
+    cache.active_ids,
+    cache.low_volume_ids,
+    cache.delivered,
+    cache.shipment_count
+  from public.capacity_station_daily_cache cache
+  where cache.company_id = p_company_id
+    and cache.station_code = any(p_station_codes)
+    and cache.work_date between p_from and p_to
+  order by cache.work_date;
 $$;
 
 drop function if exists public.capacity_associate_daily(uuid, text[], date, date);
@@ -188,5 +267,6 @@ as $$
 $$;
 
 grant execute on function public.capacity_station_daily(uuid, text[], date, date) to service_role;
+grant execute on function public.refresh_capacity_station_daily_cache(uuid, text[], date, date) to service_role;
 grant execute on function public.capacity_associate_daily(uuid, text[], date, date) to service_role;
 grant execute on function public.capacity_pincode_summary(uuid, text, date, date) to service_role;

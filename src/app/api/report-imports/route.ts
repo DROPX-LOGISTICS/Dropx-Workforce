@@ -1315,6 +1315,16 @@ export async function POST(request: Request) {
       await importStep("Refresh delivered station coverage", async () => {
         await refreshShipmentCoverage(companyId, "delivered_shipment_detail", dates, batch.data.id);
       });
+      await importStep("Refresh capacity daily summary", async () => {
+        const stationCodes = Array.from(new Set(parsedFacts.facts.map((row) => row.station_code)));
+        const refreshed = await db.rpc("refresh_capacity_station_daily_cache", {
+          p_company_id: companyId,
+          p_station_codes: stationCodes,
+          p_from: dates[0],
+          p_to: dates.at(-1)
+        });
+        if (refreshed.error) throw new Error(refreshed.error.message);
+      });
       const duplicateRows = parsedFacts.sourceRows - parsedFacts.rejected.length - parsedFacts.facts.length;
       const skipped = parsedFacts.rejected.length;
       const volumeReady = parsedFacts.facts.filter((row) => row.cubic_volume_cm3 != null && row.actual_weight_kg != null).length;

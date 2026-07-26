@@ -25,6 +25,7 @@ export type ShipmentSizeRule = {
   maxWidthCm: number;
   maxHeightCm: number;
   maxWeightKg: number;
+  minActiveShipments: number;
 };
 
 function sourceCode(stationCode: string) {

@@ -102,7 +102,8 @@ export async function upsertShipmentSizeRule(formData: FormData) {
     maxLengthCm: Number(formData.get("max_length_cm")),
     maxWidthCm: Number(formData.get("max_width_cm")),
     maxHeightCm: Number(formData.get("max_height_cm")),
-    maxWeightKg: Number(formData.get("max_weight_kg"))
+    maxWeightKg: Number(formData.get("max_weight_kg")),
+    minActiveShipments: Number(formData.get("min_active_shipments"))
   };
   const invalid = Object.values(rule).some((value) => !Number.isFinite(value) || value <= 0);
   const error = invalid ? "Enter valid positive shipment-size limits." : await saveShipmentSizeRule(companyId, rule);

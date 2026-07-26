@@ -4,6 +4,7 @@ export type CapacityStationDay = {
   station_code: string;
   work_date: string;
   active_ids: number | string;
+  low_volume_ids: number | string;
   delivered: number | string;
   shipment_count: number | string;
 };

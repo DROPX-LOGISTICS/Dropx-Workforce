@@ -30,12 +30,16 @@ type EnrolmentRow = {
   worker_type: string;
   employee_id: string | null;
   field_executive_id: string | null;
+  profile_type: "employee" | "field_executive" | "contractor" | "vendor" | "worker" | null;
+  account_id: string | null;
   location_id: string | null;
   status: string;
 };
 
 type WorkerMatch = {
   workerType: "employee" | "individual_contract";
+  profileType: "employee" | "field_executive" | "contractor" | "vendor" | "worker";
+  accountId: string;
   employeeId: string | null;
   fieldExecutiveId: string | null;
   locationId: string | null;
@@ -65,17 +69,29 @@ function cleanEnrolmentId(value: unknown) {
   return enrolmentIdCandidates(value)[0] ?? "";
 }
 
-function enrolmentPriority(row: Pick<EnrolmentRow, "status" | "worker_type"> | Pick<WorkerMatch, "isActive" | "workerType">) {
+function enrolmentPriority(
+  row: Pick<EnrolmentRow, "status" | "worker_type" | "profile_type"> |
+    Pick<WorkerMatch, "isActive" | "workerType" | "profileType">
+) {
   const workerType = "worker_type" in row ? row.worker_type : row.workerType;
+  const profileType = "profile_type" in row ? row.profile_type : row.profileType;
   const active = "status" in row ? row.status === "Active" : row.isActive;
+  const profileOrder = ["employee", "field_executive", "contractor", "vendor", "worker"];
   return [
-    workerType === "employee" ? 0 : 1,
+    Math.max(profileOrder.indexOf(profileType ?? (workerType === "employee" ? "employee" : "field_executive")), 0),
     active ? 0 : 1
   ];
 }
 
-function hasSameCategoryDuplicate<T extends { worker_type?: string; workerType?: string }>(rows: T[]) {
-  const categories = rows.map((row) => row.worker_type ?? row.workerType ?? "");
+function hasSameCategoryDuplicate<T extends {
+  profile_type?: string | null;
+  profileType?: string | null;
+  worker_type?: string;
+  workerType?: string;
+}>(rows: T[]) {
+  const categories = rows.map((row) =>
+    row.profile_type ?? row.profileType ?? row.worker_type ?? row.workerType ?? ""
+  );
   return new Set(categories).size !== categories.length;
 }
 
@@ -186,40 +202,50 @@ async function findCurrentEnrolments(companyId: string, enrolmentId: string) {
 
   const result = await supabaseAdmin
     .from("biometric_enrolments")
-    .select("id, enrolment_id, worker_type, employee_id, field_executive_id, location_id, status")
+    .select("id, enrolment_id, worker_type, employee_id, field_executive_id, profile_type, account_id, location_id, status")
     .eq("company_id", companyId)
     .in("enrolment_id", candidates)
     .is("effective_to", null)
-    .limit(2);
+    .limit(20);
   if (result.error) throw new Error(result.error.message);
   return (result.data ?? []) as EnrolmentRow[];
 }
 
 async function findWorkerMatches(companyId: string, enrolmentId: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+  const admin = supabaseAdmin;
   const normalizedEnrolmentId = cleanEnrolmentId(enrolmentId);
   if (!normalizedEnrolmentId) return [];
 
-  const [employeeResult, executiveResult] = await Promise.all([
-    supabaseAdmin
+  const nonEmployeeTables = [
+    ["field_executive", "field_executives"],
+    ["contractor", "contractors"],
+    ["vendor", "vendors"],
+    ["worker", "workers"]
+  ] as const;
+  const [employeeResult, ...nonEmployeeResults] = await Promise.all([
+    admin
       .from("employees")
       .select("id, employee_code, full_name, biometric_id, location_id, is_active, date_of_join")
       .eq("company_id", companyId)
       .not("biometric_id", "is", null),
-    supabaseAdmin
-      .from("field_executives")
+    ...nonEmployeeTables.map(([, table]) => admin
+      .from(table)
       .select("id, dropx_id, full_name, biometric_id, location_id, is_active, date_of_join")
       .eq("company_id", companyId)
-      .not("biometric_id", "is", null)
+      .not("biometric_id", "is", null))
   ]);
 
   if (employeeResult.error) throw new Error(employeeResult.error.message);
-  if (executiveResult.error) throw new Error(executiveResult.error.message);
+  const nonEmployeeError = nonEmployeeResults.find((result) => result.error)?.error;
+  if (nonEmployeeError) throw new Error(nonEmployeeError.message);
 
   const employees = (employeeResult.data ?? [])
     .filter((employee) => cleanEnrolmentId(employee.biometric_id) === normalizedEnrolmentId)
     .map((employee) => ({
     workerType: "employee" as const,
+    profileType: "employee" as const,
+    accountId: employee.id as string,
     employeeId: employee.id as string,
     fieldExecutiveId: null,
     locationId: employee.location_id as string | null,
@@ -229,20 +255,25 @@ async function findWorkerMatches(companyId: string, enrolmentId: string) {
     name: employee.full_name as string | null
   }));
 
-  const executives = (executiveResult.data ?? [])
-    .filter((executive) => cleanEnrolmentId(executive.biometric_id) === normalizedEnrolmentId)
-    .map((executive) => ({
-    workerType: "individual_contract" as const,
-    employeeId: null,
-    fieldExecutiveId: executive.id as string,
-    locationId: executive.location_id as string | null,
-    isActive: executive.is_active !== false,
-    dateOfJoin: executive.date_of_join as string | null,
-    code: executive.dropx_id as string | null,
-    name: executive.full_name as string | null
-  }));
+  const nonEmployees = nonEmployeeResults.flatMap((result, index) => {
+    const [profileType] = nonEmployeeTables[index];
+    return (result.data ?? [])
+      .filter((profile) => cleanEnrolmentId(profile.biometric_id) === normalizedEnrolmentId)
+      .map((profile) => ({
+        workerType: "individual_contract" as const,
+        profileType,
+        accountId: profile.id as string,
+        employeeId: null,
+        fieldExecutiveId: profileType === "field_executive" ? profile.id as string : null,
+        locationId: profile.location_id as string | null,
+        isActive: profile.is_active !== false,
+        dateOfJoin: profile.date_of_join as string | null,
+        code: profile.dropx_id as string | null,
+        name: profile.full_name as string | null
+      }));
+  });
 
-  return [...employees, ...executives] satisfies WorkerMatch[];
+  return [...employees, ...nonEmployees] satisfies WorkerMatch[];
 }
 
 async function createEnrolmentFromWorker({
@@ -263,6 +294,8 @@ async function createEnrolmentFromWorker({
     company_id: companyId,
     enrolment_id: cleanEnrolmentId(enrolmentId),
     worker_type: worker.workerType,
+    profile_type: worker.profileType,
+    account_id: worker.accountId,
     employee_id: worker.employeeId,
     field_executive_id: worker.fieldExecutiveId,
     location_id: worker.locationId ?? device.location_id,
@@ -276,7 +309,7 @@ async function createEnrolmentFromWorker({
   const insertResult = await supabaseAdmin
     .from("biometric_enrolments")
     .insert(payload)
-    .select("id, enrolment_id, worker_type, employee_id, field_executive_id, location_id, status")
+    .select("id, enrolment_id, worker_type, employee_id, field_executive_id, profile_type, account_id, location_id, status")
     .single();
 
   if (!insertResult.error) return insertResult.data as EnrolmentRow;
@@ -429,6 +462,8 @@ export async function POST(request: NextRequest) {
         device_id: device.id,
         enrolment_id: canonicalEnrolmentId,
         worker_type: enrolment.worker_type,
+        profile_type: enrolment.profile_type,
+        account_id: enrolment.account_id,
         employee_id: enrolment.employee_id,
         field_executive_id: enrolment.field_executive_id,
         location_id: enrolment.location_id ?? device.location_id,

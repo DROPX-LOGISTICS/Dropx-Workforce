@@ -1,8 +1,9 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import type { WorkforceProfileType } from "@/lib/workforce-profiles";
 
 type VerificationKind = "pan" | "pan_aadhaar" | "dl" | "vehicle" | "bank" | "pf_uan";
 
-type ProfileType = "employee" | "field_executive";
+type ProfileType = WorkforceProfileType;
 
 function text(value: unknown) {
   return String(value ?? "").trim();

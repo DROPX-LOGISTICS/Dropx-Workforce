@@ -166,12 +166,16 @@ async function loadDailyWorkerSnapshot({
   companyId,
   employeeId,
   fieldExecutiveId,
+  profileType,
+  accountId,
   fallbackLocationId
 }: {
   companyId: string;
   employeeId?: string | null;
   fallbackLocationId?: string | null;
   fieldExecutiveId?: string | null;
+  profileType?: string | null;
+  accountId?: string | null;
 }): Promise<DailyWorkerSnapshot> {
   if (!supabaseAdmin) return { stationCode: null, workerCode: null, workerName: null };
 
@@ -190,6 +194,25 @@ async function loadDailyWorkerSnapshot({
       workerCode = employee.data.employee_code ?? null;
       workerName = employee.data.full_name ?? null;
       locationId = employee.data.location_id ?? locationId;
+    }
+  } else if (accountId && ["field_executive", "contractor", "vendor", "worker"].includes(profileType ?? "")) {
+    const table = profileType === "contractor"
+      ? "contractors"
+      : profileType === "vendor"
+        ? "vendors"
+        : profileType === "worker"
+          ? "workers"
+          : "field_executives";
+    const executive = await supabaseAdmin
+      .from(table)
+      .select("dropx_id, full_name, location_id")
+      .eq("company_id", companyId)
+      .eq("id", accountId)
+      .maybeSingle();
+    if (!executive.error && executive.data) {
+      workerCode = executive.data.dropx_id ?? null;
+      workerName = executive.data.full_name ?? null;
+      locationId = executive.data.location_id ?? locationId;
     }
   } else if (fieldExecutiveId) {
     const executive = await supabaseAdmin
@@ -254,7 +277,7 @@ export async function rebuildAttendanceDay(companyId: string, enrolmentId: strin
 
   const latestPunch = await supabaseAdmin
     .from("attendance_punches")
-    .select("worker_type, employee_id, field_executive_id, location_id")
+    .select("worker_type, employee_id, field_executive_id, profile_type, account_id, location_id")
     .eq("company_id", companyId)
     .eq("enrolment_id", enrolmentId)
     .eq("punch_date", punchDate)
@@ -268,7 +291,9 @@ export async function rebuildAttendanceDay(companyId: string, enrolmentId: strin
     companyId,
     employeeId: latestPunch.data?.employee_id ?? null,
     fallbackLocationId: latestPunch.data?.location_id ?? null,
-    fieldExecutiveId: latestPunch.data?.field_executive_id ?? null
+    fieldExecutiveId: latestPunch.data?.field_executive_id ?? null,
+    profileType: latestPunch.data?.profile_type ?? null,
+    accountId: latestPunch.data?.account_id ?? null
   });
 
   const basePayload = {

@@ -1,11 +1,14 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import type { WorkforceProfileType } from "@/lib/workforce-profiles";
 
 type WorkerType = "employee" | "individual_contract";
 
 type EnrolmentRow = {
+  account_id: string | null;
   id: string;
   employee_id: string | null;
   field_executive_id: string | null;
+  profile_type: string | null;
 };
 
 function cleanEnrolmentId(value: string | null | undefined) {
@@ -25,6 +28,8 @@ export async function syncBiometricEnrolment({
   fieldExecutiveId,
   isActive,
   locationId,
+  profileType,
+  accountId,
   workerType
 }: {
   companyId: string;
@@ -35,13 +40,21 @@ export async function syncBiometricEnrolment({
   fieldExecutiveId?: string | null;
   isActive: boolean;
   locationId: string;
+  profileType?: WorkforceProfileType;
+  accountId?: string | null;
   workerType: WorkerType;
 }) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
 
   const cleaned = cleanEnrolmentId(enrolmentId);
-  const personColumn = workerType === "employee" ? "employee_id" : "field_executive_id";
-  const personId = workerType === "employee" ? employeeId : fieldExecutiveId;
+  const resolvedProfileType: WorkforceProfileType = profileType ??
+    (workerType === "employee" ? "employee" : "field_executive");
+  const personColumn = resolvedProfileType === "employee"
+    ? "employee_id"
+    : resolvedProfileType === "field_executive"
+      ? "field_executive_id"
+      : "account_id";
+  const personId = accountId ?? (resolvedProfileType === "employee" ? employeeId : fieldExecutiveId);
   if (!personId) throw new Error("Worker is required for biometric enrolment.");
 
   const now = new Date().toISOString();
@@ -56,6 +69,7 @@ export async function syncBiometricEnrolment({
     })
     .eq("company_id", companyId)
     .eq(personColumn, personId)
+    .eq("profile_type", resolvedProfileType)
     .is("effective_to", null)
     .neq("enrolment_id", cleaned ?? "");
 
@@ -63,18 +77,18 @@ export async function syncBiometricEnrolment({
 
   const existingResult = await supabaseAdmin
     .from("biometric_enrolments")
-    .select("id, employee_id, field_executive_id")
+    .select("id, employee_id, field_executive_id, profile_type, account_id")
     .eq("company_id", companyId)
-    .eq("worker_type", workerType)
+    .eq("profile_type", resolvedProfileType)
     .eq("enrolment_id", cleaned)
     .is("effective_to", null)
     .maybeSingle();
   if (existingResult.error) throw new Error(existingResult.error.message);
 
   const existing = existingResult.data as EnrolmentRow | null;
-  const belongsToSameWorker = workerType === "employee"
-    ? existing?.employee_id === personId
-    : existing?.field_executive_id === personId;
+  const belongsToSameWorker = existing?.account_id === personId ||
+    (resolvedProfileType === "employee" && existing?.employee_id === personId) ||
+    (resolvedProfileType === "field_executive" && existing?.field_executive_id === personId);
   if (existing && !belongsToSameWorker) {
     throw new Error("Biometric enrolment ID is already assigned to another worker.");
   }
@@ -83,8 +97,10 @@ export async function syncBiometricEnrolment({
     company_id: companyId,
     enrolment_id: cleaned,
     worker_type: workerType,
-    employee_id: workerType === "employee" ? personId : null,
-    field_executive_id: workerType === "individual_contract" ? personId : null,
+    profile_type: resolvedProfileType,
+    account_id: personId,
+    employee_id: resolvedProfileType === "employee" ? personId : null,
+    field_executive_id: resolvedProfileType === "field_executive" ? personId : null,
     location_id: locationId,
     status: isActive ? "Active" : "Inactive",
     effective_from: effectiveFrom,

@@ -2,11 +2,17 @@ import { createHash, randomUUID } from "crypto";
 import { cookies } from "next/headers";
 import { normalizeMobile } from "@/lib/connect-otp";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import {
+  type NonEmployeeProfileType,
+  type WorkforceProfileType,
+  workforceLabel,
+  workforceTable
+} from "@/lib/workforce-profiles";
 
 export type ConnectAccount = {
   id: string;
   companyId: string;
-  profileType: "user" | "field_executive" | "employee";
+  profileType: "user" | WorkforceProfileType;
   name: string | null;
   email: string | null;
   reference: string | null;
@@ -29,7 +35,7 @@ type AccountRow = {
   profile_photo_path?: string | null;
   role?: string | null;
   status?: string | null;
-  profile_type: "user" | "field_executive" | "employee";
+  profile_type: "user" | WorkforceProfileType;
 };
 
 type EmployeeAccountRow = {
@@ -88,40 +94,47 @@ async function signedProfilePhotoUrl(path?: string | null) {
 export async function findConnectAccounts(countryCode: string, mobile: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const localMobile = mobile.startsWith(countryCode) ? mobile.slice(countryCode.length) : mobile;
-  let [profilesResult, executivesResult, employeesResult]: [
-    MatchResult<{ id: string; company_id: string; full_name: string | null; email?: string | null; employee_id?: string | null; role?: string | null }>,
-    MatchResult<{ id: string; company_id: string; full_name: string | null; email?: string | null; dropx_id?: string | null; biometric_id?: string | null; designation?: string | null; onboarding_status?: string | null; profile_photo_path?: string | null }>,
-    MatchResult<EmployeeAccountRow>
-  ] = await Promise.all([
-    supabaseAdmin
-      .from("profiles")
-      .select("id, company_id, full_name, email, employee_id, role, is_active, mobile_country_code")
-      .eq("is_active", true)
-      .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
-      .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`),
-    supabaseAdmin
-      .from("field_executives")
+  type ProfileMatch = { id: string; company_id: string; full_name: string | null; email?: string | null; employee_id?: string | null; role?: string | null };
+  type NonEmployeeMatch = { id: string; company_id: string; full_name: string | null; email?: string | null; dropx_id?: string | null; biometric_id?: string | null; designation?: string | null; onboarding_status?: string | null; profile_photo_path?: string | null };
+
+  let profilesResult: MatchResult<ProfileMatch> = await supabaseAdmin
+    .from("profiles")
+    .select("id, company_id, full_name, email, employee_id, role, is_active, mobile_country_code")
+    .eq("is_active", true)
+    .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
+    .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`);
+  let employeesResult: MatchResult<EmployeeAccountRow> = await supabaseAdmin
+    .from("employees")
+    .select("id, company_id, full_name, email, employee_code, biometric_id, profile_completion_status, profile_photo_path, is_active, mobile_country_code")
+    .eq("is_active", true)
+    .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
+    .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`);
+
+  const nonEmployeeTypes: NonEmployeeProfileType[] = ["field_executive", "contractor", "vendor", "worker"];
+  async function loadNonEmployee(profileType: NonEmployeeProfileType): Promise<MatchResult<NonEmployeeMatch>> {
+    const table = workforceTable(profileType);
+    let result: MatchResult<NonEmployeeMatch> = await supabaseAdmin!
+      .from(table)
       .select("id, company_id, full_name, email, dropx_id, biometric_id, designation, onboarding_status, profile_photo_path, is_active, mobile_country_code")
       .eq("is_active", true)
       .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
-      .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`),
-    supabaseAdmin
-      .from("employees")
-      .select("id, company_id, full_name, email, employee_code, biometric_id, profile_completion_status, profile_photo_path, is_active, mobile_country_code")
-      .eq("is_active", true)
-      .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
-      .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`)
-  ]);
-  if (isMissingColumnError(profilesResult.error) || isMissingColumnError(executivesResult.error) || isMissingColumnError(employeesResult.error)) {
-    [profilesResult, executivesResult, employeesResult] = await Promise.all([
+      .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`);
+    if (isMissingColumnError(result.error)) {
+      result = await supabaseAdmin!
+        .from(table)
+        .select("id, company_id, full_name, email, dropx_id, biometric_id, designation, onboarding_status, is_active")
+        .eq("is_active", true)
+        .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`);
+    }
+    return result;
+  }
+  const nonEmployeeResults = await Promise.all(nonEmployeeTypes.map(loadNonEmployee));
+
+  if (isMissingColumnError(profilesResult.error) || isMissingColumnError(employeesResult.error)) {
+    [profilesResult, employeesResult] = await Promise.all([
       supabaseAdmin
         .from("profiles")
         .select("id, company_id, full_name, email, employee_id, role, is_active")
-        .eq("is_active", true)
-        .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`),
-      supabaseAdmin
-        .from("field_executives")
-        .select("id, company_id, full_name, email, dropx_id, biometric_id, designation, onboarding_status, is_active")
         .eq("is_active", true)
         .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`),
       supabaseAdmin
@@ -132,8 +145,10 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
     ]);
   }
   if (profilesResult.error) throw new Error(profilesResult.error.message);
-  if (executivesResult.error) throw new Error(executivesResult.error.message);
   if (employeesResult.error && !isMissingColumnError(employeesResult.error)) throw new Error(employeesResult.error.message);
+  for (const result of nonEmployeeResults) {
+    if (result.error) throw new Error(result.error.message);
+  }
 
   const employeeAccounts = (employeesResult.data ?? []).map((employee) => ({
     id: employee.id,
@@ -165,24 +180,27 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       role: profile.role,
       profile_type: "user" as const
     }))),
-    ...((executivesResult.data ?? []).map((executive) => ({
-      id: executive.id,
-      company_id: executive.company_id,
-      full_name: executive.full_name,
-      email: executive.email,
-      dropx_id: executive.dropx_id,
-      biometric_id: executive.biometric_id,
-      role: executive.designation,
-      status: executive.onboarding_status === "active"
-        ? "Active"
-        : executive.onboarding_status === "under_review"
-          ? "Under review"
-          : executive.onboarding_status === "returned"
-            ? "Returned"
-            : "Pending",
-      profile_photo_path: executive.profile_photo_path ?? null,
-      profile_type: "field_executive" as const
-    }))),
+    ...nonEmployeeResults.flatMap((result, index) => {
+      const profileType = nonEmployeeTypes[index];
+      return (result.data ?? []).map((profile) => ({
+        id: profile.id,
+        company_id: profile.company_id,
+        full_name: profile.full_name,
+        email: profile.email,
+        dropx_id: profile.dropx_id,
+        biometric_id: profile.biometric_id,
+        role: profile.designation || workforceLabel(profileType),
+        status: profile.onboarding_status === "active"
+          ? "Active"
+          : profile.onboarding_status === "under_review"
+            ? "Under review"
+            : profile.onboarding_status === "returned"
+              ? "Returned"
+              : "Pending",
+        profile_photo_path: profile.profile_photo_path ?? null,
+        profile_type: profileType
+      }));
+    }),
     ...employeeAccounts
   ].filter((account) => account.company_id);
 

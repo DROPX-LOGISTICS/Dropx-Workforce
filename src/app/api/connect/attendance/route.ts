@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectSessionCookieName, normalizeConnectMobile } from "@/lib/connect-auth";
 import { loadAttendanceReportRows } from "@/lib/biometric/attendance";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { isWorkforceProfileType, workforceTable } from "@/lib/workforce-profiles";
 
 function monthRange(month: string | null) {
   const today = new Date();
@@ -56,15 +57,16 @@ async function resolveWorker({
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const session = await activeSession();
   const { countryCode, mobile, localMobile } = normalizeConnectMobile(session.mobile_number, session.country_code);
-  if (profileType === "employee") {
+  if (isWorkforceProfileType(profileType)) {
+    const table = workforceTable(profileType);
     const result = await supabaseAdmin
-      .from("employees")
+      .from(table)
       .select("id, company_id, mobile, mobile_country_code, biometric_id")
       .eq("id", accountId)
       .maybeSingle();
     if (result.error) throw new Error(result.error.message);
     const row = result.data;
-    if (!row) throw new Error("Employee account not found.");
+    if (!row) throw new Error("Workforce account not found.");
     const rowMobile = String(row.mobile ?? "").replace(/\D/g, "");
     const rowCountryCode = String(row.mobile_country_code ?? countryCode).replace(/\D/g, "") || countryCode;
     if (rowCountryCode !== countryCode || (rowMobile !== mobile && rowMobile !== localMobile)) {
@@ -76,27 +78,7 @@ async function resolveWorker({
       filter: (item: Awaited<ReturnType<typeof loadAttendanceReportRows>>[number]) => Boolean(enrolmentId) && cleanEnrolmentId(item.enrolmentId) === enrolmentId
     };
   }
-  if (profileType === "field_executive") {
-    const result = await supabaseAdmin
-      .from("field_executives")
-      .select("id, company_id, mobile, mobile_country_code, biometric_id")
-      .eq("id", accountId)
-      .maybeSingle();
-    if (result.error) throw new Error(result.error.message);
-    const row = result.data;
-    if (!row) throw new Error("Field executive account not found.");
-    const rowMobile = String(row.mobile ?? "").replace(/\D/g, "");
-    const rowCountryCode = String(row.mobile_country_code ?? countryCode).replace(/\D/g, "") || countryCode;
-    if (rowCountryCode !== countryCode || (rowMobile !== mobile && rowMobile !== localMobile)) {
-      throw new Error("This attendance is not available for the signed-in account.");
-    }
-    const enrolmentId = cleanEnrolmentId(row.biometric_id);
-    return {
-      companyId: row.company_id as string,
-      filter: (item: Awaited<ReturnType<typeof loadAttendanceReportRows>>[number]) => Boolean(enrolmentId) && cleanEnrolmentId(item.enrolmentId) === enrolmentId
-    };
-  }
-  throw new Error("Attendance is available for employees and field executives only.");
+  throw new Error("Attendance is available for workforce accounts only.");
 }
 
 export async function GET(request: NextRequest) {

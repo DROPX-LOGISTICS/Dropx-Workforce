@@ -5,6 +5,12 @@ import { connectSessionCookieName, findConnectAccounts } from "../../../../src/l
 import { normalizeProfileFieldRules } from "../../../../src/lib/profile-field-rules";
 import { saveProfileVerifications } from "../../../../src/lib/profile-verifications";
 import { supabaseAdmin } from "../../../../src/lib/supabase-admin";
+import {
+  isNonEmployeeProfileType,
+  type NonEmployeeProfileType,
+  workforceLabel,
+  workforceTable
+} from "../../../../src/lib/workforce-profiles";
 
 type FieldExecutiveRow = {
   id: string;
@@ -146,34 +152,36 @@ async function loadSessionAccounts() {
   return findConnectAccounts(session.country_code, session.mobile_number);
 }
 
-async function requireExecutiveAccess(executiveId: string) {
+async function requireExecutiveAccess(executiveId: string, profileType: string) {
+  if (!isNonEmployeeProfileType(profileType)) throw new Error("Invalid workforce profile type.");
   const accounts = await loadSessionAccounts();
-  const account = accounts.find((item) => item.profileType === "field_executive" && item.id === executiveId);
-  if (!account) throw new Error("Field executive profile is not available for this login.");
-  return account;
+  const account = accounts.find((item) => item.profileType === profileType && item.id === executiveId);
+  if (!account) throw new Error("Workforce profile is not available for this login.");
+  return { ...account, profileType };
 }
 
-async function loadExecutive(executiveId: string, companyId: string) {
+async function loadExecutive(executiveId: string, companyId: string, profileType: NonEmployeeProfileType) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+  const table = workforceTable(profileType);
   const result = await supabaseAdmin
-    .from("field_executives")
+    .from(table)
     .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, eshram_uan, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, profile_return_remarks, stations (station_code, station_name)")
     .eq("id", executiveId)
     .eq("company_id", companyId)
     .maybeSingle();
   if (result.error && /eshram_uan|column/i.test(result.error.message)) {
     const fallbackResult = await supabaseAdmin
-      .from("field_executives")
+      .from(table)
       .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, profile_return_remarks, stations (station_code, station_name)")
       .eq("id", executiveId)
       .eq("company_id", companyId)
       .maybeSingle();
     if (fallbackResult.error) throw new Error(fallbackResult.error.message);
-    if (!fallbackResult.data) throw new Error("Field executive profile was not found.");
+    if (!fallbackResult.data) throw new Error(`${workforceLabel(profileType)} profile was not found.`);
     return { ...fallbackResult.data, eshram_uan: null } as FieldExecutiveRow;
   }
   if (result.error) throw new Error(result.error.message);
-  if (!result.data) throw new Error("Field executive profile was not found.");
+  if (!result.data) throw new Error(`${workforceLabel(profileType)} profile was not found.`);
   return result.data as FieldExecutiveRow;
 }
 
@@ -185,7 +193,7 @@ async function signedProfileUrl(path: string | null) {
   return result.data?.signedUrl ?? "";
 }
 
-async function serializeExecutive(row: FieldExecutiveRow) {
+async function serializeExecutive(row: FieldExecutiveRow, profileType: NonEmployeeProfileType) {
   const station = firstRelation(row.stations);
   const designationResult = row.designation && supabaseAdmin
     ? await supabaseAdmin
@@ -204,7 +212,7 @@ async function serializeExecutive(row: FieldExecutiveRow) {
       fullName: row.full_name,
       email: row.email ?? "-",
       location: station?.station_code ?? "-",
-      designation: row.designation ?? "Field executive",
+      designation: row.designation ?? workforceLabel(profileType),
       dateOfJoin: formatDisplayDate(row.date_of_join),
       mobile: `+${row.mobile_country_code ?? "91"} ${row.mobile}`
     },
@@ -262,9 +270,10 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const executiveId = url.searchParams.get("executiveId") ?? "";
-    const account = await requireExecutiveAccess(executiveId);
-    const executive = await loadExecutive(account.id, account.companyId);
-    return NextResponse.json({ ok: true, profile: await serializeExecutive(executive) });
+    const profileType = url.searchParams.get("profileType") ?? "field_executive";
+    const account = await requireExecutiveAccess(executiveId, profileType);
+    const executive = await loadExecutive(account.id, account.companyId, account.profileType);
+    return NextResponse.json({ ok: true, profile: await serializeExecutive(executive, account.profileType) });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to load profile." }, { status: 400 });
   }
@@ -289,9 +298,11 @@ export async function POST(request: Request) {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
     const formData = await request.formData();
     const executiveId = String(formData.get("executive_id") ?? "");
-    const account = await requireExecutiveAccess(executiveId);
+    const profileType = String(formData.get("profile_type") ?? "field_executive");
+    const account = await requireExecutiveAccess(executiveId, profileType);
+    const table = workforceTable(account.profileType);
     const manualReviewRequired = String(formData.get("manual_review_required") ?? "") === "true";
-    const currentExecutive = await loadExecutive(account.id, account.companyId);
+    const currentExecutive = await loadExecutive(account.id, account.companyId, account.profileType);
     const currentStatus = String(currentExecutive.onboarding_status ?? "pending").trim().toLowerCase();
     if (!["pending", "returned"].includes(currentStatus)) {
       throw new Error("Profile cannot be edited after submission.");
@@ -346,7 +357,7 @@ export async function POST(request: Request) {
     };
 
     const profileUpdateResult = await supabaseAdmin
-      .from("field_executives")
+      .from(table)
       .update(updatePayload)
       .eq("id", account.id)
       .eq("company_id", account.companyId);
@@ -355,7 +366,7 @@ export async function POST(request: Request) {
     await saveProfileVerifications({
       accountId: account.id,
       companyId: account.companyId,
-      profileType: "field_executive",
+      profileType: account.profileType,
       values: formData.getAll("profile_verification_results")
     });
 
@@ -377,7 +388,7 @@ export async function POST(request: Request) {
     if (profilePhotoPath) uploadPayload.profile_photo_path = profilePhotoPath;
     if (Object.keys(uploadPayload).length > 0) {
       const uploadUpdateResult = await supabaseAdmin
-        .from("field_executives")
+        .from(table)
         .update(uploadPayload)
         .eq("id", account.id)
         .eq("company_id", account.companyId);
@@ -385,8 +396,8 @@ export async function POST(request: Request) {
         throw new Error(`Profile details were saved, but upload paths were not saved. Run scripts/field_executives_v1.sql in Supabase and try again. ${uploadUpdateResult.error.message}`);
       }
     }
-    const executive = await loadExecutive(account.id, account.companyId);
-    return NextResponse.json({ ok: true, profile: await serializeExecutive(executive), notice: "Profile saved successfully." });
+    const executive = await loadExecutive(account.id, account.companyId, account.profileType);
+    return NextResponse.json({ ok: true, profile: await serializeExecutive(executive, account.profileType), notice: "Profile saved successfully." });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to save profile." }, { status: 400 });
   }

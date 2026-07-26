@@ -41,14 +41,17 @@ async function loadEnrolmentStartNumber(companyId: string) {
 }
 
 export async function generateBiometricEnrolmentId(companyId: string) {
-  const [enrolments, employees, fieldExecutives, startNumber] = await Promise.all([
+  const [enrolments, employees, fieldExecutives, contractors, vendors, workers, startNumber] = await Promise.all([
     loadNumericIds(companyId, "biometric_enrolments", "enrolment_id"),
     loadNumericIds(companyId, "employees", "biometric_id"),
     loadNumericIds(companyId, "field_executives", "biometric_id"),
+    loadNumericIds(companyId, "contractors", "biometric_id"),
+    loadNumericIds(companyId, "vendors", "biometric_id"),
+    loadNumericIds(companyId, "workers", "biometric_id"),
     loadEnrolmentStartNumber(companyId)
   ]);
 
-  const used = new Set([...enrolments, ...employees, ...fieldExecutives]);
+  const used = new Set([...enrolments, ...employees, ...fieldExecutives, ...contractors, ...vendors, ...workers]);
   const normalSeries = Array.from(used).filter((value) => value > 0 && value < 9000);
   let next = Math.max(startNumber - 1, ...normalSeries) + 1;
   while (used.has(next)) next += 1;

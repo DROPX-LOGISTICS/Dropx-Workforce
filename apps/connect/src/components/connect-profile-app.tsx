@@ -196,9 +196,11 @@ function ReadTile({ label, value, verified, url, full }: { label: string; value?
 }
 
 export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; onPhoto?: (url: string) => void }) {
-  const executive = account.profileType === "field_executive";
+  const executive = account.profileType !== "employee" && account.profileType !== "user";
   const endpoint = executive ? "/api/connect/field-executive-profile" : "/api/connect/profile";
-  const query = executive ? `executiveId=${account.id}` : `employeeId=${account.id}`;
+  const query = executive
+    ? `executiveId=${account.id}&profileType=${encodeURIComponent(account.profileType)}`
+    : `employeeId=${account.id}`;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [verifications, setVerifications] = useState<Record<string, Verification>>({});
@@ -359,6 +361,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
     try {
       const data = new FormData(event.currentTarget);
       data.set(executive ? "executive_id" : "employee_id", account.id);
+      if (executive) data.set("profile_type", account.profileType);
       const currentChecks = Object.values(verifications).filter((item) => currentCheck(item.kind) === item);
       const reviewKinds = new Set(["pan", "pan_aadhaar", "dl", "pf_uan"]);
       const manualReview = currentChecks.some((item) => reviewKinds.has(item.kind) && (!item.verified || item.manualReview));

@@ -5,6 +5,7 @@ import { connectSessionCookieName, normalizeConnectMobile } from "@/lib/connect-
 import { matchNames } from "@/lib/name-match";
 import { isMissingVerificationTable } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { isWorkforceProfileType, workforceTable } from "@/lib/workforce-profiles";
 
 const IDSPAY_BASE_URL = "https://javabackend.idspay.in/api/v1/prod";
 
@@ -131,11 +132,12 @@ async function activeSession() {
 async function resolveAccount(accountId: string, profileType: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const session = await activeSession();
+  if (!isWorkforceProfileType(profileType)) throw new Error("Invalid profile type.");
   const { countryCode, mobile, localMobile } = normalizeConnectMobile(session.mobile_number, session.country_code);
-  const table = profileType === "field_executive" ? "field_executives" : "employees";
+  const table = workforceTable(profileType);
   const result = await supabaseAdmin
     .from(table)
-    .select(profileType === "field_executive" ? "id, company_id, dropx_id, full_name, mobile, mobile_country_code" : "id, company_id, employee_code, full_name, mobile, mobile_country_code")
+    .select(profileType === "employee" ? "id, company_id, employee_code, full_name, mobile, mobile_country_code" : "id, company_id, dropx_id, full_name, mobile, mobile_country_code")
     .eq("id", accountId)
     .maybeSingle();
   if (result.error) throw new Error(result.error.message);
@@ -146,9 +148,9 @@ async function resolveAccount(accountId: string, profileType: string) {
   if (rowCountryCode !== countryCode || (rowMobile !== mobile && rowMobile !== localMobile)) {
     throw new Error("This verification is not available for the signed-in account.");
   }
-  const accountCode = profileType === "field_executive"
-    ? compact((row as { dropx_id?: unknown }).dropx_id)
-    : compact((row as { employee_code?: unknown }).employee_code);
+  const accountCode = profileType === "employee"
+    ? compact((row as { employee_code?: unknown }).employee_code)
+    : compact((row as { dropx_id?: unknown }).dropx_id);
   return { companyId: row.company_id as string, fullName: compact(row.full_name), accountCode };
 }
 
@@ -208,7 +210,7 @@ export async function GET(request: NextRequest) {
       .from("connect_profile_verifications")
       .select("kind, input_key, verified, manual_review, block_submit, display_name, message, details, verified_at")
       .eq("company_id", account.companyId)
-      .eq("profile_type", profileType === "field_executive" ? "field_executive" : "employee")
+      .eq("profile_type", profileType)
       .eq("account_id", accountId);
     if (result.error) {
       if (isMissingVerificationTable(result.error)) return ok({ verifications: [] });

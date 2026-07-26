@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const profileDocumentBucket = "employee-profile-documents";
 
-type ProfileDocumentOwnerType = "employee" | "field_executive";
+type ProfileDocumentOwnerType = "employee" | "field_executive" | "contractor" | "vendor" | "worker";
 
 type ProfileDocumentTrashPayload = {
   companyId: string;

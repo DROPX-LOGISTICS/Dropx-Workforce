@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { WorkforceProfileType } from "@/lib/workforce-profiles";
 
 export type VerificationKind = "pan" | "pan_aadhaar" | "dl" | "vehicle" | "bank" | "pf_uan";
 
@@ -26,8 +27,8 @@ type VerificationResult = {
 type ProfileVerificationPanelProps = {
   accountId: string;
   kind: VerificationKind;
-  profileType: "employee" | "field_executive";
-  pageCode?: "employees" | "delivery_associates" | "contractors";
+  profileType: WorkforceProfileType;
+  pageCode?: "employees" | "delivery_associates" | "contractors" | "vendors" | "workers";
 };
 
 const labels: Record<VerificationKind, string> = {

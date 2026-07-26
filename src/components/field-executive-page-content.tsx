@@ -13,6 +13,10 @@ import { countryCodeOptions } from "@/lib/country-codes";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { normalizeProfileFieldRules } from "@/lib/profile-field-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import {
+  nonEmployeeConfigForRoute,
+  type NonEmployeeRoute
+} from "@/lib/workforce-profiles";
 
 type LocationRow = {
   id: string;
@@ -34,9 +38,9 @@ type DesignationRow = {
   is_active: boolean;
 };
 
-type FieldExecutivePageCode = "delivery_associates" | "contractors";
-type FieldExecutiveRoute = "/field-executive" | "/contractors";
-type DesignationCategoryFilter = "field_executives" | "contractors";
+type FieldExecutivePageCode = "delivery_associates" | "contractors" | "vendors" | "workers";
+type FieldExecutiveRoute = NonEmployeeRoute;
+type DesignationCategoryFilter = "field_executives" | "contractors" | "vendors" | "workers";
 
 type ExecutiveRow = {
   id: string;
@@ -329,6 +333,7 @@ function FieldExecutiveForm({
   submitLabel?: string;
   dashboardRules?: { enabled: string[]; required: string[] };
 }) {
+  const workforceConfig = nonEmployeeConfigForRoute(returnPath);
   const fieldEnabled = (key: string) => !dashboardRules || dashboardRules.enabled.includes(key);
   const fieldRequired = (key: string) => Boolean(dashboardRules?.required.includes(key));
   return (
@@ -362,7 +367,7 @@ function FieldExecutiveForm({
       <label hidden={!fieldEnabled("date_of_birth")}>Date of birth<input className="field" name="date_of_birth" required={fieldRequired("date_of_birth")} type="date" defaultValue={textValue(executive?.date_of_birth)} /></label>
 
       <label hidden={!fieldEnabled("aadhaar_number")}>Aadhaar number<input className="field" inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" required={fieldRequired("aadhaar_number")} defaultValue={textValue(executive?.aadhaar_number)} /></label>
-      <label hidden={!fieldEnabled("pan_number")}>PAN number<input className="field" name="pan_number" placeholder="Enter PAN number" required={fieldRequired("pan_number")} defaultValue={textValue(executive?.pan_number)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="pan" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
+      <label hidden={!fieldEnabled("pan_number")}>PAN number<input className="field" name="pan_number" placeholder="Enter PAN number" required={fieldRequired("pan_number")} defaultValue={textValue(executive?.pan_number)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="pan" pageCode={workforceConfig.pageCode} profileType={workforceConfig.profileType} /> : null}</label>
       <label hidden={!fieldEnabled("eshram_uan")}>eShram UAN<input className="field" inputMode="numeric" maxLength={12} name="eshram_uan" pattern="[0-9]{12}" placeholder="Enter eShram UAN" required={fieldRequired("eshram_uan")} defaultValue={textValue(executive?.eshram_uan)} /></label>
 
       <label className="span-3" hidden={!fieldEnabled("address")}>Address<input className="field" name="address" placeholder="Enter complete address" required={fieldRequired("address")} defaultValue={textValue(executive?.address)} /></label>
@@ -384,14 +389,14 @@ function FieldExecutiveForm({
       </label>
 
       <label hidden={!fieldEnabled("bank_account_no")}>Bank A/c No.<input className="field" name="bank_account_no" pattern="[A-Za-z0-9]*" placeholder="Enter bank account number" required={fieldRequired("bank_account_no")} defaultValue={textValue(executive?.bank_account_no)} /></label>
-      <label hidden={!fieldEnabled("ifsc")}>IFSC<input className="field" name="ifsc_code" placeholder="Enter IFSC" required={fieldRequired("ifsc")} defaultValue={textValue(executive?.ifsc_code)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="bank" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
+      <label hidden={!fieldEnabled("ifsc")}>IFSC<input className="field" name="ifsc_code" placeholder="Enter IFSC" required={fieldRequired("ifsc")} defaultValue={textValue(executive?.ifsc_code)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="bank" pageCode={workforceConfig.pageCode} profileType={workforceConfig.profileType} /> : null}</label>
       <label hidden={!fieldEnabled("emergency_contact_number")}>Emergency contact number<input className="field" inputMode="numeric" maxLength={10} name="emergency_contact_number" pattern="[0-9]{10}" placeholder="Enter emergency contact number" required={fieldRequired("emergency_contact_number")} defaultValue={textValue(executive?.emergency_contact_number)} /></label>
       <label hidden={!fieldEnabled("emergency_contact_name")}>Emergency contact name<input className="field" name="emergency_contact_name" placeholder="Enter contact person name" required={fieldRequired("emergency_contact_name")} defaultValue={textValue(executive?.emergency_contact_name)} /></label>
       <label hidden={!fieldEnabled("emergency_contact_relation")}>Emergency relation<input className="field" name="emergency_contact_relation" placeholder="Enter relation" required={fieldRequired("emergency_contact_relation")} defaultValue={textValue(executive?.emergency_contact_relation)} /></label>
 
-      <label hidden={!fieldEnabled("driving_license_no")}>Driving license no.<input className="field" name="driving_license_no" placeholder="Enter DL number" required={fieldRequired("driving_license_no")} defaultValue={textValue(executive?.driving_license_no)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="dl" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
+      <label hidden={!fieldEnabled("driving_license_no")}>Driving license no.<input className="field" name="driving_license_no" placeholder="Enter DL number" required={fieldRequired("driving_license_no")} defaultValue={textValue(executive?.driving_license_no)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="dl" pageCode={workforceConfig.pageCode} profileType={workforceConfig.profileType} /> : null}</label>
       <label hidden={!fieldEnabled("driving_license_exp_date")}>DL expiry date<input className="field" name="driving_license_exp_date" required={fieldRequired("driving_license_exp_date")} type="date" defaultValue={textValue(executive?.driving_license_exp_date)} /></label>
-      <label hidden={!fieldEnabled("vehicle_reg_no")}>Vehicle reg no.<input className="field" name="vehicle_reg_no" placeholder="Enter vehicle number" required={fieldRequired("vehicle_reg_no")} defaultValue={textValue(executive?.vehicle_reg_no)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="vehicle" pageCode={returnPath === "/contractors" ? "contractors" : "delivery_associates"} profileType="field_executive" /> : null}</label>
+      <label hidden={!fieldEnabled("vehicle_reg_no")}>Vehicle reg no.<input className="field" name="vehicle_reg_no" placeholder="Enter vehicle number" required={fieldRequired("vehicle_reg_no")} defaultValue={textValue(executive?.vehicle_reg_no)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="vehicle" pageCode={workforceConfig.pageCode} profileType={workforceConfig.profileType} /> : null}</label>
 
       <label hidden={!fieldEnabled("vehicle_reg_exp_date")}>Vehicle reg expiry<input className="field" name="vehicle_reg_exp_date" required={fieldRequired("vehicle_reg_exp_date")} type="date" defaultValue={textValue(executive?.vehicle_reg_exp_date)} /></label>
       <label hidden={!fieldEnabled("vehicle_insurance_exp_date")}>Vehicle Insurance expiry<input className="field" name="vehicle_insurance_exp_date" required={fieldRequired("vehicle_insurance_exp_date")} type="date" defaultValue={textValue(executive?.vehicle_insurance_exp_date)} /></label>
@@ -518,6 +523,7 @@ function FieldExecutiveBulkImportPanel({
 async function loadFieldExecutiveData(
   authorization: AuthorizationContext,
   designationCategoryFilter: DesignationCategoryFilter[],
+  table: "field_executives" | "contractors" | "vendors" | "workers",
   editId?: string,
   viewId?: string
 ) {
@@ -614,13 +620,13 @@ async function loadFieldExecutiveData(
       `;
   const legacyExecutiveSelect = executiveSelect.replace("mobile_country_code,", "");
   let executivesResult: { data: unknown[] | null; error: { message?: string } | null } = await supabaseAdmin
-    .from("field_executives")
+    .from(table)
     .select(executiveSelect)
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
   if (isMissingColumnError(executivesResult.error)) {
     executivesResult = await supabaseAdmin
-      .from("field_executives")
+      .from(table)
       .select(legacyExecutiveSelect)
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
@@ -731,7 +737,8 @@ export async function FieldExecutivePageContent({
 }) {
   const authorization = await requirePagePermission(pageCode, "access");
   const permission = authorization.permissions[pageCode];
-  const { executives, locations, designations, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, designationCategoryFilter, editId, viewId);
+  const workforceConfig = nonEmployeeConfigForRoute(returnPath);
+  const { executives, locations, designations, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, designationCategoryFilter, workforceConfig.table, editId, viewId);
   const activeMessage = error ?? errorMessage ?? notice;
   const needsOperationModeMigration = Boolean(activeMessage?.toLowerCase().includes("operation_mode_id"));
   const locationOptions = locations.map((location) => ({

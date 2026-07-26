@@ -12,11 +12,14 @@ import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
 import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
-import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { normalizeProfileFieldRules } from "@/lib/profile-field-rules";
 import { saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { sendFieldExecutiveOnboardingWhatsApp } from "@/lib/whatsapp";
+import {
+  nonEmployeeConfigForRoute,
+  type NonEmployeeRoute
+} from "@/lib/workforce-profiles";
 
 function required(value: FormDataEntryValue | null, field: string) {
   const text = String(value ?? "").trim();
@@ -29,19 +32,22 @@ function optional(value: FormDataEntryValue | null) {
   return text || null;
 }
 
-type FieldExecutiveReturnPath = "/field-executive" | "/contractors";
-type FieldExecutivePageCode = "delivery_associates" | "contractors";
+type FieldExecutiveReturnPath = NonEmployeeRoute;
 
 function safeReturnPath(formData?: FormData): FieldExecutiveReturnPath {
-  return String(formData?.get("return_path") ?? "") === "/contractors" ? "/contractors" : "/field-executive";
+  return nonEmployeeConfigForRoute(formData?.get("return_path")).route;
 }
 
-function pageCodeForReturnPath(returnPath: FieldExecutiveReturnPath): FieldExecutivePageCode {
-  return returnPath === "/contractors" ? "contractors" : "delivery_associates";
+function pageCodeForReturnPath(returnPath: FieldExecutiveReturnPath) {
+  return nonEmployeeConfigForRoute(returnPath).pageCode;
 }
 
 function entityLabelForReturnPath(returnPath: FieldExecutiveReturnPath) {
-  return returnPath === "/contractors" ? "Independent contractor" : "Field executive";
+  return nonEmployeeConfigForRoute(returnPath).label;
+}
+
+function tableForReturnPath(returnPath: FieldExecutiveReturnPath) {
+  return nonEmployeeConfigForRoute(returnPath).table;
 }
 
 function fieldExecutiveRedirect(params?: Record<string, string>, returnPath: FieldExecutiveReturnPath = "/field-executive"): never {
@@ -74,31 +80,15 @@ function isNextRedirectError(error: unknown) {
     String((error as { digest: string }).digest).startsWith("NEXT_REDIRECT");
 }
 
-function generatedDropxId() {
-  return `FE-${Date.now().toString(36).toUpperCase()}`;
-}
-
-type FieldExecutiveWorkerCategory = "field_executive" | "contractor";
-
-function workerCategoryFromDesignationCategories(value: unknown): FieldExecutiveWorkerCategory {
-  const categories = normalizeDesignationCategories(value);
-  const isContractorOnly = categories.includes("contractors") &&
-    !categories.includes("field_executives");
-  return isContractorOnly ? "contractor" : "field_executive";
-}
-
-async function loadWorkerCategoryForDesignation(companyId: string, designationName: string): Promise<FieldExecutiveWorkerCategory> {
-  if (!supabaseAdmin) return "field_executive";
-  const result = await supabaseAdmin
-    .from("designations")
-    .select("onboarding_categories")
-    .eq("company_id", companyId)
-    .eq("name", designationName)
-    .eq("is_active", true)
-    .limit(1)
-    .maybeSingle();
-  if (result.error || !result.data) return "field_executive";
-  return workerCategoryFromDesignationCategories((result.data as { onboarding_categories?: unknown }).onboarding_categories);
+function generatedDropxId(category: "field_executive" | "contractor" | "vendor" | "worker") {
+  const prefix = category === "field_executive"
+    ? "FE"
+    : category === "contractor"
+      ? "IC"
+      : category === "vendor"
+        ? "VEN"
+        : "WRK";
+  return `${prefix}-${Date.now().toString(36).toUpperCase()}`;
 }
 
 const fieldExecutiveDocumentFields = [
@@ -208,6 +198,8 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
 
 export async function createFieldExecutive(formData: FormData) {
   const returnPath = safeReturnPath(formData);
+  const config = nonEmployeeConfigForRoute(returnPath);
+  const table = config.table;
   const entityLabel = entityLabelForReturnPath(returnPath);
   const authorization = await requirePagePermission(pageCodeForReturnPath(returnPath), "add");
   const companyId = requireCompanyId(authorization);
@@ -235,7 +227,7 @@ export async function createFieldExecutive(formData: FormData) {
       .maybeSingle();
     if (locationError) throw new Error(locationError.message);
     if (!location) throw new Error("Selected location is not available for this company.");
-    const workerCategory = await loadWorkerCategoryForDesignation(companyId, designation);
+    const workerCategory = config.category;
     const biometricId = await generateConfiguredBiometricId({
       category: workerCategory,
       companyId,
@@ -249,7 +241,7 @@ export async function createFieldExecutive(formData: FormData) {
       category: workerCategory,
       companyId,
       designationName: designation,
-      fallback: generatedDropxId,
+      fallback: () => generatedDropxId(workerCategory),
       locationId
     });
     const registrationToken = randomBytes(32).toString("base64url");
@@ -268,7 +260,7 @@ export async function createFieldExecutive(formData: FormData) {
       is_active: true
     }, companyId);
     const executiveSelect = "id, stations (station_code, station_name, providers (name))";
-    let insertResult = await supabaseAdmin.from("field_executives").insert({
+    let insertResult = await supabaseAdmin.from(table).insert({
       ...basePayload,
       onboarding_token_hash: registrationTokenHash,
       onboarding_token_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -277,7 +269,7 @@ export async function createFieldExecutive(formData: FormData) {
 
     const whatsappMigrationMissing = Boolean(insertResult.error?.message.toLowerCase().includes("onboarding_token"));
     if (whatsappMigrationMissing) {
-      insertResult = await supabaseAdmin.from("field_executives").insert(basePayload).select(executiveSelect).single();
+      insertResult = await supabaseAdmin.from(table).insert(basePayload).select(executiveSelect).single();
     }
     const { data: executive, error } = insertResult;
 
@@ -294,15 +286,16 @@ export async function createFieldExecutive(formData: FormData) {
       createdBy: authorization.userId,
       effectiveFrom: dateOfJoin,
       enrolmentId: biometricId,
-      fieldExecutiveId: executive.id,
+      accountId: executive.id,
       isActive: true,
       locationId,
+      profileType: config.profileType,
       workerType: "individual_contract"
     });
 
     const stationRelation = executive.stations as unknown as { station_code?: string; station_name?: string | null; providers?: { name?: string } | Array<{ name?: string }> | null } | null;
     const providerRelation = Array.isArray(stationRelation?.providers) ? stationRelation?.providers[0] : stationRelation?.providers;
-    if (!whatsappMigrationMissing) {
+    if (!whatsappMigrationMissing && config.profileType === "field_executive") {
       waitUntil(sendFieldExecutiveOnboardingWhatsApp({
         companyId,
         fieldExecutiveId: executive.id,
@@ -318,8 +311,7 @@ export async function createFieldExecutive(formData: FormData) {
       }));
     }
 
-    revalidatePath("/field-executive");
-    revalidatePath("/contractors");
+    revalidatePath(returnPath);
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     fieldExecutiveRedirect({
@@ -333,6 +325,8 @@ export async function createFieldExecutive(formData: FormData) {
 
 export async function updateFieldExecutive(formData: FormData) {
   const returnPath = safeReturnPath(formData);
+  const config = nonEmployeeConfigForRoute(returnPath);
+  const table = config.table;
   const entityLabel = entityLabelForReturnPath(returnPath);
   const authorization = await requirePagePermission(pageCodeForReturnPath(returnPath), "edit");
   const companyId = requireCompanyId(authorization);
@@ -343,7 +337,7 @@ export async function updateFieldExecutive(formData: FormData) {
     if (!id) throw new Error("Field executive is required.");
     const executiveId = id;
     const existingResult = await supabaseAdmin
-      .from("field_executives")
+      .from(table)
       .select("biometric_id, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path")
       .eq("id", executiveId)
       .eq("company_id", companyId)
@@ -429,7 +423,7 @@ export async function updateFieldExecutive(formData: FormData) {
         documentKey: field.pathKey.replace("_path", ""),
         fileValue: formData.get(field.formKey),
         ownerId: executiveId,
-        ownerType: "field_executive"
+        ownerType: config.profileType
       });
       if (!uploaded) continue;
       const oldPath = existingPaths?.[field.pathKey] ?? null;
@@ -437,7 +431,7 @@ export async function updateFieldExecutive(formData: FormData) {
         await moveProfileDocumentToTrash({
           companyId,
           ownerId: executiveId,
-          ownerType: "field_executive",
+          ownerType: config.profileType,
           documentLabel: field.label,
           fileName: oldPath.split("/").pop(),
           storagePath: oldPath,
@@ -448,7 +442,7 @@ export async function updateFieldExecutive(formData: FormData) {
     }
 
     const { error } = await supabaseAdmin
-      .from("field_executives")
+      .from(table)
       .update({
         ...corePayload,
         ...profilePayload,
@@ -469,7 +463,7 @@ export async function updateFieldExecutive(formData: FormData) {
     await saveProfileVerifications({
       accountId: executiveId,
       companyId,
-      profileType: "field_executive",
+      profileType: config.profileType,
       values: formData.getAll("profile_verification_results")
     });
 
@@ -478,14 +472,14 @@ export async function updateFieldExecutive(formData: FormData) {
       createdBy: authorization.userId,
       effectiveFrom: payload.date_of_join,
       enrolmentId: payload.biometric_id,
-      fieldExecutiveId: executiveId,
+      accountId: executiveId,
       isActive: Boolean(payload.is_active),
       locationId: payload.location_id,
+      profileType: config.profileType,
       workerType: "individual_contract"
     });
 
-    revalidatePath("/field-executive");
-    revalidatePath("/contractors");
+    revalidatePath(returnPath);
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     fieldExecutiveRedirect({ edit: String(formData.get("id") ?? ""), error: error instanceof Error ? friendlyFieldExecutiveError(error.message) : "Unable to update field executive." }, returnPath);
@@ -496,6 +490,7 @@ export async function updateFieldExecutive(formData: FormData) {
 
 export async function reviewFieldExecutiveProfile(formData: FormData) {
   const returnPath = safeReturnPath(formData);
+  const table = tableForReturnPath(returnPath);
   const entityLabel = entityLabelForReturnPath(returnPath);
   const authorization = await requirePagePermission(pageCodeForReturnPath(returnPath), "edit");
   const companyId = requireCompanyId(authorization);
@@ -511,7 +506,7 @@ export async function reviewFieldExecutiveProfile(formData: FormData) {
     if (action === "return" && !remarks) throw new Error("Return remarks are required.");
 
     const current = await supabaseAdmin
-      .from("field_executives")
+      .from(table)
       .select("onboarding_status")
       .eq("id", id)
       .eq("company_id", companyId)
@@ -536,14 +531,13 @@ export async function reviewFieldExecutiveProfile(formData: FormData) {
           updated_at: new Date().toISOString()
         };
     const result = await supabaseAdmin
-      .from("field_executives")
+      .from(table)
       .update(update)
       .eq("id", id)
       .eq("company_id", companyId);
     if (result.error) throw new Error(result.error.message);
 
-    revalidatePath("/field-executive");
-    revalidatePath("/contractors");
+    revalidatePath(returnPath);
     fieldExecutiveRedirect({
       notice: action === "approve"
         ? `${entityLabel} profile approved.`
@@ -645,6 +639,8 @@ async function parseBulkWorkbook(fileValue: FormDataEntryValue | null) {
 
 export async function bulkImportFieldExecutives(formData: FormData) {
   const returnPath = safeReturnPath(formData);
+  const config = nonEmployeeConfigForRoute(returnPath);
+  const table = config.table;
   const entityLabel = entityLabelForReturnPath(returnPath);
   const authorization = await requirePagePermission(pageCodeForReturnPath(returnPath), "add");
   const companyId = requireCompanyId(authorization);
@@ -664,7 +660,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
     }
     if (explicitDropxIds.size) {
       const existingIds = await supabaseAdmin
-        .from("field_executives")
+        .from(table)
         .select("dropx_id")
         .eq("company_id", companyId)
         .in("dropx_id", Array.from(explicitDropxIds.keys()));
@@ -688,7 +684,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
     const designations = new Map((designationsResult.data ?? []).map((designation) => [String(designation.code).toUpperCase(), {
       id: String(designation.id),
       name: String(designation.name),
-      workerCategory: workerCategoryFromDesignationCategories((designation as { onboarding_categories?: unknown }).onboarding_categories)
+      workerCategory: config.category
     }]));
 
     for (const [index, row] of rows.entries()) {
@@ -705,7 +701,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
         category: designation.workerCategory,
         companyId,
         designationId: designation.id,
-        fallback: generatedDropxId,
+        fallback: () => generatedDropxId(config.category),
         locationId
       });
       const biometricId = row.biometricId || await generateConfiguredBiometricId({
@@ -716,7 +712,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
         locationId
       });
 
-      const insertResult = await supabaseAdmin.from("field_executives").insert(withCompany({
+      const insertResult = await supabaseAdmin.from(table).insert(withCompany({
         dropx_id: dropxId,
         biometric_id: biometricId,
         full_name: row.fullName,
@@ -740,22 +736,22 @@ export async function bulkImportFieldExecutives(formData: FormData) {
         createdBy: authorization.userId,
         effectiveFrom: row.dateOfJoin,
         enrolmentId: row.biometricId,
-        fieldExecutiveId: row.id,
+        accountId: row.id,
         isActive: true,
         locationId: row.locationId,
+        profileType: config.profileType,
         workerType: "individual_contract"
       });
     }
 
-    revalidatePath("/field-executive");
-    revalidatePath("/contractors");
+    revalidatePath(returnPath);
     fieldExecutiveRedirect({ notice: `${inserted.length} ${entityLabel.toLowerCase()} records imported successfully.` }, returnPath);
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     if (inserted.length) {
       const insertedIds = inserted.map((row) => row.id);
       await supabaseAdmin.from("biometric_enrolments").delete().in("field_executive_id", insertedIds);
-      await supabaseAdmin.from("field_executives").delete().eq("company_id", companyId).in("id", insertedIds);
+      await supabaseAdmin.from(table).delete().eq("company_id", companyId).in("id", insertedIds);
     }
     fieldExecutiveRedirect({ error: error instanceof Error ? friendlyFieldExecutiveError(error.message) : "Unable to import field executives." }, returnPath);
   }

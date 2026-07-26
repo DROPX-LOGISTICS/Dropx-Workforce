@@ -12,6 +12,7 @@ export type WorkforceCategoryInitial = {
   code: string;
   name: string;
   profile_field_rules?: unknown;
+  app_page_access?: string[] | null;
   is_system: boolean;
   is_active: boolean;
 };
@@ -26,6 +27,7 @@ export function WorkforceCategoryForm({
   submitLabel: string;
 }) {
   const rules = normalizeCategoryProfileFieldRules(initial?.profile_field_rules);
+  const selectedPages = new Set(initial?.app_page_access ?? ["dashboard", "attendance", "settings"]);
 
   return (
     <form action={action} className="designation-form">
@@ -57,6 +59,30 @@ export function WorkforceCategoryForm({
           </label>
         ) : null}
       </div>
+
+      <section className="workforce-category-page-access">
+        <div>
+          <strong>DropX One page access</strong>
+          <p className="subtle">Choose the account pages available for this category. My Profile is always available.</p>
+        </div>
+        <div className="workforce-category-page-options">
+          {[
+            ["dashboard", "Dashboard"],
+            ["attendance", "Attendance"],
+            ["settings", "Settings"]
+          ].map(([value, label]) => (
+            <label key={value}>
+              <input
+                defaultChecked={selectedPages.has(value)}
+                name="app_page_access"
+                type="checkbox"
+                value={value}
+              />
+              <span>{label}</span>
+            </label>
+          ))}
+        </div>
+      </section>
 
       <div className="workforce-category-rule-matrix">
         <FieldRuleMatrix

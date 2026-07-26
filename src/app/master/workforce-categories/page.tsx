@@ -36,7 +36,7 @@ export default async function WorkforceCategoriesPage({
   const result = supabaseAdmin
     ? await supabaseAdmin
       .from("workforce_categories")
-      .select("id, code, name, profile_field_rules, is_system, is_active")
+      .select("id, code, name, profile_field_rules, app_page_access, is_system, is_active")
       .eq("company_id", companyId)
       .order("sort_order")
       .order("name")
@@ -90,12 +90,15 @@ export default async function WorkforceCategoriesPage({
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Code</th><th>Category</th><th>Type</th><th>Status</th><th>Action</th></tr></thead>
+              <thead><tr><th>Code</th><th>Category</th><th>App pages</th><th>Type</th><th>Status</th><th>Action</th></tr></thead>
               <tbody>
                 {filtered.map((category) => (
                   <tr key={category.id}>
                     <td><strong>{category.code}</strong></td>
                     <td>{category.name}</td>
+                    <td>{category.app_page_access?.length
+                      ? category.app_page_access.map((page) => page.replaceAll("_", " ")).join(", ")
+                      : "My Profile only"}</td>
                     <td>{category.is_system ? "System" : "Custom"}</td>
                     <td><StatusPill status={category.is_active ? "Active" : "Inactive"} /></td>
                     <td>{permission.canEdit ? <PendingLink className="button secondary compact" href={`/master/workforce-categories?edit=${category.id}`} scroll={false}>Edit</PendingLink> : "-"}</td>

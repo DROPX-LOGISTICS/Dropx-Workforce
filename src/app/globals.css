@@ -10210,6 +10210,57 @@ tbody tr:hover td {
   max-width: 980px;
 }
 
+.workforce-category-page-access {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(420px, 2fr);
+  gap: 20px;
+  align-items: center;
+  margin-top: 16px;
+  max-width: 980px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.workforce-category-page-access p {
+  margin: 5px 0 0;
+}
+
+.workforce-category-page-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.workforce-category-page-options label {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  cursor: pointer;
+}
+
+.workforce-category-page-options input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--orange);
+}
+
+@media (max-width: 760px) {
+  .workforce-category-page-access {
+    grid-template-columns: 1fr;
+  }
+
+  .workforce-category-page-options {
+    grid-template-columns: 1fr;
+  }
+}
+
 .designation-field-rules {
   background: #fff;
   border: 1px solid var(--line);

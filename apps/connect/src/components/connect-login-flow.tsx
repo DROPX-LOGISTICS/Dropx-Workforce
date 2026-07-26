@@ -14,6 +14,17 @@ const biometricKey = "dropx_connect_biometric";
 const credentialKey = "dropx_connect_passkey_id";
 const accountKey = (account: AppAccount) => `${account.profileType}:${account.companyId}:${account.id}`;
 const active = (account?: AppAccount | null) => account?.status?.toLowerCase() === "active";
+const defaultPageAccess = ["dashboard", "attendance", "settings"];
+const allowed = (account: AppAccount | null, page: "dashboard" | "attendance" | "settings") =>
+  (account?.pageAccess ?? defaultPageAccess).includes(page);
+
+function landingPage(account: AppAccount): Step {
+  if (!active(account)) return "profile";
+  if (allowed(account, "dashboard")) return "dashboard";
+  if (allowed(account, "attendance")) return "attendance";
+  if (allowed(account, "settings")) return "settings";
+  return "profile";
+}
 
 function Loader({ text }: { text: string }) {
   return <div className="dx-loader fullscreen"><span /><small>{text}</small></div>;
@@ -43,7 +54,7 @@ export function ConnectLoginFlow() {
     const saved = localStorage.getItem(defaultKeyName) || "";
     const selected = filtered.find((row) => accountKey(row) === saved) ?? (filtered.length === 1 ? filtered[0] : null);
     setAccounts(filtered); setDefaultKey(saved); setAccount(selected); setAvatar(selected?.profilePhotoUrl || "");
-    setStep(selected ? active(selected) ? "dashboard" : "profile" : "accounts");
+    setStep(selected ? landingPage(selected) : "accounts");
   }
   useEffect(() => {
     fetch("/api/connect/auth/session").then((r) => r.json()).then((payload) => {
@@ -60,7 +71,7 @@ export function ConnectLoginFlow() {
   }, []);
   useEffect(() => {
     const onPop = () => {
-      if (step !== "dashboard" && account && active(account)) setStep("dashboard");
+      if (account && step !== landingPage(account)) setStep(landingPage(account));
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -157,11 +168,22 @@ export function ConnectLoginFlow() {
     finally { setPending(false); }
   }
   function choose(next: AppAccount) {
-    setAccount(next); setAvatar(next.profilePhotoUrl || ""); setDrawer(false); setStep(active(next) ? "dashboard" : "profile");
+    setAccount(next); setAvatar(next.profilePhotoUrl || ""); setDrawer(false); setStep(landingPage(next));
   }
   function open(next: Step) {
     setDrawer(false); setProfileMenu(false);
-    if (!account) setStep("accounts"); else setStep(!active(account) && next !== "profile" ? "profile" : next);
+    if (!account) {
+      setStep("accounts");
+      return;
+    }
+    if (!active(account) && next !== "profile") {
+      setStep("profile");
+      return;
+    }
+    if (next === "dashboard" && !allowed(account, "dashboard")) return;
+    if (next === "attendance" && !allowed(account, "attendance")) return;
+    if (next === "settings" && !allowed(account, "settings")) return;
+    setStep(next);
   }
 
   const loggedIn = ["accounts","dashboard","profile","attendance","settings"].includes(step);
@@ -169,20 +191,20 @@ export function ConnectLoginFlow() {
 
   return <div className={`dx-app ${loggedIn ? "logged-in" : ""}`}>
     {loggedIn ? <header className="dx-header">
-      <button aria-label="Menu" onClick={() => { setDrawer(true); setProfileMenu(false); }}><Menu /></button>
+      <button aria-label="Menu" className={!account ? "dx-menu-unavailable" : ""} disabled={!account} onClick={() => { setDrawer(true); setProfileMenu(false); }}><Menu /></button>
       <Image alt="DropX" height={42} priority src="/dropx-logo.png" width={120} />
       <span />
       <button aria-label="Notifications" onClick={() => setNotice("No new notifications.")}><Bell /></button>
       <button className="avatar" onClick={() => { setProfileMenu((v) => !v); setDrawer(false); }}>{avatar ? <img alt="" src={avatar} /> : <b>{(account?.name || "U")[0]}</b>}</button>
       {profileMenu ? <aside className="dx-profile-pop"><strong>{account?.name || account?.reference}</strong><small>{account?.reference}</small><button onClick={() => open("profile")}><UserRound />My Profile</button><button onClick={logout}><LogOut />Sign out</button></aside> : null}
     </header> : null}
-    {drawer ? <><button aria-label="Close menu" className="dx-scrim" onClick={() => setDrawer(false)} /><aside className="dx-drawer">
+    {drawer && account ? <><button aria-label="Close menu" className="dx-scrim" onClick={() => setDrawer(false)} /><aside className="dx-drawer">
       <div><Image alt="DropX" height={44} src="/dropx-logo.png" width={126} /><button aria-label="Switch accounts" onClick={() => open("accounts")}><SwitchCamera /></button><button aria-label="Close" onClick={() => setDrawer(false)}><X /></button></div>
       <nav>
-        <button onClick={() => open("dashboard")}><Gauge />Dashboard<ChevronRight /></button>
+        {allowed(account, "dashboard") ? <button onClick={() => open("dashboard")}><Gauge />Dashboard<ChevronRight /></button> : null}
         <button onClick={() => open("profile")}><UserRound />My Profile<ChevronRight /></button>
-        <button onClick={() => open("attendance")}><Fingerprint />Attendance<ChevronRight /></button>
-        <button onClick={() => open("settings")}><Settings />Settings<ChevronRight /></button>
+        {allowed(account, "attendance") ? <button onClick={() => open("attendance")}><Fingerprint />Attendance<ChevronRight /></button> : null}
+        {allowed(account, "settings") ? <button onClick={() => open("settings")}><Settings />Settings<ChevronRight /></button> : null}
       </nav>
       <button className="signout" onClick={logout}><LogOut />Sign out</button>
     </aside></> : null}

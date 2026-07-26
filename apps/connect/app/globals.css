@@ -8024,3 +8024,8 @@ tr:last-child td {
     font-size: 12px;
   }
 }
+
+.dx-header > button.dx-menu-unavailable {
+  visibility: hidden;
+  pointer-events: none;
+}

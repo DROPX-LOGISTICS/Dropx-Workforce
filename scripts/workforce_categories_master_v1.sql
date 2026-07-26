@@ -6,6 +6,7 @@ create table if not exists public.workforce_categories (
   code text not null,
   name text not null,
   profile_field_rules jsonb not null default '{}'::jsonb,
+  app_page_access text[] not null default array['dashboard', 'attendance', 'settings']::text[],
   is_system boolean not null default false,
   is_active boolean not null default true,
   sort_order integer not null default 100,
@@ -62,6 +63,10 @@ set
   updated_at = now();
 
 alter table public.workforce_categories enable row level security;
+
+alter table public.workforce_categories
+  add column if not exists app_page_access text[] not null
+  default array['dashboard', 'attendance', 'settings']::text[];
 
 drop policy if exists workforce_categories_select_policy on public.workforce_categories;
 

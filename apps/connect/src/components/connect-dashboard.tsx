@@ -199,11 +199,12 @@ export function ConnectDashboard({
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const firstName = (account.name || account.reference || "there").trim().split(/\s+/)[0];
   const profileStatus = profile.status || account.status || "active";
+  const attendanceAllowed = (account.pageAccess ?? ["dashboard", "attendance", "settings"]).includes("attendance");
 
   return <section className="dx-dashboard">
     <header className="dx-dashboard-greeting">
       <h1>{greeting}, {firstName}</h1>
-      <p>{account.reference || "-"}{account.role ? ` · ${account.role}` : ""}</p>
+      <p>{account.reference || "-"}{account.role ? ` - ${account.role}` : ""}</p>
     </header>
 
     <section className="dx-dashboard-card today">
@@ -214,7 +215,7 @@ export function ConnectDashboard({
         <Metric icon={<Clock3 />} label="WORK" value={today?.workHours || "00:00"} tone="orange" />
         <Metric icon={<Fingerprint />} label="PUNCHES" value={today?.punchCount || 0} tone="purple" />
       </div>
-      <button className="dx-dashboard-link" onClick={onAttendance}>View attendance <ChevronRight /></button>
+      {attendanceAllowed ? <button className="dx-dashboard-link" onClick={onAttendance}>View attendance <ChevronRight /></button> : null}
     </section>
 
     <section className="dx-dashboard-card">
@@ -238,7 +239,7 @@ export function ConnectDashboard({
       </div>
     </section> : null}
 
-    {latestRequest?.regularization ? <section className="dx-dashboard-card">
+    {latestRequest?.regularization && attendanceAllowed ? <section className="dx-dashboard-card">
       <h2>Recent requests</h2>
       <button className="dx-dashboard-request" onClick={onAttendance}>
         <CalendarClock />

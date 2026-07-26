@@ -38,6 +38,16 @@ function categoryRules(formData: FormData) {
   });
 }
 
+const allowedAppPages = new Set(["dashboard", "attendance", "settings"]);
+
+function appPageAccess(formData: FormData) {
+  return Array.from(new Set(
+    formData.getAll("app_page_access")
+      .map((value) => String(value).trim().toLowerCase())
+      .filter((value) => allowedAppPages.has(value))
+  ));
+}
+
 function categoryRedirect(params: { error?: string; notice?: string }) {
   cookies().set("dropx_workforce_category_flash", JSON.stringify(params), {
     httpOnly: true,
@@ -62,6 +72,7 @@ export async function createWorkforceCategory(formData: FormData) {
       code: categoryCode(formData.get("code")),
       name: required(formData.get("name"), "Category name"),
       profile_field_rules: categoryRules(formData),
+      app_page_access: appPageAccess(formData),
       is_system: false,
       is_active: true
     }, companyId));
@@ -97,6 +108,7 @@ export async function updateWorkforceCategory(formData: FormData) {
         code,
         name: required(formData.get("name"), "Category name"),
         profile_field_rules: categoryRules(formData),
+        app_page_access: appPageAccess(formData),
         is_active: clean(formData.get("status")) !== "inactive",
         updated_at: new Date().toISOString()
       })

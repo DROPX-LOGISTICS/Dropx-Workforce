@@ -19,6 +19,7 @@ export type AppAccount = {
   status?: string | null;
   biometricId?: string | null;
   profilePhotoUrl?: string | null;
+  pageAccess?: string[];
 };
 
 type Profile = {

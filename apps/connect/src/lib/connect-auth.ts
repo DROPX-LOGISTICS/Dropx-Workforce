@@ -20,6 +20,7 @@ export type ConnectAccount = {
   status: string | null;
   biometricId: string | null;
   profilePhotoUrl: string | null;
+  pageAccess: string[];
   companyName: string;
   label: string;
 };
@@ -90,6 +91,17 @@ async function signedProfilePhotoUrl(path?: string | null) {
     .from("employee-profile-documents")
     .createSignedUrl(path, 60 * 60);
   return result.data?.signedUrl ?? "";
+}
+
+const defaultPageAccess = ["dashboard", "attendance", "settings"];
+
+function categoryCodeForProfile(profileType: ConnectAccount["profileType"]) {
+  if (profileType === "employee") return "employees";
+  if (profileType === "field_executive") return "field_executives";
+  if (profileType === "contractor") return "contractors";
+  if (profileType === "vendor") return "vendors";
+  if (profileType === "worker") return "workers";
+  return "";
 }
 
 export async function findConnectAccounts(countryCode: string, mobile: string) {
@@ -217,6 +229,22 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
     : { data: [], error: null };
   if (companiesResult.error) throw new Error(companiesResult.error.message);
   const companyNameById = new Map((companiesResult.data ?? []).map((company) => [company.id, company.name || company.code || "Company"]));
+  const categoryResult = companyIds.length
+    ? await supabaseAdmin
+      .from("workforce_categories")
+      .select("company_id, code, app_page_access")
+      .in("company_id", companyIds)
+      .eq("is_active", true)
+    : { data: [], error: null };
+  const pageAccessByCategory = new Map<string, string[]>();
+  if (!categoryResult.error) {
+    for (const category of categoryResult.data ?? []) {
+      const pages = Array.isArray(category.app_page_access)
+        ? category.app_page_access.map(String)
+        : defaultPageAccess;
+      pageAccessByCategory.set(`${category.company_id}:${category.code}`, pages);
+    }
+  }
 
   return Promise.all(accounts
     .filter((account) => companyNameById.has(account.company_id))
@@ -231,6 +259,9 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       status: account.status ?? null,
       biometricId: account.biometric_id ?? null,
       profilePhotoUrl: await signedProfilePhotoUrl(account.profile_photo_path),
+      pageAccess: account.profile_type === "user"
+        ? defaultPageAccess
+        : pageAccessByCategory.get(`${account.company_id}:${categoryCodeForProfile(account.profile_type)}`) ?? defaultPageAccess,
       companyName: companyNameById.get(account.company_id) ?? "Company",
       label: accountLabel(account, companyNameById)
     })));

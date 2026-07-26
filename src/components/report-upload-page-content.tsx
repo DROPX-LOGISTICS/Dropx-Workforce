@@ -5,6 +5,7 @@ import { ReportImportUploader } from "@/components/report-import-uploader";
 import { StatusPill } from "@/components/status-pill";
 import { getAuthorization } from "@/lib/authorization";
 import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
+import { loadCodLocations, locationModelName, providerName } from "@/lib/ops-pulse/cod";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 
 type ImportBatch = {
@@ -113,7 +114,7 @@ async function loadImportMaster(companyId: string | null) {
     .select("id, source_code, name, description, file_types, day_offset, upload_time, frequency, weekday, parser_type, dedupe_fields, is_active")
     .eq("company_id", companyId)
     .eq("is_active", true)
-    .neq("parser_type", "performance_target")
+    .in("parser_type", ["inbound_shipment_detail", "delivered_shipment_detail"])
     .order("name");
   if (error) return { rows: [] as ReportImportMaster[], error: error.message };
   return { rows: (data ?? []) as ReportImportMaster[], error: null };
@@ -143,8 +144,22 @@ export async function ReportUploadPageContent({
   const authorization = await getAuthorization();
   const companyId = authorization?.companyId ?? null;
   const date = validDate(selectedDate);
-  const { rows: reports, error: masterError } = await loadImportMaster(companyId);
-  const { rows: batches, error: batchError } = await loadBatches(companyId);
+  const [{ rows: reports, error: masterError }, { rows: batches, error: batchError }, locationResult] = await Promise.all([
+    loadImportMaster(companyId),
+    loadBatches(companyId),
+    authorization && companyId
+      ? loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess)
+      : Promise.resolve({ locations: [], error: null })
+  ]);
+  const shipmentStations = locationResult.locations.filter((location) => {
+    const provider = providerName(location).toUpperCase();
+    const model = locationModelName(location).toUpperCase();
+    return provider.includes("AMAZON") && ["DSP", "EDSP", "XPD", "XPT", "AMXL"].includes(model);
+  }).map((location) => ({
+    code: location.station_code,
+    name: location.station_name || location.city || location.station_code,
+    model: locationModelName(location)
+  }));
   const dueReports = reports.filter((report) => reportIsDue(report, date));
   const reportBySource = new Map(reports.map((report) => [report.source_code, report]));
   const latestBySource = new Map<string, ImportBatch>();
@@ -189,8 +204,8 @@ export async function ReportUploadPageContent({
         action={<span className={`status-pill ${isSupabaseAdminConfigured ? "good" : "warn"}`}>{isSupabaseAdminConfigured ? "Connected" : "Database unavailable"}</span>}
       />
 
-      {masterError || batchError ? (
-        <section className="panel message-panel error"><div className="panel-body"><strong>{masterError ?? batchError}</strong></div></section>
+      {masterError || batchError || locationResult.error ? (
+        <section className="panel message-panel error"><div className="panel-body"><strong>{masterError ?? batchError ?? locationResult.error}</strong></div></section>
       ) : null}
 
       <section className="panel">
@@ -198,7 +213,7 @@ export async function ReportUploadPageContent({
           <div><h2>Upload report</h2></div>
           <Link className="button secondary compact" href="/master/imports">Manage reports</Link>
         </div>
-        <ReportImportUploader reports={reports} compact />
+        <ReportImportUploader reports={reports} stations={shipmentStations} compact />
       </section>
 
       {coverageGaps.length ? (

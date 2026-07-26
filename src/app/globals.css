@@ -4989,6 +4989,7 @@ tbody tr:hover td {
 .capacity-map-master-form label { display:grid; gap:5px; color:#64748b; font-size:11px; font-weight:700; }
 .capacity-map-master-form input, .capacity-map-master-form select { min-width:0; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#172033; }
 .capacity-map-meta a { color:#ea580c; font-size:11px; font-weight:700; }
+.compact-upload-row.shipment-upload-row { grid-template-columns:minmax(150px,.8fr) minmax(220px,1.2fr) minmax(150px,.8fr) minmax(260px,1.4fr) auto; }
 .capacity-table { min-width:1550px; }
 .capacity-table th,.capacity-table td { vertical-align:top; }
 .capacity-reason { min-width:280px; max-width:360px; color:#475467; font-size:11px; line-height:1.45; }

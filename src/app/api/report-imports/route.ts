@@ -5,6 +5,7 @@ import crypto from "crypto";
 import * as XLSX from "xlsx";
 import { getAuthorization, hasPermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { loadCodLocations, locationModelName, providerName } from "@/lib/ops-pulse/cod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type SourceType = string;
@@ -641,14 +642,18 @@ function timestamp(value: unknown) {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-function parseDeliveredShipmentFacts(rows: SheetRow[], companyId: string, batchId: string) {
+function parseDeliveredShipmentFacts(rows: SheetRow[], companyId: string, batchId: string, selectedStation: string, selectedDate: string) {
   const headerIndex = locateHeader(rows, ["Tracking ID"]);
   const records = rowsToRecords(rows, headerIndex);
   const rejected: Array<{ rowNumber: number; issue: string }> = [];
   const byTrackingId = new Map<string, DeliveredShipmentFact>();
+  const embeddedDates = new Set(records.map(({ raw }) =>
+    timestamp(findValue(raw, ["Last Updated Time", "Delivery Time", "Delivered At"]))?.slice(0, 10)
+  ).filter(Boolean));
+  const preserveEmbeddedDates = embeddedDates.size > 1;
   records.forEach(({ raw, rowNumber }) => {
     const trackingId = clean(findValue(raw, ["Tracking ID", "Tracking Number", "Shipment ID"]));
-    const stationCode = normalizeStation(findValue(raw, ["Station", "Station Code", "Delivery Station"]));
+    const stationCode = selectedStation || normalizeStation(findValue(raw, ["Station", "Station Code", "Delivery Station"]));
     const lastUpdatedAt = timestamp(findValue(raw, ["Last Updated Time", "Delivery Time", "Delivered At"]));
     const driverId = clean(findValue(raw, ["Driver ID", "Associate ID", "DA ID"])).toUpperCase();
     const postalCode = clean(findValue(raw, ["Postal", "Pincode", "Postal Code"])).match(/\d{6}/)?.[0] ?? "";
@@ -689,7 +694,7 @@ function parseDeliveredShipmentFacts(rows: SheetRow[], companyId: string, batchI
       tracking_id: trackingId,
       updated_at: new Date().toISOString(),
       width_cm: widthCm,
-      work_date: lastUpdatedAt.slice(0, 10)
+      work_date: preserveEmbeddedDates ? lastUpdatedAt.slice(0, 10) : selectedDate || lastUpdatedAt.slice(0, 10)
     };
     const existing = byTrackingId.get(trackingId);
     if (!existing || existing.last_updated_at <= fact.last_updated_at) byTrackingId.set(trackingId, fact);
@@ -697,18 +702,24 @@ function parseDeliveredShipmentFacts(rows: SheetRow[], companyId: string, batchI
   return { facts: [...byTrackingId.values()], rejected, sourceRows: records.length };
 }
 
-function parseInboundShipmentFacts(rows: SheetRow[], companyId: string, batchId: string) {
+function parseInboundShipmentFacts(rows: SheetRow[], companyId: string, batchId: string, selectedStation: string, selectedDate: string) {
   const headerIndex = locateHeader(rows, ["Tracking ID"]);
   const records = rowsToRecords(rows, headerIndex);
   const rejected: Array<{ rowNumber: number; issue: string }> = [];
   const byTrackingId = new Map<string, InboundShipmentFact>();
+  const embeddedDates = new Set(records.map(({ raw }) => parseDate(findValue(raw, [
+    "Estimated Arrival Date", "Expected Arrival Date", "Arrival Date",
+    "Promised Delivery Date", "Scheduled Delivery Start time"
+  ]))).filter(Boolean));
+  const preserveEmbeddedDates = embeddedDates.size > 1;
   records.forEach(({ raw, rowNumber }) => {
     const trackingId = clean(findValue(raw, ["Tracking ID", "Tracking Number", "Shipment ID"]));
-    const stationCode = normalizeStation(findValue(raw, ["Station", "Station Code", "Delivery Station"]));
-    const expectedArrivalDate = parseDate(findValue(raw, [
+    const stationCode = selectedStation || normalizeStation(findValue(raw, ["Station", "Station Code", "Delivery Station"]));
+    const embeddedArrivalDate = parseDate(findValue(raw, [
       "Estimated Arrival Date", "Expected Arrival Date", "Arrival Date",
       "Promised Delivery Date", "Scheduled Delivery Start time"
     ]));
+    const expectedArrivalDate = preserveEmbeddedDates ? embeddedArrivalDate : selectedDate || embeddedArrivalDate;
     const postalCode = clean(findValue(raw, ["Postal", "Pincode", "Postal Code"])).match(/\d{6}/)?.[0] ?? "";
     if (!trackingId || !stationCode || !expectedArrivalDate || !postalCode) {
       rejected.push({ rowNumber, issue: "Missing tracking ID, station, expected-arrival date or postal code." });
@@ -1002,6 +1013,8 @@ export async function POST(request: Request) {
 
   const formData = await importStep("Read uploaded form", () => request.formData());
   const sourceType = clean(formData.get("source_type")) as SourceType;
+  const selectedStation = normalizeStation(formData.get("station_code"));
+  const selectedReportDate = parseDate(formData.get("report_date"));
   const file = formData.get("file");
   const master = await db.from("report_import_master")
     .select("source_code, name, file_types, parser_type, dedupe_fields, is_active")
@@ -1012,6 +1025,21 @@ export async function POST(request: Request) {
   if (master.error) return databaseSetupError(master.error.message);
   if (!master.data) return Response.json({ error: "Select an active report from Import Master." }, { status: 400 });
   const masterData = master.data;
+  if (masterData.parser_type === "inbound_shipment_detail" || masterData.parser_type === "delivered_shipment_detail") {
+    if (!selectedStation || !selectedReportDate) {
+      return Response.json({ error: "Select the station and data date." }, { status: 400 });
+    }
+    const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
+    if (locationResult.error) return Response.json({ error: locationResult.error }, { status: 500 });
+    const eligible = locationResult.locations.some((location) => {
+      const provider = providerName(location).toUpperCase();
+      const model = locationModelName(location).toUpperCase();
+      return location.station_code === selectedStation
+        && provider.includes("AMAZON")
+        && ["DSP", "EDSP", "XPD", "XPT", "AMXL"].includes(model);
+    });
+    if (!eligible) return Response.json({ error: "Select an eligible Amazon DSP or XPD station." }, { status: 400 });
+  }
   if (!(file instanceof File)) return Response.json({ error: "Upload a report file." }, { status: 400 });
   const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
   if (!(masterData.file_types as string[]).includes(extension)) {
@@ -1099,7 +1127,7 @@ export async function POST(request: Request) {
     const workbookRows = readWorkbookRows(fileBuffer);
     if (masterData.parser_type === "delivered_shipment_detail") {
       const parsedFacts = await importStep("Parse delivered shipment details", () => Promise.resolve(
-        parseDeliveredShipmentFacts(workbookRows, companyId, batch.data.id)
+        parseDeliveredShipmentFacts(workbookRows, companyId, batch.data.id, selectedStation, selectedReportDate ?? "")
       ));
       await importStep("Save delivered shipment facts", () => upsertInChunks(
         "delivered_shipment_facts",
@@ -1133,7 +1161,7 @@ export async function POST(request: Request) {
     }
     if (masterData.parser_type === "inbound_shipment_detail") {
       const parsedFacts = await importStep("Parse inbound shipment details", () => Promise.resolve(
-        parseInboundShipmentFacts(workbookRows, companyId, batch.data.id)
+        parseInboundShipmentFacts(workbookRows, companyId, batch.data.id, selectedStation, selectedReportDate ?? "")
       ));
       await importStep("Save inbound shipment facts", () => upsertInChunks(
         "inbound_shipment_facts",

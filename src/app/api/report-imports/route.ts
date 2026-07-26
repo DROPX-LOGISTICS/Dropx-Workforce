@@ -97,7 +97,6 @@ const sourceLabels: Record<SourceType, string> = {
   daily_edsp_metrics: "Daily EDSP metrics"
 };
 const HASH_LOOKUP_CHUNK_SIZE = 25;
-const TRACKING_LOOKUP_CHUNK_SIZE = 400;
 
 function clean(value: unknown) {
   return String(value ?? "").trim().replace(/^'+/, "").replace(/'+$/, "");
@@ -1012,19 +1011,6 @@ async function upsertInChunks<T extends Record<string, unknown>>(table: string, 
   }
 }
 
-async function countExistingShipmentFacts(table: "delivered_shipment_facts" | "inbound_shipment_facts", companyId: string, trackingIds: string[]) {
-  if (!supabaseAdmin || !trackingIds.length) return 0;
-  let count = 0;
-  for (let index = 0; index < trackingIds.length; index += TRACKING_LOOKUP_CHUNK_SIZE) {
-    const result = await supabaseAdmin.from(table).select("tracking_id")
-      .eq("company_id", companyId)
-      .in("tracking_id", trackingIds.slice(index, index + TRACKING_LOOKUP_CHUNK_SIZE));
-    if (result.error) throw new Error(result.error.message);
-    count += result.data?.length ?? 0;
-  }
-  return count;
-}
-
 async function refreshShipmentCoverage(
   companyId: string,
   sourceType: "delivered_shipment_detail" | "inbound_shipment_detail",
@@ -1300,8 +1286,6 @@ export async function POST(request: Request) {
         station_code: detectedParents.join(", ") || "Auto-detect"
       }).eq("id", batch.data.id).eq("company_id", companyId));
       if (detected.error) throw new Error(detected.error.message);
-      const refreshedExisting = await importStep("Identify previously imported shipments", () =>
-        countExistingShipmentFacts("delivered_shipment_facts", companyId, parsedFacts.facts.map((row) => row.tracking_id)));
       await importStep("Save delivered shipment facts", () => upsertInChunks(
         "delivered_shipment_facts",
         parsedFacts.facts,
@@ -1314,7 +1298,7 @@ export async function POST(request: Request) {
       const duplicateRows = parsedFacts.sourceRows - parsedFacts.rejected.length - parsedFacts.facts.length;
       const skipped = parsedFacts.rejected.length;
       const volumeReady = parsedFacts.facts.filter((row) => row.cubic_volume_cm3 != null && row.actual_weight_kg != null).length;
-      const message = `${parsedFacts.facts.length} unique tracking shipment${parsedFacts.facts.length === 1 ? "" : "s"} processed across all worksheets. ${refreshedExisting} previously stored shipment${refreshedExisting === 1 ? "" : "s"} refreshed, ${duplicateRows} repeated row${duplicateRows === 1 ? "" : "s"} consolidated, and ${skipped} invalid row${skipped === 1 ? "" : "s"} skipped.`;
+      const message = `${parsedFacts.facts.length} unique tracking shipment${parsedFacts.facts.length === 1 ? "" : "s"} saved or refreshed across all worksheets. ${duplicateRows} repeated row${duplicateRows === 1 ? "" : "s"} consolidated, and ${skipped} invalid row${skipped === 1 ? "" : "s"} skipped.`;
       const update = await importStep("Mark delivered shipment import completed", async () => db.from("report_import_batches").update({
         completed_at: new Date().toISOString(),
         imported_row_count: parsedFacts.facts.length,
@@ -1331,7 +1315,6 @@ export async function POST(request: Request) {
         duplicateRows,
         imported: parsedFacts.facts.length,
         message,
-        refreshedExisting,
         skipped,
         totalRows: parsedFacts.sourceRows
       });
@@ -1367,8 +1350,6 @@ export async function POST(request: Request) {
         station_code: detectedParents.join(", ") || "Auto-detect"
       }).eq("id", batch.data.id).eq("company_id", companyId));
       if (detected.error) throw new Error(detected.error.message);
-      const refreshedExisting = await importStep("Identify previously imported shipments", () =>
-        countExistingShipmentFacts("inbound_shipment_facts", companyId, parsedFacts.facts.map((row) => row.tracking_id)));
       await importStep("Save inbound shipment facts", () => upsertInChunks(
         "inbound_shipment_facts",
         parsedFacts.facts,
@@ -1381,7 +1362,7 @@ export async function POST(request: Request) {
       const duplicateRows = parsedFacts.sourceRows - parsedFacts.rejected.length - parsedFacts.facts.length;
       const skipped = parsedFacts.rejected.length;
       const volumeReady = parsedFacts.facts.filter((row) => row.cubic_volume_cm3 != null && row.actual_weight_kg != null).length;
-      const message = `${parsedFacts.facts.length} unique inbound shipment${parsedFacts.facts.length === 1 ? "" : "s"} processed across all worksheets. ${refreshedExisting} previously stored shipment${refreshedExisting === 1 ? "" : "s"} refreshed, ${duplicateRows} repeated row${duplicateRows === 1 ? "" : "s"} consolidated, and ${skipped} invalid row${skipped === 1 ? "" : "s"} skipped.`;
+      const message = `${parsedFacts.facts.length} unique inbound shipment${parsedFacts.facts.length === 1 ? "" : "s"} saved or refreshed across all worksheets. ${duplicateRows} repeated row${duplicateRows === 1 ? "" : "s"} consolidated, and ${skipped} invalid row${skipped === 1 ? "" : "s"} skipped.`;
       const update = await importStep("Mark inbound shipment import completed", async () => db.from("report_import_batches").update({
         completed_at: new Date().toISOString(),
         imported_row_count: parsedFacts.facts.length,
@@ -1398,7 +1379,6 @@ export async function POST(request: Request) {
         duplicateRows,
         imported: parsedFacts.facts.length,
         message,
-        refreshedExisting,
         skipped,
         totalRows: parsedFacts.sourceRows
       });

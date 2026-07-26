@@ -44,6 +44,7 @@ function operationalAnswer(question: string, rows: StationSnapshot[], from: stri
     return `${row.station}: ${formatNumber(row.delivered_packages)} delivered by ${formatNumber(row.active_delivery_das)} active delivery DAs; SPR ${formatNumber(row.spr, 2)} on ${date}.`;
   };
   if (/\bhow many\b.*\bda|active da|da count|delivery associate/.test(q)) {
+    if (/\bspr\b|shipment.?per|productivity/.test(q)) return rows.slice(0, 15).map(line).join("\n");
     const deliveryTotal = rows.reduce((sum, row) => sum + row.active_delivery_das, 0);
     const masterTotal = rows.reduce((sum, row) => sum + row.active_da_master_count, 0);
     if (rows.length === 1) return `${rows[0].station}: ${formatNumber(deliveryTotal)} active delivery DAs on ${rows[0].latest_delivery_date ?? "the latest available delivery date"}; ${formatNumber(masterTotal)} active DA records in the master.`;

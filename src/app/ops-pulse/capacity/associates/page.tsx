@@ -36,7 +36,7 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
   const sort = ["name", "average", "peak", "delivered", "days", "highDays", "station", "level"].includes(String(searchParams?.sort)) ? String(searchParams?.sort) : "average";
   const dir = searchParams?.dir === "asc" ? "asc" : "desc";
   const end = valid(searchParams?.to) ? String(searchParams?.to) : today();
-  const preset = ["wtd", "mtd", "ytd", "custom"].includes(String(searchParams?.preset)) ? String(searchParams?.preset) : "mtd";
+  const preset = ["wtd", "mtd", "ytd", "custom"].includes(String(searchParams?.preset)) ? String(searchParams?.preset) : "wtd";
   const weekday = new Date(`${end}T00:00:00Z`).getUTCDay();
   const start = valid(searchParams?.from) ? String(searchParams?.from)
     : preset === "wtd" ? shift(end, -((weekday + 6) % 7))
@@ -47,18 +47,41 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
   ]);
   const rows = associateResult.data ?? [];
   const ruleMap = new Map(ruleResult.rows.map((rule) => [rule.stationCode, rule]));
-  const keys = [...new Set(rows.map((row) => `${row.station_code}|${row.associate_id}`))];
-  const allAssociates = keys.map((key) => {
-    const [stationCode, id] = key.split("|");
-    const idRows = rows.filter((row) => row.station_code === stationCode && row.associate_id === id);
-    const dates = [...new Set(idRows.map((row) => row.work_date))].sort();
-    const delivered = idRows.reduce((sum, row) => sum + num(row.delivered), 0);
-    const daily = dates.map((date) => idRows.filter((row) => row.work_date === date).reduce((sum, row) => sum + num(row.delivered), 0));
-    const average = dates.length ? delivered / dates.length : 0;
-    const target = ruleMap.get(stationCode)?.targetSpr ?? 60;
-    const safe = ruleMap.get(stationCode)?.maxSafeSpr ?? 70;
+  const aggregateMap = new Map<string, { stationCode: string; id: string; name: string; daily: Map<string, number>; delivered: number }>();
+  rows.forEach((row) => {
+    const key = `${row.station_code}|${row.associate_id}`;
+    const current = aggregateMap.get(key) ?? {
+      stationCode: row.station_code,
+      id: row.associate_id,
+      name: row.associate_name || "Unmapped name",
+      daily: new Map<string, number>(),
+      delivered: 0
+    };
+    const delivered = num(row.delivered);
+    current.delivered += delivered;
+    current.daily.set(row.work_date, (current.daily.get(row.work_date) ?? 0) + delivered);
+    if (current.name === "Unmapped name" && row.associate_name) current.name = row.associate_name;
+    aggregateMap.set(key, current);
+  });
+  const allAssociates = [...aggregateMap.values()].map((aggregate) => {
+    const daily = [...aggregate.daily.values()];
+    const average = daily.length ? aggregate.delivered / daily.length : 0;
+    const target = ruleMap.get(aggregate.stationCode)?.targetSpr ?? 60;
+    const safe = ruleMap.get(aggregate.stationCode)?.maxSafeSpr ?? 70;
     const level = average > safe ? "high" : average < target ? "low" : "target";
-    return { stationCode, id, name: idRows.find((row) => row.associate_name)?.associate_name || "Unmapped name", dates: dates.length, delivered, average, peak: Math.max(0, ...daily), highDays: daily.filter((value) => value > safe).length, target, safe, level };
+    return {
+      stationCode: aggregate.stationCode,
+      id: aggregate.id,
+      name: aggregate.name,
+      dates: daily.length,
+      delivered: aggregate.delivered,
+      average,
+      peak: Math.max(0, ...daily),
+      highDays: daily.filter((value) => value > safe).length,
+      target,
+      safe,
+      level
+    };
   });
   const filteredAssociates = allAssociates.filter((row) => band === "all" || row.level === band);
   const sortValue = (row: typeof allAssociates[number]) => sort === "name" ? row.name : sort === "peak" ? row.peak : sort === "delivered" ? row.delivered : sort === "days" ? row.dates : sort === "highDays" ? row.highDays : sort === "station" ? row.stationCode : sort === "level" ? row.level : row.average;

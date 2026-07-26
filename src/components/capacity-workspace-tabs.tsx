@@ -1,10 +1,17 @@
-import Link from "next/link";
+"use client";
+
+import { useSearchParams } from "next/navigation";
+import { PendingLink } from "@/components/pending-link";
 
 export function CapacityWorkspaceTabs({ active }: { active: "overview" | "daily" | "associates" | "delivery" }) {
+  const searchParams = useSearchParams();
+  const selectedStations = searchParams.get("stations");
+  const withScope = (path: string) => selectedStations ? `${path}?stations=${encodeURIComponent(selectedStations)}` : path;
+
   return <nav className="performance-tabs performance-workspace-tabs">
-    <Link className={active === "overview" ? "active" : ""} href="/ops-pulse/capacity">Capacity overview</Link>
-    <Link className={active === "daily" ? "active" : ""} href="/ops-pulse/capacity/daily">Daily ground update</Link>
-    <Link className={active === "associates" ? "active" : ""} href="/ops-pulse/capacity/associates">Associate SPR</Link>
-    <Link className={active === "delivery" ? "active" : ""} href="/ops-pulse/performance/shipments">Delivery data</Link>
+    <PendingLink className={active === "overview" ? "active" : ""} disableWhenCurrent href={withScope("/ops-pulse/capacity")}>Capacity overview</PendingLink>
+    <PendingLink className={active === "daily" ? "active" : ""} disableWhenCurrent href={withScope("/ops-pulse/capacity/daily")}>Daily ground update</PendingLink>
+    <PendingLink className={active === "associates" ? "active" : ""} disableWhenCurrent href={withScope("/ops-pulse/capacity/associates")}>Associate SPR</PendingLink>
+    <PendingLink className={active === "delivery" ? "active" : ""} disableWhenCurrent href={withScope("/ops-pulse/performance/shipments")}>Delivery data</PendingLink>
   </nav>;
 }

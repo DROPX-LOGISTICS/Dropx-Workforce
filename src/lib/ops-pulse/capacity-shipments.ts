@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export type CapacityStationDay = {
@@ -38,7 +39,7 @@ export type CapacityPincode = {
   average_cubic_cm3: number | string | null;
 };
 
-export async function loadCapacityStationDays(companyId: string, stationCodes: string[], from: string, to: string) {
+const cachedCapacityStationDays = unstable_cache(async (companyId: string, stationCodes: string[], from: string, to: string) => {
   if (!supabaseAdmin || !stationCodes.length) return { data: [] as CapacityStationDay[], error: null };
   const chunks: string[][] = [];
   for (let index = 0; index < stationCodes.length; index += 6) chunks.push(stationCodes.slice(index, index + 6));
@@ -49,9 +50,13 @@ export async function loadCapacityStationDays(companyId: string, stationCodes: s
     data: results.flatMap((result) => (result.data ?? []) as CapacityStationDay[]),
     error: results.find((result) => result.error)?.error ?? null
   };
+}, ["capacity-station-days"], { revalidate: 60 });
+
+export async function loadCapacityStationDays(companyId: string, stationCodes: string[], from: string, to: string) {
+  return cachedCapacityStationDays(companyId, [...stationCodes].sort(), from, to);
 }
 
-export async function loadCapacityAssociateDays(companyId: string, stationCodes: string[], from: string, to: string) {
+const cachedCapacityAssociateDays = unstable_cache(async (companyId: string, stationCodes: string[], from: string, to: string) => {
   if (!supabaseAdmin || !stationCodes.length) return { data: [] as CapacityAssociateDay[], error: null };
   const result = await supabaseAdmin.rpc("capacity_associate_daily", {
     p_company_id: companyId,
@@ -60,6 +65,10 @@ export async function loadCapacityAssociateDays(companyId: string, stationCodes:
     p_to: to
   });
   return { data: (result.data ?? []) as CapacityAssociateDay[], error: result.error };
+}, ["capacity-associate-days"], { revalidate: 120 });
+
+export async function loadCapacityAssociateDays(companyId: string, stationCodes: string[], from: string, to: string) {
+  return cachedCapacityAssociateDays(companyId, [...stationCodes].sort(), from, to);
 }
 
 export async function loadCapacityPincodes(companyId: string, stationCode: string, from: string, to: string) {

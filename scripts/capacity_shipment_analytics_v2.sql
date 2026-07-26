@@ -32,6 +32,7 @@ language sql
 stable
 security definer
 set search_path = public
+set statement_timeout = '30s'
 as $$
   with station_scope as (
     select distinct
@@ -77,6 +78,7 @@ language sql
 stable
 security definer
 set search_path = public
+set statement_timeout = '30s'
 as $$
   with station_scope as (
     select distinct
@@ -142,6 +144,7 @@ language sql
 stable
 security definer
 set search_path = public
+set statement_timeout = '30s'
 as $$
   with station_scope as (
     select station.station_code as source_station_code

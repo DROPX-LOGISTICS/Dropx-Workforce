@@ -7,6 +7,7 @@ import { InboxNotificationListener } from "@/components/inbox-notification-liste
 import { PaymentNotificationBell } from "@/components/payment-notification-bell";
 import { PaymentNotificationProvider } from "@/components/payment-notification-provider";
 import { OpsContextSwitcher } from "@/components/ops-context-switcher";
+import { OpsAiChat } from "@/components/ops-ai-chat";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { UserMenu } from "@/components/user-menu";
 import { redirect } from "next/navigation";
@@ -108,6 +109,7 @@ export async function AppShell({ children, active, pageCode }: { children: React
       <DocumentTitle pageName={active} productName={isOpsHost ? "OpsPulse · DropX" : "DropX Dashboard"} />
       <InboxNotificationListener enabled={inboxNotificationsEnabled} />
       {children}
+      {isOpsHost && hasPermission(authorization, "ops_pulse", "access") ? <OpsAiChat /> : null}
     </AppShellFrame>
     </PaymentNotificationProvider>
   );

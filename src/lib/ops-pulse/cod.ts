@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const codFormTypes = ["amazon", "flipkart"] as const;
@@ -501,7 +502,7 @@ export function isMissingCodSetup(error: unknown) {
     (message.includes("relation") && message.includes("does not exist"));
 }
 
-export async function loadCodLocations(companyId: string, locationScopeIds: string[], hasAllLocationAccess: boolean) {
+export const loadCodLocations = cache(async (companyId: string, locationScopeIds: string[], hasAllLocationAccess: boolean) => {
   if (!supabaseAdmin) return { locations: [] as CodLocationRow[], error: "Supabase service role key is not configured." };
   const { data, error } = await supabaseAdmin
     .from("stations")
@@ -517,7 +518,7 @@ export async function loadCodLocations(companyId: string, locationScopeIds: stri
       : rows.filter((location) => locationScopeIds.includes(location.id) && !location.hide_from_location_list),
     error: null
   };
-}
+});
 
 export async function loadCodStationSettings(companyId: string, locationScopeIds: string[], hasAllLocationAccess: boolean) {
   if (!supabaseAdmin) return { rows: [] as CodStationSettingRow[], error: "Supabase service role key is not configured." };

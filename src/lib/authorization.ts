@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { accessPages, ensureAccessPages } from "@/lib/access-pages";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
@@ -83,7 +84,7 @@ async function ensureMissingCurrentAccessPages(companyId: string) {
   }
 }
 
-export async function getAuthorization(): Promise<AuthorizationContext | null> {
+export const getAuthorization = cache(async (): Promise<AuthorizationContext | null> => {
   const supabase = createServerSupabaseClient();
   const { data } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
   if (!data.user || !supabaseAdmin) return null;
@@ -271,7 +272,7 @@ export async function getAuthorization(): Promise<AuthorizationContext | null> {
     roleName,
     userId: profile.id
   };
-}
+});
 
 export function isCompanyOwner(authorization: AuthorizationContext) {
   return authorization.isMasterOwner || authorization.roleCode === "OWNER";

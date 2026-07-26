@@ -1030,7 +1030,8 @@ async function refreshShipmentCoverage(
   sourceType: "delivered_shipment_detail" | "inbound_shipment_detail",
   dates: string[],
   batchId: string,
-  chunkSize = 7
+  chunkSize = 7,
+  retry = 0
 ) {
   if (!supabaseAdmin || !dates.length) return;
   for (let index = 0; index < dates.length; index += chunkSize) {
@@ -1044,7 +1045,12 @@ async function refreshShipmentCoverage(
     if (!result.error) continue;
     const timedOut = /statement timeout|57014|canceling statement/i.test(readableError(result.error));
     if (timedOut && chunk.length > 1) {
-      await refreshShipmentCoverage(companyId, sourceType, chunk, batchId, Math.max(1, Math.floor(chunk.length / 2)));
+      await refreshShipmentCoverage(companyId, sourceType, chunk, batchId, Math.max(1, Math.floor(chunk.length / 2)), retry);
+      continue;
+    }
+    if (timedOut && retry < 3) {
+      await new Promise((resolve) => setTimeout(resolve, 1000 * (retry + 1)));
+      await refreshShipmentCoverage(companyId, sourceType, chunk, batchId, 1, retry + 1);
       continue;
     }
     throw new Error(`dates ${chunk[0]}${chunk.length > 1 ? ` to ${chunk.at(-1)}` : ""}: ${readableError(result.error)}`);

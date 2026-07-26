@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Bell, ChevronRight, Fingerprint, Gauge, LogOut, Menu, Settings, SwitchCamera, UserRound, UsersRound, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { ConnectAttendance } from "./connect-attendance";
+import { ConnectDashboard } from "./connect-dashboard";
 import { AppAccount, ConnectProfileApp } from "./connect-profile-app";
 import { countryCodeOptions } from "@/lib/country-codes";
 
@@ -197,7 +198,7 @@ export function ConnectLoginFlow() {
     </div> : <main className="dx-content">
       {notice ? <div className="dx-alert success">{notice}<button onClick={() => setNotice("")}><X /></button></div> : null}
       {step === "accounts" ? <section className="dx-accounts"><h1>Choose account</h1>{accounts.map((row) => <button key={accountKey(row)} onClick={() => choose(row)}><i>{row.profilePhotoUrl ? <img alt="" src={row.profilePhotoUrl} /> : <UsersRound />}</i><span><strong>{row.companyName}</strong><em>{row.name || row.reference}</em><small>{row.reference} {row.biometricId ? ` | ${row.biometricId}` : ""}</small></span><ChevronRight /></button>)}</section> : null}
-      {step === "dashboard" ? <section className="dx-dashboard"><h1>Dashboard</h1></section> : null}
+      {step === "dashboard" && account ? <ConnectDashboard account={account} onAttendance={() => open("attendance")} onProfile={() => open("profile")} /> : null}
       {step === "profile" && account ? <ConnectProfileApp account={account} onPhoto={(url) => setAvatar(url)} /> : null}
       {step === "attendance" && account ? <ConnectAttendance account={account} /> : null}
       {step === "settings" ? <section className="dx-settings"><h1>Settings</h1><label>Default account<select value={defaultKey} onChange={(e) => { setDefaultKey(e.target.value); localStorage.setItem(defaultKeyName, e.target.value); }}><option value="">Select default account</option>{accounts.map((row) => <option key={accountKey(row)} value={accountKey(row)}>{row.companyName} - {row.reference || row.name}</option>)}</select></label><label className="toggle"><span><strong>Enable biometric login</strong><small>Use Face ID or device authentication when available.</small></span><input defaultChecked={localStorage.getItem(biometricKey) === "true"} onChange={(e) => enrollBiometric(e.target.checked)} type="checkbox" /></label><button onClick={resetPin}>Change PIN</button></section> : null}

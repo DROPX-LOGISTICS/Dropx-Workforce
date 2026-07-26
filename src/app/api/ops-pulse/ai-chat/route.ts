@@ -12,6 +12,50 @@ function textFromResponse(payload: any) {
   if (typeof payload?.output_text === "string") return payload.output_text;
   return (payload?.output ?? []).flatMap((item: any) => item?.content ?? []).map((item: any) => item?.text ?? "").filter(Boolean).join("\n");
 }
+type StationSnapshot = {
+  station: string;
+  name: string | null;
+  latest_delivery_date: string | null;
+  assigned_packages: number;
+  delivered_packages: number;
+  active_delivery_das: number;
+  spr: number;
+  delivery_rate_pct: number | null;
+  present_das: number;
+  active_da_master_count: number;
+  onboarding_pending: number;
+  latest_cps: { date: string; overall: number; target: number; gap: number; total_cost: number } | null;
+  cod: { submissions: number; pending: number; deposited: number; validated: number };
+};
+function formatNumber(value: number, digits = 0) {
+  return value.toLocaleString("en-IN", { maximumFractionDigits: digits, minimumFractionDigits: digits });
+}
+function operationalAnswer(question: string, rows: StationSnapshot[], from: string, to: string) {
+  const q = question.toLowerCase();
+  if (!rows.length) return `No operational data is available in your permitted scope for ${from} to ${to}.`;
+  const line = (row: StationSnapshot) => {
+    const date = row.latest_delivery_date ?? "no delivery date";
+    if (/\bspr\b|shipment.?per|productivity/.test(q)) return `${row.station}: SPR ${formatNumber(row.spr, 2)} (${formatNumber(row.delivered_packages)} delivered ÷ ${formatNumber(row.active_delivery_das)} active delivery DAs) on ${date}.`;
+    if (/onboard|pending da/.test(q)) return `${row.station}: ${formatNumber(row.onboarding_pending)} onboarding pending out of ${formatNumber(row.active_da_master_count)} active DA master records.`;
+    if (/\bcps\b|cost per shipment/.test(q)) return row.latest_cps ? `${row.station}: CPS ₹${formatNumber(row.latest_cps.overall, 2)} versus target ₹${formatNumber(row.latest_cps.target, 2)}; gap ₹${formatNumber(row.latest_cps.gap, 2)} on ${row.latest_cps.date}.` : `${row.station}: CPS data is not available in this period.`;
+    if (/\bcod\b|cash|deposit|remittance/.test(q)) return `${row.station}: ${formatNumber(row.cod.submissions)} COD submissions, ${formatNumber(row.cod.pending)} pending; deposited ₹${formatNumber(row.cod.deposited, 2)}, validated ₹${formatNumber(row.cod.validated, 2)} for ${from} to ${to}.`;
+    if (/assign|deliver|package|shipment|volume/.test(q)) return `${row.station}: ${formatNumber(row.assigned_packages)} assigned, ${formatNumber(row.delivered_packages)} delivered, ${row.delivery_rate_pct == null ? "delivery rate unavailable" : `${formatNumber(row.delivery_rate_pct, 2)}% delivery rate`} on ${date}.`;
+    if (/attendance|present/.test(q)) return `${row.station}: ${formatNumber(row.present_das)} DAs marked present on ${date}.`;
+    return `${row.station}: ${formatNumber(row.delivered_packages)} delivered by ${formatNumber(row.active_delivery_das)} active delivery DAs; SPR ${formatNumber(row.spr, 2)} on ${date}.`;
+  };
+  if (/\bhow many\b.*\bda|active da|da count|delivery associate/.test(q)) {
+    const deliveryTotal = rows.reduce((sum, row) => sum + row.active_delivery_das, 0);
+    const masterTotal = rows.reduce((sum, row) => sum + row.active_da_master_count, 0);
+    if (rows.length === 1) return `${rows[0].station}: ${formatNumber(deliveryTotal)} active delivery DAs on ${rows[0].latest_delivery_date ?? "the latest available delivery date"}; ${formatNumber(masterTotal)} active DA records in the master.`;
+    return `Across ${formatNumber(rows.length)} permitted stations: ${formatNumber(deliveryTotal)} active delivery DAs on each station’s latest available date, and ${formatNumber(masterTotal)} active DA master records.`;
+  }
+  if (/\bwhich\b.*\bcps|cps.*target/.test(q)) {
+    const exceptions = rows.filter((row) => row.latest_cps && row.latest_cps.overall > row.latest_cps.target).sort((a, b) => (b.latest_cps?.gap ?? 0) - (a.latest_cps?.gap ?? 0));
+    return exceptions.length ? `CPS above target (higher cost than target):\n${exceptions.slice(0, 15).map(line).join("\n")}` : "No permitted station with available CPS data is above its target in this period.";
+  }
+  const visible = rows.slice(0, 12);
+  return `${visible.map(line).join("\n")}${rows.length > visible.length ? `\nShowing 12 of ${rows.length} stations. Ask for a station code to narrow the answer.` : ""}`;
+}
 
 export async function POST(request: Request) {
   const authorization = await getAuthorization();
@@ -40,7 +84,7 @@ export async function POST(request: Request) {
   ]);
   const error = shipment.error || attendance.error || executives.error || cps.error || cod.error;
   if (error) return Response.json({ error: error.message }, { status: 500 });
-  const byStation = locations.map((location) => {
+  const byStation: StationSnapshot[] = locations.map((location) => {
     const shipments = (shipment.data ?? []).filter((row) => row.station_code === location.station_code);
     const latestDate = shipments.map((row) => row.work_date).sort().at(-1) ?? null;
     const latest = latestDate ? shipments.filter((row) => row.work_date === latestDate) : [];
@@ -52,7 +96,7 @@ export async function POST(request: Request) {
     const stationExecutives = (executives.data ?? []).filter((row) => row.location_id === location.id);
     const codRows = (cod.data ?? []).filter((row) => row.station_code === location.station_code);
     return {
-      station: location.station_code, name: location.station_name || location.city, cluster: location.cluster, region: location.region,
+      station: location.station_code, name: location.station_name || location.city || null, cluster: location.cluster, region: location.region,
       latest_delivery_date: latestDate, assigned_packages: assigned, delivered_packages: delivered, active_delivery_das: activeDas,
       spr: activeDas ? Number((delivered / activeDas).toFixed(2)) : 0,
       delivery_rate_pct: assigned ? Number((delivered / assigned * 100).toFixed(2)) : null,
@@ -64,7 +108,7 @@ export async function POST(request: Request) {
     };
   });
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return Response.json({ error: "Ops AI is not configured. Add OPENAI_API_KEY in the Ops Pulse Vercel project." }, { status: 503 });
+  if (!apiKey) return Response.json({ answer: operationalAnswer(question, byStation, from, rangeTo), range: { from, to: rangeTo }, stations: codes, mode: "operational" });
   const ai = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -76,6 +120,6 @@ export async function POST(request: Request) {
     })
   });
   const payload = await ai.json();
-  if (!ai.ok) return Response.json({ error: payload?.error?.message ?? "AI request failed." }, { status: 502 });
+  if (!ai.ok) return Response.json({ answer: operationalAnswer(question, byStation, from, rangeTo), range: { from, to: rangeTo }, stations: codes, mode: "operational" });
   return Response.json({ answer: textFromResponse(payload), range: { from, to: rangeTo }, stations: codes });
 }

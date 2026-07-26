@@ -659,7 +659,7 @@ export async function loadExecutiveReconciliationRows(
   const codRosterLocations = amazonCodLocations.length ? amazonCodLocations : locations;
   const scopedLocations = params.locationId
     ? codRosterLocations.filter((location) => location.id === params.locationId)
-    : codRosterLocations;
+    : codRosterLocations.slice(0, 1);
   const stationScope = Array.from(new Set(scopedLocations.map((location) => location.station_code).filter(Boolean)));
   if (!stationScope.length) return { businessDate, locations: codRosterLocations, rows: [] as ExecutiveReconciliationViewRow[], error: null };
 

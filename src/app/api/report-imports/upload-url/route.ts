@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   }
   const path = `${companyId}/${authorization.userId}/${crypto.randomUUID()}-${safeFileName(body.fileName)}`;
   let signed = await supabaseAdmin.storage.from(bucket).createSignedUploadUrl(path);
-  if (signed.error && /bucket.*not found/i.test(signed.error.message)) {
+  if (signed.error && /(bucket.*not found|related resource does not exist)/i.test(signed.error.message)) {
     const created = await supabaseAdmin.storage.createBucket(bucket, {
       fileSizeLimit: 100 * 1024 * 1024,
       public: false

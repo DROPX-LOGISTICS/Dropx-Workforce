@@ -757,8 +757,21 @@ export async function loadExecutiveReconciliationRows(
     sourceFrom,
     businessDate
   );
-  const latestAssociateOwner = new Map<string, (typeof associateSourceResult.data)[number]>();
+  const latestSourceDateByStation = new Map<string, string>();
   associateSourceResult.data.forEach((associate) => {
+    const stationCode = String(associate.station_code ?? "").trim().toUpperCase();
+    const workDate = String(associate.work_date ?? "");
+    if (!stationCode || !workDate) return;
+    const current = latestSourceDateByStation.get(stationCode);
+    if (!current || workDate > current) latestSourceDateByStation.set(stationCode, workDate);
+  });
+  const latestAssociateOwner = new Map<string, (typeof associateSourceResult.data)[number]>();
+  associateSourceResult.data
+    .filter((associate) => (
+      latestSourceDateByStation.get(String(associate.station_code ?? "").trim().toUpperCase())
+      === String(associate.work_date ?? "")
+    ))
+    .forEach((associate) => {
     const providerEmployeeId = String(associate.provider_employee_id ?? "").trim().toUpperCase();
     const stationCode = String(associate.station_code ?? "").trim().toUpperCase();
     const workDate = String(associate.work_date ?? "");

@@ -187,6 +187,7 @@ export async function ReportUploadPageContent({
   const expectedShipmentStations = shipmentStations
     .filter((station) =>
       !station.parentStationId
+      && station.code.toUpperCase() !== "TEST"
       && station.provider.toUpperCase().includes("AMAZON")
       && ["DSP", "EDSP"].includes(station.model.toUpperCase()))
     .sort((a, b) => a.code.localeCompare(b.code));

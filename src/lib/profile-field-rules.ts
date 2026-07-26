@@ -115,6 +115,10 @@ export function normalizeProfileFieldRules(value: unknown): DesignationProfileFi
   };
 }
 
+export function normalizeCategoryProfileFieldRules(value: unknown): ProfileFieldChannelRules {
+  return normalizeChannelRules(value, workforceProfileFields);
+}
+
 export function emptyProfileFieldRules(): DesignationProfileFieldRules {
   return normalizeProfileFieldRules(null);
 }

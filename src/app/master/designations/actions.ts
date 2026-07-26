@@ -6,7 +6,6 @@ import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
-import { normalizeProfileFieldRules } from "@/lib/profile-field-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 function clean(value: FormDataEntryValue | null) {
@@ -60,24 +59,9 @@ function modelIds(formData: FormData) {
 }
 
 function onboardingCategories(formData: FormData) {
-  return normalizeDesignationCategories(formData.getAll("onboarding_categories"));
-}
-
-function profileFieldRules(formData: FormData) {
-  const categories = ["employees", "field_executives", "contractors", "vendors", "workers"] as const;
-  return normalizeProfileFieldRules(Object.fromEntries(categories.map((category) => [
-    category,
-    {
-      dropx_one: {
-        enabled: formData.getAll(`${category}_dropx_one_enabled_fields`),
-        required: formData.getAll(`${category}_dropx_one_required_fields`)
-      },
-      dashboard: {
-        enabled: formData.getAll(`${category}_dashboard_enabled_fields`),
-        required: formData.getAll(`${category}_dashboard_required_fields`)
-      }
-    }
-  ])));
+  const categories = normalizeDesignationCategories(formData.getAll("onboarding_categories"), []);
+  if (!categories.length) throw new Error("Select at least one workforce category.");
+  return categories;
 }
 
 export async function createDesignation(formData: FormData) {
@@ -95,7 +79,6 @@ export async function createDesignation(formData: FormData) {
       model_ids: modelIds(formData),
       location_ids: [],
       onboarding_categories: onboardingCategories(formData),
-      profile_field_rules: profileFieldRules(formData),
       is_active: true
     }, companyId));
     if (error) throw new Error(error.message);
@@ -128,7 +111,6 @@ export async function updateDesignation(formData: FormData) {
         model_ids: modelIds(formData),
         location_ids: [],
         onboarding_categories: onboardingCategories(formData),
-        profile_field_rules: profileFieldRules(formData),
         is_active: status,
         updated_at: new Date().toISOString()
       })

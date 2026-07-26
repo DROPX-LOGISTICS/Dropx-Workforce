@@ -10,8 +10,8 @@ import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
-import { normalizeProfileFieldRules } from "@/lib/profile-field-rules";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
+import { loadWorkforceCategoryRules } from "@/lib/workforce-category-rules";
 import { bulkImportEmployees, createEmployee, reviewEmployeeProfile, updateEmployee } from "./actions";
 
 type LocationRow = {
@@ -405,12 +405,18 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
     helper: location.station_name ?? undefined,
     modelId: location.location_model_id ?? null
   }));
+  const employeeCategoryRules = await loadWorkforceCategoryRules(
+    companyId,
+    "employees",
+    designations[0]?.profile_field_rules,
+    "employees"
+  );
   const designationOptions = designations.map((designation) => ({
     value: designation.id,
     label: designation.name,
     helper: designation.code,
     modelIds: designation.model_ids ?? [],
-    dashboardRules: normalizeProfileFieldRules(designation.profile_field_rules).employees.dashboard
+    dashboardRules: employeeCategoryRules.dashboard
   }));
 
   return (

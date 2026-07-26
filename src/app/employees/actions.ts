@@ -12,9 +12,9 @@ import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
 import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
-import { normalizeProfileFieldRules } from "@/lib/profile-field-rules";
 import { saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { loadWorkforceCategoryRules } from "@/lib/workforce-category-rules";
 import { sendEmployeeOnboardingWhatsApp } from "@/lib/whatsapp";
 
 function required(value: FormDataEntryValue | null, field: string) {
@@ -255,7 +255,12 @@ export async function updateEmployee(formData: FormData) {
     if (designationResult.error) throw new Error(designationResult.error.message);
     if (!locationResult.data) throw new Error("Selected location is not available for this company.");
     if (!designationResult.data) throw new Error("Selected designation is not available.");
-    const dashboardRules = normalizeProfileFieldRules(designationResult.data.profile_field_rules).employees.dashboard;
+    const dashboardRules = (await loadWorkforceCategoryRules(
+      companyId,
+      "employees",
+      designationResult.data.profile_field_rules,
+      "employees"
+    )).dashboard;
     const dashboardEnabled = new Set(dashboardRules.enabled);
     const filteredExtraPayload = Object.fromEntries(
       Object.entries(extraPayload).filter(([key]) => dashboardEnabled.has(key))

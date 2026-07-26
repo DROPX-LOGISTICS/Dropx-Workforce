@@ -6,16 +6,20 @@ export const designationCategoryOptions = [
   { value: "workers", label: "Workers" }
 ] as const;
 
-export type DesignationCategory = typeof designationCategoryOptions[number]["value"];
+export type DesignationCategory = string;
 
-const validCategories = new Set<string>(designationCategoryOptions.map((option) => option.value));
+function normalizeCategoryCode(value: unknown) {
+  const code = String(value ?? "").trim().toLowerCase() === "delivery_executives"
+    ? "field_executives"
+    : String(value ?? "").trim().toLowerCase();
+  return /^[a-z0-9_]+$/.test(code) ? code : null;
+}
 
 export function normalizeDesignationCategories(value: unknown, fallback: DesignationCategory[] = ["employees"]) {
   const values = Array.isArray(value) ? value : [];
   const normalized = Array.from(new Set(values
-    .map((item) => String(item ?? "").trim())
-    .map((item) => item === "delivery_executives" ? "field_executives" : item)
-    .filter((item) => validCategories.has(item)))) as DesignationCategory[];
+    .map(normalizeCategoryCode)
+    .filter((item): item is string => Boolean(item))));
   return normalized.length ? normalized : fallback;
 }
 

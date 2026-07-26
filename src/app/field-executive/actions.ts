@@ -12,9 +12,9 @@ import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
 import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
-import { normalizeProfileFieldRules } from "@/lib/profile-field-rules";
 import { saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { loadWorkforceCategoryRules } from "@/lib/workforce-category-rules";
 import { sendFieldExecutiveOnboardingWhatsApp } from "@/lib/whatsapp";
 import {
   nonEmployeeConfigForRoute,
@@ -374,7 +374,12 @@ export async function updateFieldExecutive(formData: FormData) {
       .eq("is_active", true)
       .maybeSingle();
     if (designationResult.error) throw new Error(designationResult.error.message);
-    const dashboardRules = normalizeProfileFieldRules(designationResult.data?.profile_field_rules)[config.designationCategory].dashboard;
+    const dashboardRules = (await loadWorkforceCategoryRules(
+      companyId,
+      config.designationCategory,
+      designationResult.data?.profile_field_rules,
+      config.designationCategory
+    )).dashboard;
     const profilePayloadKeys: Record<string, keyof typeof payload> = {
       gender: "gender",
       date_of_birth: "date_of_birth",

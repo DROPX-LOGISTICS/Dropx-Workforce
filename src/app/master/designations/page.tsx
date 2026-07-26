@@ -46,6 +46,12 @@ type DesignationRow = {
   is_active: boolean;
 };
 
+type WorkforceCategoryRow = {
+  code: string;
+  name: string;
+  is_active: boolean;
+};
+
 function loadFlash() {
   const raw = cookies().get("dropx_designation_flash")?.value;
   if (!raw) return { error: null as string | null, notice: null as string | null };
@@ -72,15 +78,17 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
       providers: [] as ProviderRow[],
       locations: [] as LocationRow[],
       models: [] as ModelRow[],
+      categories: [] as WorkforceCategoryRow[],
       error: "Supabase service role key is not configured."
     };
   }
 
-  const [designationsResult, providersResult, locationsResult, modelsResult] = await Promise.all([
+  const [designationsResult, providersResult, locationsResult, modelsResult, categoriesResult] = await Promise.all([
     supabaseAdmin.from("designations").select("id, code, name, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("providers").select("id, code, name, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("stations").select("id, station_code, station_name, hide_from_location_list").eq("company_id", companyId).eq("is_active", true).order("station_code"),
-    supabaseAdmin.from("location_models").select("id, provider_id, code, name, is_active, providers (code, name)").eq("company_id", companyId).eq("is_active", true).order("code")
+    supabaseAdmin.from("location_models").select("id, provider_id, code, name, is_active, providers (code, name)").eq("company_id", companyId).eq("is_active", true).order("code"),
+    supabaseAdmin.from("workforce_categories").select("code, name, is_active").eq("company_id", companyId).eq("is_active", true).order("sort_order").order("name")
   ]);
   let designationRows: unknown[] = designationsResult.data ?? [];
   let designationError: { message?: string } | null = designationsResult.error;
@@ -112,6 +120,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
       providers: [] as ProviderRow[],
       locations: [] as LocationRow[],
       models: [] as ModelRow[],
+      categories: [] as WorkforceCategoryRow[],
       error: designationError.message
     };
   }
@@ -121,6 +130,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
       providers: [] as ProviderRow[],
       locations: [] as LocationRow[],
       models: [] as ModelRow[],
+      categories: [] as WorkforceCategoryRow[],
       error: providersResult.error.message
     };
   }
@@ -130,6 +140,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
       providers: [] as ProviderRow[],
       locations: [] as LocationRow[],
       models: [] as ModelRow[],
+      categories: [] as WorkforceCategoryRow[],
       error: locationsResult.error.message
     };
   }
@@ -139,9 +150,17 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
       providers: [] as ProviderRow[],
       locations: [] as LocationRow[],
       models: [] as ModelRow[],
+      categories: [] as WorkforceCategoryRow[],
       error: modelsResult.error.message
     };
   }
+  const fallbackCategories: WorkforceCategoryRow[] = [
+    { code: "employees", name: "Employees", is_active: true },
+    { code: "field_executives", name: "Field Executives", is_active: true },
+    { code: "contractors", name: "Independent Contractor", is_active: true },
+    { code: "vendors", name: "Vendors", is_active: true },
+    { code: "workers", name: "Workers", is_active: true }
+  ];
 
   const locations = hasAllLocationAccess
     ? (locationsResult.data ?? [])
@@ -155,6 +174,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
     providers: (providersResult.data ?? []) as ProviderRow[],
     locations: locations as LocationRow[],
     models: (modelsResult.data ?? []) as ModelRow[],
+    categories: categoriesResult.error ? fallbackCategories : (categoriesResult.data ?? []) as WorkforceCategoryRow[],
     error: null
   };
 }
@@ -169,11 +189,12 @@ export default async function DesignationsPage({
   const authorization = await requirePagePermission("designations", "access");
   const companyId = requireCompanyId(authorization);
   const pagePermission = authorization.permissions.designations;
-  const { designations, providers, models, error } = await loadDesignations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
+  const { designations, providers, models, categories, error } = await loadDesignations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const flash = loadFlash();
   const query = String(searchParams?.q ?? "").trim().toLowerCase();
   const providerById = new Map(providers.map((provider) => [provider.id, provider]));
   const modelById = new Map(models.map((model) => [model.id, model]));
+  const categoryNameByCode = new Map(categories.map((category) => [category.code, category.name]));
   const filteredDesignations = designations.filter((designation) => {
     const providerText = designation.provider_ids
       .map((providerId) => providerById.get(providerId))
@@ -185,7 +206,7 @@ export default async function DesignationsPage({
       .filter(Boolean)
       .map((model) => `${model?.code} ${model?.name}`)
       .join(" ");
-    const categoryText = normalizeDesignationCategories(designation.onboarding_categories).map(designationCategoryLabel).join(" ");
+    const categoryText = normalizeDesignationCategories(designation.onboarding_categories).map((category) => categoryNameByCode.get(category) ?? designationCategoryLabel(category)).join(" ");
     return `${designation.code} ${designation.name} ${providerText} ${modelText} ${categoryText}`.toLowerCase().includes(query);
   });
   const editDesignation = designations.find((designation) => designation.id === searchParams?.edit) ?? null;
@@ -259,7 +280,7 @@ export default async function DesignationsPage({
                       <td>
                         <div className="mini-chip-list">
                           {normalizeDesignationCategories(designation.onboarding_categories).map((category) => (
-                            <span className="mini-tag" key={category}>{designationCategoryLabel(category)}</span>
+                            <span className="mini-tag" key={category}>{categoryNameByCode.get(category) ?? designationCategoryLabel(category)}</span>
                           ))}
                         </div>
                       </td>
@@ -294,7 +315,7 @@ export default async function DesignationsPage({
               </div>
               <PendingLink className="icon-button" href="/master/designations" scroll={false} aria-label="Close">x</PendingLink>
             </div>
-            <DesignationForm action={createDesignation} models={models.map((model) => ({
+            <DesignationForm action={createDesignation} categories={categories} models={models.map((model) => ({
               id: model.id,
               code: model.code,
               name: model.name,
@@ -314,7 +335,7 @@ export default async function DesignationsPage({
               </div>
               <PendingLink className="icon-button" href="/master/designations" scroll={false} aria-label="Close">x</PendingLink>
             </div>
-            <DesignationForm action={updateDesignation} initial={editDesignation} models={models.map((model) => ({
+            <DesignationForm action={updateDesignation} categories={categories} initial={editDesignation} models={models.map((model) => ({
               id: model.id,
               code: model.code,
               name: model.name,

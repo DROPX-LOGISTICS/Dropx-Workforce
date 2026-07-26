@@ -11,8 +11,8 @@ import { type AuthorizationContext, requirePagePermission } from "@/lib/authoriz
 import { requireCompanyId } from "@/lib/company-scope";
 import { countryCodeOptions } from "@/lib/country-codes";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
-import { normalizeProfileFieldRules } from "@/lib/profile-field-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { loadWorkforceCategoryRules } from "@/lib/workforce-category-rules";
 import {
   nonEmployeeConfigForRoute,
   type NonEmployeeRoute
@@ -756,6 +756,12 @@ export async function FieldExecutivePageContent({
   const permission = authorization.permissions[pageCode];
   const workforceConfig = nonEmployeeConfigForRoute(returnPath);
   const { executives, locations, designations, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, designationCategoryFilter, workforceConfig.table, editId, viewId);
+  const categoryRules = await loadWorkforceCategoryRules(
+    requireCompanyId(authorization),
+    workforceConfig.designationCategory,
+    designations[0]?.profile_field_rules,
+    workforceConfig.designationCategory
+  );
   const activeMessage = error ?? errorMessage ?? notice;
   const needsOperationModeMigration = Boolean(activeMessage?.toLowerCase().includes("operation_mode_id"));
   const locationOptions = locations.map((location) => ({
@@ -771,7 +777,7 @@ export async function FieldExecutivePageContent({
     label: designation.name,
     helper: designation.code,
     modelIds: designation.model_ids ?? [],
-    dashboardRules: normalizeProfileFieldRules(designation.profile_field_rules)[workforceConfig.designationCategory].dashboard
+    dashboardRules: categoryRules.dashboard
   }));
 
   return (

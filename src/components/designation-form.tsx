@@ -3,15 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { SubmitButton } from "@/components/submit-button";
-import { designationCategoryOptions, normalizeDesignationCategories, type DesignationCategory } from "@/lib/designation-categories";
+import { normalizeDesignationCategories, type DesignationCategory } from "@/lib/designation-categories";
 import {
-  employeeProfileFields,
-  fieldExecutiveProfileFields,
-  normalizeProfileFieldRules,
-  type DesignationProfileFieldRules,
   type ProfileFieldChannelRules,
   type ProfileFieldRule,
-  type ProfileFieldRuleCategory,
   type ProfileFieldRuleSet
 } from "@/lib/profile-field-rules";
 
@@ -40,10 +35,17 @@ type DesignationInitial = {
   is_active: boolean;
 };
 
+export type WorkforceCategoryOption = {
+  code: string;
+  name: string;
+};
+
 function CategoryMultiSelect({
+  categories,
   selected,
   setSelected
 }: {
+  categories: WorkforceCategoryOption[];
   selected: DesignationCategory[];
   setSelected: (value: DesignationCategory[]) => void;
 }) {
@@ -51,7 +53,7 @@ function CategoryMultiSelect({
   const rootRef = useRef<HTMLDivElement>(null);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const summary = selected.length
-    ? selected.map((category) => designationCategoryOptions.find((option) => option.value === category)?.label ?? category).join(", ")
+    ? selected.map((category) => categories.find((option) => option.code === category)?.name ?? category).join(", ")
     : "Select categories";
 
   useEffect(() => {
@@ -90,15 +92,15 @@ function CategoryMultiSelect({
       {open ? (
         <div className="multi-select-menu designation-category-menu">
           <div className="multi-select-options compact">
-            {designationCategoryOptions.map((category) => (
-              <label className="multi-select-option" key={category.value}>
+            {categories.map((category) => (
+              <label className="multi-select-option" key={category.code}>
                 <input
-                  checked={selectedSet.has(category.value)}
+                  checked={selectedSet.has(category.code)}
                   className="matrix-checkbox"
-                  onChange={() => toggle(category.value)}
+                  onChange={() => toggle(category.code)}
                   type="checkbox"
                 />
-                <span><strong>{category.label}</strong></span>
+                <span><strong>{category.name}</strong></span>
               </label>
             ))}
           </div>
@@ -108,14 +110,14 @@ function CategoryMultiSelect({
   );
 }
 
-function FieldRuleMatrix({
+export function FieldRuleMatrix({
   fields,
   namePrefix,
   rules,
   title
 }: {
   fields: ProfileFieldRule[];
-  namePrefix: ProfileFieldRuleCategory;
+  namePrefix?: string;
   rules: ProfileFieldChannelRules;
   title: string;
 }) {
@@ -153,10 +155,10 @@ function FieldRuleMatrix({
 
   return (
     <section className="designation-field-rules">
-      {dropxOne.enabled.map((key) => <input key={`dropx-enabled-${key}`} name={`${namePrefix}_dropx_one_enabled_fields`} type="hidden" value={key} />)}
-      {dropxOne.required.map((key) => <input key={`dropx-required-${key}`} name={`${namePrefix}_dropx_one_required_fields`} type="hidden" value={key} />)}
-      {dashboard.enabled.map((key) => <input key={`dashboard-enabled-${key}`} name={`${namePrefix}_dashboard_enabled_fields`} type="hidden" value={key} />)}
-      {dashboard.required.map((key) => <input key={`dashboard-required-${key}`} name={`${namePrefix}_dashboard_required_fields`} type="hidden" value={key} />)}
+      {dropxOne.enabled.map((key) => <input key={`dropx-enabled-${key}`} name={`${namePrefix ? `${namePrefix}_` : ""}dropx_one_enabled_fields`} type="hidden" value={key} />)}
+      {dropxOne.required.map((key) => <input key={`dropx-required-${key}`} name={`${namePrefix ? `${namePrefix}_` : ""}dropx_one_required_fields`} type="hidden" value={key} />)}
+      {dashboard.enabled.map((key) => <input key={`dashboard-enabled-${key}`} name={`${namePrefix ? `${namePrefix}_` : ""}dashboard_enabled_fields`} type="hidden" value={key} />)}
+      {dashboard.required.map((key) => <input key={`dashboard-required-${key}`} name={`${namePrefix ? `${namePrefix}_` : ""}dashboard_required_fields`} type="hidden" value={key} />)}
       <div className="designation-field-rules-head">
         <h3>{title}</h3>
         <p className="subtle">Configure visibility and required fields independently for DropX One and Dashboard.</p>
@@ -312,11 +314,13 @@ function ModelMultiSelect({
 
 export function DesignationForm({
   action,
+  categories,
   initial,
   models,
   submitLabel = "Add designation"
 }: {
   action: (formData: FormData) => void;
+  categories: WorkforceCategoryOption[];
   initial?: DesignationInitial | null;
   providers?: ProviderOption[];
   models: ModelOption[];
@@ -326,17 +330,6 @@ export function DesignationForm({
   const [selectedCategories, setSelectedCategories] = useState<DesignationCategory[]>(
     normalizeDesignationCategories(initial?.onboarding_categories)
   );
-  const fieldRules = normalizeProfileFieldRules(initial?.profile_field_rules);
-  const categoryFieldConfig: Record<DesignationCategory, {
-    fields: ProfileFieldRule[];
-    title: string;
-  }> = {
-    employees: { fields: employeeProfileFields, title: "Employee fields" },
-    field_executives: { fields: fieldExecutiveProfileFields, title: "Field executive fields" },
-    contractors: { fields: fieldExecutiveProfileFields, title: "Independent Contractor fields" },
-    vendors: { fields: fieldExecutiveProfileFields, title: "Vendor fields" },
-    workers: { fields: fieldExecutiveProfileFields, title: "Worker fields" }
-  };
 
   return (
     <form action={action} className="designation-form">
@@ -358,7 +351,7 @@ export function DesignationForm({
         </label>
         <label>
           Category
-          <CategoryMultiSelect selected={selectedCategories} setSelected={setSelectedCategories} />
+          <CategoryMultiSelect categories={categories} selected={selectedCategories} setSelected={setSelectedCategories} />
         </label>
         <label>
           Models
@@ -374,24 +367,9 @@ export function DesignationForm({
           </label>
         ) : null}
       </div>
-      {selectedCategories.length ? (
-        <div className={`designation-field-rule-grid ${selectedCategories.length === 1 ? "single" : ""}`}>
-          {selectedCategories.map((category) => {
-            const config = categoryFieldConfig[category];
-            return (
-              <FieldRuleMatrix
-                fields={config.fields}
-                key={category}
-                namePrefix={category}
-                rules={fieldRules[category]}
-                title={config.title}
-              />
-            );
-          })}
-        </div>
-      ) : (
-        <div className="designation-field-rule-empty">Select one or more categories to configure onboarding fields.</div>
-      )}
+      {!selectedCategories.length ? (
+        <div className="designation-field-rule-empty">Select one or more workforce categories.</div>
+      ) : null}
       <div className="form-actions right">
         <SubmitButton className="button" pendingText="Saving">{submitLabel}</SubmitButton>
       </div>

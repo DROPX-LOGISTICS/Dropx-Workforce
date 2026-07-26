@@ -2,9 +2,9 @@ import { createHash } from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { connectSessionCookieName, findConnectAccounts } from "../../../../src/lib/connect-auth";
-import { normalizeProfileFieldRules } from "../../../../src/lib/profile-field-rules";
 import { saveProfileVerifications } from "../../../../src/lib/profile-verifications";
 import { supabaseAdmin } from "../../../../src/lib/supabase-admin";
+import { loadWorkforceCategoryRules } from "../../../../src/lib/workforce-category-rules";
 
 type EmployeeProfileRow = {
   id: string;
@@ -179,7 +179,12 @@ async function signedProfileUrl(path: string | null) {
 async function serializeEmployee(row: EmployeeProfileRow) {
   const station = firstRelation(row.stations);
   const designation = firstRelation(row.designations);
-  const fieldRules = normalizeProfileFieldRules(designation?.profile_field_rules).employees.dropx_one;
+  const fieldRules = (await loadWorkforceCategoryRules(
+    row.company_id,
+    "employees",
+    designation?.profile_field_rules,
+    "employees"
+  )).dropx_one;
   return {
     id: row.id,
     readOnly: {

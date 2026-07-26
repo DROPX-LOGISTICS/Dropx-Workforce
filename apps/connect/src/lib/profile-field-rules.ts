@@ -23,6 +23,8 @@ export type DesignationProfileFieldRules = {
   workers: ProfileFieldChannelRules;
 };
 
+export type ProfileFieldRuleCategory = keyof DesignationProfileFieldRules;
+
 export const workforceProfileFields: ProfileFieldRule[] = [
   { key: "gender", label: "Gender", group: "Personal details", kind: "select" },
   { key: "date_of_birth", label: "Date of birth", group: "Personal details", kind: "date" },
@@ -111,4 +113,8 @@ export function normalizeProfileFieldRules(value: unknown): DesignationProfileFi
     vendors: normalizeChannelRules(record.vendors ?? legacyNonEmployeeRules, fieldExecutiveProfileFields),
     workers: normalizeChannelRules(record.workers ?? legacyNonEmployeeRules, fieldExecutiveProfileFields)
   };
+}
+
+export function normalizeCategoryProfileFieldRules(value: unknown): ProfileFieldChannelRules {
+  return normalizeChannelRules(value, workforceProfileFields);
 }

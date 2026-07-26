@@ -2,9 +2,9 @@ import { createHash } from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { connectSessionCookieName, findConnectAccounts } from "../../../../src/lib/connect-auth";
-import { normalizeProfileFieldRules } from "../../../../src/lib/profile-field-rules";
 import { saveProfileVerifications } from "../../../../src/lib/profile-verifications";
 import { supabaseAdmin } from "../../../../src/lib/supabase-admin";
+import { loadWorkforceCategoryRules } from "../../../../src/lib/workforce-category-rules";
 import {
   isNonEmployeeProfileType,
   profileFieldRuleCategory,
@@ -207,7 +207,13 @@ async function serializeExecutive(row: FieldExecutiveRow, profileType: NonEmploy
       .eq("name", row.designation)
       .maybeSingle()
     : null;
-  const fieldRules = normalizeProfileFieldRules(designationResult?.data?.profile_field_rules)[profileFieldRuleCategory(profileType)].dropx_one;
+  const categoryCode = profileFieldRuleCategory(profileType);
+  const fieldRules = (await loadWorkforceCategoryRules(
+    row.company_id,
+    categoryCode,
+    designationResult?.data?.profile_field_rules,
+    categoryCode
+  )).dropx_one;
   return {
     id: row.id,
     readOnly: {
@@ -322,7 +328,13 @@ export async function POST(request: Request) {
         .eq("name", currentExecutive.designation)
         .maybeSingle()
       : null;
-    const rules = normalizeProfileFieldRules(designationResult?.data?.profile_field_rules)[profileFieldRuleCategory(account.profileType)].dropx_one;
+    const categoryCode = profileFieldRuleCategory(account.profileType);
+    const rules = (await loadWorkforceCategoryRules(
+      account.companyId,
+      categoryCode,
+      designationResult?.data?.profile_field_rules,
+      categoryCode
+    )).dropx_one;
     const requiredFields = new Set(rules.required);
     const isRequired = (key: string) => requiredFields.has(key);
     const textValue = (key: string, label: string) => isRequired(key) ? requiredText(formData.get(key), label) : cleanText(formData.get(key));

@@ -149,6 +149,33 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const responseRows = rows.map((row) => ({
+      date: row.punchDate,
+      status: row.status,
+      inTime: row.inTime,
+      outTime: row.outTime,
+      workHours: row.workHours,
+      punchCount: row.punchCount,
+      remark: row.remark,
+      regularization: requestByDate.get(row.punchDate) ?? null
+    }));
+    const attendanceDates = new Set(responseRows.map((row) => row.date));
+    for (const [date, regularization] of requestByDate) {
+      if (!attendanceDates.has(date)) {
+        responseRows.push({
+          date,
+          status: "",
+          inTime: "",
+          outTime: "",
+          workHours: "",
+          punchCount: 0,
+          remark: "",
+          regularization
+        });
+      }
+    }
+    responseRows.sort((left, right) => left.date.localeCompare(right.date));
+
     return NextResponse.json({
       month: range.label,
       summary: {
@@ -157,16 +184,7 @@ export async function GET(request: NextRequest) {
         absent,
         misPunch
       },
-      rows: rows.map((row) => ({
-        date: row.punchDate,
-        status: row.status,
-        inTime: row.inTime,
-        outTime: row.outTime,
-        workHours: row.workHours,
-        punchCount: row.punchCount,
-        remark: row.remark,
-        regularization: requestByDate.get(row.punchDate) ?? null
-      }))
+      rows: responseRows
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load attendance.";

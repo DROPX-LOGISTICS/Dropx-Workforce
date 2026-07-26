@@ -56,6 +56,19 @@ function dayStatus(row: Row | undefined, future: boolean) {
   return row.status === "P" ? "present" : "off";
 }
 
+function emptyAttendanceRow(date: string): Row {
+  return {
+    date,
+    status: "",
+    inTime: "",
+    outTime: "",
+    workHours: "",
+    punchCount: 0,
+    remark: "",
+    regularization: null
+  };
+}
+
 export function ConnectAttendance({ account }: { account: Account }) {
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -127,7 +140,8 @@ export function ConnectAttendance({ account }: { account: Account }) {
               {Array.from({ length: days }, (_, index) => index + 1).map((day) => {
                 const row = rowsByDay.get(day);
                 const future = new Date(year, monthNumber - 1, day) > now;
-                return <button className={`${dayStatus(row, future)} ${selected === row && row ? "selected" : ""}`} key={day} onClick={() => row && setSelected(row)}>{day}</button>;
+                const date = `${year}-${String(monthNumber).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                return <button className={`${dayStatus(row, future)} ${selected?.date === date ? "selected" : ""}`} disabled={future} key={day} onClick={() => !future && setSelected(row ?? emptyAttendanceRow(date))}>{day}</button>;
               })}
             </div>
             <div className="dx-legend"><span className="present">Present</span><span className="absent">Absent</span><span className="miss">Mis Punch</span><span className="off">Off / Future</span></div>
@@ -146,7 +160,7 @@ export function ConnectAttendance({ account }: { account: Account }) {
           </div> : null}
         </div>
         {tab === "calendar" && selected ? <div className="dx-selected-day">
-          <header><div><CalendarDays /><strong>{selected.date.split("-").reverse().join("/")}</strong></div><em className={dayStatus(selected, false)}>{selected.status === "P" ? "Present" : "Absent"}</em></header>
+          <header><div><CalendarDays /><strong>{selected.date.split("-").reverse().join("/")}</strong></div><em className={dayStatus(selected, false)}>{selected.status === "P" ? "Present" : selected.status === "A" ? "Absent" : "No punch"}</em></header>
           <div><span><LogIn /><small>IN</small><strong>{selected.inTime || "--:--"}</strong></span><span><LogOut /><small>OUT</small><strong>{selected.outTime || "--:--"}</strong></span><span><Clock3 /><small>WORK</small><strong>{selected.workHours || "00:00"}</strong></span><span><Fingerprint /><small>PUNCHES</small><strong>{selected.punchCount}</strong></span></div>
           <footer>
             {selected.regularization ? <span className={`dx-request-status ${selected.regularization.status}`}>Regularization {selected.regularization.status}</span> : null}
@@ -228,7 +242,7 @@ function RegularizationSheet({
       <form onSubmit={submit}>
         <div className="dx-regularization-day">
           <span><small>DATE</small><strong>{row.date.split("-").reverse().join("/")}</strong></span>
-          <em>{row.status === "P" ? "Present" : row.status === "A" ? "Absent" : row.status}</em>
+          <em>{row.status === "P" ? "Present" : row.status === "A" ? "Absent" : "No punch"}</em>
         </div>
         <div className="dx-time-grid">
           <label>Requested IN<input required type="time" value={inTime} onChange={(event) => setInTime(event.target.value)} /></label>

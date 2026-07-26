@@ -687,11 +687,12 @@ function parseAmountNear(text, labels) {
 }
 
 function hasMfaOrHumanBlocker(text) {
-  return /otp|one time password|two.?step|multi.?factor|verification code|captcha|approve.*notification|authentication required/i.test(text);
+  return /otp|one time password|two.?step|multi.?factor|captcha|approve.*notification|authentication required|enter(?:\s+the)?\s+verification code|verification code\s+(?:sent|required|expires)/i.test(text);
 }
 
 function isLoginVisible(text, url) {
-  return /sign in|login|password|email|username/i.test(text) || /signin|login/i.test(url);
+  if (/signin|login/i.test(url)) return true;
+  return /(?:^|\n)\s*(?:sign in|log in|login)\s*(?:$|\n)|enter\s+(?:your\s+)?(?:password|email|username)/i.test(text);
 }
 
 function sessionStatePath(payload) {
@@ -1022,15 +1023,49 @@ async function setDate(page, checkDate) {
       if (!(await input.isVisible().catch(() => false))) continue;
       const type = await input.getAttribute("type").catch(() => "");
       const value = type === "date" ? date : displayDate;
+      await input.click({ clickCount: 3 }).catch(() => null);
+      await input.press("Control+A").catch(() => null);
       await input.fill(value).catch(() => null);
       await input.evaluate((element, nextValue) => {
-        element.value = nextValue;
+        const prototype = element instanceof HTMLInputElement
+          ? HTMLInputElement.prototype
+          : HTMLTextAreaElement.prototype;
+        const valueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+        if (valueSetter) valueSetter.call(element, nextValue);
+        else element.value = nextValue;
         element.dispatchEvent(new Event("input", { bubbles: true }));
         element.dispatchEvent(new Event("change", { bubbles: true }));
+        element.dispatchEvent(new Event("blur", { bubbles: true }));
       }, value).catch(() => null);
       await input.press("Enter").catch(() => null);
-      await page.waitForTimeout(500);
-      return { changed: true, message: `Date set to ${displayDate}.` };
+      await input.press("Tab").catch(() => null);
+      await page.waitForTimeout(900);
+
+      const observedValue = await input.inputValue().catch(() => "");
+      const normalizedObserved = /^\d{4}-\d{2}-\d{2}$/.test(observedValue)
+        ? formatSccDate(observedValue)
+        : observedValue;
+      const visibleValue = observedValue || await input.getAttribute("value").catch(() => "") || "";
+      const changed = observedValue === date ||
+        observedValue === displayDate ||
+        normalizedObserved === displayDate ||
+        visibleValue === date ||
+        visibleValue === displayDate;
+      if (changed) {
+        return {
+          changed: true,
+          message: `Date set to ${displayDate}.`,
+          requested_value: displayDate,
+          observed_value: visibleValue
+        };
+      }
+
+      return {
+        changed: false,
+        message: `SCC kept ${visibleValue || "its existing date"} instead of ${displayDate}.`,
+        requested_value: displayDate,
+        observed_value: visibleValue
+      };
     }
   }
 
@@ -1369,6 +1404,29 @@ async function runSccCheck(payload) {
     await page.waitForTimeout(1500);
     const evidence = await collectPageEvidence(page);
     const debugScreenshot = await captureDebug(page, payload.run_id, checkType);
+    if (!dateResult.changed) {
+      return {
+        status: "Manual Review",
+        pending_count: 0,
+        pending_amount: 0,
+        summary: dateResult.message,
+        evidence: {
+          ...evidence,
+          debug_screenshot: debugScreenshot,
+          station_selector: stationResult,
+          date_selector: dateResult,
+          driver_selector: driverResult
+        },
+        raw_result: {
+          login: { ...loginResult, session_reused: hasStoredSession, session_saved: true },
+          station_selector: stationResult,
+          date_selector: dateResult,
+          driver_selector: driverResult,
+          inspected_url: evidence.url,
+          page_title: evidence.title
+        }
+      };
+    }
     let summary;
     if (checkType === "prepared_deposit") {
       summary = summarizePreparedDeposit(evidence, stationCode, checkDate);

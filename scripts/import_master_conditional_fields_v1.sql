@@ -8,7 +8,7 @@ alter table public.report_import_master
 update public.report_import_master
 set
   requires_station = true,
-  station_scope = 'amazon_dsp_xpd',
+  station_scope = 'amazon_dsp_xpt',
   requires_report_date = true,
   report_date_label = case
     when source_code = 'inbound_shipment_detail' then 'Expected at station'

@@ -16,9 +16,9 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const sourceOptions = reports.filter((report) => report.is_active);
-  const [sourceType, setSourceType] = useState(sourceOptions[0]?.source_code ?? "");
+  const [sourceType, setSourceType] = useState("");
   const [stationCode, setStationCode] = useState(stations[0]?.code ?? "");
-  const [reportDate, setReportDate] = useState(indiaDate(sourceOptions[0]?.date_default_offset ?? 0));
+  const [reportDate, setReportDate] = useState(indiaDate());
   const [message, setMessage] = useState<string | null>(null);
   const [summary, setSummary] = useState<{ duplicateRows?: number; imported?: number; skipped?: number; totalRows?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +28,10 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
     setMessage(null);
     setSummary(null);
     setError(null);
+    if (!sourceType) {
+      setError("Select the report you are uploading.");
+      return;
+    }
     const file = fileRef.current?.files?.[0];
     if (!file) {
       setError("Choose a report file first.");
@@ -60,12 +64,12 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
     });
   }
 
-  const selected = sourceOptions.find((option) => option.source_code === sourceType) ?? sourceOptions[0];
+  const selected = sourceOptions.find((option) => option.source_code === sourceType);
   const requiresStation = Boolean(selected?.requires_station);
   const requiresReportDate = Boolean(selected?.requires_report_date);
   const hasConditionalFields = requiresStation || requiresReportDate;
-  const eligibleStations = selected?.station_scope === "amazon_dsp_xpd"
-    ? stations.filter((station) => station.provider.toUpperCase().includes("AMAZON") && ["DSP", "EDSP", "XPD", "XPT", "AMXL"].includes(station.model.toUpperCase()))
+  const eligibleStations = selected?.station_scope === "amazon_dsp_xpt" || selected?.station_scope === "amazon_dsp_xpd"
+    ? stations.filter((station) => station.provider.toUpperCase().includes("AMAZON") && ["DSP", "EDSP", "XPT"].includes(station.model.toUpperCase()))
     : stations;
   const effectiveStationCode = eligibleStations.some((station) => station.code === stationCode)
     ? stationCode
@@ -98,6 +102,7 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
             const next = sourceOptions.find((option) => option.source_code === nextType);
             setReportDate(indiaDate(next?.date_default_offset ?? 0));
           }}>
+            <option value="">Select report</option>
             {sourceOptions.map((option) => <option key={option.source_code} value={option.source_code}>{option.parser_type === "inbound_shipment_detail" ? "Inbound data" : option.parser_type === "delivered_shipment_detail" ? "Delivered data" : option.name}</option>)}
           </select>
         </label>

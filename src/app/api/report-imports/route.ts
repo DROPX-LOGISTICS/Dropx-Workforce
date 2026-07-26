@@ -1037,7 +1037,7 @@ export async function POST(request: Request) {
       const provider = providerName(location).toUpperCase();
       const model = locationModelName(location).toUpperCase();
       return location.station_code === selectedStation
-        && (masterData.station_scope !== "amazon_dsp_xpd" || (provider.includes("AMAZON") && ["DSP", "EDSP", "XPD", "XPT", "AMXL"].includes(model)));
+        && (!["amazon_dsp_xpt", "amazon_dsp_xpd"].includes(masterData.station_scope) || (provider.includes("AMAZON") && ["DSP", "EDSP", "XPT"].includes(model)));
     });
     if (!eligible) return Response.json({ error: "Select an eligible station for this report." }, { status: 400 });
   }

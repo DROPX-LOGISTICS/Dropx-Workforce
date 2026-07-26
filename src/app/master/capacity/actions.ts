@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
-import { deleteCapacityRegionMap, deleteCapacityRule, deleteCapacityServiceRoute, saveCapacityRegionMap, saveCapacityRule, saveCapacityServiceRoute, saveShipmentSizeRule } from "@/lib/ops-pulse/capacity";
+import { deleteCapacityRegionMap, deleteCapacityRule, deleteCapacityServiceRoute, saveCapacityMapLayerSnapshots, saveCapacityRegionMap, saveCapacityRule, saveCapacityServiceRoute, saveShipmentSizeRule } from "@/lib/ops-pulse/capacity";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { isAmazonEdspXptLocation } from "@/lib/ops-pulse/operating-context";
 
@@ -104,6 +104,19 @@ export async function removeCapacityRegionMap(formData: FormData) {
   revalidatePath("/master/capacity");
   revalidatePath("/ops-pulse/capacity");
   redirect(`/master/capacity?${error ? `error=${encodeURIComponent(error)}` : "map_deleted=1"}`);
+}
+
+export async function importCapacityMapKml(formData: FormData) {
+  const authorization = await requirePagePermission("cod_master", "edit");
+  const companyId = requireCompanyId(authorization);
+  const mapUrl = String(formData.get("map_url") ?? "").trim();
+  const file = formData.get("kml_file");
+  const error = !(file instanceof File) || !file.name.toLowerCase().endsWith(".kml")
+    ? "Choose a Google My Maps KML export."
+    : await saveCapacityMapLayerSnapshots(companyId, mapUrl, await file.text());
+  revalidatePath("/master/capacity");
+  revalidatePath("/ops-pulse/capacity");
+  redirect(`/master/capacity?${error ? `error=${encodeURIComponent(error)}` : "map_layers_saved=1"}`);
 }
 
 export async function upsertShipmentSizeRule(formData: FormData) {

@@ -139,7 +139,7 @@ export default async function CapacityStationPage({ params, searchParams }: { pa
     map.matchField === "station" ? stationCode : map.matchField === "state" ? location.state : location.region
   ));
   const capacityMapUrl = capacityMap ? capacityMapEmbedUrl(capacityMap.mapUrl) : null;
-  const stationLayer = capacityMap ? await loadGoogleMyMapsStationLayer(capacityMap.mapUrl, stationCode) : { features: [], error: null };
+  const stationLayer = capacityMap ? await loadGoogleMyMapsStationLayer(companyId, capacityMap.mapUrl, stationCode) : { features: [], error: null };
   const fallbackAction = !daily.length ? "No shipment-ID data is available for this date range."
     : requiredIds != null && requiredIds > averageIds ? `Average demand requires ${requiredIds} IDs including ${buffer}% buffer; current daily average is ${fmt(averageIds, 1)}.`
     : requiredIds != null ? `Average road-active capacity covers demand; validate ad hoc IDs before closing hiring requirements.` : "Configure target SPR in Capacity Master to calculate required IDs.";

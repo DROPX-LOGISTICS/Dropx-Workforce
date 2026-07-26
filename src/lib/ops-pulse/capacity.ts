@@ -56,6 +56,10 @@ function mapSourceCode(matchField: string, matchValue: string) {
   return `capacity_map_${matchField}_${matchValue.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
 }
 
+function mapSnapshotSourceCode(mapId: string, stationCode: string) {
+  return `capacity_map_snapshot_${mapId}_${stationCode}`.toLowerCase().replace(/[^a-z0-9_]+/g, "_").slice(0, 180);
+}
+
 function routeSourceCode(route: CapacityServiceRoute) {
   const token = `${route.stationCode}_${route.routeName}_${route.daId}`.toLowerCase().replace(/[^a-z0-9]+/g, "_");
   return `capacity_service_route_${token}`.slice(0, 180);
@@ -234,7 +238,51 @@ function decodeKmlText(value: string) {
     .replace(/&quot;/g, "\"").replace(/&#39;/g, "'").trim();
 }
 
-export async function loadGoogleMyMapsStationLayer(mapUrl: string, stationCode: string) {
+export function parseGoogleMyMapsKml(kml: string) {
+  const layers: Record<string, CapacityMapLayerFeature[]> = {};
+  [...kml.matchAll(/<Folder(?:\s[^>]*)?>([\s\S]*?)<\/Folder>/gi)].forEach((match) => {
+    const body = match[1];
+    const layerName = decodeKmlText(body.match(/<name>([\s\S]*?)<\/name>/i)?.[1] ?? "").toUpperCase();
+    if (!layerName) return;
+    layers[layerName] = [...body.matchAll(/<Placemark(?:\s[^>]*)?>([\s\S]*?)<\/Placemark>/gi)].map((placemark) => {
+      const featureBody = placemark[1];
+      const name = decodeKmlText(featureBody.match(/<name>([\s\S]*?)<\/name>/i)?.[1] ?? "Service point");
+      const coordinateText = featureBody.match(/<coordinates>([\s\S]*?)<\/coordinates>/i)?.[1] ?? "";
+      const coordinates = coordinateText.trim().split(/\s+/).map((token) => {
+        const [lng, lat] = token.split(",").map(Number);
+        return { lat, lng };
+      }).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+      return { name, coordinates };
+    }).filter((feature) => feature.coordinates.length);
+  });
+  return layers;
+}
+
+export async function saveCapacityMapLayerSnapshots(companyId: string, mapUrl: string, kml: string) {
+  if (!supabaseAdmin) return "Database service is unavailable.";
+  let mapId = "";
+  try { mapId = new URL(mapUrl).searchParams.get("mid") ?? ""; } catch {}
+  if (!mapId) return "Map ID is missing.";
+  const layers = parseGoogleMyMapsKml(kml);
+  const records = Object.entries(layers).filter(([, features]) => features.length).map(([stationCode, features]) => ({
+    company_id: companyId,
+    source_code: mapSnapshotSourceCode(mapId, stationCode),
+    name: `${stationCode} map layer snapshot`,
+    description: JSON.stringify({ mapId, stationCode, features }),
+    file_types: [],
+    day_offset: 0,
+    frequency: "daily",
+    parser_type: "capacity_map_layer_snapshot",
+    dedupe_fields: ["map_id", "station_code"],
+    is_active: true,
+    updated_at: new Date().toISOString()
+  }));
+  if (!records.length) return "No station layers were found in this KML file.";
+  const result = await supabaseAdmin.from("report_import_master").upsert(records, { onConflict: "company_id,source_code" });
+  return result.error?.message ?? null;
+}
+
+export async function loadGoogleMyMapsStationLayer(companyId: string, mapUrl: string, stationCode: string) {
   try {
     const parsed = new URL(mapUrl);
     const mapId = parsed.searchParams.get("mid");
@@ -242,26 +290,20 @@ export async function loadGoogleMyMapsStationLayer(mapUrl: string, stationCode: 
     const response = await fetch(`https://www.google.com/maps/d/kml?mid=${encodeURIComponent(mapId)}&forcekml=1`, {
       next: { revalidate: 3600 }
     });
-    if (!response.ok) return { features: [] as CapacityMapLayerFeature[], error: "The service-area map could not be read." };
-    const kml = await response.text();
-    const folders = [...kml.matchAll(/<Folder(?:\s[^>]*)?>([\s\S]*?)<\/Folder>/gi)];
     const wanted = stationCode.trim().toUpperCase();
-    const folder = folders.map((match) => match[1]).find((body) => {
-      const name = body.match(/<name>([\s\S]*?)<\/name>/i)?.[1] ?? "";
-      return decodeKmlText(name).toUpperCase() === wanted;
-    });
-    if (!folder) return { features: [] as CapacityMapLayerFeature[], error: `No ${wanted} layer exists in this map.` };
-    const features = [...folder.matchAll(/<Placemark(?:\s[^>]*)?>([\s\S]*?)<\/Placemark>/gi)].map((match) => {
-      const body = match[1];
-      const name = decodeKmlText(body.match(/<name>([\s\S]*?)<\/name>/i)?.[1] ?? "Service point");
-      const coordinateText = body.match(/<coordinates>([\s\S]*?)<\/coordinates>/i)?.[1] ?? "";
-      const coordinates = coordinateText.trim().split(/\s+/).map((token) => {
-        const [lng, lat] = token.split(",").map(Number);
-        return { lat, lng };
-      }).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
-      return { name, coordinates };
-    }).filter((feature) => feature.coordinates.length);
-    return { features, error: null as string | null };
+    if (response.ok) {
+      const layers = parseGoogleMyMapsKml(await response.text());
+      if (layers[wanted]?.length) return { features: layers[wanted], error: null as string | null };
+    }
+    if (supabaseAdmin) {
+      const snapshot = await supabaseAdmin.from("report_import_master").select("description")
+        .eq("company_id", companyId).eq("source_code", mapSnapshotSourceCode(mapId, wanted)).eq("is_active", true).maybeSingle();
+      if (snapshot.data?.description) {
+        const saved = JSON.parse(snapshot.data.description) as { features?: CapacityMapLayerFeature[] };
+        if (saved.features?.length) return { features: saved.features, error: null as string | null };
+      }
+    }
+    return { features: [] as CapacityMapLayerFeature[], error: `No readable ${wanted} layer exists in this map.` };
   } catch {
     return { features: [] as CapacityMapLayerFeature[], error: "The service-area map URL is invalid." };
   }

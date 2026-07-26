@@ -744,20 +744,43 @@ export async function loadExecutiveReconciliationRows(
   const sourceDate = new Date(`${businessDate}T00:00:00Z`);
   sourceDate.setUTCDate(sourceDate.getUTCDate() - 30);
   const sourceFrom = sourceDate.toISOString().slice(0, 10);
-  const associateSourceResult = await loadShipmentCountAssociateDays(companyId, stationScope, sourceFrom, businessDate);
-  const latestSourceDateByStation = new Map<string, string>();
+  // A parent station and one of its XPT stations can both contain the same DA
+  // in historical shipment rows. Resolve ownership across the complete Amazon
+  // network before narrowing to the selected station, otherwise opening each
+  // station independently makes the same DA appear in both rosters.
+  const networkStationScope = Array.from(new Set(
+    codRosterLocations.map((location) => String(location.station_code ?? "").trim().toUpperCase()).filter(Boolean)
+  ));
+  const associateSourceResult = await loadShipmentCountAssociateDays(
+    companyId,
+    networkStationScope,
+    sourceFrom,
+    businessDate
+  );
+  const latestAssociateOwner = new Map<string, (typeof associateSourceResult.data)[number]>();
   associateSourceResult.data.forEach((associate) => {
+    const providerEmployeeId = String(associate.provider_employee_id ?? "").trim().toUpperCase();
     const stationCode = String(associate.station_code ?? "").trim().toUpperCase();
     const workDate = String(associate.work_date ?? "");
-    if (!stationCode || !workDate) return;
-    const current = latestSourceDateByStation.get(stationCode);
-    if (!current || workDate > current) latestSourceDateByStation.set(stationCode, workDate);
+    if (!providerEmployeeId || !stationCode || !workDate) return;
+
+    const current = latestAssociateOwner.get(providerEmployeeId);
+    const currentDate = String(current?.work_date ?? "");
+    const delivery = Number(associate.total_delivery ?? 0);
+    const currentDelivery = Number(current?.total_delivery ?? 0);
+    const currentStation = String(current?.station_code ?? "").trim().toUpperCase();
+    if (
+      !current
+      || workDate > currentDate
+      || (workDate === currentDate && delivery > currentDelivery)
+      || (workDate === currentDate && delivery === currentDelivery && stationCode < currentStation)
+    ) {
+      latestAssociateOwner.set(providerEmployeeId, associate);
+    }
   });
   const latestAssociateByKey = new Map<string, (typeof associateSourceResult.data)[number]>();
-  associateSourceResult.data
-    .filter((associate) =>
-      latestSourceDateByStation.get(String(associate.station_code ?? "").trim().toUpperCase()) === String(associate.work_date ?? "")
-    )
+  Array.from(latestAssociateOwner.values())
+    .filter((associate) => stationScope.includes(String(associate.station_code ?? "").trim().toUpperCase()))
     .forEach((associate) => {
     const providerEmployeeId = String(associate.provider_employee_id ?? "").trim();
     const stationCode = String(associate.station_code ?? "").trim();

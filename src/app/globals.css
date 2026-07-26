@@ -9887,6 +9887,50 @@ tbody tr:hover td {
   grid-column: 1 / -1;
 }
 
+.cash-live-status {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.cash-live-status strong {
+  color: #172033;
+}
+
+.cash-live-status .cash-live-result {
+  margin-left: auto;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-weight: 850;
+}
+
+.cash-live-status.short .cash-live-result {
+  background: #fff3cd;
+  color: #9a6700;
+}
+
+.cash-live-status.excess .cash-live-result {
+  background: #fee2e2;
+  color: #b42318;
+}
+
+.cash-live-status.matched .cash-live-result {
+  background: #dcfce7;
+  color: #137a43;
+}
+
+.cash-live-status.waiting .cash-live-result {
+  background: #e2e8f0;
+  color: #475569;
+}
+
 .reconciliation-add-action {
   justify-content: flex-start;
 }
@@ -9962,6 +10006,16 @@ tbody tr:hover td {
 
   .cash-breakdown-grid {
     grid-template-columns: repeat(2, minmax(70px, 1fr));
+  }
+
+  .cash-live-status {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .cash-live-status .cash-live-result {
+    margin-left: 0;
   }
 }
 

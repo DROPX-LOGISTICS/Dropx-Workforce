@@ -30,7 +30,7 @@ export default async function ImportMasterPage() {
       />
       {result.error ? (
         <section className="panel message-panel error"><div className="panel-body"><strong>{result.error.message}</strong></div></section>
-      ) : <ImportMasterPanel reports={(result.data ?? []) as ReportImportMaster[]} />}
+      ) : <ImportMasterPanel reports={((result.data ?? []) as ReportImportMaster[]).filter((report) => report.file_types.length > 0)} />}
     </AppShell>
   );
 }

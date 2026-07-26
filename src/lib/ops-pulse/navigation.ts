@@ -5,9 +5,10 @@ const commonStart: NavItem[] = [
   { code: "ops_pulse", label: "Command Center", href: "/", icon: "#" },
   { code: "daily_submission", label: "Daily Operations", href: "/daily-submission", icon: "D" },
   { code: "cod_reports", label: "Performance", href: "/performance", icon: "P" },
-  { code: "cps_associates", label: "Capacity", href: "/capacity", icon: "A" },
-  { code: "cod_reports", label: "Reports", href: "/reports", icon: "R" }
+  { code: "cps_associates", label: "Capacity", href: "/capacity", icon: "A" }
 ];
+
+const reports: NavItem = { code: "cod_reports", label: "Reports", href: "/reports", icon: "R" };
 
 const cps: NavItem = {
   code: "cps",
@@ -94,7 +95,7 @@ function modelOperations(mode: OperatingMode): NavItem {
 
 export function opsNavItemsForMode(mode: OperatingMode): NavItem[] {
   const start = mode === "amazon_now" ? commonStart.filter((item) => item.label !== "Capacity") : commonStart;
-  return [...start, modelOperations(mode), cps, ...administration];
+  return [...start, modelOperations(mode), cps, reports, ...administration];
 }
 
 export function normalizeOpsClient(value: string | null | undefined) {

@@ -4951,6 +4951,81 @@ tbody tr:hover td {
   gap: 18px;
 }
 
+.ops-report-builder {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, .05);
+  max-width: 1050px;
+  padding: 18px;
+}
+
+.ops-report-choice,
+.ops-report-parameters {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+}
+
+.ops-report-choice {
+  grid-template-columns: 180px minmax(240px, 320px) 1fr;
+}
+
+.ops-report-parameters {
+  border-top: 1px solid #e2e8f0;
+  grid-template-columns: 150px 150px minmax(220px, 1fr) auto;
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.ops-report-choice label,
+.ops-report-parameters > label {
+  color: #64748b;
+  display: grid;
+  font-size: 11px;
+  font-weight: 800;
+  gap: 5px;
+  text-transform: uppercase;
+}
+
+.ops-report-choice select,
+.ops-report-parameters select,
+.ops-report-parameters input {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  color: #0f172a;
+  font: inherit;
+  min-height: 42px;
+  padding: 0 10px;
+}
+
+.ops-report-description {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 2px 0 3px;
+}
+
+.ops-report-description strong { color: #0f172a; font-size: 15px; }
+.ops-report-description span { color: #64748b; font-size: 12px; line-height: 1.4; }
+.ops-report-parameters details { position: relative; }
+.ops-report-parameters details > summary {
+  align-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 0 12px;
+}
+.ops-report-parameters details > summary span { color: #64748b; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.ops-report-parameters details > summary strong { font-size: 12px; }
+.ops-report-parameters .ops-report-scope { left: 0; min-width: 560px; position: absolute; top: 48px; z-index: 20; }
+.ops-report-download { min-width: 132px; white-space: nowrap; }
+.ops-report-download.disabled { opacity: .45; pointer-events: none; }
+
 .ops-report-filters {
   position: relative;
   z-index: 20;

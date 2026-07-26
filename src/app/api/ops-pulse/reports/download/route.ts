@@ -3,6 +3,7 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { isOpsReportType } from "@/lib/ops-pulse/report-catalog";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import * as XLSX from "xlsx";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -21,6 +22,18 @@ function stationScope(requested: string[], permitted: string[]) {
 function response(headers: string[], rows: unknown[][], filename: string) {
   const body = [headers.map(csv).join(","), ...rows.map((row) => row.map(csv).join(","))].join("\r\n");
   return new Response(`\uFEFF${body}`, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${filename}"`, "Cache-Control": "no-store" } });
+}
+function workbookResponse(sheets: Array<{ name: string; rows: Record<string, unknown>[] }>, filename: string) {
+  const workbook = XLSX.utils.book_new();
+  sheets.forEach((sheet) => XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(sheet.rows), sheet.name.slice(0, 31)));
+  const body = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+  return new Response(body, { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${filename}"`, "Cache-Control": "no-store" } });
+}
+function promiseDate(raw: Record<string, unknown> | null) {
+  const value = raw?.["Promised Delivery Date"];
+  if (!value) return "";
+  const parsed = new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
 }
 async function allRows<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>, cap = 100000) {
   const data: T[] = [];
@@ -53,6 +66,81 @@ export async function GET(request: Request) {
   const codes = stationScope((url.searchParams.get("stations") ?? "").split(",").filter(Boolean), permittedCodes);
   if (!codes.length) return Response.json({ error: "No permitted stations." }, { status: 403 });
   const suffix = `${from}-to-${to}.csv`;
+
+  if (type === "shipment_station" || type === "shipment_pincode" || type === "shipment_promise" || type === "station_360") {
+    const facts = await allRows((start, end) => db.from("delivered_shipment_facts")
+      .select("work_date,station_code,postal_code,driver_id,package_count,actual_weight_kg,length_cm,width_cm,height_cm,cubic_volume_cm3,raw_payload")
+      .eq("company_id", companyId).in("station_code", codes).gte("work_date", from).lte("work_date", to).order("work_date").range(start, end));
+    if (facts.error) return Response.json({ error: facts.error.message }, { status: 500 });
+    const sizeMaster = await db.from("report_import_master").select("description").eq("company_id", companyId).eq("source_code", "capacity_shipment_size_rule").maybeSingle();
+    let sizeRule = { maxLengthCm: 46, maxWidthCm: 36, maxHeightCm: 20, maxWeightKg: 5, dimensionalDivisor: 5000, maxDimensionalWeightKg: 5 };
+    try { sizeRule = { ...sizeRule, ...(JSON.parse(sizeMaster.data?.description ?? "{}") as typeof sizeRule) }; } catch {}
+    const size = (row: typeof facts.data[number]) => {
+      const complete = row.actual_weight_kg != null && row.length_cm != null && row.width_cm != null && row.height_cm != null;
+      if (!complete) return "Unclassified";
+      const dimensional = n(row.cubic_volume_cm3) / sizeRule.dimensionalDivisor;
+      return n(row.actual_weight_kg) > sizeRule.maxWeightKg || n(row.length_cm) > sizeRule.maxLengthCm || n(row.width_cm) > sizeRule.maxWidthCm || n(row.height_cm) > sizeRule.maxHeightCm || dimensional > sizeRule.maxDimensionalWeightKg ? "Volumetric" : "Small";
+    };
+    const stationMap = new Map<string, { date: string; station: string; delivered: number; drivers: Set<string>; pincodes: Set<string>; small: number; volumetric: number; unclassified: number }>();
+    const pincodeMap = new Map<string, { station: string; pincode: string; delivered: number; drivers: Set<string>; small: number; volumetric: number; unclassified: number }>();
+    const promiseMap = new Map<string, { station: string; pincode: string; promise: string; status: string; shipMethod: string; shipOption: string; volume: number }>();
+    (facts.data ?? []).forEach((row) => {
+      const count = Math.max(1, n(row.package_count));
+      const classification = size(row);
+      const stationKey = `${row.work_date}|${row.station_code}`;
+      const station = stationMap.get(stationKey) ?? { date: row.work_date, station: row.station_code, delivered: 0, drivers: new Set<string>(), pincodes: new Set<string>(), small: 0, volumetric: 0, unclassified: 0 };
+      station.delivered += count; if (row.driver_id) station.drivers.add(row.driver_id); if (row.postal_code) station.pincodes.add(row.postal_code);
+      if (classification === "Small") station.small += count; else if (classification === "Volumetric") station.volumetric += count; else station.unclassified += count;
+      stationMap.set(stationKey, station);
+      const pincodeKey = `${row.station_code}|${row.postal_code}`;
+      const pin = pincodeMap.get(pincodeKey) ?? { station: row.station_code, pincode: row.postal_code, delivered: 0, drivers: new Set<string>(), small: 0, volumetric: 0, unclassified: 0 };
+      pin.delivered += count; if (row.driver_id) pin.drivers.add(row.driver_id);
+      if (classification === "Small") pin.small += count; else if (classification === "Volumetric") pin.volumetric += count; else pin.unclassified += count;
+      pincodeMap.set(pincodeKey, pin);
+      const raw = row.raw_payload as Record<string, unknown> | null;
+      const promised = promiseDate(raw);
+      const promiseStatus = !promised ? "Promise unavailable" : row.work_date < promised ? "Early" : row.work_date === promised ? "On promise" : "Late";
+      const shipMethod = String(raw?.["Ship Method"] ?? "");
+      const shipOption = String(raw?.["Ship Option"] ?? "");
+      const promiseKey = `${row.station_code}|${row.postal_code}|${promised}|${promiseStatus}|${shipMethod}|${shipOption}`;
+      const promise = promiseMap.get(promiseKey) ?? { station: row.station_code, pincode: row.postal_code, promise: promised, status: promiseStatus, shipMethod, shipOption, volume: 0 };
+      promise.volume += count; promiseMap.set(promiseKey, promise);
+    });
+    const stationRows = [...stationMap.values()].sort((a, b) => `${a.date}${a.station}`.localeCompare(`${b.date}${b.station}`)).map((row) => ({
+      Date: row.date, Station: row.station, Delivered: row.delivered, "Road-active IDs": row.drivers.size, SPR: row.drivers.size ? Number((row.delivered / row.drivers.size).toFixed(2)) : 0, Pincodes: row.pincodes.size,
+      Small: row.small, "Small %": row.delivered ? Number((row.small / row.delivered * 100).toFixed(2)) : 0,
+      Volumetric: row.volumetric, "Volumetric %": row.delivered ? Number((row.volumetric / row.delivered * 100).toFixed(2)) : 0, Unclassified: row.unclassified
+    }));
+    const pincodeRows = [...pincodeMap.values()].sort((a, b) => a.station.localeCompare(b.station) || b.delivered - a.delivered || a.pincode.localeCompare(b.pincode)).map((row) => ({
+      Station: row.station, Pincode: row.pincode, Delivered: row.delivered, "Serving IDs": row.drivers.size,
+      Small: row.small, "Small %": row.delivered ? Number((row.small / row.delivered * 100).toFixed(2)) : 0,
+      Volumetric: row.volumetric, "Volumetric %": row.delivered ? Number((row.volumetric / row.delivered * 100).toFixed(2)) : 0,
+      Unclassified: row.unclassified, "Unclassified %": row.delivered ? Number((row.unclassified / row.delivered * 100).toFixed(2)) : 0
+    }));
+    const promiseRows = [...promiseMap.values()].sort((a, b) => `${a.station}${a.pincode}${a.promise}`.localeCompare(`${b.station}${b.pincode}${b.promise}`)).map((row) => ({
+      Station: row.station, Pincode: row.pincode, "Promise date": row.promise, "Promise position": row.status, "Ship method": row.shipMethod, "Ship option": row.shipOption, Volume: row.volume
+    }));
+    if (type === "shipment_station") return response(Object.keys(stationRows[0] ?? { Date: "", Station: "" }), stationRows.map(Object.values), `shipment-station-${suffix}`);
+    if (type === "shipment_pincode") return response(Object.keys(pincodeRows[0] ?? { Station: "", Pincode: "" }), pincodeRows.map(Object.values), `shipment-pincode-${suffix}`);
+    if (type === "shipment_promise") return response(Object.keys(promiseRows[0] ?? { Station: "", Pincode: "" }), promiseRows.map(Object.values), `customer-promise-${suffix}`);
+    const inbound = await allRows((start, end) => db.from("inbound_shipment_facts").select("expected_arrival_date,station_code,postal_code,package_count")
+      .eq("company_id", companyId).in("station_code", codes).gte("expected_arrival_date", from).lte("expected_arrival_date", to).order("expected_arrival_date").range(start, end));
+    const assigned = await allRows((start, end) => db.from("cps_shipment_daily").select("work_date,station_code,assigned_count,total_delivery,provider_employee_id")
+      .eq("company_id", companyId).in("station_code", codes).gte("work_date", from).lte("work_date", to).order("work_date").range(start, end));
+    if (inbound.error || assigned.error) return Response.json({ error: inbound.error?.message || assigned.error?.message }, { status: 500 });
+    const inboundRows = (inbound.data ?? []).map((row) => ({ Date: row.expected_arrival_date, Station: row.station_code, Pincode: row.postal_code, Volume: Math.max(1, n(row.package_count)) }));
+    const groundRows = (assigned.data ?? []).map((row) => ({ Date: row.work_date, Station: row.station_code, "Associate ID": row.provider_employee_id, Assigned: n(row.assigned_count), Delivered: n(row.total_delivery) }));
+    return workbookResponse([{ name: "Daily summary", rows: stationRows }, { name: "Pincode mix", rows: pincodeRows }, { name: "Customer promise", rows: promiseRows }, { name: "Inbound", rows: inboundRows }, { name: "Assigned ground input", rows: groundRows }], `station-360-${from}-to-${to}.xlsx`);
+  }
+
+  if (type === "inbound_daily") {
+    const result = await allRows((start, end) => db.from("inbound_shipment_facts").select("expected_arrival_date,station_code,postal_code,package_count")
+      .eq("company_id", companyId).in("station_code", codes).gte("expected_arrival_date", from).lte("expected_arrival_date", to).order("expected_arrival_date").range(start, end));
+    if (result.error) return Response.json({ error: result.error.message }, { status: 500 });
+    const map = new Map<string, number>();
+    (result.data ?? []).forEach((row) => { const key = `${row.expected_arrival_date}|${row.station_code}|${row.postal_code}`; map.set(key, (map.get(key) ?? 0) + Math.max(1, n(row.package_count))); });
+    return response(["Expected arrival date", "Station", "Pincode", "Inbound volume"], [...map.entries()].sort().map(([key, volume]) => [...key.split("|"), volume]), `inbound-volume-${suffix}`);
+  }
 
   if (type === "da_delivery" || type === "station_delivery" || type === "capacity") {
     const shipment = await allRows((start, end) => db.from("cps_shipment_daily").select("work_date,station_code,provider_employee_id,provider_employee_name,assigned_count,amazon_delivery,swa_delivery,c_return,mfn,mfn_return,total_delivery,total_activity,mapping_status,da_total_pay")

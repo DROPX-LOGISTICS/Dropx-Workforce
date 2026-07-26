@@ -23,32 +23,7 @@ export type DesignationProfileFieldRules = {
   workers: ProfileFieldChannelRules;
 };
 
-export const employeeProfileFields: ProfileFieldRule[] = [
-  { key: "gender", label: "Gender", group: "Personal details", kind: "select" },
-  { key: "date_of_birth", label: "Date of birth", group: "Personal details", kind: "date" },
-  { key: "aadhaar_number", label: "Aadhaar number", group: "Personal details", kind: "number" },
-  { key: "pan_number", label: "PAN number", group: "Personal details", kind: "text" },
-  { key: "father_name", label: "Father name", group: "Personal details", kind: "text" },
-  { key: "blood_group", label: "Blood group", group: "Personal details", kind: "select" },
-  { key: "address", label: "Address", group: "Address", kind: "text" },
-  { key: "state_code", label: "State code", group: "Address", kind: "select" },
-  { key: "pincode", label: "Pincode", group: "Address", kind: "number" },
-  { key: "landmark", label: "Landmark", group: "Address", kind: "text" },
-  { key: "bank_account_no", label: "Bank account no", group: "Bank details", kind: "text" },
-  { key: "ifsc", label: "IFSC", group: "Bank details", kind: "text" },
-  { key: "pf_uan", label: "PF UAN", group: "Statutory details", kind: "text" },
-  { key: "pf_account_no", label: "PF Account No", group: "Statutory details", kind: "text" },
-  { key: "esi_no", label: "ESI No", group: "Statutory details", kind: "text" },
-  { key: "emergency_contact_number", label: "Emergency contact number", group: "Emergency contact", kind: "number" },
-  { key: "emergency_contact_name", label: "Emergency contact name", group: "Emergency contact", kind: "text" },
-  { key: "emergency_contact_relation", label: "Emergency relation", group: "Emergency contact", kind: "select" },
-  { key: "aadhaar_front", label: "Aadhaar front upload", group: "Uploads", kind: "file" },
-  { key: "aadhaar_back", label: "Aadhaar back upload", group: "Uploads", kind: "file" },
-  { key: "pan_upload", label: "PAN upload", group: "Uploads", kind: "file" },
-  { key: "profile_photo", label: "Photo upload", group: "Uploads", kind: "file" }
-];
-
-export const fieldExecutiveProfileFields: ProfileFieldRule[] = [
+export const workforceProfileFields: ProfileFieldRule[] = [
   { key: "gender", label: "Gender", group: "Personal details", kind: "select" },
   { key: "date_of_birth", label: "Date of birth", group: "Personal details", kind: "date" },
   { key: "aadhaar_number", label: "Aadhaar number", group: "Personal details", kind: "number" },
@@ -63,6 +38,9 @@ export const fieldExecutiveProfileFields: ProfileFieldRule[] = [
   { key: "landmark", label: "Landmark", group: "Address", kind: "text" },
   { key: "bank_account_no", label: "Bank account no", group: "Bank details", kind: "text" },
   { key: "ifsc", label: "IFSC", group: "Bank details", kind: "text" },
+  { key: "pf_uan", label: "PF UAN", group: "Statutory details", kind: "text" },
+  { key: "pf_account_no", label: "PF Account No", group: "Statutory details", kind: "text" },
+  { key: "esi_no", label: "ESI No", group: "Statutory details", kind: "text" },
   { key: "driving_license_no", label: "Driving license no", group: "Driving and vehicle", kind: "text" },
   { key: "driving_license_exp_date", label: "DL expiry date", group: "Driving and vehicle", kind: "date" },
   { key: "vehicle_reg_no", label: "Vehicle reg no", group: "Driving and vehicle", kind: "text" },
@@ -79,6 +57,9 @@ export const fieldExecutiveProfileFields: ProfileFieldRule[] = [
   { key: "dl_back", label: "DL back upload", group: "Uploads", kind: "file" },
   { key: "profile_photo", label: "Photo upload", group: "Uploads", kind: "file" }
 ];
+
+export const employeeProfileFields = workforceProfileFields;
+export const fieldExecutiveProfileFields = workforceProfileFields;
 
 function normalizeRuleSet(
   value: unknown,

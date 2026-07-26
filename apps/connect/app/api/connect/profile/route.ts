@@ -20,6 +20,8 @@ type EmployeeProfileRow = {
   date_of_birth: string | null;
   aadhaar_number: string | null;
   pan_number: string | null;
+  eshram_uan?: string | null;
+  is_handicapped?: boolean | null;
   address: string | null;
   state: string | null;
   pincode: string | null;
@@ -33,6 +35,12 @@ type EmployeeProfileRow = {
   pf_uan?: string | null;
   pf_account_no?: string | null;
   esi_no?: string | null;
+  driving_license_no?: string | null;
+  driving_license_exp_date?: string | null;
+  vehicle_reg_no?: string | null;
+  vehicle_reg_exp_date?: string | null;
+  vehicle_insurance_exp_date?: string | null;
+  vehicle_pollution_exp_date?: string | null;
   emergency_contact_name: string | null;
   emergency_contact_number: string | null;
   emergency_contact_relation: string | null;
@@ -40,6 +48,8 @@ type EmployeeProfileRow = {
   aadhaar_front_path: string | null;
   aadhaar_back_path: string | null;
   pan_upload_path: string | null;
+  dl_front_path?: string | null;
+  dl_back_path?: string | null;
   profile_completion_status: string | null;
   profile_return_remarks?: string | null;
   stations?: { station_code: string | null; station_name: string | null } | { station_code: string | null; station_name: string | null }[] | null;
@@ -138,7 +148,7 @@ async function loadEmployee(employeeId: string, companyId: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const result = await supabaseAdmin
     .from("employees")
-    .select("id, company_id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, gender, date_of_birth, aadhaar_number, pan_number, address, state, pincode, landmark, state_code, father_name, blood_group, bank_account_no, ifsc, statutory_applicability, pf_uan, pf_account_no, esi_no, emergency_contact_name, emergency_contact_number, emergency_contact_relation, profile_photo_path, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_completion_status, profile_return_remarks, stations (station_code, station_name), designations (code, name, profile_field_rules)")
+    .select("id, company_id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, gender, date_of_birth, aadhaar_number, pan_number, eshram_uan, is_handicapped, address, state, pincode, landmark, state_code, father_name, blood_group, bank_account_no, ifsc, statutory_applicability, pf_uan, pf_account_no, esi_no, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, emergency_contact_name, emergency_contact_number, emergency_contact_relation, profile_photo_path, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_completion_status, profile_return_remarks, stations (station_code, station_name), designations (code, name, profile_field_rules)")
     .eq("id", employeeId)
     .eq("company_id", companyId)
     .maybeSingle();
@@ -187,6 +197,8 @@ async function serializeEmployee(row: EmployeeProfileRow) {
       dateOfBirth: formatDisplayDate(row.date_of_birth) === "-" ? "" : formatDisplayDate(row.date_of_birth),
       aadhaarNumber: row.aadhaar_number ?? "",
       panNumber: row.pan_number ?? "",
+      eshramUan: row.eshram_uan ?? "",
+      isHandicapped: typeof row.is_handicapped === "boolean" ? String(row.is_handicapped) : "",
       address: row.address ?? "",
       state: row.state ?? "",
       pincode: row.pincode ?? "",
@@ -199,6 +211,12 @@ async function serializeEmployee(row: EmployeeProfileRow) {
       pfUan: row.pf_uan ?? "",
       pfAccountNo: row.pf_account_no ?? "",
       esiNo: row.esi_no ?? "",
+      drivingLicenseNo: row.driving_license_no ?? "",
+      drivingLicenseExpiry: formatDisplayDate(row.driving_license_exp_date ?? null) === "-" ? "" : formatDisplayDate(row.driving_license_exp_date ?? null),
+      vehicleRegistrationNo: row.vehicle_reg_no ?? "",
+      registrationExpiry: formatDisplayDate(row.vehicle_reg_exp_date ?? null) === "-" ? "" : formatDisplayDate(row.vehicle_reg_exp_date ?? null),
+      insuranceExpiry: formatDisplayDate(row.vehicle_insurance_exp_date ?? null) === "-" ? "" : formatDisplayDate(row.vehicle_insurance_exp_date ?? null),
+      pollutionExpiry: formatDisplayDate(row.vehicle_pollution_exp_date ?? null) === "-" ? "" : formatDisplayDate(row.vehicle_pollution_exp_date ?? null),
       emergencyContactName: row.emergency_contact_name ?? "",
       emergencyContactNumber: row.emergency_contact_number ?? "",
       emergencyContactRelation: row.emergency_contact_relation ?? ""
@@ -209,12 +227,16 @@ async function serializeEmployee(row: EmployeeProfileRow) {
       aadhaarFront: Boolean(row.aadhaar_front_path),
       aadhaarBack: Boolean(row.aadhaar_back_path),
       pan: Boolean(row.pan_upload_path),
+      dlFront: Boolean(row.dl_front_path),
+      dlBack: Boolean(row.dl_back_path),
       photo: Boolean(row.profile_photo_path)
     },
     uploadUrls: {
       aadhaarFront: await signedProfileUrl(row.aadhaar_front_path),
       aadhaarBack: await signedProfileUrl(row.aadhaar_back_path),
       pan: await signedProfileUrl(row.pan_upload_path),
+      dlFront: await signedProfileUrl(row.dl_front_path ?? null),
+      dlBack: await signedProfileUrl(row.dl_back_path ?? null),
       photo: await signedProfileUrl(row.profile_photo_path),
       profilePhoto: await signedProfileUrl(row.profile_photo_path)
     },
@@ -267,6 +289,8 @@ export async function POST(request: Request) {
       uploadProfileFile(formData.get("aadhaar_front"), account.companyId, account.id, "aadhaar-front"),
       uploadProfileFile(formData.get("aadhaar_back"), account.companyId, account.id, "aadhaar-back"),
       uploadProfileFile(formData.get("pan_upload"), account.companyId, account.id, "pan"),
+      uploadProfileFile(formData.get("dl_front"), account.companyId, account.id, "dl-front"),
+      uploadProfileFile(formData.get("dl_back"), account.companyId, account.id, "dl-back"),
       uploadProfileFile(formData.get("profile_photo"), account.companyId, account.id, "photo")
     ]);
 
@@ -275,6 +299,8 @@ export async function POST(request: Request) {
       date_of_birth: normalizeDate(formData.get("date_of_birth")),
       aadhaar_number: normalizeAadhaar(formData.get("aadhaar_number")),
       pan_number: normalizePan(formData.get("pan_number")),
+      eshram_uan: cleanDigits(formData.get("eshram_uan")),
+      is_handicapped: cleanText(formData.get("is_handicapped")) === null ? null : cleanText(formData.get("is_handicapped")) === "true",
       address: cleanText(formData.get("address")),
       state: null,
       pincode: cleanDigits(formData.get("pincode")),
@@ -287,6 +313,12 @@ export async function POST(request: Request) {
       emergency_contact_name: cleanText(formData.get("emergency_contact_name")),
       emergency_contact_number: cleanDigits(formData.get("emergency_contact_number")),
       emergency_contact_relation: cleanText(formData.get("emergency_contact_relation")),
+      driving_license_no: cleanText(formData.get("driving_license_no"))?.toUpperCase() ?? null,
+      driving_license_exp_date: normalizeDate(formData.get("driving_license_exp_date")),
+      vehicle_reg_no: cleanText(formData.get("vehicle_reg_no"))?.toUpperCase() ?? null,
+      vehicle_reg_exp_date: normalizeDate(formData.get("vehicle_reg_exp_date")),
+      vehicle_insurance_exp_date: normalizeDate(formData.get("vehicle_insurance_exp_date")),
+      vehicle_pollution_exp_date: normalizeDate(formData.get("vehicle_pollution_exp_date")),
       profile_completion_status: manualReviewRequired ? "under_review" : "active",
       profile_return_remarks: null,
       profile_returned_at: null,
@@ -299,10 +331,12 @@ export async function POST(request: Request) {
     if (pfUan) updatePayload.pf_uan = pfUan;
     if (pfAccountNo) updatePayload.pf_account_no = pfAccountNo;
     if (esiNo) updatePayload.esi_no = esiNo;
-    const [aadhaarFrontPath, aadhaarBackPath, panUploadPath, profilePhotoPath] = uploads;
+    const [aadhaarFrontPath, aadhaarBackPath, panUploadPath, dlFrontPath, dlBackPath, profilePhotoPath] = uploads;
     if (aadhaarFrontPath) updatePayload.aadhaar_front_path = aadhaarFrontPath;
     if (aadhaarBackPath) updatePayload.aadhaar_back_path = aadhaarBackPath;
     if (panUploadPath) updatePayload.pan_upload_path = panUploadPath;
+    if (dlFrontPath) updatePayload.dl_front_path = dlFrontPath;
+    if (dlBackPath) updatePayload.dl_back_path = dlBackPath;
     if (profilePhotoPath) updatePayload.profile_photo_path = profilePhotoPath;
 
     const updateResult = await supabaseAdmin

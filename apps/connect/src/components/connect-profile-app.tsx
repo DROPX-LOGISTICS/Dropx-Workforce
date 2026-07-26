@@ -53,8 +53,9 @@ type Verification = {
 const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const states = ["AN","AP","AR","AS","BR","CG","CH","DD","DL","DN","GA","GJ","HP","HR","JH","JK","KA","KL","LA","LD","MH","ML","MN","MP","MZ","NL","OD","PB","PY","RJ","SK","TN","TR","TS","UK","UP","WB"];
 const relations = ["Parent", "Spouse", "Child", "Other Relative", "Friend", "Other"];
-const defaultEmployee = ["gender","date_of_birth","aadhaar_number","pan_number","father_name","blood_group","address","state_code","pincode","landmark","bank_account_no","ifsc","pf_uan","pf_account_no","esi_no","emergency_contact_number","emergency_contact_name","emergency_contact_relation","aadhaar_front","aadhaar_back","pan_upload","profile_photo"];
-const defaultExecutive = [...defaultEmployee.filter((key) => !["pf_uan","pf_account_no","esi_no"].includes(key)),"eshram_uan","is_handicapped","driving_license_no","driving_license_exp_date","vehicle_reg_no","vehicle_reg_exp_date","vehicle_insurance_exp_date","vehicle_pollution_exp_date","dl_front","dl_back"];
+const defaultWorkforceFields = ["gender","date_of_birth","aadhaar_number","pan_number","eshram_uan","father_name","blood_group","is_handicapped","address","state_code","pincode","landmark","bank_account_no","ifsc","pf_uan","pf_account_no","esi_no","driving_license_no","driving_license_exp_date","vehicle_reg_no","vehicle_reg_exp_date","vehicle_insurance_exp_date","vehicle_pollution_exp_date","emergency_contact_number","emergency_contact_name","emergency_contact_relation","aadhaar_front","aadhaar_back","pan_upload","dl_front","dl_back","profile_photo"];
+const defaultEmployee = defaultWorkforceFields;
+const defaultExecutive = defaultWorkforceFields;
 const fieldValueKeys: Record<string, string> = {
   date_of_birth: "dateOfBirth",
   aadhaar_number: "aadhaarNumber",
@@ -341,9 +342,9 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
       ...(enabled.has("pan_number") ? ["pan"] : []),
       ...(enabled.has("pan_number") && enabled.has("aadhaar_number") && attempted("pan") && !currentCheck("pan")?.blockSubmit ? ["pan_aadhaar"] : []),
       ...(enabled.has("bank_account_no") && enabled.has("ifsc") ? ["bank"] : []),
-      ...(!executive && pfAnswer === "yes" && enabled.has("pf_uan") && profile?.statutoryApplicability?.includes("pf") ? ["pf_uan"] : []),
-      ...(executive && enabled.has("driving_license_no") ? ["dl"] : []),
-      ...(executive && enabled.has("vehicle_reg_no") ? ["vehicle"] : [])
+      ...(pfAnswer === "yes" && enabled.has("pf_uan") && (executive || profile?.statutoryApplicability?.includes("pf")) ? ["pf_uan"] : []),
+      ...(enabled.has("driving_license_no") ? ["dl"] : []),
+      ...(enabled.has("vehicle_reg_no") ? ["vehicle"] : [])
     ];
     if (mandatory.some((kind) => !attempted(kind))) {
       setError("Complete every applicable verification before saving.");
@@ -418,12 +419,12 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
         ...(enabled.has("bank_account_no") ? { "Bank account no": values.bankAccountNo } : {}),
         ...(enabled.has("ifsc") ? { IFSC: values.ifsc } : {})
       }},
-      ...(!executive && profile.statutoryApplicability?.length ? [{ name: "Statutory details", values: {
-        ...(profile.statutoryApplicability.includes("pf") && enabled.has("pf_uan") ? { "PF UAN": values.pfUan } : {}),
-        ...(profile.statutoryApplicability.includes("pf") && enabled.has("pf_account_no") ? { "PF Account No": values.pfAccountNo } : {}),
-        ...(profile.statutoryApplicability.includes("esi") && enabled.has("esi_no") ? { "ESI No": values.esiNo } : {})
+      ...(["pf_uan","pf_account_no","esi_no"].some((field) => enabled.has(field)) ? [{ name: "Statutory details", values: {
+        ...(enabled.has("pf_uan") ? { "PF UAN": values.pfUan } : {}),
+        ...(enabled.has("pf_account_no") ? { "PF Account No": values.pfAccountNo } : {}),
+        ...(enabled.has("esi_no") ? { "ESI No": values.esiNo } : {})
       }}] : []),
-      ...(executive && (enabled.has("driving_license_no") || enabled.has("vehicle_reg_no")) ? [{ name: "Driving and vehicle", values: {
+      ...((enabled.has("driving_license_no") || enabled.has("vehicle_reg_no")) ? [{ name: "Driving and vehicle", values: {
         ...(enabled.has("driving_license_no") ? { "Driving license no": values.drivingLicenseNo } : {}),
         ...(enabled.has("driving_license_exp_date") ? { "DL expiry date": values.drivingLicenseExpiry } : {}),
         ...(enabled.has("vehicle_reg_no") ? { "Vehicle reg no": values.vehicleRegistrationNo } : {}),
@@ -549,8 +550,8 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
         <VerificationText checks={[currentCheck("bank")]} />
       </> : null}
     </ProfileSection>
-    {!executive ? <ProfileSection title="Statutory details">
-      {profile.statutoryApplicability?.includes("pf") && enabled.has("pf_uan") ? <>
+    {["pf_uan","pf_account_no","esi_no"].some((field) => enabled.has(field)) ? <ProfileSection title="Statutory details">
+      {(executive || profile.statutoryApplicability?.includes("pf")) && enabled.has("pf_uan") ? <>
         <label className="dx-field">
           <span>Do you have PF UAN? *</span>
           <select required value={pfAnswer} onChange={(event) => {
@@ -566,8 +567,8 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
           <VerificationText checks={[currentCheck("pf_uan")]} />
         </> : null}
       </> : null}
-      {profile.statutoryApplicability?.includes("pf") ? input("pf_account_no","PF Account No") : null}
-      {profile.statutoryApplicability?.includes("esi") && enabled.has("esi_no") ? <>
+      {executive || profile.statutoryApplicability?.includes("pf") ? input("pf_account_no","PF Account No") : null}
+      {(executive || profile.statutoryApplicability?.includes("esi")) && enabled.has("esi_no") ? <>
         <label className="dx-field">
           <span>Do you have ESI No? *</span>
           <select required value={esiAnswer} onChange={(event) => {
@@ -581,7 +582,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
         {esiAnswer === "yes" ? <label className="dx-field"><span>ESI No *</span><input name="esi_no" onChange={(event) => set("esiNo", event.target.value)} required value={values.esiNo || ""} /></label> : null}
       </> : null}
     </ProfileSection> : null}
-    {executive && drivingEnabled ? <ProfileSection title="Driving and vehicle">
+    {drivingEnabled ? <ProfileSection title="Driving and vehicle">
       {enabled.has("driving_license_no") ? <>
         <VerifyField label={`Driving license no${required.has("driving_license_no") ? " *" : ""}`} name="driving_license_no" onChange={(value) => set("drivingLicenseNo", value.toUpperCase(), ["dl"])} onVerify={() => verify("dl")} running={running === "dl"} value={values.drivingLicenseNo || ""} checked={attempted("dl")} verified={verified("dl")} error={verificationErrors.dl} required={required.has("driving_license_no")} />
         <VerificationText checks={[dlCheck]} />

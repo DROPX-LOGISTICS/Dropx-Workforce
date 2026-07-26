@@ -69,6 +69,9 @@ type ExecutiveRow = {
   is_handicapped: boolean | null;
   bank_account_no: string | null;
   ifsc_code: string | null;
+  pf_uan?: string | null;
+  pf_account_no?: string | null;
+  esi_no?: string | null;
   driving_license_no: string | null;
   driving_license_exp_date: string | null;
   vehicle_reg_no: string | null;
@@ -289,6 +292,14 @@ function FieldExecutiveDetails({ executive }: { executive: ExecutiveRow }) {
         </dl>
       </section>
       <section>
+        <h3>Statutory</h3>
+        <dl className="executive-detail-grid">
+          <ExecutiveDetail label="PF UAN" value={executive.pf_uan} />
+          <ExecutiveDetail label="PF Account No" value={executive.pf_account_no} />
+          <ExecutiveDetail label="ESI No" value={executive.esi_no} />
+        </dl>
+      </section>
+      <section>
         <h3>License and vehicle</h3>
         <dl className="executive-detail-grid">
           <ExecutiveDetail label="Driving license number" value={executive.driving_license_no} />
@@ -390,6 +401,9 @@ function FieldExecutiveForm({
 
       <label hidden={!fieldEnabled("bank_account_no")}>Bank A/c No.<input className="field" name="bank_account_no" pattern="[A-Za-z0-9]*" placeholder="Enter bank account number" required={fieldRequired("bank_account_no")} defaultValue={textValue(executive?.bank_account_no)} /></label>
       <label hidden={!fieldEnabled("ifsc")}>IFSC<input className="field" name="ifsc_code" placeholder="Enter IFSC" required={fieldRequired("ifsc")} defaultValue={textValue(executive?.ifsc_code)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="bank" pageCode={workforceConfig.pageCode} profileType={workforceConfig.profileType} /> : null}</label>
+      <label hidden={!fieldEnabled("pf_uan")}>PF UAN<input className="field" inputMode="numeric" maxLength={12} name="pf_uan" pattern="[0-9]{12}" placeholder="Enter PF UAN" required={fieldRequired("pf_uan")} defaultValue={textValue(executive?.pf_uan)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="pf_uan" pageCode={workforceConfig.pageCode} profileType={workforceConfig.profileType} /> : null}</label>
+      <label hidden={!fieldEnabled("pf_account_no")}>PF Account No<input className="field" name="pf_account_no" pattern="[A-Za-z0-9]*" placeholder="Enter PF Account No" required={fieldRequired("pf_account_no")} defaultValue={textValue(executive?.pf_account_no)} /></label>
+      <label hidden={!fieldEnabled("esi_no")}>ESI No<input className="field" name="esi_no" pattern="[A-Za-z0-9]*" placeholder="Enter ESI No" required={fieldRequired("esi_no")} defaultValue={textValue(executive?.esi_no)} /></label>
       <label hidden={!fieldEnabled("emergency_contact_number")}>Emergency contact number<input className="field" inputMode="numeric" maxLength={10} name="emergency_contact_number" pattern="[0-9]{10}" placeholder="Enter emergency contact number" required={fieldRequired("emergency_contact_number")} defaultValue={textValue(executive?.emergency_contact_number)} /></label>
       <label hidden={!fieldEnabled("emergency_contact_name")}>Emergency contact name<input className="field" name="emergency_contact_name" placeholder="Enter contact person name" required={fieldRequired("emergency_contact_name")} defaultValue={textValue(executive?.emergency_contact_name)} /></label>
       <label hidden={!fieldEnabled("emergency_contact_relation")}>Emergency relation<input className="field" name="emergency_contact_relation" placeholder="Enter relation" required={fieldRequired("emergency_contact_relation")} defaultValue={textValue(executive?.emergency_contact_relation)} /></label>
@@ -600,6 +614,9 @@ async function loadFieldExecutiveData(
         is_handicapped,
         bank_account_no,
         ifsc_code,
+        pf_uan,
+        pf_account_no,
+        esi_no,
         driving_license_no,
         driving_license_exp_date,
         vehicle_reg_no,

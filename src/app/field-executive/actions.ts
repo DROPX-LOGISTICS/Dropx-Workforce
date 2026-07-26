@@ -124,6 +124,9 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
   const isHandicapped = isHandicappedValue === null ? null : isHandicappedValue === "true";
   const bankAccountNo = optional(formData.get("bank_account_no"))?.toUpperCase() ?? null;
   const ifscCode = optional(formData.get("ifsc_code"))?.toUpperCase() ?? null;
+  const pfUan = optional(formData.get("pf_uan"))?.replace(/\D/g, "") ?? null;
+  const pfAccountNo = optional(formData.get("pf_account_no"))?.toUpperCase() ?? null;
+  const esiNo = optional(formData.get("esi_no"))?.toUpperCase() ?? null;
   const drivingLicenseNo = optional(formData.get("driving_license_no"))?.toUpperCase() ?? null;
   const drivingLicenseExpDate = optional(formData.get("driving_license_exp_date"));
   const vehicleRegNo = optional(formData.get("vehicle_reg_no"))?.toUpperCase() ?? null;
@@ -145,6 +148,9 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
   if (panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panNumber)) throw new Error("PAN number format is invalid.");
   if (ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode)) throw new Error("IFSC format is invalid.");
   if (bankAccountNo && !/^[A-Z0-9]+$/.test(bankAccountNo)) throw new Error("Bank account number can contain only letters and numbers.");
+  if (pfUan && !/^\d{12}$/.test(pfUan)) throw new Error("PF UAN must contain exactly 12 digits.");
+  if (pfAccountNo && !/^[A-Z0-9]+$/.test(pfAccountNo)) throw new Error("PF Account No can contain only letters and numbers.");
+  if (esiNo && !/^[A-Z0-9]+$/.test(esiNo)) throw new Error("ESI No can contain only letters and numbers.");
 
   [
     ["Date of join", dateOfJoin],
@@ -181,6 +187,9 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
       is_handicapped: isHandicapped,
       bank_account_no: bankAccountNo,
       ifsc_code: ifscCode,
+      pf_uan: pfUan,
+      pf_account_no: pfAccountNo,
+      esi_no: esiNo,
       driving_license_no: drivingLicenseNo,
       driving_license_exp_date: drivingLicenseExpDate,
       vehicle_reg_no: vehicleRegNo,
@@ -381,6 +390,9 @@ export async function updateFieldExecutive(formData: FormData) {
       landmark: "landmark",
       bank_account_no: "bank_account_no",
       ifsc: "ifsc_code",
+      pf_uan: "pf_uan",
+      pf_account_no: "pf_account_no",
+      esi_no: "esi_no",
       driving_license_no: "driving_license_no",
       driving_license_exp_date: "driving_license_exp_date",
       vehicle_reg_no: "vehicle_reg_no",

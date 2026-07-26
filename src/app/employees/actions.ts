@@ -71,6 +71,8 @@ const employeeDocumentFields = [
   { formKey: "aadhaar_front_file", pathKey: "aadhaar_front_path", label: "Aadhaar front" },
   { formKey: "aadhaar_back_file", pathKey: "aadhaar_back_path", label: "Aadhaar back" },
   { formKey: "pan_upload_file", pathKey: "pan_upload_path", label: "PAN upload" },
+  { formKey: "dl_front_file", pathKey: "dl_front_path", label: "DL front" },
+  { formKey: "dl_back_file", pathKey: "dl_back_path", label: "DL back" },
   { formKey: "profile_photo_file", pathKey: "profile_photo_path", label: "Profile photo" }
 ] as const;
 
@@ -197,6 +199,8 @@ export async function updateEmployee(formData: FormData) {
       blood_group: optional(formData.get("blood_group")),
       aadhaar_number: optional(formData.get("aadhaar_number"))?.replace(/\D/g, "") ?? null,
       pan_number: optional(formData.get("pan_number"))?.toUpperCase() ?? null,
+      eshram_uan: optional(formData.get("eshram_uan"))?.replace(/\D/g, "") ?? null,
+      is_handicapped: optional(formData.get("is_handicapped")) === null ? null : optional(formData.get("is_handicapped")) === "true",
       address: optional(formData.get("address")),
       state_code: optional(formData.get("state_code"))?.toUpperCase() ?? null,
       pincode: optional(formData.get("pincode"))?.replace(/\D/g, "") ?? null,
@@ -209,11 +213,19 @@ export async function updateEmployee(formData: FormData) {
       pf_uan: optional(formData.get("pf_uan"))?.replace(/\D/g, "") ?? null,
       pf_account_no: optional(formData.get("pf_account_no"))?.toUpperCase() ?? null,
       esi_no: optional(formData.get("esi_no"))?.toUpperCase() ?? null
+      ,
+      driving_license_no: optional(formData.get("driving_license_no"))?.toUpperCase() ?? null,
+      driving_license_exp_date: optional(formData.get("driving_license_exp_date")),
+      vehicle_reg_no: optional(formData.get("vehicle_reg_no"))?.toUpperCase() ?? null,
+      vehicle_reg_exp_date: optional(formData.get("vehicle_reg_exp_date")),
+      vehicle_insurance_exp_date: optional(formData.get("vehicle_insurance_exp_date")),
+      vehicle_pollution_exp_date: optional(formData.get("vehicle_pollution_exp_date"))
     };
 
     if (!/^\d{6,15}$/.test(mobile)) throw new Error("Mobile number must contain 6 to 15 digits.");
     if (extraPayload.aadhaar_number && !/^\d{12}$/.test(extraPayload.aadhaar_number)) throw new Error("Aadhaar number must contain exactly 12 digits.");
     if (extraPayload.pan_number && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(extraPayload.pan_number)) throw new Error("PAN number format is invalid.");
+    if (extraPayload.eshram_uan && !/^\d{12}$/.test(extraPayload.eshram_uan)) throw new Error("eShram UAN must contain exactly 12 digits.");
     if (extraPayload.pincode && !/^\d{6}$/.test(extraPayload.pincode)) throw new Error("Postal PIN must contain exactly 6 digits.");
     if (extraPayload.emergency_contact_number && !/^\d{10}$/.test(extraPayload.emergency_contact_number)) throw new Error("Emergency contact number must contain exactly 10 digits.");
     if (extraPayload.ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(extraPayload.ifsc)) throw new Error("IFSC format is invalid.");
@@ -223,6 +235,14 @@ export async function updateEmployee(formData: FormData) {
     if (extraPayload.esi_no && !/^[A-Z0-9]+$/.test(extraPayload.esi_no)) throw new Error("ESI No can contain only letters and numbers.");
     if (Number.isNaN(Date.parse(dateOfJoin))) throw new Error("Enter a valid date of join.");
     if (extraPayload.date_of_birth && Number.isNaN(Date.parse(extraPayload.date_of_birth))) throw new Error("Enter a valid date of birth.");
+    for (const [label, value] of [
+      ["DL expiry date", extraPayload.driving_license_exp_date],
+      ["Vehicle reg expiry", extraPayload.vehicle_reg_exp_date],
+      ["Vehicle Insurance expiry", extraPayload.vehicle_insurance_exp_date],
+      ["Pollution expiry", extraPayload.vehicle_pollution_exp_date]
+    ] as const) {
+      if (value && Number.isNaN(Date.parse(value))) throw new Error(`Enter a valid ${label}.`);
+    }
     if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
       throw new Error("You do not have access to the selected location.");
     }
@@ -247,6 +267,8 @@ export async function updateEmployee(formData: FormData) {
       blood_group: "Blood group",
       aadhaar_number: "Aadhaar number",
       pan_number: "PAN number",
+      eshram_uan: "eShram UAN",
+      is_handicapped: "Handicapped",
       address: "Address",
       state_code: "State",
       pincode: "Postal PIN",
@@ -259,6 +281,13 @@ export async function updateEmployee(formData: FormData) {
       pf_uan: "PF UAN",
       pf_account_no: "PF Account No",
       esi_no: "ESI No"
+      ,
+      driving_license_no: "Driving license no",
+      driving_license_exp_date: "DL expiry date",
+      vehicle_reg_no: "Vehicle reg no",
+      vehicle_reg_exp_date: "Vehicle reg expiry",
+      vehicle_insurance_exp_date: "Vehicle Insurance expiry",
+      vehicle_pollution_exp_date: "Pollution expiry"
     };
     for (const key of dashboardRules.required) {
       if ((key === "pf_uan" || key === "pf_account_no") && !statutoryApplicability.includes("pf")) continue;
@@ -270,7 +299,7 @@ export async function updateEmployee(formData: FormData) {
 
     const existingResult = await supabaseAdmin
       .from("employees")
-      .select("biometric_id, aadhaar_front_path, aadhaar_back_path, pan_upload_path, profile_photo_path")
+      .select("biometric_id, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path")
       .eq("id", id)
       .eq("company_id", companyId)
       .maybeSingle();

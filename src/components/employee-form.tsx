@@ -35,6 +35,8 @@ type EmployeeFormProps = {
     blood_group?: string | null;
     aadhaar_number?: string | null;
     pan_number?: string | null;
+    eshram_uan?: string | null;
+    is_handicapped?: boolean | null;
     address?: string | null;
     state_code?: string | null;
     pincode?: string | null;
@@ -47,6 +49,12 @@ type EmployeeFormProps = {
     pf_uan?: string | null;
     pf_account_no?: string | null;
     esi_no?: string | null;
+    driving_license_no?: string | null;
+    driving_license_exp_date?: string | null;
+    vehicle_reg_no?: string | null;
+    vehicle_reg_exp_date?: string | null;
+    vehicle_insurance_exp_date?: string | null;
+    vehicle_pollution_exp_date?: string | null;
     statutory_applicability: string[] | null;
     is_active?: boolean;
   } | null;
@@ -207,6 +215,10 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
           {fieldEnabled("father_name") ? <label>Father name<input className="field" defaultValue={employee?.father_name ?? ""} name="father_name" placeholder="Enter father name" required={fieldRequired("father_name")} /></label> : null}
           {fieldEnabled("aadhaar_number") ? <label>Aadhaar number<input className="field" defaultValue={employee?.aadhaar_number ?? ""} inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" required={fieldRequired("aadhaar_number")} /></label> : null}
           {fieldEnabled("pan_number") ? <label>PAN number<input className="field" defaultValue={employee?.pan_number ?? ""} name="pan_number" placeholder="Enter PAN number" required={fieldRequired("pan_number")} />{employee ? <ProfileVerificationPanel accountId={employee.id} kind="pan" pageCode="employees" profileType="employee" /> : null}</label> : null}
+          {fieldEnabled("eshram_uan") ? <label>eShram UAN<input className="field" defaultValue={employee?.eshram_uan ?? ""} inputMode="numeric" maxLength={12} name="eshram_uan" pattern="[0-9]{12}" placeholder="Enter eShram UAN" required={fieldRequired("eshram_uan")} /></label> : null}
+          {fieldEnabled("is_handicapped") ? <label>Handicapped
+            <SearchableSelect name="is_handicapped" options={[{ value: "false", label: "No" }, { value: "true", label: "Yes" }]} defaultValue={typeof employee?.is_handicapped === "boolean" ? String(employee.is_handicapped) : undefined} placeholder="Select" />
+          </label> : null}
           {fieldEnabled("address") ? <label className="span-3">Address<input className="field" defaultValue={employee?.address ?? ""} name="address" placeholder="Enter complete address" required={fieldRequired("address")} /></label> : null}
           {fieldEnabled("state_code") ? <label>State
             <SearchableSelect name="state_code" options={stateOptions} defaultValue={employee?.state_code ?? undefined} placeholder="Select state" />
@@ -218,12 +230,20 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
           {hasPf && fieldEnabled("pf_uan") ? <label>PF UAN<input className="field" defaultValue={employee?.pf_uan ?? ""} inputMode="numeric" name="pf_uan" placeholder="Enter PF UAN" required={fieldRequired("pf_uan")} />{employee ? <ProfileVerificationPanel accountId={employee.id} kind="pf_uan" pageCode="employees" profileType="employee" /> : null}</label> : null}
           {hasPf && fieldEnabled("pf_account_no") ? <label>PF Account No<input className="field" defaultValue={employee?.pf_account_no ?? ""} name="pf_account_no" pattern="[A-Za-z0-9]*" placeholder="Enter PF Account No" required={fieldRequired("pf_account_no")} /></label> : null}
           {hasEsi && fieldEnabled("esi_no") ? <label>ESI No<input className="field" defaultValue={employee?.esi_no ?? ""} name="esi_no" pattern="[A-Za-z0-9]*" placeholder="Enter ESI No" required={fieldRequired("esi_no")} /></label> : null}
+          {fieldEnabled("driving_license_no") ? <label>Driving license no.<input className="field" defaultValue={employee?.driving_license_no ?? ""} name="driving_license_no" placeholder="Enter DL number" required={fieldRequired("driving_license_no")} />{employee ? <ProfileVerificationPanel accountId={employee.id} kind="dl" pageCode="employees" profileType="employee" /> : null}</label> : null}
+          {fieldEnabled("driving_license_exp_date") ? <label>DL expiry date<input className="field" defaultValue={employee?.driving_license_exp_date ?? ""} name="driving_license_exp_date" required={fieldRequired("driving_license_exp_date")} type="date" /></label> : null}
+          {fieldEnabled("vehicle_reg_no") ? <label>Vehicle reg no.<input className="field" defaultValue={employee?.vehicle_reg_no ?? ""} name="vehicle_reg_no" placeholder="Enter vehicle number" required={fieldRequired("vehicle_reg_no")} />{employee ? <ProfileVerificationPanel accountId={employee.id} kind="vehicle" pageCode="employees" profileType="employee" /> : null}</label> : null}
+          {fieldEnabled("vehicle_reg_exp_date") ? <label>Vehicle reg expiry<input className="field" defaultValue={employee?.vehicle_reg_exp_date ?? ""} name="vehicle_reg_exp_date" required={fieldRequired("vehicle_reg_exp_date")} type="date" /></label> : null}
+          {fieldEnabled("vehicle_insurance_exp_date") ? <label>Vehicle Insurance expiry<input className="field" defaultValue={employee?.vehicle_insurance_exp_date ?? ""} name="vehicle_insurance_exp_date" required={fieldRequired("vehicle_insurance_exp_date")} type="date" /></label> : null}
+          {fieldEnabled("vehicle_pollution_exp_date") ? <label>Pollution expiry<input className="field" defaultValue={employee?.vehicle_pollution_exp_date ?? ""} name="vehicle_pollution_exp_date" required={fieldRequired("vehicle_pollution_exp_date")} type="date" /></label> : null}
           {fieldEnabled("emergency_contact_number") ? <label>Emergency contact number<input className="field" defaultValue={employee?.emergency_contact_number ?? ""} inputMode="numeric" maxLength={10} name="emergency_contact_number" pattern="[0-9]{10}" placeholder="Enter emergency contact number" required={fieldRequired("emergency_contact_number")} /></label> : null}
           {fieldEnabled("emergency_contact_name") ? <label>Emergency contact name<input className="field" defaultValue={employee?.emergency_contact_name ?? ""} name="emergency_contact_name" placeholder="Enter contact person name" required={fieldRequired("emergency_contact_name")} /></label> : null}
           {fieldEnabled("emergency_contact_relation") ? <label>Emergency relation<input className="field" defaultValue={employee?.emergency_contact_relation ?? ""} name="emergency_contact_relation" placeholder="Enter relation" required={fieldRequired("emergency_contact_relation")} /></label> : null}
           {fieldEnabled("aadhaar_front") ? <label>Aadhaar front file<input className="field" name="aadhaar_front_file" type="file" /></label> : null}
           {fieldEnabled("aadhaar_back") ? <label>Aadhaar back file<input className="field" name="aadhaar_back_file" type="file" /></label> : null}
           {fieldEnabled("pan_upload") ? <label>PAN upload<input className="field" name="pan_upload_file" type="file" /></label> : null}
+          {fieldEnabled("dl_front") ? <label>DL front file<input className="field" name="dl_front_file" type="file" /></label> : null}
+          {fieldEnabled("dl_back") ? <label>DL back file<input className="field" name="dl_back_file" type="file" /></label> : null}
           {fieldEnabled("profile_photo") ? <label>Profile photo<input accept="image/*" className="field" name="profile_photo_file" type="file" /></label> : null}
         </>
       ) : null}

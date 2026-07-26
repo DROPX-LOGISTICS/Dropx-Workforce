@@ -553,6 +553,7 @@ export async function createLocation(formData: FormData) {
   const latitude = optionalCoordinate(formData.get("latitude"), "Latitude", -90, 90);
   const longitude = optionalCoordinate(formData.get("longitude"), "Longitude", -180, 180);
   const stationEmail = clean(formData.get("station_email"));
+  const parentStationId = clean(formData.get("parent_station_id"));
   const stationManagerEmail = clean(formData.get("station_manager_email"))?.toLowerCase() ?? null;
   const stationReportingEmail = stationManagerEmail ?? clusterManagerEmail;
   const hideFromLocationList = formData.get("hide_from_location_list") === "on";
@@ -578,6 +579,7 @@ export async function createLocation(formData: FormData) {
     longitude,
     station_email: stationEmail,
     station_manager_email: stationManagerEmail,
+    parent_station_id: parentStationId,
     hide_from_location_list: hideFromLocationList,
     is_active: true
   }, companyId)).select("id").single();
@@ -619,6 +621,7 @@ export async function updateLocation(formData: FormData) {
   const latitude = optionalCoordinate(formData.get("latitude"), "Latitude", -90, 90);
   const longitude = optionalCoordinate(formData.get("longitude"), "Longitude", -180, 180);
   const stationEmail = clean(formData.get("station_email"));
+  const parentStationId = clean(formData.get("parent_station_id"));
   const stationManagerEmail = clean(formData.get("station_manager_email"))?.toLowerCase() ?? null;
   const stationReportingEmail = stationManagerEmail ?? clusterManagerEmail;
   const isActive = formData.get("is_active") !== "inactive";
@@ -654,6 +657,7 @@ export async function updateLocation(formData: FormData) {
       longitude,
       station_email: stationEmail,
       station_manager_email: stationManagerEmail,
+      parent_station_id: parentStationId,
       hide_from_location_list: hideFromLocationList,
       is_active: isActive
     })

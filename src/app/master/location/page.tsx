@@ -51,6 +51,7 @@ type LocationRow = {
   longitude: number | null;
   station_email: string | null;
   station_manager_email: string | null;
+  parent_station_id: string | null;
   hide_from_location_list: boolean;
   is_active: boolean;
   providers?: { code: string; name: string } | null;
@@ -204,6 +205,7 @@ async function loadMasterData(companyId: string) {
     longitude,
     station_email,
     station_manager_email,
+    parent_station_id,
     hide_from_location_list,
     is_active,
     providers (code, name),
@@ -364,6 +366,13 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     const normalized = String(value ?? "").trim().toLowerCase();
     return users.find((user) => normalizeEmail(user.email) === normalized || String(user.full_name ?? "").trim().toLowerCase() === normalized)?.email ?? "";
   };
+  const parentStationOptions = locations
+    .filter((location) => location.id !== editLocation?.id && location.is_active && location.location_models?.code !== "XPT")
+    .map((location) => ({
+      value: location.id,
+      label: `${location.station_code} · ${location.station_name || location.city || "Station"}`,
+      helper: location.location_models?.code || undefined
+    }));
 
   return (
     <AppShell active="Locations" pageCode="master_locations">
@@ -421,6 +430,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               <label>Latitude<input className="field" name="latitude" placeholder="Enter latitude" step="any" type="number" min="-90" max="90" /></label>
               <label>Longitude<input className="field" name="longitude" placeholder="Enter longitude" step="any" type="number" min="-180" max="180" /></label>
               <label>Location email<input className="field" name="station_email" placeholder="Enter location email" /></label>
+              <label>Shipment parent station<SearchableSelect name="parent_station_id" options={parentStationOptions} placeholder="Only for XPT locations" /></label>
               <label className="check-row span-3">
                 <input name="hide_from_location_list" type="checkbox" />
                 <span>Hide from location list</span>
@@ -461,6 +471,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               <label>Latitude<input className="field" name="latitude" defaultValue={editLocation.latitude ?? ""} step="any" type="number" min="-90" max="90" /></label>
               <label>Longitude<input className="field" name="longitude" defaultValue={editLocation.longitude ?? ""} step="any" type="number" min="-180" max="180" /></label>
               <label>Location email<input className="field" name="station_email" defaultValue={editLocation.station_email ?? ""} /></label>
+              <label>Shipment parent station<SearchableSelect name="parent_station_id" options={parentStationOptions} defaultValue={editLocation.parent_station_id ?? ""} placeholder="Only for XPT locations" /></label>
               <label>Status
                 <select className="select" name="is_active" defaultValue={editLocation.is_active ? "active" : "inactive"}>
                   <option value="active">Active</option>

@@ -1033,11 +1033,17 @@ export async function POST(request: Request) {
       ? await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess)
       : { locations: [], error: null };
     if (locationResult.error) return Response.json({ error: locationResult.error }, { status: 500 });
+    const selectedLocation = locationResult.locations.find((location) => location.station_code === selectedStation);
+    const selectedParentResult = selectedLocation
+      ? await db.from("stations").select("parent_station_id").eq("company_id", companyId).eq("id", selectedLocation.id).maybeSingle()
+      : { data: null, error: null };
+    if (selectedParentResult.error) return databaseSetupError(selectedParentResult.error.message);
     const eligible = !masterData.requires_station || locationResult.locations.some((location) => {
       const provider = providerName(location).toUpperCase();
       const model = locationModelName(location).toUpperCase();
       return location.station_code === selectedStation
-        && (!["amazon_dsp_xpt", "amazon_dsp_xpd"].includes(masterData.station_scope) || (provider.includes("AMAZON") && ["DSP", "EDSP", "XPT"].includes(model)));
+        && (!["amazon_dsp_xpt", "amazon_dsp_xpd"].includes(masterData.station_scope)
+          || (provider.includes("AMAZON") && ["DSP", "EDSP"].includes(model) && !selectedParentResult.data?.parent_station_id));
     });
     if (!eligible) return Response.json({ error: "Select an eligible station for this report." }, { status: 400 });
   }
@@ -1053,6 +1059,7 @@ export async function POST(request: Request) {
     file_name: file.name,
     file_size: file.size,
     source_type: sourceType,
+    station_code: selectedStation || null,
     status: "Processing"
   }).select("id").single());
   if (batch.error) return databaseSetupError(batch.error.message);

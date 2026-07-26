@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
 
-type ShipmentStation = { code: string; name: string; model: string; provider: string };
+type ShipmentStation = { code: string; name: string; model: string; provider: string; parentStationId?: string | null; id?: string; childCodes?: string[] };
 
 function indiaDate(days = 0) {
   const now = new Date();
@@ -69,7 +69,7 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
   const requiresReportDate = Boolean(selected?.requires_report_date);
   const hasConditionalFields = requiresStation || requiresReportDate;
   const eligibleStations = selected?.station_scope === "amazon_dsp_xpt" || selected?.station_scope === "amazon_dsp_xpd"
-    ? stations.filter((station) => station.provider.toUpperCase().includes("AMAZON") && ["DSP", "EDSP", "XPT"].includes(station.model.toUpperCase()))
+    ? stations.filter((station) => station.provider.toUpperCase().includes("AMAZON") && ["DSP", "EDSP"].includes(station.model.toUpperCase()) && !station.parentStationId)
     : stations;
   const effectiveStationCode = eligibleStations.some((station) => station.code === stationCode)
     ? stationCode
@@ -109,7 +109,7 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
         {requiresStation ? <label>
           <span>Station</span>
           <select className="select" value={effectiveStationCode} onChange={(event) => setStationCode(event.target.value)} required>
-            {eligibleStations.map((station) => <option key={station.code} value={station.code}>{station.code} · {station.name} · {station.model}</option>)}
+            {eligibleStations.map((station) => <option key={station.code} value={station.code}>{station.code} · {station.name} · {station.model}{station.childCodes?.length ? ` · includes ${station.childCodes.join(", ")} XPT` : ""}</option>)}
           </select>
         </label> : null}
         {requiresReportDate ? <label>

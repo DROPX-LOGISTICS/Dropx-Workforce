@@ -153,11 +153,26 @@ export async function ReportUploadPageContent({
       ? loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess)
       : Promise.resolve({ locations: [], error: null })
   ]);
+  const stationIds = locationResult.locations.map((location) => location.id);
+  const parentRows = companyId && supabaseAdmin && stationIds.length
+    ? await supabaseAdmin.from("stations").select("id, parent_station_id").eq("company_id", companyId).in("id", stationIds)
+    : { data: [] as Array<{ id: string; parent_station_id: string | null }> };
+  const parentById = new Map((parentRows.data ?? []).map((row) => [row.id, row.parent_station_id]));
+  const codeById = new Map(locationResult.locations.map((location) => [location.id, location.station_code]));
+  const childCodesByParent = new Map<string, string[]>();
+  parentById.forEach((parentId, childId) => {
+    if (!parentId) return;
+    const childCode = codeById.get(childId);
+    if (childCode) childCodesByParent.set(parentId, [...(childCodesByParent.get(parentId) ?? []), childCode]);
+  });
   const shipmentStations = locationResult.locations.map((location) => ({
+    id: location.id,
     code: location.station_code,
     name: location.station_name || location.city || location.station_code,
     model: locationModelName(location),
-    provider: providerName(location)
+    provider: providerName(location),
+    parentStationId: parentById.get(location.id) ?? null,
+    childCodes: (childCodesByParent.get(location.id) ?? []).sort()
   }));
   const dueReports = reports.filter((report) => reportIsDue(report, date));
   const reportBySource = new Map(reports.map((report) => [report.source_code, report]));

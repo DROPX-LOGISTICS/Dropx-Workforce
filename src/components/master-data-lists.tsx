@@ -39,6 +39,7 @@ type LocationRow = {
   longitude: number | null;
   station_email: string | null;
   station_manager_email: string | null;
+  parent_station_id?: string | null;
   is_active: boolean;
   providers?: { code: string; name: string } | null;
   location_models?: { code: string; name: string } | null;
@@ -493,6 +494,7 @@ export function MasterDataLists({
                 <th>Cluster Manager</th>
                 <th>Provider</th>
                 <th>Model</th>
+                <th>Shipment parent</th>
                 <th>Address</th>
                 <th>Contact</th>
                 <th>Status</th>
@@ -509,6 +511,7 @@ export function MasterDataLists({
                   <td>{row.cluster_manager || "-"}</td>
                   <td>{row.providers?.name || "-"}</td>
                   <td>{row.location_models?.code || "-"}</td>
+                  <td>{row.parent_station_id ? locations.find((location) => location.id === row.parent_station_id)?.station_code || "Mapped" : "-"}</td>
                   <td>
                     {row.latitude !== null && row.longitude !== null ? (
                       <a

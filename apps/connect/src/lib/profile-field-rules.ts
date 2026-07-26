@@ -18,6 +18,9 @@ export type ProfileFieldChannelRules = {
 export type DesignationProfileFieldRules = {
   employees: ProfileFieldChannelRules;
   field_executives: ProfileFieldChannelRules;
+  contractors: ProfileFieldChannelRules;
+  vendors: ProfileFieldChannelRules;
+  workers: ProfileFieldChannelRules;
 };
 
 export const employeeProfileFields: ProfileFieldRule[] = [
@@ -119,8 +122,12 @@ function normalizeChannelRules(value: unknown, fields: ProfileFieldRule[]): Prof
 
 export function normalizeProfileFieldRules(value: unknown): DesignationProfileFieldRules {
   const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const legacyNonEmployeeRules = record.field_executives;
   return {
     employees: normalizeChannelRules(record.employees, employeeProfileFields),
-    field_executives: normalizeChannelRules(record.field_executives, fieldExecutiveProfileFields)
+    field_executives: normalizeChannelRules(legacyNonEmployeeRules, fieldExecutiveProfileFields),
+    contractors: normalizeChannelRules(record.contractors ?? legacyNonEmployeeRules, fieldExecutiveProfileFields),
+    vendors: normalizeChannelRules(record.vendors ?? legacyNonEmployeeRules, fieldExecutiveProfileFields),
+    workers: normalizeChannelRules(record.workers ?? legacyNonEmployeeRules, fieldExecutiveProfileFields)
   };
 }

@@ -11,6 +11,7 @@ import {
   type DesignationProfileFieldRules,
   type ProfileFieldChannelRules,
   type ProfileFieldRule,
+  type ProfileFieldRuleCategory,
   type ProfileFieldRuleSet
 } from "@/lib/profile-field-rules";
 
@@ -114,7 +115,7 @@ function FieldRuleMatrix({
   title
 }: {
   fields: ProfileFieldRule[];
-  namePrefix: "employees" | "field_executives";
+  namePrefix: ProfileFieldRuleCategory;
   rules: ProfileFieldChannelRules;
   title: string;
 }) {
@@ -326,17 +327,16 @@ export function DesignationForm({
     normalizeDesignationCategories(initial?.onboarding_categories)
   );
   const fieldRules = normalizeProfileFieldRules(initial?.profile_field_rules);
-  const showEmployeeFields = selectedCategories.includes("employees");
-  const showFieldExecutiveFields =
-    selectedCategories.includes("field_executives") ||
-    selectedCategories.includes("contractors");
-  const fieldExecutiveFieldTitle = selectedCategories.includes("contractors") &&
-    !selectedCategories.includes("field_executives")
-      ? "Independent Contractor fields"
-      : selectedCategories.includes("contractors")
-        ? "Field executive / Independent Contractor fields"
-        : "Field executive fields";
-  const hasVisibleFieldRules = showEmployeeFields || showFieldExecutiveFields;
+  const categoryFieldConfig: Record<DesignationCategory, {
+    fields: ProfileFieldRule[];
+    title: string;
+  }> = {
+    employees: { fields: employeeProfileFields, title: "Employee fields" },
+    field_executives: { fields: fieldExecutiveProfileFields, title: "Field executive fields" },
+    contractors: { fields: fieldExecutiveProfileFields, title: "Independent Contractor fields" },
+    vendors: { fields: fieldExecutiveProfileFields, title: "Vendor fields" },
+    workers: { fields: fieldExecutiveProfileFields, title: "Worker fields" }
+  };
 
   return (
     <form action={action} className="designation-form">
@@ -374,17 +374,23 @@ export function DesignationForm({
           </label>
         ) : null}
       </div>
-      {hasVisibleFieldRules ? (
-        <div className={`designation-field-rule-grid ${showEmployeeFields !== showFieldExecutiveFields ? "single" : ""}`}>
-          {showEmployeeFields ? (
-            <FieldRuleMatrix fields={employeeProfileFields} namePrefix="employees" rules={fieldRules.employees} title="Employee fields" />
-          ) : null}
-          {showFieldExecutiveFields ? (
-            <FieldRuleMatrix fields={fieldExecutiveProfileFields} namePrefix="field_executives" rules={fieldRules.field_executives} title={fieldExecutiveFieldTitle} />
-          ) : null}
+      {selectedCategories.length ? (
+        <div className={`designation-field-rule-grid ${selectedCategories.length === 1 ? "single" : ""}`}>
+          {selectedCategories.map((category) => {
+            const config = categoryFieldConfig[category];
+            return (
+              <FieldRuleMatrix
+                fields={config.fields}
+                key={category}
+                namePrefix={category}
+                rules={fieldRules[category]}
+                title={config.title}
+              />
+            );
+          })}
         </div>
       ) : (
-        <div className="designation-field-rule-empty">Select Employees, Field executives, or Independent Contractor to configure onboarding fields.</div>
+        <div className="designation-field-rule-empty">Select one or more categories to configure onboarding fields.</div>
       )}
       <div className="form-actions right">
         <SubmitButton className="button" pendingText="Saving">{submitLabel}</SubmitButton>

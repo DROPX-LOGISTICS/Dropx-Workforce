@@ -7,6 +7,7 @@ import { saveProfileVerifications } from "../../../../src/lib/profile-verificati
 import { supabaseAdmin } from "../../../../src/lib/supabase-admin";
 import {
   isNonEmployeeProfileType,
+  profileFieldRuleCategory,
   type NonEmployeeProfileType,
   workforceLabel,
   workforceTable
@@ -203,7 +204,7 @@ async function serializeExecutive(row: FieldExecutiveRow, profileType: NonEmploy
       .eq("name", row.designation)
       .maybeSingle()
     : null;
-  const fieldRules = normalizeProfileFieldRules(designationResult?.data?.profile_field_rules).field_executives.dropx_one;
+  const fieldRules = normalizeProfileFieldRules(designationResult?.data?.profile_field_rules)[profileFieldRuleCategory(profileType)].dropx_one;
   return {
     id: row.id,
     readOnly: {
@@ -315,7 +316,7 @@ export async function POST(request: Request) {
         .eq("name", currentExecutive.designation)
         .maybeSingle()
       : null;
-    const rules = normalizeProfileFieldRules(designationResult?.data?.profile_field_rules).field_executives.dropx_one;
+    const rules = normalizeProfileFieldRules(designationResult?.data?.profile_field_rules)[profileFieldRuleCategory(account.profileType)].dropx_one;
     const requiredFields = new Set(rules.required);
     const isRequired = (key: string) => requiredFields.has(key);
     const textValue = (key: string, label: string) => isRequired(key) ? requiredText(formData.get(key), label) : cleanText(formData.get(key));

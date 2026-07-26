@@ -754,7 +754,7 @@ export async function FieldExecutivePageContent({
     label: designation.name,
     helper: designation.code,
     modelIds: designation.model_ids ?? [],
-    dashboardRules: normalizeProfileFieldRules(designation.profile_field_rules).field_executives.dashboard
+    dashboardRules: normalizeProfileFieldRules(designation.profile_field_rules)[workforceConfig.designationCategory].dashboard
   }));
 
   return (

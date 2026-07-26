@@ -34,3 +34,10 @@ export function workforceLabel(profileType: NonEmployeeProfileType) {
   if (profileType === "worker") return "Worker";
   return "Field executive";
 }
+
+export function profileFieldRuleCategory(profileType: NonEmployeeProfileType) {
+  if (profileType === "contractor") return "contractors" as const;
+  if (profileType === "vendor") return "vendors" as const;
+  if (profileType === "worker") return "workers" as const;
+  return "field_executives" as const;
+}

@@ -365,7 +365,7 @@ export async function updateFieldExecutive(formData: FormData) {
       .eq("is_active", true)
       .maybeSingle();
     if (designationResult.error) throw new Error(designationResult.error.message);
-    const dashboardRules = normalizeProfileFieldRules(designationResult.data?.profile_field_rules).field_executives.dashboard;
+    const dashboardRules = normalizeProfileFieldRules(designationResult.data?.profile_field_rules)[config.designationCategory].dashboard;
     const profilePayloadKeys: Record<string, keyof typeof payload> = {
       gender: "gender",
       date_of_birth: "date_of_birth",

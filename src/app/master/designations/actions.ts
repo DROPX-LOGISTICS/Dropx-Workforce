@@ -64,28 +64,20 @@ function onboardingCategories(formData: FormData) {
 }
 
 function profileFieldRules(formData: FormData) {
-  return normalizeProfileFieldRules({
-    employees: {
+  const categories = ["employees", "field_executives", "contractors", "vendors", "workers"] as const;
+  return normalizeProfileFieldRules(Object.fromEntries(categories.map((category) => [
+    category,
+    {
       dropx_one: {
-        enabled: formData.getAll("employees_dropx_one_enabled_fields"),
-        required: formData.getAll("employees_dropx_one_required_fields")
+        enabled: formData.getAll(`${category}_dropx_one_enabled_fields`),
+        required: formData.getAll(`${category}_dropx_one_required_fields`)
       },
       dashboard: {
-        enabled: formData.getAll("employees_dashboard_enabled_fields"),
-        required: formData.getAll("employees_dashboard_required_fields")
-      }
-    },
-    field_executives: {
-      dropx_one: {
-        enabled: formData.getAll("field_executives_dropx_one_enabled_fields"),
-        required: formData.getAll("field_executives_dropx_one_required_fields")
-      },
-      dashboard: {
-        enabled: formData.getAll("field_executives_dashboard_enabled_fields"),
-        required: formData.getAll("field_executives_dashboard_required_fields")
+        enabled: formData.getAll(`${category}_dashboard_enabled_fields`),
+        required: formData.getAll(`${category}_dashboard_required_fields`)
       }
     }
-  });
+  ])));
 }
 
 export async function createDesignation(formData: FormData) {

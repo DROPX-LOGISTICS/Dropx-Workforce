@@ -124,6 +124,7 @@ function workerInfo() {
     vnc_path: ENABLE_VNC ? "/vnc.html" : null,
     interactive_login_supported: ENABLE_VNC || !HEADLESS,
     session_mode: "worker_browser_storage_state",
+    saved_session_without_password_supported: true,
     local_chrome_session_reused: false,
     biometric_attendance_safe: true,
     biometric_middleware_host: "bio.dropxlogistics.com is not used by this worker",

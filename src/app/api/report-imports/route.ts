@@ -1,5 +1,5 @@
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 import crypto from "crypto";
 import * as XLSX from "xlsx";
@@ -42,6 +42,29 @@ type ParsedImportRow = {
   raw: RawRecord;
   rowNumber: number;
   status: "Imported" | "Skipped";
+};
+
+type DeliveredShipmentFact = {
+  actual_weight_kg: number | null;
+  city: string | null;
+  company_id: string;
+  cubic_volume_cm3: number | null;
+  driver_id: string;
+  driver_name: string | null;
+  final_state: string;
+  height_cm: number | null;
+  last_scan_status: string | null;
+  last_updated_at: string;
+  length_cm: number | null;
+  package_count: number;
+  postal_code: string;
+  raw_payload: RawRecord;
+  source_batch_id: string;
+  station_code: string;
+  tracking_id: string;
+  updated_at: string;
+  width_cm: number | null;
+  work_date: string;
 };
 
 const sourceLabels: Record<SourceType, string> = {
@@ -576,6 +599,84 @@ function parseGenericFile(rows: SheetRow[]) {
   });
 }
 
+function measurement(value: unknown, dimension: "length" | "weight") {
+  const text = clean(value).toLowerCase();
+  const number = Number(text.match(/-?\d+(?:\.\d+)?/)?.[0] ?? NaN);
+  if (!Number.isFinite(number) || number < 0) return null;
+  if (dimension === "weight") {
+    if (/\b(?:g|gram|grams)\b/.test(text) && !/\bkg\b/.test(text)) return number / 1000;
+    if (/\b(?:lb|lbs|pound|pounds)\b/.test(text)) return number * 0.45359237;
+    return number;
+  }
+  if (/\bmm\b/.test(text)) return number / 10;
+  if (/\b(?:m|meter|meters)\b/.test(text) && !/\bcm\b/.test(text)) return number * 100;
+  if (/\b(?:in|inch|inches)\b/.test(text)) return number * 2.54;
+  return number;
+}
+
+function timestamp(value: unknown) {
+  const text = clean(value);
+  if (!text) return null;
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function parseDeliveredShipmentFacts(rows: SheetRow[], companyId: string, batchId: string) {
+  const headerIndex = locateHeader(rows, ["Tracking ID"]);
+  const records = rowsToRecords(rows, headerIndex);
+  const rejected: Array<{ rowNumber: number; issue: string }> = [];
+  const byTrackingId = new Map<string, DeliveredShipmentFact>();
+  records.forEach(({ raw, rowNumber }) => {
+    const trackingId = clean(findValue(raw, ["Tracking ID", "Tracking Number", "Shipment ID"]));
+    const stationCode = normalizeStation(findValue(raw, ["Station", "Station Code", "Delivery Station"]));
+    const lastUpdatedAt = timestamp(findValue(raw, ["Last Updated Time", "Delivery Time", "Delivered At"]));
+    const driverId = clean(findValue(raw, ["Driver ID", "Associate ID", "DA ID"])).toUpperCase();
+    const postalCode = clean(findValue(raw, ["Postal", "Pincode", "Postal Code"])).match(/\d{6}/)?.[0] ?? "";
+    const finalState = clean(findValue(raw, ["State", "Final State", "Shipment State"]));
+    const lastScanStatus = clean(findValue(raw, ["Last Scan Status", "Scan Status"]));
+    if (!trackingId || !stationCode || !lastUpdatedAt || !driverId || !postalCode) {
+      rejected.push({ rowNumber, issue: "Missing tracking ID, station, timestamp, Driver ID or postal code." });
+      return;
+    }
+    if (lastScanStatus && key(lastScanStatus) !== "successful") {
+      rejected.push({ rowNumber, issue: `Last scan status is ${lastScanStatus}.` });
+      return;
+    }
+    const lengthCm = measurement(findValue(raw, ["Package Length", "Length"]), "length");
+    const widthCm = measurement(findValue(raw, ["Package Width", "Width"]), "length");
+    const heightCm = measurement(findValue(raw, ["Package Height", "Height"]), "length");
+    const actualWeightKg = measurement(findValue(raw, ["Package Weight", "Weight"]), "weight");
+    const cubicVolumeCm3 = lengthCm != null && widthCm != null && heightCm != null
+      ? lengthCm * widthCm * heightCm
+      : null;
+    const fact: DeliveredShipmentFact = {
+      actual_weight_kg: actualWeightKg,
+      city: clean(findValue(raw, ["City"])) || null,
+      company_id: companyId,
+      cubic_volume_cm3: cubicVolumeCm3,
+      driver_id: driverId,
+      driver_name: clean(findValue(raw, ["Driver Name", "Associate Name", "Last Scan By"])) || null,
+      final_state: finalState,
+      height_cm: heightCm,
+      last_scan_status: lastScanStatus || null,
+      last_updated_at: lastUpdatedAt,
+      length_cm: lengthCm,
+      package_count: Math.max(1, toNumber(findValue(raw, ["Package Count"])) || 1),
+      postal_code: postalCode,
+      raw_payload: raw,
+      source_batch_id: batchId,
+      station_code: stationCode,
+      tracking_id: trackingId,
+      updated_at: new Date().toISOString(),
+      width_cm: widthCm,
+      work_date: lastUpdatedAt.slice(0, 10)
+    };
+    const existing = byTrackingId.get(trackingId);
+    if (!existing || existing.last_updated_at <= fact.last_updated_at) byTrackingId.set(trackingId, fact);
+  });
+  return { facts: [...byTrackingId.values()], rejected, sourceRows: records.length };
+}
+
 async function mapFuelStations(companyId: string, rows: Array<{ normalized: NormalizedImport | null }>) {
   if (!supabaseAdmin) return;
   const vehicles = Array.from(new Set(rows.map((row) => clean(row.normalized?.normalizedData.vehicle_no)).filter(Boolean)));
@@ -927,6 +1028,40 @@ export async function POST(request: Request) {
     }
 
     const workbookRows = readWorkbookRows(fileBuffer);
+    if (masterData.parser_type === "delivered_shipment_detail") {
+      const parsedFacts = await importStep("Parse delivered shipment details", () => Promise.resolve(
+        parseDeliveredShipmentFacts(workbookRows, companyId, batch.data.id)
+      ));
+      await importStep("Save delivered shipment facts", () => upsertInChunks(
+        "delivered_shipment_facts",
+        parsedFacts.facts,
+        "company_id,tracking_id",
+        750
+      ));
+      const dates = parsedFacts.facts.map((row) => row.work_date).sort();
+      const duplicateRows = parsedFacts.sourceRows - parsedFacts.rejected.length - parsedFacts.facts.length;
+      const skipped = parsedFacts.rejected.length + duplicateRows;
+      const volumeReady = parsedFacts.facts.filter((row) => row.cubic_volume_cm3 != null && row.actual_weight_kg != null).length;
+      const message = `${parsedFacts.facts.length} tracking shipment${parsedFacts.facts.length === 1 ? "" : "s"} refreshed. ${volumeReady} have complete weight and dimensions. ${skipped} row${skipped === 1 ? "" : "s"} skipped or consolidated.`;
+      const update = await importStep("Mark delivered shipment import completed", async () => db.from("report_import_batches").update({
+        completed_at: new Date().toISOString(),
+        imported_row_count: parsedFacts.facts.length,
+        message,
+        report_from: dates[0] ?? null,
+        report_to: dates.at(-1) ?? null,
+        row_count: parsedFacts.sourceRows,
+        skipped_row_count: skipped,
+        status: "Completed"
+      }).eq("id", batch.data.id).eq("company_id", companyId));
+      if (update.error) throw new Error(update.error.message);
+      return Response.json({
+        duplicateRows,
+        imported: parsedFacts.facts.length,
+        message,
+        skipped,
+        totalRows: parsedFacts.sourceRows
+      });
+    }
     const parsed = await importStep("Parse uploaded report rows", async () => masterData.parser_type === "generic_table"
       ? parseGenericFile(workbookRows)
       : parseFile(sourceType as CoreSourceType, workbookRows));

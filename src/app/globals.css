@@ -9661,6 +9661,31 @@ tbody tr:hover td {
   min-height: 98px;
 }
 
+.reconciliation-closure-panel > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.reconciliation-closure-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.reconciliation-closure-panel > summary::after {
+  content: "Open";
+  margin-left: 4px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.reconciliation-closure-panel[open] > summary::after {
+  content: "Hide";
+}
+
 .reconciliation-lifecycle {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

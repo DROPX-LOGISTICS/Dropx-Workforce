@@ -341,14 +341,14 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
             <div className="metric-card"><span>Difference</span><strong className={moneyClass(netDifference)}>{differenceLabel(netDifference)}</strong><small>Correct before final close</small></div>
           </section>
 
-          <section className="panel">
-            <div className="panel-head">
+          <details className="panel reconciliation-closure-panel">
+            <summary className="panel-head">
               <div>
-                <h2>Day closure</h2>
+                <h2>Validate & close</h2>
                 <p className="subtle">{selectedStation ? `${selectedStation.station_code} · ${result.businessDate}` : "Select a station"}</p>
               </div>
               <StatusPill status={selectedClosure?.is_final_submitted ? "Final submitted" : selectedClosure?.submission_status ?? "Draft"} />
-            </div>
+            </summary>
             <div className="panel-body">
               <div className="reconciliation-lifecycle" aria-label="COD closure lifecycle">
                 <div className={sccRows ? "complete" : "current"}><i>1</i><span>DER roster</span><strong>{sccRows ? `${sccRows} fetched` : "Fetch"}</strong></div>
@@ -506,7 +506,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                 </details>
               ) : null}
             </div>
-          </section>
+          </details>
 
           <section className="panel">
             <div className="panel-head">

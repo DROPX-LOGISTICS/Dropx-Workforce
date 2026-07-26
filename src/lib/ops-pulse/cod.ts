@@ -738,11 +738,24 @@ export async function loadExecutiveReconciliationRows(
     });
   });
 
-  // The cash-entry roster must remain usable before SCC/DER sync completes.
-  // Capacity associate days merge delivered-detail rows with the Amazon Daily
-  // Shipment Count fallback, so the dropdown uses whichever source is present.
-  const associateSourceResult = await loadCapacityAssociateDays(companyId, stationScope, businessDate, businessDate);
+  // The cash-entry roster must remain usable before the selected day's files or
+  // SCC sync arrive. Use that day when present; otherwise use each station's
+  // latest available delivered/daily-shipment roster from the prior fortnight.
+  const sourceDate = new Date(`${businessDate}T00:00:00Z`);
+  sourceDate.setUTCDate(sourceDate.getUTCDate() - 14);
+  const sourceFrom = sourceDate.toISOString().slice(0, 10);
+  const associateSourceResult = await loadCapacityAssociateDays(companyId, stationScope, sourceFrom, businessDate);
+  const latestSourceDateByStation = new Map<string, string>();
   associateSourceResult.data.forEach((associate) => {
+    const stationCode = String(associate.station_code ?? "").trim().toUpperCase();
+    const workDate = String(associate.work_date ?? "");
+    if (!stationCode || !workDate) return;
+    const current = latestSourceDateByStation.get(stationCode);
+    if (!current || workDate > current) latestSourceDateByStation.set(stationCode, workDate);
+  });
+  associateSourceResult.data
+    .filter((associate) => latestSourceDateByStation.get(String(associate.station_code ?? "").trim().toUpperCase()) === associate.work_date)
+    .forEach((associate) => {
     const providerEmployeeId = String(associate.associate_id ?? "").trim();
     const stationCode = String(associate.station_code ?? "").trim();
     if (!providerEmployeeId || !stationCode) return;
@@ -794,7 +807,7 @@ export async function loadExecutiveReconciliationRows(
       updated_at: reconciliation?.updated_at ?? reconciliation?.created_at ?? null,
       source: "shipment_data"
     });
-  });
+    });
 
   reconciliations.forEach((reconciliation) => {
     const key = executiveRowKey(reconciliation.station_code, reconciliation.provider_employee_id);

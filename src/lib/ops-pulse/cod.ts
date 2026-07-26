@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { loadCapacityAssociateDays } from "@/lib/ops-pulse/capacity-shipments";
 
 export const codFormTypes = ["amazon", "flipkart"] as const;
 export const codClients = ["Amazon", "Flipkart"] as const;
@@ -263,7 +264,7 @@ export type ExecutiveReconciliationViewRow = {
   scc_raw_row: Record<string, unknown> | null;
   source_updated_at: string | null;
   updated_at: string | null;
-  source: "scc_driver_reconciliation" | "manual";
+  source: "scc_driver_reconciliation" | "shipment_data" | "manual";
 };
 
 export const depositSlipAttachmentFields = [
@@ -734,6 +735,64 @@ export async function loadExecutiveReconciliationRows(
       source_updated_at: roster.last_seen_at,
       updated_at: reconciliation?.updated_at ?? reconciliation?.created_at ?? null,
       source: "scc_driver_reconciliation"
+    });
+  });
+
+  // The cash-entry roster must remain usable before SCC/DER sync completes.
+  // Capacity associate days merge delivered-detail rows with the Amazon Daily
+  // Shipment Count fallback, so the dropdown uses whichever source is present.
+  const associateSourceResult = await loadCapacityAssociateDays(companyId, stationScope, businessDate, businessDate);
+  associateSourceResult.data.forEach((associate) => {
+    const providerEmployeeId = String(associate.associate_id ?? "").trim();
+    const stationCode = String(associate.station_code ?? "").trim();
+    if (!providerEmployeeId || !stationCode) return;
+    const key = executiveRowKey(stationCode, providerEmployeeId);
+    const existing = rowsByKey.get(key);
+    if (existing) {
+      if (!existing.source_associate_name && associate.associate_name) existing.source_associate_name = associate.associate_name;
+      if (!existing.associate_name && associate.associate_name) existing.associate_name = associate.associate_name;
+      existing.total_delivery = Number(existing.total_delivery ?? 0) || Number(associate.delivered ?? 0);
+      existing.total_activity = Number(existing.total_activity ?? 0) || Number(associate.delivered ?? 0);
+      return;
+    }
+
+    const reconciliation = reconciliationByKey.get(key);
+    const station = locationsByStation.get(stationCode.toUpperCase());
+    rowsByKey.set(key, {
+      key,
+      reconciliation_id: reconciliation?.id ?? null,
+      business_date: businessDate,
+      location_id: reconciliation?.location_id ?? station?.id ?? null,
+      station_code: stationCode,
+      station_name: station?.station_name ?? null,
+      state: station?.state ?? null,
+      provider_employee_id: providerEmployeeId,
+      source_associate_name: associate.associate_name ?? reconciliation?.source_associate_name ?? null,
+      manual_associate_name: reconciliation?.manual_associate_name ?? null,
+      associate_name: associate.associate_name ?? reconciliation?.source_associate_name ?? reconciliation?.manual_associate_name ?? null,
+      shipment_type: reconciliation?.shipment_type ?? "Shipment data",
+      total_delivery: reconciliation?.total_delivery ?? associate.delivered ?? 0,
+      total_activity: reconciliation?.total_activity ?? associate.delivered ?? 0,
+      reconciliation_status: reconciliation?.reconciliation_status ?? "Pending",
+      pending_amount: reconciliation?.pending_amount ?? 0,
+      expected_amount: reconciliation?.expected_amount ?? 0,
+      cash_500_count: reconciliation?.cash_500_count ?? 0,
+      cash_200_count: reconciliation?.cash_200_count ?? 0,
+      cash_100_count: reconciliation?.cash_100_count ?? 0,
+      cash_50_count: reconciliation?.cash_50_count ?? 0,
+      cash_20_count: reconciliation?.cash_20_count ?? 0,
+      cash_10_count: reconciliation?.cash_10_count ?? 0,
+      cash_other_amount: reconciliation?.cash_other_amount ?? 0,
+      collected_amount: reconciliation?.collected_amount ?? 0,
+      difference_amount: reconciliation?.difference_amount ?? 0,
+      remarks: reconciliation?.remarks ?? null,
+      scc_pending_amount: null,
+      scc_pending_details: [],
+      scc_last_detail_checked_at: null,
+      scc_raw_row: null,
+      source_updated_at: null,
+      updated_at: reconciliation?.updated_at ?? reconciliation?.created_at ?? null,
+      source: "shipment_data"
     });
   });
 

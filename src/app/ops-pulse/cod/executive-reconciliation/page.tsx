@@ -513,7 +513,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                 <h2>Collect cash</h2>
                 <p className="subtle">Select associate, count denominations and save.</p>
               </div>
-              <span className="count-badge">{rows.length} Amazon associates</span>
+              <span className="count-badge">{rows.length} associates</span>
             </div>
             {defaultLocationId && selectedStation ? (
               <AssociateEntryBuilder

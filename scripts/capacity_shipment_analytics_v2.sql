@@ -1,6 +1,9 @@
 -- Capacity analytics sourced from delivered shipment facts.
 -- XPT facts roll up to the configured parent station.
 
+create index if not exists delivered_shipment_facts_capacity_station_date_idx
+  on public.delivered_shipment_facts (company_id, station_code, work_date);
+
 create or replace function public.capacity_station_daily(
   p_company_id uuid,
   p_station_codes text[],
@@ -18,21 +21,28 @@ stable
 security definer
 set search_path = public
 as $$
+  with station_scope as (
+    select distinct
+      station.station_code as source_station_code,
+      coalesce(parent.station_code, station.station_code) as output_station_code
+    from public.stations station
+    left join public.stations parent on parent.id = station.parent_station_id
+    where station.company_id = p_company_id
+      and coalesce(parent.station_code, station.station_code) = any(p_station_codes)
+  )
   select
-    coalesce(parent.station_code, station.station_code, facts.station_code) as station_code,
+    scope.output_station_code as station_code,
     facts.work_date,
     count(distinct nullif(facts.driver_id, '')) as active_ids,
     sum(greatest(facts.package_count, 1))::bigint as delivered,
     count(*)::bigint as shipment_count
-  from public.delivered_shipment_facts facts
-  left join public.stations station
-    on station.company_id = facts.company_id
-   and station.station_code = facts.station_code
-  left join public.stations parent on parent.id = station.parent_station_id
+  from station_scope scope
+  join public.delivered_shipment_facts facts
+    on facts.company_id = p_company_id
+   and facts.station_code = scope.source_station_code
+   and facts.work_date between p_from and p_to
   where facts.company_id = p_company_id
-    and facts.work_date between p_from and p_to
-    and coalesce(parent.station_code, station.station_code, facts.station_code) = any(p_station_codes)
-  group by coalesce(parent.station_code, station.station_code, facts.station_code), facts.work_date
+  group by scope.output_station_code, facts.work_date
   order by facts.work_date;
 $$;
 
@@ -53,22 +63,29 @@ stable
 security definer
 set search_path = public
 as $$
+  with station_scope as (
+    select distinct
+      station.station_code as source_station_code,
+      coalesce(parent.station_code, station.station_code) as output_station_code
+    from public.stations station
+    left join public.stations parent on parent.id = station.parent_station_id
+    where station.company_id = p_company_id
+      and coalesce(parent.station_code, station.station_code) = any(p_station_codes)
+  )
   select
-    coalesce(parent.station_code, station.station_code, facts.station_code) as station_code,
+    scope.output_station_code as station_code,
     facts.work_date,
     facts.driver_id as associate_id,
     max(nullif(facts.driver_name, '')) as associate_name,
     sum(greatest(facts.package_count, 1))::bigint as delivered
-  from public.delivered_shipment_facts facts
-  left join public.stations station
-    on station.company_id = facts.company_id
-   and station.station_code = facts.station_code
-  left join public.stations parent on parent.id = station.parent_station_id
+  from station_scope scope
+  join public.delivered_shipment_facts facts
+    on facts.company_id = p_company_id
+   and facts.station_code = scope.source_station_code
+   and facts.work_date between p_from and p_to
   where facts.company_id = p_company_id
-    and facts.work_date between p_from and p_to
     and nullif(facts.driver_id, '') is not null
-    and coalesce(parent.station_code, station.station_code, facts.station_code) = any(p_station_codes)
-  group by coalesce(parent.station_code, station.station_code, facts.station_code),
+  group by scope.output_station_code,
     facts.work_date, facts.driver_id
   order by facts.work_date, facts.driver_id;
 $$;
@@ -93,6 +110,13 @@ stable
 security definer
 set search_path = public
 as $$
+  with station_scope as (
+    select distinct station.station_code as source_station_code
+    from public.stations station
+    left join public.stations parent on parent.id = station.parent_station_id
+    where station.company_id = p_company_id
+      and coalesce(parent.station_code, station.station_code) = p_station_code
+  )
   select
     facts.postal_code,
     sum(greatest(facts.package_count, 1))::bigint as delivered,
@@ -102,14 +126,12 @@ as $$
     count(*) filter (where facts.cubic_volume_cm3 is not null)::bigint as dimension_ready,
     avg(facts.actual_weight_kg)::numeric as average_weight_kg,
     avg(facts.cubic_volume_cm3)::numeric as average_cubic_cm3
-  from public.delivered_shipment_facts facts
-  left join public.stations station
-    on station.company_id = facts.company_id
-   and station.station_code = facts.station_code
-  left join public.stations parent on parent.id = station.parent_station_id
+  from station_scope scope
+  join public.delivered_shipment_facts facts
+    on facts.company_id = p_company_id
+   and facts.station_code = scope.source_station_code
+   and facts.work_date between p_from and p_to
   where facts.company_id = p_company_id
-    and facts.work_date between p_from and p_to
-    and coalesce(parent.station_code, station.station_code, facts.station_code) = p_station_code
     and nullif(facts.postal_code, '') is not null
   group by facts.postal_code
   order by delivered desc;

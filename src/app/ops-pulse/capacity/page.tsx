@@ -70,7 +70,7 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
   const detailFrom = /^\d{4}-\d{2}-\d{2}$/.test(String(searchParams?.from)) ? String(searchParams?.from) : `${end.slice(0, 8)}01`;
   const detailTo = /^\d{4}-\d{2}-\d{2}$/.test(String(searchParams?.to)) ? String(searchParams?.to) : end;
   const periodDays = lens === "current" ? 6 : lens === "movement" ? 7 : 30;
-  const start = dateShift(end, -(Math.max(30, periodDays) + 14));
+  const start = dateShift(end, -(periodDays - 1));
   const [ruleResult, shipmentResult, associateResult, reviewResult] = await Promise.all([
     loadCapacityRules(companyId),
     loadCapacityStationDays(companyId, codes, start, end),

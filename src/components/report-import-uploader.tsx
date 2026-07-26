@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
+import { supabase } from "@/lib/supabase";
 
 type ShipmentStation = { code: string; name: string; model: string; provider: string; parentStationId?: string | null; id?: string; childCodes?: string[] };
 
@@ -41,15 +42,39 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
     payload.append("source_type", sourceType);
     payload.append("station_code", effectiveStationCode);
     payload.append("report_date", reportDate);
-    payload.append("file", file);
     startTransition(async () => {
+      if (file.size > 3.5 * 1024 * 1024) {
+        const signedResponse = await fetch("/api/report-imports/upload-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileName: file.name, size: file.size })
+        });
+        const signed = await signedResponse.json().catch(() => ({}));
+        if (!signedResponse.ok || !signed.path || !signed.token || !supabase) {
+          setError(signed.error ?? "Unable to prepare this large-file upload.");
+          return;
+        }
+        const staged = await supabase.storage.from(signed.bucket).uploadToSignedUrl(signed.path, signed.token, file, {
+          contentType: file.type || "application/octet-stream"
+        });
+        if (staged.error) {
+          setError(`Unable to stage this file: ${staged.error.message}`);
+          return;
+        }
+        payload.append("storage_bucket", signed.bucket);
+        payload.append("storage_path", signed.path);
+        payload.append("original_file_name", file.name);
+        payload.append("original_file_size", String(file.size));
+      } else {
+        payload.append("file", file);
+      }
       const response = await fetch("/api/report-imports", {
         method: "POST",
         body: payload
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(result.error ?? "Unable to import this file.");
+        setError(result.error ?? `Unable to import this file (${response.status}).`);
         return;
       }
       setMessage(result.message ?? "Import completed.");

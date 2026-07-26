@@ -642,7 +642,7 @@ function timestamp(value: unknown) {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-function parseDeliveredShipmentFacts(rows: SheetRow[], companyId: string, batchId: string, selectedStation: string, selectedDate: string) {
+function parseDeliveredShipmentFacts(rows: SheetRow[], companyId: string, batchId: string, selectedStation: string, selectedDate: string, allowedStations: Set<string>) {
   const headerIndex = locateHeader(rows, ["Tracking ID"]);
   const records = rowsToRecords(rows, headerIndex);
   const rejected: Array<{ rowNumber: number; issue: string }> = [];
@@ -653,7 +653,7 @@ function parseDeliveredShipmentFacts(rows: SheetRow[], companyId: string, batchI
   const preserveEmbeddedDates = embeddedDates.size > 1;
   records.forEach(({ raw, rowNumber }) => {
     const trackingId = clean(findValue(raw, ["Tracking ID", "Tracking Number", "Shipment ID"]));
-    const stationCode = selectedStation || normalizeStation(findValue(raw, ["Station", "Station Code", "Delivery Station"]));
+    const stationCode = normalizeStation(findValue(raw, ["Station", "Station Code", "Delivery Station"])) || selectedStation;
     const lastUpdatedAt = timestamp(findValue(raw, ["Last Updated Time", "Delivery Time", "Delivered At"]));
     const driverId = clean(findValue(raw, ["Driver ID", "Associate ID", "DA ID"])).toUpperCase();
     const postalCode = clean(findValue(raw, ["Postal", "Pincode", "Postal Code"])).match(/\d{6}/)?.[0] ?? "";
@@ -661,6 +661,10 @@ function parseDeliveredShipmentFacts(rows: SheetRow[], companyId: string, batchI
     const lastScanStatus = clean(findValue(raw, ["Last Scan Status", "Scan Status"]));
     if (!trackingId || !stationCode || !lastUpdatedAt || !driverId || !postalCode) {
       rejected.push({ rowNumber, issue: "Missing tracking ID, station, timestamp, Driver ID or postal code." });
+      return;
+    }
+    if (!allowedStations.has(stationCode)) {
+      rejected.push({ rowNumber, issue: `Station ${stationCode} is not mapped under ${selectedStation}.` });
       return;
     }
     if (lastScanStatus && key(lastScanStatus) !== "successful") {
@@ -702,7 +706,7 @@ function parseDeliveredShipmentFacts(rows: SheetRow[], companyId: string, batchI
   return { facts: [...byTrackingId.values()], rejected, sourceRows: records.length };
 }
 
-function parseInboundShipmentFacts(rows: SheetRow[], companyId: string, batchId: string, selectedStation: string, selectedDate: string) {
+function parseInboundShipmentFacts(rows: SheetRow[], companyId: string, batchId: string, selectedStation: string, selectedDate: string, allowedStations: Set<string>) {
   const headerIndex = locateHeader(rows, ["Tracking ID"]);
   const records = rowsToRecords(rows, headerIndex);
   const rejected: Array<{ rowNumber: number; issue: string }> = [];
@@ -714,7 +718,7 @@ function parseInboundShipmentFacts(rows: SheetRow[], companyId: string, batchId:
   const preserveEmbeddedDates = embeddedDates.size > 1;
   records.forEach(({ raw, rowNumber }) => {
     const trackingId = clean(findValue(raw, ["Tracking ID", "Tracking Number", "Shipment ID"]));
-    const stationCode = selectedStation || normalizeStation(findValue(raw, ["Station", "Station Code", "Delivery Station"]));
+    const stationCode = normalizeStation(findValue(raw, ["Station", "Station Code", "Delivery Station"])) || selectedStation;
     const embeddedArrivalDate = parseDate(findValue(raw, [
       "Estimated Arrival Date", "Expected Arrival Date", "Arrival Date",
       "Promised Delivery Date", "Scheduled Delivery Start time"
@@ -723,6 +727,10 @@ function parseInboundShipmentFacts(rows: SheetRow[], companyId: string, batchId:
     const postalCode = clean(findValue(raw, ["Postal", "Pincode", "Postal Code"])).match(/\d{6}/)?.[0] ?? "";
     if (!trackingId || !stationCode || !expectedArrivalDate || !postalCode) {
       rejected.push({ rowNumber, issue: "Missing tracking ID, station, expected-arrival date or postal code." });
+      return;
+    }
+    if (!allowedStations.has(stationCode)) {
+      rejected.push({ rowNumber, issue: `Station ${stationCode} is not mapped under ${selectedStation}.` });
       return;
     }
     const lengthCm = measurement(findValue(raw, ["Package Length", "Length"]), "length");
@@ -1016,6 +1024,11 @@ export async function POST(request: Request) {
   const selectedStation = normalizeStation(formData.get("station_code"));
   const selectedReportDate = parseDate(formData.get("report_date"));
   const file = formData.get("file");
+  const storageBucket = clean(formData.get("storage_bucket"));
+  const storagePath = clean(formData.get("storage_path"));
+  const stagedFileName = clean(formData.get("original_file_name"));
+  const stagedFileSize = Number(clean(formData.get("original_file_size")) || 0);
+  const shipmentStationCodes = new Set<string>(selectedStation ? [selectedStation] : []);
   const master = await db.from("report_import_master")
     .select("source_code, name, file_types, parser_type, dedupe_fields, is_active, requires_station, station_scope, requires_report_date")
     .eq("company_id", companyId)
@@ -1038,6 +1051,14 @@ export async function POST(request: Request) {
       ? await db.from("stations").select("parent_station_id").eq("company_id", companyId).eq("id", selectedLocation.id).maybeSingle()
       : { data: null, error: null };
     if (selectedParentResult.error) return databaseSetupError(selectedParentResult.error.message);
+    if (selectedLocation && ["amazon_dsp_xpt", "amazon_dsp_xpd"].includes(masterData.station_scope)) {
+      const children = await db.from("stations").select("station_code")
+        .eq("company_id", companyId)
+        .eq("parent_station_id", selectedLocation.id)
+        .eq("is_active", true);
+      if (children.error) return databaseSetupError(children.error.message);
+      (children.data ?? []).forEach((child) => shipmentStationCodes.add(normalizeStation(child.station_code)));
+    }
     const eligible = !masterData.requires_station || locationResult.locations.some((location) => {
       const provider = providerName(location).toUpperCase();
       const model = locationModelName(location).toUpperCase();
@@ -1047,8 +1068,12 @@ export async function POST(request: Request) {
     });
     if (!eligible) return Response.json({ error: "Select an eligible station for this report." }, { status: 400 });
   }
-  if (!(file instanceof File)) return Response.json({ error: "Upload a report file." }, { status: 400 });
-  const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
+  if (!(file instanceof File) && (!storageBucket || !storagePath || !stagedFileName)) {
+    return Response.json({ error: "Upload a report file." }, { status: 400 });
+  }
+  const fileName = file instanceof File ? file.name : stagedFileName;
+  const fileSize = file instanceof File ? file.size : stagedFileSize;
+  const extension = fileName.split(".").at(-1)?.toLowerCase() ?? "";
   if (!(masterData.file_types as string[]).includes(extension)) {
     return Response.json({ error: `${masterData.name} accepts ${(masterData.file_types as string[]).map((item) => `.${item}`).join(", ")} files.` }, { status: 400 });
   }
@@ -1056,8 +1081,8 @@ export async function POST(request: Request) {
   const batch = await importStep("Create import batch", async () => db.from("report_import_batches").insert({
     company_id: companyId,
     created_by: authorization.userId,
-    file_name: file.name,
-    file_size: file.size,
+    file_name: fileName,
+    file_size: fileSize,
     source_type: sourceType,
     station_code: selectedStation || null,
     status: "Processing"
@@ -1065,7 +1090,18 @@ export async function POST(request: Request) {
   if (batch.error) return databaseSetupError(batch.error.message);
 
   try {
-    const fileBuffer = await importStep("Read uploaded file", () => file.arrayBuffer());
+    const fileBuffer = await importStep("Read uploaded file", async () => {
+      if (file instanceof File) return file.arrayBuffer();
+      const expectedPrefix = `${companyId}/${authorization.userId}/`;
+      if (storageBucket !== "report-import-staging" || !storagePath.startsWith(expectedPrefix)) {
+        throw new Error("The staged report path is invalid.");
+      }
+      const downloaded = await db.storage.from(storageBucket).download(storagePath);
+      if (downloaded.error || !downloaded.data) throw new Error(downloaded.error?.message ?? "Unable to read the staged report.");
+      const buffer = await downloaded.data.arrayBuffer();
+      await db.storage.from(storageBucket).remove([storagePath]);
+      return buffer;
+    });
     if (masterData.parser_type === "pdf_scorecard" || masterData.parser_type === "pdf_daily_metrics") {
       const pdf = await importStep("Convert PDF to metric rows", () => readPdfMetricRows(
         fileBuffer,
@@ -1115,7 +1151,7 @@ export async function POST(request: Request) {
       });
       await importStep("Save PDF metric facts", () => insertInChunks("report_metric_facts", validMetrics, 250));
       const duplicateRows = metricRows.length - validMetrics.length;
-      const message = `${validMetrics.length} table row${validMetrics.length === 1 ? "" : "s"} extracted from ${file.name}. ${duplicateRows} duplicate${duplicateRows === 1 ? "" : "s"} ignored.`;
+      const message = `${validMetrics.length} table row${validMetrics.length === 1 ? "" : "s"} extracted from ${fileName}. ${duplicateRows} duplicate${duplicateRows === 1 ? "" : "s"} ignored.`;
       const scorecardPeriod = masterData.parser_type === "pdf_scorecard" && pdf.reportYear && pdf.reportWeek
         ? amazonWeekRange(pdf.reportYear, pdf.reportWeek)
         : null;
@@ -1135,7 +1171,7 @@ export async function POST(request: Request) {
     const workbookRows = readWorkbookRows(fileBuffer);
     if (masterData.parser_type === "delivered_shipment_detail") {
       const parsedFacts = await importStep("Parse delivered shipment details", () => Promise.resolve(
-        parseDeliveredShipmentFacts(workbookRows, companyId, batch.data.id, selectedStation, selectedReportDate ?? "")
+        parseDeliveredShipmentFacts(workbookRows, companyId, batch.data.id, selectedStation, selectedReportDate ?? "", shipmentStationCodes)
       ));
       await importStep("Save delivered shipment facts", () => upsertInChunks(
         "delivered_shipment_facts",
@@ -1169,7 +1205,7 @@ export async function POST(request: Request) {
     }
     if (masterData.parser_type === "inbound_shipment_detail") {
       const parsedFacts = await importStep("Parse inbound shipment details", () => Promise.resolve(
-        parseInboundShipmentFacts(workbookRows, companyId, batch.data.id, selectedStation, selectedReportDate ?? "")
+        parseInboundShipmentFacts(workbookRows, companyId, batch.data.id, selectedStation, selectedReportDate ?? "", shipmentStationCodes)
       ));
       await importStep("Save inbound shipment facts", () => upsertInChunks(
         "inbound_shipment_facts",
@@ -1278,7 +1314,7 @@ export async function POST(request: Request) {
         expense_date: row.normalized!.workDate!,
         expense_type: clean(row.normalized!.normalizedData.expense_type) || null,
         raw_payload: row.raw,
-        source_file_name: file.name,
+        source_file_name: fileName,
         source_row_hash: row.hash,
         remarks: clean(row.normalized!.normalizedData.remarks) || null,
         source_batch_id: batch.data.id,

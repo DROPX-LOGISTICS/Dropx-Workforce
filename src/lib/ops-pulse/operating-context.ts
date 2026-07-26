@@ -19,6 +19,12 @@ export function operatingModeForLocation(location: CodLocationRow): OperatingMod
   return null;
 }
 
+export function isAmazonEdspXptLocation(location: CodLocationRow) {
+  const model = locationModelName(location).toUpperCase();
+  const provider = providerName(location).toUpperCase();
+  return provider.includes("AMAZON") && (model === "EDSP" || model === "XPT");
+}
+
 export function locationsForMode(locations: CodLocationRow[], mode: OperatingMode) {
   return locations.filter((location) => operatingModeForLocation(location) === mode);
 }

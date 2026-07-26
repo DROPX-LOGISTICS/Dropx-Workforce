@@ -23,6 +23,14 @@ type ImportBatch = {
   created_at: string;
 };
 
+type ShipmentCoverageRow = {
+  source_type: string;
+  parent_station_code: string;
+  business_date: string;
+  shipment_count: number;
+  last_uploaded_at: string;
+};
+
 function todayInIndia() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata",
@@ -176,6 +184,46 @@ export async function ReportUploadPageContent({
     parentStationId: parentById.get(location.id) ?? null,
     childCodes: (childCodesByParent.get(location.id) ?? []).sort()
   }));
+  const expectedShipmentStations = shipmentStations
+    .filter((station) =>
+      !station.parentStationId
+      && station.provider.toUpperCase().includes("AMAZON")
+      && ["DSP", "EDSP"].includes(station.model.toUpperCase()))
+    .sort((a, b) => a.code.localeCompare(b.code));
+  const coverageResult = companyId && supabaseAdmin
+    ? await supabaseAdmin
+      .from("shipment_import_coverage")
+      .select("source_type, parent_station_code, business_date, shipment_count, last_uploaded_at")
+      .eq("company_id", companyId)
+      .eq("business_date", date)
+    : { data: [] as ShipmentCoverageRow[], error: null };
+  const coverageRows = (coverageResult.data ?? []) as ShipmentCoverageRow[];
+  const coverageByKey = new Map(coverageRows.map((row) => [`${row.source_type}|${row.parent_station_code}`, row]));
+  const stationBatch = (sourceType: string, stationCode: string) => batches.find((batch) =>
+    batch.source_type === sourceType
+    && batchMatchesDate(batch, date)
+    && (batch.station_code ?? "").split(",").map((code) => code.trim()).includes(stationCode));
+  const stationCoverage = expectedShipmentStations.map((station) => {
+    const statusFor = (sourceType: string) => {
+      const coverage = coverageByKey.get(`${sourceType}|${station.code}`);
+      if (coverage) return { status: "Uploaded", count: coverage.shipment_count, uploadedAt: coverage.last_uploaded_at };
+      const batch = stationBatch(sourceType, station.code);
+      if (batch && ["processing", "failed"].includes(batch.status.toLowerCase())) {
+        return { status: batch.status, count: 0, uploadedAt: batch.created_at };
+      }
+      return { status: "Pending", count: 0, uploadedAt: null };
+    };
+    return {
+      station,
+      delivered: statusFor("delivered_shipment_detail"),
+      inbound: statusFor("inbound_shipment_detail")
+    };
+  }).sort((a, b) => {
+    const priority = (row: typeof a) => Number(row.delivered.status === "Uploaded") + Number(row.inbound.status === "Uploaded");
+    return priority(a) - priority(b) || a.station.code.localeCompare(b.station.code);
+  });
+  const deliveredUploaded = stationCoverage.filter((row) => row.delivered.status === "Uploaded").length;
+  const inboundUploaded = stationCoverage.filter((row) => row.inbound.status === "Uploaded").length;
   const dueReports = reports.filter((report) => reportIsDue(report, date));
   const reportBySource = new Map(reports.map((report) => [report.source_code, report]));
   const latestBySource = new Map<string, ImportBatch>();
@@ -210,16 +258,6 @@ export async function ReportUploadPageContent({
     return missing.length ? [{ report, missing }] : [];
   });
   const recentBatches = batches.slice(0, 10);
-  const shipmentCoverageDates = Array.from({ length: 7 }, (_, index) => addDays(today, -index));
-  const shipmentCoverage = shipmentCoverageDates.map((coverageDate) => {
-    const findBatch = (sourceType: string) => batches.find((batch) => successfulBatchCoversDate(batch, sourceType, coverageDate));
-    return {
-      date: coverageDate,
-      delivered: findBatch("delivered_shipment_detail"),
-      inbound: findBatch("inbound_shipment_detail")
-    };
-  });
-
   return (
     <AppShell active={active} pageCode={pageCode}>
       <PageHead
@@ -229,8 +267,8 @@ export async function ReportUploadPageContent({
         action={<span className={`status-pill ${isSupabaseAdminConfigured ? "good" : "warn"}`}>{isSupabaseAdminConfigured ? "Connected" : "Database unavailable"}</span>}
       />
 
-      {masterError || batchError || locationResult.error ? (
-        <section className="panel message-panel error"><div className="panel-body"><strong>{masterError ?? batchError ?? locationResult.error}</strong></div></section>
+      {masterError || batchError || locationResult.error || coverageResult.error ? (
+        <section className="panel message-panel error"><div className="panel-body"><strong>{masterError ?? batchError ?? locationResult.error ?? coverageResult.error?.message}</strong></div></section>
       ) : null}
 
       <section className="panel">
@@ -242,20 +280,38 @@ export async function ReportUploadPageContent({
       </section>
 
       <section className="panel">
-        <div className="panel-head">
-          <div><h2>Shipment coverage</h2><p className="subtle">Latest seven days. Re-uploading refreshes existing Tracking IDs without double-counting.</p></div>
+        <div className="panel-head toolbar">
+          <div>
+            <h2>Station upload checklist</h2>
+            <p className="subtle">{displayDate(date)} · Delivered {deliveredUploaded}/{stationCoverage.length} · Inbound {inboundUploaded}/{stationCoverage.length}</p>
+          </div>
+          <form className="toolbar-actions" method="get">
+            <input aria-label="Shipment coverage date" className="field compact-date" defaultValue={date} name="date" type="date" />
+            <button className="button secondary compact" type="submit">View</button>
+            <Link className="button secondary compact" href="/imports">Today</Link>
+          </form>
         </div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Date</th><th>Delivered</th><th>Inbound</th></tr></thead>
+            <thead><tr><th>Station</th><th>Delivered data</th><th>Inbound data</th></tr></thead>
             <tbody>
-              {shipmentCoverage.map((row) => (
-                <tr key={`shipment-coverage-${row.date}`}>
-                  <td><strong>{displayDate(row.date)}</strong></td>
-                  <td>{row.delivered ? <><StatusPill status="Uploaded" /> <span className="subtle">{row.delivered.station_code || "Detected"} · {row.delivered.file_name}</span></> : <StatusPill status="Missing" />}</td>
-                  <td>{row.inbound ? <><StatusPill status="Uploaded" /> <span className="subtle">{row.inbound.station_code || "Detected"} · {row.inbound.file_name}</span></> : <StatusPill status="Missing" />}</td>
+              {stationCoverage.map((row) => (
+                <tr key={`shipment-coverage-${row.station.id}`}>
+                  <td>
+                    <strong>{row.station.code} · {row.station.name}</strong>
+                    {row.station.childCodes.length ? <div className="subtle">Includes XPT: {row.station.childCodes.join(", ")}</div> : null}
+                  </td>
+                  <td>
+                    <StatusPill status={row.delivered.status} />
+                    {row.delivered.count ? <span className="subtle"> {row.delivered.count.toLocaleString("en-IN")} shipments</span> : null}
+                  </td>
+                  <td>
+                    <StatusPill status={row.inbound.status} />
+                    {row.inbound.count ? <span className="subtle"> {row.inbound.count.toLocaleString("en-IN")} shipments</span> : null}
+                  </td>
                 </tr>
               ))}
+              {!stationCoverage.length ? <tr><td className="empty-cell" colSpan={3}>No eligible Amazon DSP or EDSP parent stations are available.</td></tr> : null}
             </tbody>
           </table>
         </div>

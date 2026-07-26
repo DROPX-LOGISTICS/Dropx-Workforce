@@ -1239,6 +1239,15 @@ export async function POST(request: Request) {
       const parsedFacts = await importStep("Parse delivered shipment details", () => Promise.resolve(
         parseDeliveredShipmentFacts(workbookRows, companyId, batch.data.id, selectedStation, selectedReportDate ?? "", shipmentStationCodes)
       ));
+      const dates = Array.from(new Set(parsedFacts.facts.map((row) => row.work_date))).sort();
+      const detectedParents = await importStep("Resolve detected parent stations", () =>
+        shipmentParentCodes(companyId, parsedFacts.facts.map((row) => row.station_code)));
+      const detected = await importStep("Record detected shipment coverage", async () => db.from("report_import_batches").update({
+        report_from: dates[0] ?? null,
+        report_to: dates.at(-1) ?? null,
+        station_code: detectedParents.join(", ") || "Auto-detect"
+      }).eq("id", batch.data.id).eq("company_id", companyId));
+      if (detected.error) throw new Error(detected.error.message);
       const refreshedExisting = await importStep("Identify previously imported shipments", () =>
         countExistingShipmentFacts("delivered_shipment_facts", companyId, parsedFacts.facts.map((row) => row.tracking_id)));
       await importStep("Save delivered shipment facts", () => upsertInChunks(
@@ -1247,9 +1256,15 @@ export async function POST(request: Request) {
         "company_id,tracking_id",
         750
       ));
-      const dates = parsedFacts.facts.map((row) => row.work_date).sort();
-      const detectedParents = await importStep("Resolve detected parent stations", () =>
-        shipmentParentCodes(companyId, parsedFacts.facts.map((row) => row.station_code)));
+      await importStep("Refresh delivered station coverage", async () => {
+        const result = await db.rpc("refresh_shipment_import_coverage", {
+          p_batch_id: batch.data.id,
+          p_company_id: companyId,
+          p_dates: dates,
+          p_source_type: "delivered_shipment_detail"
+        });
+        if (result.error) throw new Error(result.error.message);
+      });
       const duplicateRows = parsedFacts.sourceRows - parsedFacts.rejected.length - parsedFacts.facts.length;
       const skipped = parsedFacts.rejected.length;
       const volumeReady = parsedFacts.facts.filter((row) => row.cubic_volume_cm3 != null && row.actual_weight_kg != null).length;
@@ -1279,6 +1294,15 @@ export async function POST(request: Request) {
       const parsedFacts = await importStep("Parse inbound shipment details", () => Promise.resolve(
         parseInboundShipmentFacts(workbookRows, companyId, batch.data.id, selectedStation, selectedReportDate ?? "", shipmentStationCodes)
       ));
+      const dates = Array.from(new Set(parsedFacts.facts.map((row) => row.expected_arrival_date))).sort();
+      const detectedParents = await importStep("Resolve detected parent stations", () =>
+        shipmentParentCodes(companyId, parsedFacts.facts.map((row) => row.station_code)));
+      const detected = await importStep("Record detected shipment coverage", async () => db.from("report_import_batches").update({
+        report_from: dates[0] ?? null,
+        report_to: dates.at(-1) ?? null,
+        station_code: detectedParents.join(", ") || "Auto-detect"
+      }).eq("id", batch.data.id).eq("company_id", companyId));
+      if (detected.error) throw new Error(detected.error.message);
       const refreshedExisting = await importStep("Identify previously imported shipments", () =>
         countExistingShipmentFacts("inbound_shipment_facts", companyId, parsedFacts.facts.map((row) => row.tracking_id)));
       await importStep("Save inbound shipment facts", () => upsertInChunks(
@@ -1287,9 +1311,15 @@ export async function POST(request: Request) {
         "company_id,tracking_id",
         750
       ));
-      const dates = parsedFacts.facts.map((row) => row.expected_arrival_date).sort();
-      const detectedParents = await importStep("Resolve detected parent stations", () =>
-        shipmentParentCodes(companyId, parsedFacts.facts.map((row) => row.station_code)));
+      await importStep("Refresh inbound station coverage", async () => {
+        const result = await db.rpc("refresh_shipment_import_coverage", {
+          p_batch_id: batch.data.id,
+          p_company_id: companyId,
+          p_dates: dates,
+          p_source_type: "inbound_shipment_detail"
+        });
+        if (result.error) throw new Error(result.error.message);
+      });
       const duplicateRows = parsedFacts.sourceRows - parsedFacts.rejected.length - parsedFacts.facts.length;
       const skipped = parsedFacts.rejected.length;
       const volumeReady = parsedFacts.facts.filter((row) => row.cubic_volume_cm3 != null && row.actual_weight_kg != null).length;

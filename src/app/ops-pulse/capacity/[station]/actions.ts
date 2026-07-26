@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { loadCapacityStationDays } from "@/lib/ops-pulse/capacity-shipments";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
@@ -58,9 +59,8 @@ export async function saveDailyCapacityReview(formData: FormData) {
     redirect(`/capacity/${stationCode}?from=${from}&to=${to}&review_date=${reviewDate}&error=${encodeURIComponent("Enter valid regular strength, regular present and a review note. Regular present cannot exceed strength.")}`);
   }
   if (!supabaseAdmin) redirect(`/capacity/${stationCode}?error=Service+unavailable`);
-  const shipment = await supabaseAdmin.from("cps_shipment_daily").select("provider_employee_id")
-    .eq("company_id", companyId).eq("station_code", stationCode).eq("work_date", reviewDate).limit(5000);
-  const systemRoadIds = new Set((shipment.data ?? []).map((row) => row.provider_employee_id).filter(Boolean)).size;
+  const shipment = await loadCapacityStationDays(companyId, [stationCode], reviewDate, reviewDate);
+  const systemRoadIds = Number(shipment.data[0]?.active_ids ?? 0);
   const actualActive = regularPresent + adHocPresent;
   const absent = Math.max(0, regularStrength - regularPresent);
   const reviewedAt = new Date().toISOString();

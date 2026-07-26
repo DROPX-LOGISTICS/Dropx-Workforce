@@ -4,13 +4,12 @@ import { PageHead } from "@/components/page-head";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCapacityRules } from "@/lib/ops-pulse/capacity";
+import { loadCapacityAssociateDays } from "@/lib/ops-pulse/capacity-shipments";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { operatingModeForLocation, resolveOperatingContext } from "@/lib/ops-pulse/operating-context";
-import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 type SearchParams = { from?: string; to?: string; preset?: string; station?: string; band?: string; sort?: string; dir?: string };
-type Row = { work_date: string; station_code: string; provider_employee_id: string; provider_employee_name: string | null; total_delivery: number | string | null };
 function today() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()); }
 function shift(value: string, days: number) { const date = new Date(`${value}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); }
 function valid(value: unknown) { return /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")); }
@@ -34,27 +33,24 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
   const start = valid(searchParams?.from) ? String(searchParams?.from)
     : preset === "wtd" ? shift(end, -((weekday + 6) % 7))
     : preset === "ytd" ? `${end.slice(0, 4)}-01-01` : `${end.slice(0, 8)}01`;
-  const [ruleResult, ...stationResults] = await Promise.all([
+  const [ruleResult, associateResult] = await Promise.all([
     loadCapacityRules(companyId),
-    ...queryLocations.map((location) => supabaseAdmin ? supabaseAdmin.from("cps_shipment_daily")
-      .select("work_date,station_code,provider_employee_id,provider_employee_name,total_delivery")
-      .eq("company_id", companyId).eq("station_code", location.station_code).gte("work_date", start).lte("work_date", end)
-      .order("work_date", { ascending: false }).limit(5000) : Promise.resolve({ data: [] as Row[], error: null }))
+    loadCapacityAssociateDays(companyId, queryLocations.map((location) => location.station_code), start, end)
   ]);
-  const rows = stationResults.flatMap((result) => (result.data ?? []) as Row[]);
+  const rows = associateResult.data ?? [];
   const ruleMap = new Map(ruleResult.rows.map((rule) => [rule.stationCode, rule]));
-  const keys = [...new Set(rows.map((row) => `${row.station_code}|${row.provider_employee_id}`))];
+  const keys = [...new Set(rows.map((row) => `${row.station_code}|${row.associate_id}`))];
   const allAssociates = keys.map((key) => {
     const [stationCode, id] = key.split("|");
-    const idRows = rows.filter((row) => row.station_code === stationCode && row.provider_employee_id === id);
+    const idRows = rows.filter((row) => row.station_code === stationCode && row.associate_id === id);
     const dates = [...new Set(idRows.map((row) => row.work_date))].sort();
-    const delivered = idRows.reduce((sum, row) => sum + num(row.total_delivery), 0);
-    const daily = dates.map((date) => idRows.filter((row) => row.work_date === date).reduce((sum, row) => sum + num(row.total_delivery), 0));
+    const delivered = idRows.reduce((sum, row) => sum + num(row.delivered), 0);
+    const daily = dates.map((date) => idRows.filter((row) => row.work_date === date).reduce((sum, row) => sum + num(row.delivered), 0));
     const average = dates.length ? delivered / dates.length : 0;
     const target = ruleMap.get(stationCode)?.targetSpr ?? 60;
     const safe = ruleMap.get(stationCode)?.maxSafeSpr ?? 70;
     const level = average > safe ? "high" : average < target ? "low" : "target";
-    return { stationCode, id, name: idRows.find((row) => row.provider_employee_name)?.provider_employee_name || "Unmapped name", dates: dates.length, delivered, average, peak: Math.max(0, ...daily), highDays: daily.filter((value) => value > safe).length, target, safe, level };
+    return { stationCode, id, name: idRows.find((row) => row.associate_name)?.associate_name || "Unmapped name", dates: dates.length, delivered, average, peak: Math.max(0, ...daily), highDays: daily.filter((value) => value > safe).length, target, safe, level };
   });
   const filteredAssociates = allAssociates.filter((row) => band === "all" || row.level === band);
   const sortValue = (row: typeof allAssociates[number]) => sort === "peak" ? row.peak : sort === "delivered" ? row.delivered : sort === "days" ? row.dates : sort === "highDays" ? row.highDays : sort === "station" ? row.stationCode : row.average;
@@ -79,6 +75,7 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
   return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">
     <PageHead eyebrow="Associate Productivity" title="Associate SPR" subtitle="Complete associate-level delivered allocation across any station and date range." />
     <CapacityWorkspaceTabs active="associates" />
+    {locationResult.error || ruleResult.error || associateResult.error ? <div className="message-panel error">{locationResult.error || ruleResult.error || associateResult.error?.message}</div> : null}
     <form className="capacity-period-filter capacity-associate-filter" method="get"><label>Station<select name="station" defaultValue={selectedStation}><option value="">All stations</option>{locations.map((location) => <option key={location.id} value={location.station_code}>{location.station_code} · {location.station_name || location.city || ""}</option>)}</select></label><label>SPR level<select name="band" defaultValue={band}><option value="all">All SPR levels</option><option value="low">Below target</option><option value="target">Target to safe</option><option value="high">Above safe</option></select></label><label>Period<select name="preset" defaultValue={preset}><option value="wtd">Week to date</option><option value="mtd">Month to date</option><option value="ytd">Year to date</option><option value="custom">Custom</option></select></label><label>From<input type="date" name="from" defaultValue={start}/></label><label>To<input type="date" name="to" defaultValue={end}/></label><button className="button compact">Apply</button></form>
     <section className="performance-summary-grid"><article><span>All associates</span><strong>{allAssociates.length}</strong><small>{selectedStation || `${queryLocations.length} stations`}</small></article><article><span>Below target</span><strong>{lowCount}</strong><small>Average below station target SPR</small></article><article><span>Target to safe</span><strong>{targetCount}</strong><small>Within configured range</small></article><article><span>Above safe</span><strong>{highCount}</strong><small>Average above safe SPR</small></article></section>
     <section className="panel"><div className="panel-head"><div><h2>Associate productivity</h2><p className="subtle">SPR is total delivered divided by days the ID appeared in shipment data.</p></div><span className="status-pill neutral">{associates.length} shown</span></div><div className="table-wrap"><table className="capacity-daily-table"><thead><tr><th>Associate</th><th><a href={sortHref("station")}>Station <small>{sortMark("station")}</small></a></th><th><a href={sortHref("days")}>Days worked <small>{sortMark("days")}</small></a></th><th><a href={sortHref("delivered")}>Total delivered <small>{sortMark("delivered")}</small></a></th><th><a href={sortHref("average")}>Average SPR <small>{sortMark("average")}</small></a></th><th><a href={sortHref("peak")}>Peak <small>{sortMark("peak")}</small></a></th><th><a href={sortHref("highDays")}>High days <small>{sortMark("highDays")}</small></a></th><th>SPR position</th></tr></thead><tbody>

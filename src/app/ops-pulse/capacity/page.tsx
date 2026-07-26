@@ -74,7 +74,9 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
   const [ruleResult, shipmentResult, associateResult, reviewResult] = await Promise.all([
     loadCapacityRules(companyId),
     loadCapacityStationDays(companyId, codes, start, end),
-    loadCapacityAssociateDays(companyId, codes, start, end),
+    selectedStationCode
+      ? loadCapacityAssociateDays(companyId, [selectedStationCode], detailFrom, detailTo)
+      : Promise.resolve({ data: [], error: null }),
     supabaseAdmin ? supabaseAdmin.from("report_import_master").select("id,description,updated_at")
       .eq("company_id", companyId).eq("parser_type", "capacity_daily_review").order("updated_at", { ascending: false }).limit(5000)
       : { data: [] as ReviewRow[], error: null }
@@ -122,9 +124,10 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
       const associateId = key.slice(key.indexOf(":") + 1);
       associateDays.set(associateId, (associateDays.get(associateId) ?? 0) + 1);
     });
-    const consistentHeadcount = [...associateDays.values()].filter((days) => days >= consistencyThreshold).length;
+    const measuredConsistentHeadcount = [...associateDays.values()].filter((days) => days >= consistencyThreshold).length;
     const occasionalHeadcount = [...associateDays.values()].filter((days) => days < consistencyThreshold).length;
-    const currentHeadcount = consistentHeadcount || operationalHeadcount;
+    const consistentHeadcount = measuredConsistentHeadcount || operationalHeadcount;
+    const currentHeadcount = consistentHeadcount;
     const averageHeadcount = daily.length ? daily.reduce((sum, day) => sum + day.associates, 0) / daily.length : 0;
     const averageVolume = daily.length ? daily.reduce((sum, day) => sum + day.volume, 0) / daily.length : 0;
     const currentSpr = averageHeadcount ? averageVolume / averageHeadcount : 0;
@@ -198,7 +201,7 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
     <div className="capacity-basis-strip"><strong>Planning basis</strong><span>Latest six shipment days · unique road-active IDs · delivered packages · station master SPR and buffer</span></div>
     {locationResult.error || ruleResult.error || shipmentResult.error || associateResult.error || reviewResult.error ? <div className="message-panel error">{locationResult.error || ruleResult.error || shipmentResult.error?.message || associateResult.error?.message || reviewResult.error?.message}</div> : null}
     <section className="performance-summary-grid"><article><span>Road-active IDs</span><strong>{fmt(totalRoadActive)}</strong><small>System shipment IDs</small></article><article><span>Ops-confirmed regular</span><strong>{reviewedStations.length ? fmt(actualRegular) : "—"}</strong><small>{reviewedStations.length}/{views.length} stations reviewed</small></article><article><span>Ad hoc dependency</span><strong>{reviewedStations.length ? fmt(adHocTotal) : "—"}</strong><small>Temporary resources confirmed</small></article><article><span>Absenteeism</span><strong>{reviewedStations.length ? `${fmt(networkAbsenteeism, 1)}%` : "—"}</strong><small>Based on Ops-confirmed regular strength</small></article><article><span>Additional hiring</span><strong>{fmt(hiringNeed)}</strong><small>System demand requirement {fmt(totalRequired)}</small></article></section>
-    <section className="panel"><div className="panel-head"><div><h2>Station capacity plan</h2><p className="subtle">Attrition is inferred from associate IDs active in the previous seven days but absent in the latest seven days.</p></div><a className="button secondary compact" href="/master/capacity">Capacity Master</a></div>
+    <section className="panel"><div className="panel-head"><div><h2>Station capacity plan</h2><p className="subtle">System headcount is the latest road-active ID count. Open a station for associate movement and day-level evidence.</p></div><a className="button secondary compact" href="/master/capacity">Capacity Master</a></div>
       <div className="table-wrap"><table className="capacity-table"><thead><tr><th>Station</th><th>System IDs</th><th>Actual regular</th><th>Ad hoc</th><th>Absent</th><th>Consistent IDs</th><th>Average volume</th><th>SPR</th><th>Required HC</th><th>Decision</th><th>Reason</th></tr></thead><tbody>
         {views.map((row) => { const review = latestReviewByStation.get(row.stationCode); const reliableHeadcount = review ? num(review.regularPresent) : row.consistentHeadcount || row.operationalHeadcount; const reliableGap = row.requiredHeadcount == null ? null : row.requiredHeadcount - reliableHeadcount; const reliableStatus = row.status === "no_data" ? "No data" : reliableGap && reliableGap > 0 ? `${review ? "Hire" : "System: hire"} ${reliableGap}` : reliableGap != null && reliableGap < -1 ? `${review ? "Surplus" : "System: surplus"} ${Math.abs(reliableGap)}` : review ? "Balanced" : "System: balanced"; return <tr key={row.stationCode}><td><a className="capacity-station-link" href={`/capacity/${row.stationCode}?from=${detailFrom}&to=${detailTo}`}><strong>{row.stationCode}</strong><small>{row.stationName}<br/>{review ? `Ops reviewed · ${review.reviewDate}` : row.latestDate ? `System data · ${row.latestDate}` : "No shipment IDs"}</small></a></td><td><strong>{fmt(row.operationalHeadcount)}</strong></td><td>{review ? fmt(num(review.regularPresent)) : "—"}</td><td>{review ? fmt(num(review.adHocPresent)) : "—"}</td><td className={num(review?.absent) ? "metric-bad-text" : ""}>{review ? fmt(num(review.absent)) : "—"}</td><td><strong>{fmt(row.consistentHeadcount)}</strong><small>{row.consistencyDays ? `≥ ${Math.ceil(row.consistencyDays * 2 / 3)} of ${row.consistencyDays} days` : "No source days"}</small></td><td>{fmt(row.averageVolume)}</td><td><strong className={row.status === "risk" ? "metric-bad-text" : ""}>{row.status === "no_data" ? "—" : fmt(row.currentSpr, 1)}</strong></td><td>{row.requiredHeadcount ?? "—"}</td><td><span className={`capacity-decision ${reliableGap && reliableGap > 0 ? "hire" : reliableGap != null && reliableGap < -1 ? "surplus" : row.status === "no_data" ? "unconfigured" : "balanced"}`}>{reliableStatus}</span></td><td className="capacity-reason">{review ? String(review.note || generatedReasons[row.stationCode] || row.reason) : `${generatedReasons[row.stationCode] || row.reason} Provisional until Ops confirms regular/ad hoc strength.`}</td></tr>; })}
       </tbody></table></div>

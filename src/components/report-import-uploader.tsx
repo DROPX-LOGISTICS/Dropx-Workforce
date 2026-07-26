@@ -21,7 +21,7 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
   const [stationCode, setStationCode] = useState(stations[0]?.code ?? "");
   const [reportDate, setReportDate] = useState(indiaDate());
   const [message, setMessage] = useState<string | null>(null);
-  const [summary, setSummary] = useState<{ duplicateRows?: number; imported?: number; skipped?: number; totalRows?: number } | null>(null);
+  const [summary, setSummary] = useState<{ duplicateRows?: number; imported?: number; refreshedExisting?: number; skipped?: number; totalRows?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -81,6 +81,7 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
       setSummary({
         duplicateRows: Number(result.duplicateRows ?? 0),
         imported: Number(result.imported ?? 0),
+        refreshedExisting: Number(result.refreshedExisting ?? 0),
         skipped: Number(result.skipped ?? 0),
         totalRows: Number(result.totalRows ?? 0)
       });
@@ -164,10 +165,11 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
       {message ? <div className="message-panel success"><strong>{message}</strong></div> : null}
       {summary ? (
         <div className="report-import-summary">
-          <span>Total rows <strong>{summary.totalRows}</strong></span>
-          <span>Imported <strong>{summary.imported}</strong></span>
-          <span>Skipped <strong>{summary.skipped}</strong></span>
-          <span>Duplicates ignored <strong>{summary.duplicateRows}</strong></span>
+          <span>Source rows <strong>{summary.totalRows}</strong></span>
+          <span>Unique shipments processed <strong>{summary.imported}</strong></span>
+          <span>Repeated rows consolidated <strong>{summary.duplicateRows}</strong></span>
+          <span>Invalid rows skipped <strong>{summary.skipped}</strong></span>
+          {summary.refreshedExisting ? <span>Existing shipments refreshed <strong>{summary.refreshedExisting}</strong></span> : null}
         </div>
       ) : null}
       {error ? <div className="message-panel error"><strong>{error}</strong></div> : null}

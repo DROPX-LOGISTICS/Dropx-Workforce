@@ -252,12 +252,22 @@ function dedupeHash(raw: RawRecord, dedupeFields: string[]) {
   return crypto.createHash("sha256").update(JSON.stringify(values)).digest("hex");
 }
 
-function readWorkbookRows(buffer: ArrayBuffer) {
-  const workbook = XLSX.read(buffer, { type: "array", raw: false, cellDates: false });
-  const sheetName = workbook.SheetNames[0];
-  if (!sheetName) throw new Error("The workbook has no sheets.");
-  const sheet = workbook.Sheets[sheetName];
-  return XLSX.utils.sheet_to_json<SheetRow>(sheet, { header: 1, raw: false, defval: "" });
+function readWorkbookRows(buffer: ArrayBuffer, includeAllSheets = false) {
+  const workbook = XLSX.read(buffer, { type: "array", raw: true, cellDates: true });
+  const sheetNames = includeAllSheets ? workbook.SheetNames : workbook.SheetNames.slice(0, 1);
+  if (!sheetNames.length) throw new Error("The workbook has no sheets.");
+  const combined: SheetRow[] = [];
+  sheetNames.forEach((sheetName, sheetIndex) => {
+    const rows = XLSX.utils.sheet_to_json<SheetRow>(workbook.Sheets[sheetName], { header: 1, raw: true, defval: "" });
+    if (!rows.length) return;
+    if (sheetIndex === 0) {
+      combined.push(...rows);
+      return;
+    }
+    const headerIndex = locateHeader(rows, ["Tracking ID"]);
+    combined.push(...rows.slice(headerIndex + 1));
+  });
+  return combined;
 }
 
 type PdfMetricRow = {
@@ -993,6 +1003,19 @@ async function upsertInChunks<T extends Record<string, unknown>>(table: string, 
   }
 }
 
+async function countExistingShipmentFacts(table: "delivered_shipment_facts" | "inbound_shipment_facts", companyId: string, trackingIds: string[]) {
+  if (!supabaseAdmin || !trackingIds.length) return 0;
+  let count = 0;
+  for (let index = 0; index < trackingIds.length; index += HASH_LOOKUP_CHUNK_SIZE) {
+    const result = await supabaseAdmin.from(table).select("tracking_id")
+      .eq("company_id", companyId)
+      .in("tracking_id", trackingIds.slice(index, index + HASH_LOOKUP_CHUNK_SIZE));
+    if (result.error) throw new Error(result.error.message);
+    count += result.data?.length ?? 0;
+  }
+  return count;
+}
+
 export async function GET() {
   if (!supabaseAdmin) return Response.json({ error: "Supabase service key is not configured." }, { status: 500 });
   const authorization = await getAuthorization();
@@ -1168,11 +1191,16 @@ export async function POST(request: Request) {
       return Response.json({ duplicateRows, imported: validMetrics.length, message, skipped: duplicateRows, totalRows: metricRows.length });
     }
 
-    const workbookRows = readWorkbookRows(fileBuffer);
+    const workbookRows = readWorkbookRows(
+      fileBuffer,
+      masterData.parser_type === "delivered_shipment_detail" || masterData.parser_type === "inbound_shipment_detail"
+    );
     if (masterData.parser_type === "delivered_shipment_detail") {
       const parsedFacts = await importStep("Parse delivered shipment details", () => Promise.resolve(
         parseDeliveredShipmentFacts(workbookRows, companyId, batch.data.id, selectedStation, selectedReportDate ?? "", shipmentStationCodes)
       ));
+      const refreshedExisting = await importStep("Identify previously imported shipments", () =>
+        countExistingShipmentFacts("delivered_shipment_facts", companyId, parsedFacts.facts.map((row) => row.tracking_id)));
       await importStep("Save delivered shipment facts", () => upsertInChunks(
         "delivered_shipment_facts",
         parsedFacts.facts,
@@ -1181,9 +1209,9 @@ export async function POST(request: Request) {
       ));
       const dates = parsedFacts.facts.map((row) => row.work_date).sort();
       const duplicateRows = parsedFacts.sourceRows - parsedFacts.rejected.length - parsedFacts.facts.length;
-      const skipped = parsedFacts.rejected.length + duplicateRows;
+      const skipped = parsedFacts.rejected.length;
       const volumeReady = parsedFacts.facts.filter((row) => row.cubic_volume_cm3 != null && row.actual_weight_kg != null).length;
-      const message = `${parsedFacts.facts.length} tracking shipment${parsedFacts.facts.length === 1 ? "" : "s"} refreshed. ${volumeReady} have complete weight and dimensions. ${skipped} row${skipped === 1 ? "" : "s"} skipped or consolidated.`;
+      const message = `${parsedFacts.facts.length} unique tracking shipment${parsedFacts.facts.length === 1 ? "" : "s"} processed across all worksheets. ${refreshedExisting} previously stored shipment${refreshedExisting === 1 ? "" : "s"} refreshed, ${duplicateRows} repeated row${duplicateRows === 1 ? "" : "s"} consolidated, and ${skipped} invalid row${skipped === 1 ? "" : "s"} skipped.`;
       const update = await importStep("Mark delivered shipment import completed", async () => db.from("report_import_batches").update({
         completed_at: new Date().toISOString(),
         imported_row_count: parsedFacts.facts.length,
@@ -1199,6 +1227,7 @@ export async function POST(request: Request) {
         duplicateRows,
         imported: parsedFacts.facts.length,
         message,
+        refreshedExisting,
         skipped,
         totalRows: parsedFacts.sourceRows
       });
@@ -1207,6 +1236,8 @@ export async function POST(request: Request) {
       const parsedFacts = await importStep("Parse inbound shipment details", () => Promise.resolve(
         parseInboundShipmentFacts(workbookRows, companyId, batch.data.id, selectedStation, selectedReportDate ?? "", shipmentStationCodes)
       ));
+      const refreshedExisting = await importStep("Identify previously imported shipments", () =>
+        countExistingShipmentFacts("inbound_shipment_facts", companyId, parsedFacts.facts.map((row) => row.tracking_id)));
       await importStep("Save inbound shipment facts", () => upsertInChunks(
         "inbound_shipment_facts",
         parsedFacts.facts,
@@ -1215,9 +1246,9 @@ export async function POST(request: Request) {
       ));
       const dates = parsedFacts.facts.map((row) => row.expected_arrival_date).sort();
       const duplicateRows = parsedFacts.sourceRows - parsedFacts.rejected.length - parsedFacts.facts.length;
-      const skipped = parsedFacts.rejected.length + duplicateRows;
+      const skipped = parsedFacts.rejected.length;
       const volumeReady = parsedFacts.facts.filter((row) => row.cubic_volume_cm3 != null && row.actual_weight_kg != null).length;
-      const message = `${parsedFacts.facts.length} inbound tracking shipment${parsedFacts.facts.length === 1 ? "" : "s"} refreshed. ${volumeReady} have complete weight and dimensions. ${skipped} row${skipped === 1 ? "" : "s"} skipped or consolidated.`;
+      const message = `${parsedFacts.facts.length} unique inbound shipment${parsedFacts.facts.length === 1 ? "" : "s"} processed across all worksheets. ${refreshedExisting} previously stored shipment${refreshedExisting === 1 ? "" : "s"} refreshed, ${duplicateRows} repeated row${duplicateRows === 1 ? "" : "s"} consolidated, and ${skipped} invalid row${skipped === 1 ? "" : "s"} skipped.`;
       const update = await importStep("Mark inbound shipment import completed", async () => db.from("report_import_batches").update({
         completed_at: new Date().toISOString(),
         imported_row_count: parsedFacts.facts.length,
@@ -1233,6 +1264,7 @@ export async function POST(request: Request) {
         duplicateRows,
         imported: parsedFacts.facts.length,
         message,
+        refreshedExisting,
         skipped,
         totalRows: parsedFacts.sourceRows
       });

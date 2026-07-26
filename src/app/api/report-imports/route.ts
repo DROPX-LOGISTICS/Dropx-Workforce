@@ -450,13 +450,18 @@ function parseAmazon(raw: RawRecord, rowNumber: number): NormalizedImport | null
 }
 
 function readableError(error: unknown) {
-  if (error instanceof Error) return error.message;
+  if (error instanceof Error) {
+    if (/<html|<!doctype|error code 5(?:02|03|04|20)/i.test(error.message)) return "Temporary database gateway error. Please retry.";
+    return error.message;
+  }
   if (error && typeof error === "object") {
     const candidate = error as { code?: unknown; details?: unknown; hint?: unknown; message?: unknown; status?: unknown; statusText?: unknown };
-    return [candidate.message, candidate.details, candidate.hint, candidate.statusText, candidate.code, candidate.status]
+    const message = [candidate.message, candidate.details, candidate.hint, candidate.statusText, candidate.code, candidate.status]
       .map((item) => clean(item))
       .filter(Boolean)
       .join(" ");
+    if (/<html|<!doctype|error code 5(?:02|03|04|20)|\b5(?:02|03|04|20)\b/i.test(message)) return "Temporary database gateway error. Please retry.";
+    return message;
   }
   return clean(error) || "Unknown error";
 }
@@ -995,15 +1000,21 @@ async function insertInChunks<T extends Record<string, unknown>>(table: string, 
   }
 }
 
-async function upsertInChunks<T extends Record<string, unknown>>(table: string, rows: T[], onConflict: string, chunkSize = 500) {
+async function upsertInChunks<T extends Record<string, unknown>>(table: string, rows: T[], onConflict: string, chunkSize = 500, retry = 0) {
   if (!supabaseAdmin || !rows.length) return;
   for (let index = 0; index < rows.length; index += chunkSize) {
     const chunk = rows.slice(index, index + chunkSize);
     const result = await supabaseAdmin.from(table).upsert(chunk as never[], { onConflict });
     if (result.error) {
-      const timedOut = /statement timeout|57014|canceling statement/i.test(readableError(result.error));
-      if (timedOut && chunkSize > 100) {
-        await upsertInChunks(table, chunk, onConflict, Math.max(100, Math.floor(chunkSize / 3)));
+      const rawError = JSON.stringify(result.error);
+      const transient = /statement timeout|57014|canceling statement|<html|<!doctype|error code 5(?:02|03|04|20)|\b5(?:02|03|04|20)\b|fetch failed|network/i.test(rawError);
+      if (transient && chunkSize > 100) {
+        await upsertInChunks(table, chunk, onConflict, Math.max(100, Math.floor(chunkSize / 3)), retry);
+        continue;
+      }
+      if (transient && retry < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 750 * (retry + 1)));
+        await upsertInChunks(table, chunk, onConflict, chunkSize, retry + 1);
         continue;
       }
       throw new Error(`${table} upsert rows ${index + 1}-${Math.min(index + chunkSize, rows.length)} on ${onConflict}: ${readableError(result.error)}`);

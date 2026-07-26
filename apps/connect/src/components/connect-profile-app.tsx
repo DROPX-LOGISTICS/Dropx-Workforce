@@ -5,7 +5,7 @@ import {
   Mail, MapPin, Phone, ShieldCheck, TriangleAlert, UserRound, WalletCards
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { minimumAgeError } from "@/lib/profile-age";
+import { minimumAgeError } from "../lib/profile-age";
 
 export type AppAccount = {
   id: string;

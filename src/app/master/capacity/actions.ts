@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
-import { deleteCapacityRegionMap, deleteCapacityRule, saveCapacityRegionMap, saveCapacityRule, saveShipmentSizeRule } from "@/lib/ops-pulse/capacity";
+import { deleteCapacityRegionMap, deleteCapacityRule, deleteCapacityServiceRoute, saveCapacityRegionMap, saveCapacityRule, saveCapacityServiceRoute, saveShipmentSizeRule } from "@/lib/ops-pulse/capacity";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { operatingModeForLocation } from "@/lib/ops-pulse/operating-context";
 
@@ -110,4 +110,40 @@ export async function upsertShipmentSizeRule(formData: FormData) {
   revalidatePath("/master/capacity");
   revalidatePath("/ops-pulse/capacity");
   redirect(`/master/capacity?${error ? `error=${encodeURIComponent(error)}` : "size_saved=1"}`);
+}
+
+export async function upsertCapacityServiceRoute(formData: FormData) {
+  const authorization = await requirePagePermission("cod_master", "edit");
+  const companyId = requireCompanyId(authorization);
+  const stationCode = String(formData.get("station_code") ?? "").trim().toUpperCase();
+  const routeName = String(formData.get("route_name") ?? "").trim();
+  const vehicleType = String(formData.get("vehicle_type") ?? "");
+  const pincode = String(formData.get("pincode") ?? "").replace(/\D/g, "");
+  const daId = String(formData.get("da_id") ?? "").trim();
+  const daName = String(formData.get("da_name") ?? "").trim();
+  const color = String(formData.get("color") ?? "").trim();
+  const coordinates = String(formData.get("coordinates") ?? "").split(/[\n;]/).map((line) => {
+    const [lat, lng] = line.trim().split(",").map(Number);
+    return { lat, lng };
+  }).filter((point) => Number.isFinite(point.lat) && point.lat >= -90 && point.lat <= 90 && Number.isFinite(point.lng) && point.lng >= -180 && point.lng <= 180);
+  const validVehicle = vehicleType === "bike" || vehicleType === "van";
+  const error = !stationCode || !routeName || !validVehicle || !/^\d{6}$/.test(pincode) || !daId || coordinates.length < 2
+    ? "Enter station, route, vehicle, six-digit pincode, DA ID and at least two valid latitude,longitude points."
+    : await saveCapacityServiceRoute(companyId, {
+      stationCode, routeName, vehicleType: vehicleType as "bike" | "van", pincode, daId, daName,
+      color: /^#[0-9a-f]{6}$/i.test(color) ? color : vehicleType === "van" ? "#7c3aed" : "#ea580c",
+      coordinates, isActive: true
+    });
+  revalidatePath("/master/capacity");
+  revalidatePath(`/ops-pulse/capacity/${stationCode}`);
+  redirect(`/master/capacity?${error ? `error=${encodeURIComponent(error)}` : "route_saved=1"}`);
+}
+
+export async function removeCapacityServiceRoute(formData: FormData) {
+  const authorization = await requirePagePermission("cod_master", "edit");
+  const companyId = requireCompanyId(authorization);
+  const error = await deleteCapacityServiceRoute(companyId, String(formData.get("id") ?? ""));
+  revalidatePath("/master/capacity");
+  revalidatePath("/ops-pulse/capacity");
+  redirect(`/master/capacity?${error ? `error=${encodeURIComponent(error)}` : "route_deleted=1"}`);
 }

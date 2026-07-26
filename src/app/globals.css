@@ -6886,6 +6886,26 @@ tbody tr:hover td {
   cursor: grabbing;
 }
 
+.capacity-internal-map { display: grid; gap: 12px; }
+.capacity-map-toolbar { align-items: end; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
+.capacity-map-toolbar > div:first-child { display: grid; gap: 3px; margin-right: auto; }
+.capacity-map-toolbar > div:first-child span { color: #64748b; font-size: 12px; }
+.capacity-map-toolbar label { color: #64748b; display: grid; font-size: 11px; font-weight: 700; gap: 4px; text-transform: uppercase; }
+.capacity-map-toolbar select { background: white; border: 1px solid #dbe2ea; border-radius: 8px; min-width: 130px; padding: 8px 10px; }
+.capacity-map-zoom { display: flex; gap: 5px; }
+.capacity-map-zoom button { background: white; border: 1px solid #dbe2ea; border-radius: 8px; font-size: 20px; height: 36px; width: 36px; }
+.capacity-map-canvas { background: #e7edf2; border: 1px solid #dbe2ea; border-radius: 12px; height: min(560px, 62vh); overflow: hidden; position: relative; }
+.capacity-map-canvas > img { height: 256px; position: absolute; user-select: none; width: 256px; }
+.capacity-map-canvas svg { height: 100%; left: 0; overflow: visible; position: absolute; top: 0; width: 100%; }
+.capacity-map-canvas text { fill: #111827; font-size: 13px; font-weight: 800; paint-order: stroke; stroke: white; stroke-width: 4px; }
+.capacity-map-canvas text.route-label { fill: #475569; font-size: 10px; font-weight: 700; }
+.capacity-map-canvas text.station-label { font-size: 14px; }
+.capacity-map-no-routes { background: rgb(255 255 255 / 92%); border-radius: 10px; left: 50%; padding: 14px 18px; position: absolute; top: 50%; transform: translate(-50%, -50%); }
+.capacity-map-attribution { background: rgb(255 255 255 / 80%); bottom: 0; color: #475569; padding: 2px 5px; position: absolute; right: 0; }
+.capacity-map-legend { display: flex; flex-wrap: wrap; gap: 8px; }
+.capacity-map-legend span { align-items: center; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 999px; display: flex; font-size: 11px; gap: 5px; padding: 5px 9px; }
+.capacity-map-legend i { border-radius: 50%; height: 9px; width: 9px; }
+
 .fleet-map-tiles {
   position: absolute;
   inset: 0;

@@ -3,12 +3,11 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-const REFRESH_INTERVAL_MS = 5000;
-
-export function LiveCacheRefresh() {
+export function LiveCacheRefresh({ active }: { active: boolean }) {
   const router = useRouter();
 
   useEffect(() => {
+    if (!active) return;
     const interval = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       const activeElement = document.activeElement;
@@ -18,10 +17,10 @@ export function LiveCacheRefresh() {
         || activeElement instanceof HTMLSelectElement
       ) return;
       router.refresh();
-    }, REFRESH_INTERVAL_MS);
+    }, 10000);
 
     return () => window.clearInterval(interval);
-  }, [router]);
+  }, [active, router]);
 
   return null;
 }

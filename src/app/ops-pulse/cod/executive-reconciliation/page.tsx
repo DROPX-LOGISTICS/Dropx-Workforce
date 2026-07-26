@@ -205,7 +205,10 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
   );
 
   const operatingContext = resolveOperatingContext(result.locations);
-  const defaultLocationId = operatingContext.location?.id ?? searchParams?.location ?? "";
+  const requestedLocationId = searchParams?.location ?? "";
+  const defaultLocationId = result.locations.some((location) => location.id === requestedLocationId)
+    ? requestedLocationId
+    : operatingContext.location?.id ?? "";
   const returnHref = currentHref({
     date: searchParams?.date ?? result.businessDate,
     location: defaultLocationId,
@@ -227,7 +230,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
   const expectedTotal = savedRows.reduce((sum, row) => sum + amountValue(row.expected_amount), 0);
   const collectedTotal = savedRows.reduce((sum, row) => sum + amountValue(row.collected_amount), 0);
   const netDifference = savedRows.reduce((sum, row) => sum + amountValue(row.difference_amount), 0);
-  const hasSingleStationScope = true;
+  const hasSingleStationScope = result.locations.length <= 1;
   const sccRows = rows.filter((row) => row.source === "scc_driver_reconciliation").length;
   const workerReady = Boolean(process.env.OPS_PORTAL_WORKER_URL?.trim() && process.env.OPS_PORTAL_WORKER_SECRET?.trim());
   const auditAllowed = canAccessCodAudit(authorization);
@@ -244,6 +247,9 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
   ]);
   const driverRun = portalRunsResult.rows.find((run) => run.check_type === "driver_reconciliation");
   const depositRun = portalRunsResult.rows.find((run) => run.check_type === "prepared_deposit");
+  const hasActivePortalCheck = [driverRun, depositRun].some((run) =>
+    run && ["Queued", "Running", "Fail", "Manual Review", "Error"].includes(run.status) && Number(run.attempt_count ?? 0) < 3
+  );
   const selectedClosure = closures.find((closure) => closure.location_id === defaultLocationId) ?? null;
   const driverCleared = selectedClosure?.driver_check_status === "Passed" ||
     selectedClosure?.driver_check_status === "Exception approved";
@@ -259,21 +265,13 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
     ? "Pending"
     : selectedClosure?.deposit_check_status ?? "Locked";
   const canManagerReview = auditAllowed;
-  const closureTotals = closures.reduce((totals, closure) => ({
-    collected: totals.collected + Number(closure.collected_cod ?? 0),
-    expected: totals.expected + Number(closure.amazon_open_remittance_expected ?? 0),
-    matched: totals.matched + (closure.validation_status === "Matched" ? 1 : 0),
-    mismatch: totals.mismatch + (closure.validation_status === "Mismatch" ? 1 : 0),
-    pendingManager: totals.pendingManager + (closure.manager_status === "Pending" ? 1 : 0)
-  }), { collected: 0, expected: 0, matched: 0, mismatch: 0, pendingManager: 0 });
-
   return (
     <AppShell active="COD" pageCode="cod_executive_reconciliation">
       <PageHead
         eyebrow="Ops Pulse"
-        title="COD"
-        subtitle="Collect associate-wise COD and count cash denominations against the expected amount."
-        action={<span className={`status-pill ${isSupabaseAdminConfigured ? "good" : "warn"}`}>{isSupabaseAdminConfigured ? "Database connected" : "Database key missing"}</span>}
+        title="Executive Reconciliation"
+        subtitle="Count cash, validate SCC and close the station day."
+        action={<span className={`status-pill ${workerReady && isSupabaseAdminConfigured ? "good" : "warn"}`}>{workerReady && isSupabaseAdminConfigured ? "Automation ready" : "Setup required"}</span>}
       />
       <CodSectionTabs active="executive-reconciliation" />
 
@@ -302,15 +300,15 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
 
       {!setupError ? (
         <>
-          <LiveCacheRefresh />
-          <section className="panel">
+          <LiveCacheRefresh active={hasActivePortalCheck} />
+          <section className="panel reconciliation-control-bar">
             <div className="panel-body">
               <form action="/ops-pulse/cod/executive-reconciliation" className="form-grid cod-reconciliation-filter-grid">
                 <label>Business Date<input className="field" name="date" type="date" defaultValue={result.businessDate} /></label>
                 <label className="span-2">Station
                   <select className="field" name="location" defaultValue={defaultLocationId} disabled={hasSingleStationScope}>
-                    {!hasSingleStationScope ? <option value="">All permitted stations</option> : null}
-                    {selectedStation ? <option value={selectedStation.id}>{locationLabel(selectedStation)}</option> : null}
+                    {!hasSingleStationScope ? <option value="">Select station</option> : null}
+                    {result.locations.map((location) => <option key={location.id} value={location.id}>{locationLabel(location)}</option>)}
                   </select>
                   {hasSingleStationScope ? <input type="hidden" name="location" value={defaultLocationId} /> : null}
                 </label>
@@ -321,7 +319,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                   </select>
                 </label>
                 <div className="form-actions cod-filter-actions align-right">
-                  <button className="button secondary" type="submit">Show sheet</button>
+                  <button className="button secondary" type="submit">Apply</button>
                 </div>
               </form>
               {permission.canEdit ? (
@@ -329,61 +327,47 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                   <input type="hidden" name="return_href" value={returnHref} />
                   <input type="hidden" name="business_date" value={result.businessDate} />
                   <input type="hidden" name="location_id" value={defaultLocationId} />
-                  <SubmitButton className="button secondary" disabled={!defaultLocationId}>Sync SCC now</SubmitButton>
+                  <SubmitButton disabled={!defaultLocationId}>Fetch DER</SubmitButton>
                 </form>
               ) : null}
-              <div className="scc-sync-card">
-                <div className="scc-sync-item">
-                  <span>SCC source</span>
-                  <strong>{workerReady ? "Automation connected" : "Automation not configured"}</strong>
-                  <small>{workerReady ? "Use Sync SCC now or wait for scheduled checks to pull Amazon SCC Driver Reconciliation." : "Connect the live SCC worker before station teams use this page."}</small>
-                </div>
-                <div className="scc-sync-item">
-                  <span>Imported rows</span>
-                  <strong>{sccRows}</strong>
-                  <small>For selected date and station</small>
-                </div>
-                <div className="scc-sync-item">
-                  <span>Station flow</span>
-                  <strong>Sync, then count cash</strong>
-                  <small>Associates should come from SCC automatically for the selected date and station.</small>
-                </div>
-              </div>
             </div>
           </section>
 
-          <section className="summary-grid">
-            <div className="metric-card"><span>Entered associates</span><strong>{savedRows.length}</strong><small>Saved COD reconciliation rows</small></div>
-            <div className="metric-card"><span>Balanced</span><strong>{completed}</strong><small>Cash equals expected COD</small></div>
-            <div className="metric-card"><span>Expected COD</span><strong>{formatAmount(expectedTotal)}</strong><small>Amount entered by station</small></div>
-            <div className="metric-card"><span>Net Cash Difference</span><strong className={moneyClass(netDifference)}>{differenceLabel(netDifference)}</strong><small>Collected {formatAmount(collectedTotal)}</small></div>
+          <section className="summary-grid reconciliation-summary">
+            <div className="metric-card"><span>DER roster</span><strong>{sccRows}</strong><small>{workerReady ? "Browser task connected" : "Worker setup required"}</small></div>
+            <div className="metric-card"><span>Cash entered</span><strong>{savedRows.length} / {sccRows || rows.length}</strong><small>{completed} balanced</small></div>
+            <div className="metric-card"><span>Collected</span><strong>{formatAmount(collectedTotal)}</strong><small>Expected {formatAmount(expectedTotal)}</small></div>
+            <div className="metric-card"><span>Difference</span><strong className={moneyClass(netDifference)}>{differenceLabel(netDifference)}</strong><small>Correct before final close</small></div>
           </section>
 
           <section className="panel">
             <div className="panel-head">
               <div>
-                <h2>Station COD closure</h2>
-                <p className="subtle">Complete the gates in order. Driver Reconciliation must clear first, then Bank Deposit. A pending gate can continue only after manager approval.</p>
+                <h2>Day closure</h2>
+                <p className="subtle">{selectedStation ? `${selectedStation.station_code} · ${result.businessDate}` : "Select a station"}</p>
               </div>
               <StatusPill status={selectedClosure?.is_final_submitted ? "Final submitted" : selectedClosure?.submission_status ?? "Draft"} />
             </div>
             <div className="panel-body">
-              <div className="summary-grid">
-                <div className="metric-card"><span>Driver Reconciliation</span><strong>{selectedClosure?.driver_check_status ?? "Not run"}</strong><small>Pending {formatAmount(selectedClosure?.driver_reconciliation_pending ?? 0)}</small></div>
-                <div className="metric-card"><span>Bank Deposit</span><strong>{depositDisplayStatus}</strong><small>{selectedClosure?.no_deposit_liability ? `No liability · COD difference ${formatAmount(depositAmountDifference)}` : "Liability clearance not confirmed"}</small></div>
-                <div className="metric-card"><span>Collected COD</span><strong>{formatAmount(closureTotals.collected)}</strong><small>Submitted station cash</small></div>
-                <div className="metric-card"><span>Amazon expected</span><strong>{formatAmount(closureTotals.expected)}</strong><small>Open remittances without code</small></div>
+              <div className="reconciliation-lifecycle" aria-label="COD closure lifecycle">
+                <div className={sccRows ? "complete" : "current"}><i>1</i><span>DER roster</span><strong>{sccRows ? `${sccRows} fetched` : "Fetch"}</strong></div>
+                <div className={savedRows.length && Math.abs(netDifference) <= 1 ? "complete" : sccRows ? "current" : ""}><i>2</i><span>Cash collection</span><strong>{savedRows.length ? `${completed}/${savedRows.length} balanced` : "Pending"}</strong></div>
+                <div className={driverCleared ? "complete" : savedRows.length ? "current" : ""}><i>3</i><span>Driver recon</span><strong>{selectedClosure?.driver_check_status ?? "Not run"}</strong></div>
+                <div className={selectedClosure?.is_final_submitted ? "complete" : driverCleared ? "current" : ""}><i>4</i><span>Deposit & close</span><strong>{selectedClosure?.is_final_submitted ? "Closed" : depositDisplayStatus}</strong></div>
               </div>
               {defaultLocationId ? (
-                <div style={{ display: "grid", gap: 16, marginTop: 18 }}>
-                  <section className="metric-card">
-                    <span>Step 1</span>
-                    <strong>Clear Driver Reconciliation</strong>
-                    <small>SCC checks all drivers for this station and date. Bank Deposit remains locked until this passes or a manager approves an exception.</small>
+                <div className="reconciliation-gates">
+                  <section className="reconciliation-gate">
+                    <div className="reconciliation-gate-head">
+                      <div><span>Validation 1</span><strong>Driver reconciliation</strong></div>
+                      <StatusPill status={selectedClosure?.driver_check_status ?? "Not run"} />
+                    </div>
                     <PortalCheckProgress
                       attemptCount={Number(driverRun?.attempt_count ?? 0)}
                       checkLabel="SCC Driver Reconciliation"
+                      lastCheckedAt={driverRun?.last_checked_at ?? null}
                       nextCheckAt={driverRun?.next_check_at ?? null}
+                      summary={driverRun?.summary ?? null}
                       status={driverRun?.status ?? "Not run"}
                     />
                     <form action={queueCodClosureCheck} className="form-actions" style={{ marginTop: 12 }}>
@@ -392,20 +376,21 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                       <input type="hidden" name="location_id" value={defaultLocationId} />
                       <input type="hidden" name="check_type" value="driver_reconciliation" />
                       <SubmitButton className="button secondary" disabled={!permission.canEdit || selectedClosure?.is_final_submitted}>
-                        Run Driver Reconciliation
+                        Validate DER
                       </SubmitButton>
                     </form>
                     {selectedClosure && ["Pending", "Manual Review", "Error", "Exception rejected"].includes(selectedClosure.driver_check_status) ? (
-                      <form action={requestCodGateException} className="form-grid three" style={{ marginTop: 12 }}>
-                        <input type="hidden" name="return_href" value={returnHref} />
-                        <input type="hidden" name="business_date" value={result.businessDate} />
-                        <input type="hidden" name="location_id" value={defaultLocationId} />
-                        <input type="hidden" name="gate" value="driver" />
-                        <label className="span-2">Driver exception reason
-                          <textarea className="field" name="exception_reason" rows={2} required placeholder="Explain why the station must continue while Driver Reconciliation is pending." />
-                        </label>
-                        <div className="form-actions align-right"><SubmitButton>Request manager approval</SubmitButton></div>
-                      </form>
+                      <details className="reconciliation-exception">
+                        <summary>Request exception</summary>
+                        <form action={requestCodGateException} className="form-grid three">
+                          <input type="hidden" name="return_href" value={returnHref} />
+                          <input type="hidden" name="business_date" value={result.businessDate} />
+                          <input type="hidden" name="location_id" value={defaultLocationId} />
+                          <input type="hidden" name="gate" value="driver" />
+                          <label className="span-2">Reason<textarea className="field" name="exception_reason" rows={2} required /></label>
+                          <div className="form-actions align-right"><SubmitButton>Send to manager</SubmitButton></div>
+                        </form>
+                      </details>
                     ) : null}
                     {selectedClosure?.driver_check_status === "Exception requested" ? (
                       <div className="alert danger" style={{ marginTop: 12 }}>
@@ -427,14 +412,17 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     ) : null}
                   </section>
 
-                  <section className="metric-card">
-                    <span>Step 2</span>
-                    <strong>Validate Bank Deposit</strong>
-                    <small>Confirms no remaining liability and compares every open CREATED remittance without a code against collected COD.</small>
+                  <section className={`reconciliation-gate ${!driverCleared ? "locked" : ""}`}>
+                    <div className="reconciliation-gate-head">
+                      <div><span>Validation 2</span><strong>Bank deposit</strong></div>
+                      <StatusPill status={depositDisplayStatus} />
+                    </div>
                     <PortalCheckProgress
                       attemptCount={Number(depositRun?.attempt_count ?? 0)}
                       checkLabel="SCC Bank Deposit"
+                      lastCheckedAt={depositRun?.last_checked_at ?? null}
                       nextCheckAt={depositRun?.next_check_at ?? null}
+                      summary={depositRun?.summary ?? null}
                       status={driverCleared ? depositRun?.status ?? "Not run" : "Locked"}
                     />
                     <form action={queueCodClosureCheck} className="form-actions" style={{ marginTop: 12 }}>
@@ -443,20 +431,21 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                       <input type="hidden" name="location_id" value={defaultLocationId} />
                       <input type="hidden" name="check_type" value="prepared_deposit" />
                       <SubmitButton className="button secondary" disabled={!permission.canEdit || !driverCleared || selectedClosure?.is_final_submitted}>
-                        {driverCleared ? "Run Bank Deposit check" : "Locked until Driver Recon clears"}
+                        {driverCleared ? "Validate deposit" : "Driver recon required"}
                       </SubmitButton>
                     </form>
                     {selectedClosure && ["Pending", "Error", "Exception rejected"].includes(depositDisplayStatus) ? (
-                      <form action={requestCodGateException} className="form-grid three" style={{ marginTop: 12 }}>
-                        <input type="hidden" name="return_href" value={returnHref} />
-                        <input type="hidden" name="business_date" value={result.businessDate} />
-                        <input type="hidden" name="location_id" value={defaultLocationId} />
-                        <input type="hidden" name="gate" value="deposit" />
-                        <label className="span-2">Bank Deposit exception reason
-                          <textarea className="field" name="exception_reason" rows={2} required placeholder="Explain the pending liability or remittance mismatch." />
-                        </label>
-                        <div className="form-actions align-right"><SubmitButton>Request manager approval</SubmitButton></div>
-                      </form>
+                      <details className="reconciliation-exception">
+                        <summary>Request exception</summary>
+                        <form action={requestCodGateException} className="form-grid three">
+                          <input type="hidden" name="return_href" value={returnHref} />
+                          <input type="hidden" name="business_date" value={result.businessDate} />
+                          <input type="hidden" name="location_id" value={defaultLocationId} />
+                          <input type="hidden" name="gate" value="deposit" />
+                          <label className="span-2">Reason<textarea className="field" name="exception_reason" rows={2} required /></label>
+                          <div className="form-actions align-right"><SubmitButton>Send to manager</SubmitButton></div>
+                        </form>
+                      </details>
                     ) : null}
                     {selectedClosure?.deposit_check_status === "Exception requested" ? (
                       <div className="alert danger" style={{ marginTop: 12 }}>
@@ -478,10 +467,12 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     ) : null}
                   </section>
 
-                  <section className="metric-card">
-                    <span>Step 3</span>
-                    <strong>Final station submission</strong>
-                    <small>Final submission locks associate entries. Delete or correct any row before submitting.</small>
+                  <section className={`reconciliation-gate final ${!depositCleared ? "locked" : ""}`}>
+                    <div className="reconciliation-gate-head">
+                      <div><span>Final</span><strong>Close station day</strong></div>
+                      <StatusPill status={selectedClosure?.is_final_submitted ? "Final submitted" : "Pending"} />
+                    </div>
+                    <p className="subtle">Final close locks all cash entries.</p>
                     <form action={submitCodDayClosure} className="form-actions" style={{ marginTop: 12 }}>
                       <input type="hidden" name="return_href" value={returnHref} />
                       <input type="hidden" name="business_date" value={result.businessDate} />
@@ -494,7 +485,9 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                 </div>
               ) : <p className="subtle">Select one station to submit its day closure.</p>}
               {managerNotifications.length ? (
-                <div className="table-wrap" style={{ marginTop: 18 }}>
+                <details className="reconciliation-support-panel">
+                  <summary>Manager notifications ({managerNotifications.length})</summary>
+                  <div className="table-wrap">
                   <table>
                     <thead><tr><th>Created</th><th>Manager notification</th><th>Portal</th><th>Email</th></tr></thead>
                     <tbody>
@@ -508,7 +501,8 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                       ))}
                     </tbody>
                   </table>
-                </div>
+                  </div>
+                </details>
               ) : null}
             </div>
           </section>
@@ -516,8 +510,8 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
           <section className="panel">
             <div className="panel-head">
               <div>
-                <h2>Add executive reconciliation</h2>
-                <p className="subtle">Select an associate mapped to this station from Amazon data. Use + Add associate to enter another person on the next row.</p>
+                <h2>Collect cash</h2>
+                <p className="subtle">Select associate, count denominations and save.</p>
               </div>
               <span className="count-badge">{rows.length} Amazon associates</span>
             </div>
@@ -546,26 +540,23 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
           <section className="panel">
             <div className="panel-head">
               <div>
-                <h2>Saved reconciliation entries</h2>
-                <p className="subtle">Saved amounts and denomination counts remain available for review and correction.</p>
+                <h2>Saved cash</h2>
+                <p className="subtle">Edit or delete before final close.</p>
               </div>
               <span className="count-badge">{savedRows.length} entries</span>
             </div>
-            <div className="table-wrap cash-reconciliation-wrap" aria-label="Executive reconciliation sheet">
-              <table className="cash-reconciliation-table">
+            <div className="table-wrap reconciliation-saved-wrap" aria-label="Executive reconciliation sheet">
+              <table className="reconciliation-saved-table">
                 <thead>
                   <tr>
-                    <th>Station</th>
                     <th>Associate</th>
                     <th>Executive ID</th>
                     <th>Expected COD</th>
-                    {denominations.map(([, label]) => <th key={label}>{label}</th>)}
-                    <th>Other</th>
+                    <th>Cash count</th>
                     <th>Collected</th>
-                    <th>Short / Excess</th>
+                    <th>Difference</th>
                     <th>Status</th>
-                    <th>Remarks</th>
-                    <th>Edit / Delete</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -573,7 +564,6 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     const difference = amountValue(row.difference_amount);
                     return (
                       <tr key={row.key}>
-                        <td><strong>{row.station_code}</strong><br /><span className="subtle">{row.station_name ?? row.state ?? "-"}</span></td>
                         <td>
                           {row.source_associate_name ? (
                             <PendingReconDetails row={row} />
@@ -584,16 +574,27 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                         </td>
                         <td>{row.provider_employee_id}</td>
                         <td><input className="field compact-field amount-field" form={`recon-${row.key}`} name="expected_amount" defaultValue={String(row.expected_amount ?? 0)} inputMode="decimal" /></td>
-                        {denominations.map(([name]) => (
-                          <td key={`${row.key}-${name}`}>
-                            <input className="field compact-field cash-count-field" form={`recon-${row.key}`} name={name} defaultValue={String(denominationValue(row, name))} inputMode="numeric" />
-                          </td>
-                        ))}
-                        <td><input className="field compact-field cash-count-field" form={`recon-${row.key}`} name="cash_other_amount" defaultValue={String(row.cash_other_amount ?? 0)} inputMode="decimal" /></td>
+                        <td>
+                          <details className="cash-breakdown inline">
+                            <summary>Edit denominations</summary>
+                            <div className="cash-breakdown-grid">
+                              {denominations.map(([name, label]) => (
+                                <label key={`${row.key}-${name}`}>₹{label}
+                                  <input className="field compact-field cash-count-field" form={`recon-${row.key}`} name={name} defaultValue={String(denominationValue(row, name))} inputMode="numeric" />
+                                </label>
+                              ))}
+                              <label>Other
+                                <input className="field compact-field cash-count-field" form={`recon-${row.key}`} name="cash_other_amount" defaultValue={String(row.cash_other_amount ?? 0)} inputMode="decimal" />
+                              </label>
+                              <label className="cash-remarks">Remarks
+                                <input className="field compact-field" form={`recon-${row.key}`} name="remarks" defaultValue={row.remarks ?? ""} placeholder="Optional note" />
+                              </label>
+                            </div>
+                          </details>
+                        </td>
                         <td><strong>{formatAmount(row.collected_amount)}</strong></td>
                         <td><strong className={moneyClass(difference)}>{differenceLabel(difference)}</strong></td>
                         <td><StatusPill status={row.reconciliation_status} /></td>
-                        <td><input className="field compact-field remarks-field" form={`recon-${row.key}`} name="remarks" defaultValue={row.remarks ?? ""} placeholder="Notes" /></td>
                         <td>
                           <form action={saveExecutiveReconciliation} id={`recon-${row.key}`}>
                             <input type="hidden" name="return_href" value={returnHref} />
@@ -621,7 +622,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                       </tr>
                     );
                   }) : (
-                    <tr><td className="empty-cell" colSpan={16}>No saved COD entries. Select an associate above and save the first reconciliation row.</td></tr>
+                    <tr><td className="empty-cell" colSpan={8}>No saved cash entries.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -629,18 +630,11 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
           </section>
 
           {auditAllowed ? (
-            <section className="panel">
-              <div className="panel-head toolbar">
-                <div>
-                  <h2>COD activity history</h2>
-                  <p className="subtle">Immutable manager/owner history of entries, edits, deletes, validation checks, exceptions, approvals, and final submission.</p>
-                </div>
-                <a
-                  className="button secondary"
-                  href={`/api/ops-pulse/cod/audit-export?date=${encodeURIComponent(result.businessDate)}${defaultLocationId ? `&location=${encodeURIComponent(defaultLocationId)}` : ""}`}
-                >
-                  Download audit CSV
-                </a>
+            <details className="panel reconciliation-support-panel">
+              <summary>Activity history ({auditRows.length})</summary>
+              <div className="reconciliation-support-toolbar">
+                <span className="subtle">Entries, edits, deletions, checks and approvals</span>
+                <a className="button secondary" href={`/api/ops-pulse/cod/audit-export?date=${encodeURIComponent(result.businessDate)}${defaultLocationId ? `&location=${encodeURIComponent(defaultLocationId)}` : ""}`}>Download CSV</a>
               </div>
               <div className="table-wrap">
                 <table>
@@ -661,17 +655,12 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                   </tbody>
                 </table>
               </div>
-            </section>
+            </details>
           ) : null}
 
           {permission.canAdd ? (
-            <section className="panel">
-              <div className="panel-head">
-                <div>
-                  <h2>Associate not in SCC roster</h2>
-                  <p className="subtle">Use only when cash was collected from someone who is not visible in SCC yet.</p>
-                </div>
-              </div>
+            <details className="panel reconciliation-support-panel">
+              <summary>Add associate missing from DER</summary>
               <div className="panel-body">
                 <form action={addManualExecutiveReconciliation} className="form-grid cod-manual-reconciliation-grid">
                   <input type="hidden" name="return_href" value={returnHref} />
@@ -691,7 +680,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                   </div>
                 </form>
               </div>
-            </section>
+            </details>
           ) : null}
         </>
       ) : null}

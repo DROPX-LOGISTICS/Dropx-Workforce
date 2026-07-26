@@ -868,6 +868,18 @@ async function maybeLogin(page, payload, initialUrl = "") {
   let text = await page.locator("body").innerText({ timeout: 10000 }).catch(() => "");
   if (!isLoginVisible(text, page.url())) return { loggedIn: true, message: "Session already active." };
 
+  if (!String(payload.username ?? "").trim() || !String(payload.password ?? "").trim()) {
+    const portalName = portalShortName(payload);
+    const interactiveHint = ENABLE_VNC
+      ? `Open /vnc.html on the ${portalName} worker, complete the Amazon login once, then retry this check.`
+      : `Start the worker with ENABLE_VNC=true and HEADLESS=false, complete Amazon login once, then retry this check.`;
+    return {
+      loggedIn: false,
+      manualReview: true,
+      message: `The saved ${portalName} session has expired or is not available. ${interactiveHint}`
+    };
+  }
+
   const userFilled = await fillFirst(page, [
     "#ap_email",
     "input[type='email']",
@@ -1284,8 +1296,6 @@ async function captureDebug(page, runId, label) {
 
 async function runSccCheck(payload) {
   payload = normalizePortalPayload({ ...payload, portal_code: "scc" });
-  requiredString(payload.username, "username");
-  requiredString(payload.password, "password");
   const stationCode = requiredString(payload.portal_station_code || payload.station_code, "station_code");
   const checkDate = requiredString(payload.check_date, "check_date");
   const checkType = requiredString(payload.check_type, "check_type");
@@ -1391,8 +1401,6 @@ async function runSccCheck(payload) {
 }
 
 async function runSccWarmup(payload) {
-  requiredString(payload.username, "username");
-  requiredString(payload.password, "password");
   const warmupPayload = normalizePortalPayload(payload);
   const portalName = portalShortName(warmupPayload);
 

@@ -67,98 +67,83 @@ export function AssociateEntryBuilder({
   }
 
   return (
-    <div className="table-wrap cash-reconciliation-wrap" aria-label="Add associate reconciliation rows">
-      <table className="cash-reconciliation-table">
-        <thead>
-          <tr>
-            <th>Station</th>
-            <th>Associate</th>
-            <th>Executive ID</th>
-            <th>Expected COD</th>
-            {denominations.map(([, label]) => <th key={label}>{label}</th>)}
-            <th>Other</th>
-            <th>Collected</th>
-            <th>Short / Excess</th>
-            <th>Status</th>
-            <th>Remarks</th>
-            <th>Save</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((entry, index) => {
-            const associate = optionMap.get(entry.providerEmployeeId);
-            const formId = `new-reconciliation-${entry.key}`;
-            return (
-              <tr key={entry.key}>
-                <td><strong>{stationCode}</strong><br /><span className="subtle">{stationLabel}</span></td>
-                <td>
-                  <select
-                    className="field compact-field associate-field"
-                    value={entry.providerEmployeeId}
-                    onChange={(event) => selectAssociate(entry.key, event.target.value)}
-                    required
-                    aria-label={`Associate ${index + 1}`}
-                    form={formId}
-                    name="provider_employee_id"
-                  >
-                    <option value="">Select associate</option>
-                    {associates.map((option) => (
-                      <option key={option.providerEmployeeId} value={option.providerEmployeeId}>
-                        {option.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input form={formId} type="hidden" name="source_associate_name" value={associate?.name ?? ""} />
-                  <input form={formId} type="hidden" name="shipment_type" value={associate?.shipmentType ?? "SCC Driver Reconciliation"} />
-                </td>
-                <td>{associate?.providerEmployeeId ?? "-"}</td>
-                <td>
-                  <input
-                    className="field compact-field amount-field"
-                    form={formId}
-                    name="expected_amount"
-                    defaultValue={associate ? String(associate.pendingAmount) : ""}
-                    key={`${entry.key}-${entry.providerEmployeeId}-expected`}
-                    inputMode="decimal"
-                    placeholder="0"
-                  />
-                </td>
-                {denominations.map(([name]) => (
-                  <td key={`${entry.key}-${name}`}>
-                    <input className="field compact-field cash-count-field" form={formId} name={name} inputMode="numeric" placeholder="0" />
-                  </td>
+    <div className="reconciliation-entry-list" aria-label="Add associate reconciliation rows">
+      {rows.map((entry, index) => {
+        const associate = optionMap.get(entry.providerEmployeeId);
+        const formId = `new-reconciliation-${entry.key}`;
+        return (
+          <article className="reconciliation-entry-card" key={entry.key}>
+            <div className="reconciliation-entry-grid">
+              <label>Associate
+                <select
+                  className="field"
+                  value={entry.providerEmployeeId}
+                  onChange={(event) => selectAssociate(entry.key, event.target.value)}
+                  required
+                  aria-label={`Associate ${index + 1}`}
+                  form={formId}
+                  name="provider_employee_id"
+                >
+                  <option value="">Select associate</option>
+                  {associates.map((option) => (
+                    <option key={option.providerEmployeeId} value={option.providerEmployeeId}>
+                      {option.name} · {option.providerEmployeeId}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>Expected COD
+                <input
+                  className="field"
+                  form={formId}
+                  name="expected_amount"
+                  defaultValue={associate ? String(associate.pendingAmount) : ""}
+                  key={`${entry.key}-${entry.providerEmployeeId}-expected`}
+                  inputMode="decimal"
+                  placeholder="₹ 0"
+                />
+              </label>
+              <label>Remarks
+                <input className="field" form={formId} name="remarks" placeholder="Optional note" />
+              </label>
+              <div className="reconciliation-row-actions">
+                <form action={saveExecutiveReconciliation} id={formId}>
+                  <input type="hidden" name="return_href" value={returnHref} />
+                  <input type="hidden" name="business_date" value={businessDate} />
+                  <input type="hidden" name="location_id" value={locationId} />
+                  <input type="hidden" name="station_code" value={stationCode} />
+                  <input type="hidden" name="source_associate_name" value={associate?.name ?? ""} />
+                  <input type="hidden" name="shipment_type" value={associate?.shipmentType ?? "SCC Driver Reconciliation"} />
+                  <input type="hidden" name="total_delivery" value="0" />
+                  <input type="hidden" name="total_activity" value="0" />
+                  <SubmitButton disabled={!canEdit || !entry.providerEmployeeId}>Save cash</SubmitButton>
+                </form>
+                {rows.length > 1 ? (
+                  <button className="button ghost" type="button" onClick={() => removeRow(entry.key)} aria-label={`Remove associate row ${index + 1}`}>Remove</button>
+                ) : null}
+              </div>
+            </div>
+            <details className="cash-breakdown">
+              <summary>Cash denomination count</summary>
+              <div className="cash-breakdown-grid">
+                {denominations.map(([name, label]) => (
+                  <label key={`${entry.key}-${name}`}>{label}
+                    <input className="field" form={formId} name={name} inputMode="numeric" placeholder="0" />
+                  </label>
                 ))}
-                <td><input className="field compact-field cash-count-field" form={formId} name="cash_other_amount" inputMode="decimal" placeholder="0" /></td>
-                <td className="subtle">After save</td>
-                <td className="subtle">After save</td>
-                <td><span className="status-pill warn">New</span></td>
-                <td><input className="field compact-field remarks-field" form={formId} name="remarks" placeholder="Notes" /></td>
-                <td>
-                  <form action={saveExecutiveReconciliation} id={formId}>
-                    <input type="hidden" name="return_href" value={returnHref} />
-                    <input type="hidden" name="business_date" value={businessDate} />
-                    <input type="hidden" name="location_id" value={locationId} />
-                    <input type="hidden" name="station_code" value={stationCode} />
-                    <input type="hidden" name="total_delivery" value="0" />
-                    <input type="hidden" name="total_activity" value="0" />
-                    <div className="form-actions" style={{ flexWrap: "nowrap" }}>
-                      <SubmitButton className="button secondary small-button" disabled={!canEdit || !entry.providerEmployeeId}>Save</SubmitButton>
-                      {rows.length > 1 ? (
-                        <button className="button ghost small-button" type="button" onClick={() => removeRow(entry.key)} aria-label={`Remove associate row ${index + 1}`}>×</button>
-                      ) : null}
-                    </div>
-                  </form>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      <div className="form-actions" style={{ justifyContent: "flex-start", padding: "12px 14px" }}>
+                <label>Other / coins
+                  <input className="field" form={formId} name="cash_other_amount" inputMode="decimal" placeholder="0" />
+                </label>
+              </div>
+            </details>
+          </article>
+        );
+      })}
+      <div className="form-actions reconciliation-add-action">
         <button className="button secondary" type="button" onClick={addRow} disabled={!associates.length || !canEdit}>
           + Add associate
         </button>
-        {!associates.length ? <span className="subtle">Sync Amazon SCC for this station and date to load associates.</span> : null}
+        <span className="subtle">{associates.length ? `${associates.length} associates available for ${stationCode} · ${stationLabel}` : "Run SCC sync to load the station roster."}</span>
       </div>
     </div>
   );

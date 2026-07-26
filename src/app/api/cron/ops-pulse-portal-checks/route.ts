@@ -322,18 +322,6 @@ async function processRun(run: PortalRun, workerUrl: string, workerSecret: strin
   const driverReconciliationUrl = setting.amazon_driver_recon_url || sccCredentials?.urls.driver_reconciliation || "https://www.amazonlogistics.eu/station/dashboard/driverreconciliation";
   const bankDepositsUrl = setting.amazon_bank_deposit_url || sccCredentials?.urls.bank_deposits || "https://www.amazonlogistics.eu/station/dashboard/bankdeposits";
 
-  if (!username || !password) {
-    await markRun(run.id, {
-      status: "Error",
-      error_message: "Amazon SCC connector is not configured. Add SCC username/password in Settings > Amazon Connector.",
-      summary: "Waiting for owner-only SCC connector credentials.",
-      last_checked_at: new Date().toISOString(),
-      attempt_count: Number(run.attempt_count ?? 0) + 1,
-      next_check_at: retryAt(setting.portal_check_interval_minutes)
-    });
-    return { error: 1, ok: 0 };
-  }
-
   await markRun(run.id, {
     status: "Running",
     error_message: null,
@@ -392,7 +380,9 @@ async function processRun(run: PortalRun, workerUrl: string, workerSecret: strin
       raw_result: rawResult,
       error_message: status === "Error" ? String(result.error_message ?? "Portal worker returned an error.") : null,
       last_checked_at: new Date().toISOString(),
-      next_check_at: retryAt(setting.portal_check_interval_minutes)
+      next_check_at: status === "Pass" || status === "Skipped"
+        ? null
+        : retryAt(setting.portal_check_interval_minutes)
     });
     await logRun(run, "worker_result", `Portal worker completed ${run.check_type}.`, rawResult);
     return { error: 0, ok: 1 };
@@ -462,7 +452,7 @@ export async function GET(request: Request) {
   const runsResult = await supabaseAdmin
     .from("ops_portal_check_runs")
     .select(PORTAL_RUN_SELECT)
-    .in("status", ["Queued", "Pass", "Fail", "Manual Review", "Error"])
+    .in("status", ["Queued", "Fail", "Manual Review", "Error"])
     .or(`next_check_at.is.null,next_check_at.lte.${now}`)
     .order("created_at", { ascending: true })
     .limit(10);

@@ -192,7 +192,7 @@ const cachedCapacityAssociateDays = unstable_cache(async (companyId: string, sta
     ),
     error: detailResult.error ?? countResult.error
   };
-}, ["capacity-associate-days-v2"], { revalidate: 120 });
+}, ["capacity-associate-days-v3"], { revalidate: 120 });
 
 export async function loadCapacityAssociateDays(companyId: string, stationCodes: string[], from: string, to: string) {
   return cachedCapacityAssociateDays(companyId, [...stationCodes].sort(), from, to);

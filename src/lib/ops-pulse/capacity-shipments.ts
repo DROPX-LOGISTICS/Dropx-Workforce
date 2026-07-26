@@ -62,6 +62,47 @@ function normalizedAssociateName(value: string | null | undefined) {
     .toUpperCase();
 }
 
+async function loadDetailedAssociateDays(companyId: string, stationCodes: string[], from: string, to: string) {
+  if (!supabaseAdmin || !stationCodes.length) {
+    return { data: [] as CapacityAssociateDay[], error: null };
+  }
+
+  const stationChunks: string[][] = [];
+  for (let index = 0; index < stationCodes.length; index += 6) {
+    stationChunks.push(stationCodes.slice(index, index + 6));
+  }
+
+  const chunks = await Promise.all(stationChunks.map(async (codes) => {
+    const rows: CapacityAssociateDay[] = [];
+    let fromRow = 0;
+    for (;;) {
+      const result = await supabaseAdmin!
+        .rpc("capacity_associate_daily", {
+          p_company_id: companyId,
+          p_station_codes: codes,
+          p_from: from,
+          p_to: to
+        })
+        .order("work_date", { ascending: true })
+        .order("station_code", { ascending: true })
+        .order("associate_id", { ascending: true })
+        .range(fromRow, fromRow + ASSOCIATE_PAGE_SIZE - 1);
+
+      if (result.error) return { data: rows, error: result.error };
+      const page = (result.data ?? []) as CapacityAssociateDay[];
+      if (!page.length) break;
+      rows.push(...page);
+      fromRow += page.length;
+    }
+    return { data: rows, error: null };
+  }));
+
+  return {
+    data: chunks.flatMap((chunk) => chunk.data),
+    error: chunks.find((chunk) => chunk.error)?.error ?? null
+  };
+}
+
 async function loadShipmentCountAssociateDays(companyId: string, stationCodes: string[], from: string, to: string) {
   if (!supabaseAdmin || !stationCodes.length) {
     return { data: [] as ShipmentCountAssociateDay[], error: null };
@@ -177,22 +218,17 @@ export async function loadCapacityStationDays(companyId: string, stationCodes: s
 const cachedCapacityAssociateDays = unstable_cache(async (companyId: string, stationCodes: string[], from: string, to: string) => {
   if (!supabaseAdmin || !stationCodes.length) return { data: [] as CapacityAssociateDay[], error: null };
   const [detailResult, countResult] = await Promise.all([
-    supabaseAdmin.rpc("capacity_associate_daily", {
-      p_company_id: companyId,
-      p_station_codes: stationCodes,
-      p_from: from,
-      p_to: to
-    }),
+    loadDetailedAssociateDays(companyId, stationCodes, from, to),
     loadShipmentCountAssociateDays(companyId, stationCodes, from, to)
   ]);
   return {
     data: mergeCapacityAssociateDays(
-      (detailResult.data ?? []) as CapacityAssociateDay[],
+      detailResult.data,
       countResult.data
     ),
     error: detailResult.error ?? countResult.error
   };
-}, ["capacity-associate-days-v3"], { revalidate: 120 });
+}, ["capacity-associate-days-v4"], { revalidate: 120 });
 
 export async function loadCapacityAssociateDays(companyId: string, stationCodes: string[], from: string, to: string) {
   return cachedCapacityAssociateDays(companyId, [...stationCodes].sort(), from, to);

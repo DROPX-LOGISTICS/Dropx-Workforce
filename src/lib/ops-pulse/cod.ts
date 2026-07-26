@@ -738,23 +738,25 @@ export async function loadExecutiveReconciliationRows(
     });
   });
 
-  // The cash-entry roster must remain usable before the selected day's files or
-  // SCC sync arrive. Use that day when present; otherwise use each station's
-  // latest available delivered/daily-shipment roster from the prior fortnight.
+  // Associate selection is a station roster, not a day-level report. Build one
+  // distinct list from associates seen in the station's recent Amazon shipment
+  // data. The selected date applies only to the COD entry and SCC validation.
   const sourceDate = new Date(`${businessDate}T00:00:00Z`);
-  sourceDate.setUTCDate(sourceDate.getUTCDate() - 14);
+  sourceDate.setUTCDate(sourceDate.getUTCDate() - 90);
   const sourceFrom = sourceDate.toISOString().slice(0, 10);
   const associateSourceResult = await loadCapacityAssociateDays(companyId, stationScope, sourceFrom, businessDate);
-  const latestSourceDateByStation = new Map<string, string>();
+  const latestAssociateByKey = new Map<string, (typeof associateSourceResult.data)[number]>();
   associateSourceResult.data.forEach((associate) => {
-    const stationCode = String(associate.station_code ?? "").trim().toUpperCase();
-    const workDate = String(associate.work_date ?? "");
-    if (!stationCode || !workDate) return;
-    const current = latestSourceDateByStation.get(stationCode);
-    if (!current || workDate > current) latestSourceDateByStation.set(stationCode, workDate);
+    const providerEmployeeId = String(associate.associate_id ?? "").trim();
+    const stationCode = String(associate.station_code ?? "").trim();
+    if (!providerEmployeeId || !stationCode) return;
+    const key = executiveRowKey(stationCode, providerEmployeeId);
+    const current = latestAssociateByKey.get(key);
+    if (!current || String(associate.work_date ?? "") > String(current.work_date ?? "")) {
+      latestAssociateByKey.set(key, associate);
+    }
   });
-  associateSourceResult.data
-    .filter((associate) => latestSourceDateByStation.get(String(associate.station_code ?? "").trim().toUpperCase()) === associate.work_date)
+  Array.from(latestAssociateByKey.values())
     .forEach((associate) => {
     const providerEmployeeId = String(associate.associate_id ?? "").trim();
     const stationCode = String(associate.station_code ?? "").trim();

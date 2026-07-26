@@ -83,8 +83,7 @@ type FieldExecutiveWorkerCategory = "field_executive" | "contractor";
 function workerCategoryFromDesignationCategories(value: unknown): FieldExecutiveWorkerCategory {
   const categories = normalizeDesignationCategories(value);
   const isContractorOnly = categories.includes("contractors") &&
-    !categories.includes("field_executives") &&
-    !categories.includes("delivery_executives");
+    !categories.includes("field_executives");
   return isContractorOnly ? "contractor" : "field_executive";
 }
 

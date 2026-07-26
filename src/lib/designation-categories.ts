@@ -1,7 +1,6 @@
 export const designationCategoryOptions = [
   { value: "employees", label: "Employees" },
   { value: "field_executives", label: "Field executives" },
-  { value: "delivery_executives", label: "Delivery executives" },
   { value: "vendors", label: "Vendors" },
   { value: "contractors", label: "Independent Contractor" },
   { value: "workers", label: "Workers" }
@@ -13,7 +12,10 @@ const validCategories = new Set<string>(designationCategoryOptions.map((option) 
 
 export function normalizeDesignationCategories(value: unknown, fallback: DesignationCategory[] = ["employees"]) {
   const values = Array.isArray(value) ? value : [];
-  const normalized = Array.from(new Set(values.map((item) => String(item ?? "").trim()).filter((item) => validCategories.has(item)))) as DesignationCategory[];
+  const normalized = Array.from(new Set(values
+    .map((item) => String(item ?? "").trim())
+    .map((item) => item === "delivery_executives" ? "field_executives" : item)
+    .filter((item) => validCategories.has(item)))) as DesignationCategory[];
   return normalized.length ? normalized : fallback;
 }
 

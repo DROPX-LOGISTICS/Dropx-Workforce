@@ -23,7 +23,7 @@ export default function FieldExecutivePage({
       addTitle="Add field executive"
       bulkImportDescription="Upload existing field executive rows and keep the profile completion pending for the app."
       bulkImportTitle="Bulk upload field executives"
-      designationCategoryFilter={["field_executives", "delivery_executives"]}
+      designationCategoryFilter={["field_executives"]}
       detailSubtitle="Complete Field Executive profile"
       editId={searchParams?.edit}
       editTitle="Edit field executive"

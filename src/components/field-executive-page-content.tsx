@@ -36,7 +36,7 @@ type DesignationRow = {
 
 type FieldExecutivePageCode = "delivery_associates" | "contractors";
 type FieldExecutiveRoute = "/field-executive" | "/contractors";
-type DesignationCategoryFilter = "field_executives" | "delivery_executives" | "contractors";
+type DesignationCategoryFilter = "field_executives" | "contractors";
 
 type ExecutiveRow = {
   id: string;
@@ -693,7 +693,7 @@ export async function FieldExecutivePageContent({
   addTitle = "Add field executive",
   bulkImportDescription = "Upload existing field executive rows and keep the profile completion pending for the app.",
   bulkImportTitle = "Bulk upload field executives",
-  designationCategoryFilter = ["field_executives", "delivery_executives"],
+  designationCategoryFilter = ["field_executives"],
   detailSubtitle = "Complete Field Executive profile",
   errorMessage,
   editId,

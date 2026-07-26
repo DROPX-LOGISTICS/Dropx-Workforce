@@ -329,15 +329,13 @@ export function DesignationForm({
   const showEmployeeFields = selectedCategories.includes("employees");
   const showFieldExecutiveFields =
     selectedCategories.includes("field_executives") ||
-    selectedCategories.includes("delivery_executives") ||
     selectedCategories.includes("contractors");
   const fieldExecutiveFieldTitle = selectedCategories.includes("contractors") &&
-    !selectedCategories.includes("field_executives") &&
-    !selectedCategories.includes("delivery_executives")
+    !selectedCategories.includes("field_executives")
       ? "Independent Contractor fields"
       : selectedCategories.includes("contractors")
-        ? "Delivery executive / Independent Contractor fields"
-        : "Delivery executive fields";
+        ? "Field executive / Independent Contractor fields"
+        : "Field executive fields";
   const hasVisibleFieldRules = showEmployeeFields || showFieldExecutiveFields;
 
   return (
@@ -386,7 +384,7 @@ export function DesignationForm({
           ) : null}
         </div>
       ) : (
-        <div className="designation-field-rule-empty">Select Employees, Field executives, Delivery executives, or Independent Contractor to configure onboarding fields.</div>
+        <div className="designation-field-rule-empty">Select Employees, Field executives, or Independent Contractor to configure onboarding fields.</div>
       )}
       <div className="form-actions right">
         <SubmitButton className="button" pendingText="Saving">{submitLabel}</SubmitButton>

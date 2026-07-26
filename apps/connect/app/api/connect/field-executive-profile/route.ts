@@ -5,6 +5,7 @@ import { connectSessionCookieName, findConnectAccounts } from "../../../../src/l
 import { saveProfileVerifications } from "../../../../src/lib/profile-verifications";
 import { supabaseAdmin } from "../../../../src/lib/supabase-admin";
 import { loadWorkforceCategoryRules } from "../../../../src/lib/workforce-category-rules";
+import { assertMinimumProfileAge } from "../../../../src/lib/profile-age";
 import {
   isNonEmployeeProfileType,
   profileFieldRuleCategory,
@@ -346,10 +347,12 @@ export async function POST(request: Request) {
     const pfUanValue = isRequired("pf_uan") || cleanText(formData.get("pf_uan")) ? requiredTwelveDigits(formData.get("pf_uan"), "PF UAN") : null;
     const pfAccountValue = alphaNumValue(formData.get("pf_account_no"), "PF Account No", isRequired("pf_account_no"));
     const esiValue = alphaNumValue(formData.get("esi_no"), "ESI No", isRequired("esi_no"));
+    const dateOfBirth = dateValue("date_of_birth", "Date of birth");
+    assertMinimumProfileAge(dateOfBirth);
 
     const updatePayload: Record<string, unknown> = {
       gender: textValue("gender", "Gender"),
-      date_of_birth: dateValue("date_of_birth", "Date of birth"),
+      date_of_birth: dateOfBirth,
       aadhaar_number: digitsValue("aadhaar_number", "Aadhaar number"),
       pan_number: panValue,
       eshram_uan: eshramValue,

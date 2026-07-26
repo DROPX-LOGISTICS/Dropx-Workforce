@@ -5,6 +5,7 @@ import {
   Mail, MapPin, Phone, ShieldCheck, TriangleAlert, UserRound, WalletCards
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { minimumAgeError } from "@/lib/profile-age";
 
 export type AppAccount = {
   id: string;
@@ -338,6 +339,13 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
     event.preventDefault();
     setError("");
     setNotice("");
+    const dateOfBirthError = enabled.has("date_of_birth")
+      ? minimumAgeError(values.dateOfBirth)
+      : null;
+    if (dateOfBirthError) {
+      setError(dateOfBirthError);
+      return;
+    }
     const mandatory = [
       ...(enabled.has("pan_number") ? ["pan"] : []),
       ...(enabled.has("pan_number") && enabled.has("aadhaar_number") && attempted("pan") && !currentCheck("pan")?.blockSubmit ? ["pan_aadhaar"] : []),
@@ -513,7 +521,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
     </ProfileSection>
     <ProfileSection title="Personal details">
       {input("gender","Gender",{ choices: ["Male","Female","Other"] })}
-      {dateField("date_of_birth","Date of birth")}
+      {dateField("date_of_birth","Date of birth",{ warning: minimumAgeError(values.dateOfBirth) ?? "" })}
       {enabled.has("pan_number") ? <>
         <VerifyField label={`PAN${required.has("pan_number") ? " *" : ""}`} name="pan_number" onChange={(value) => set("panNumber", value.toUpperCase(), ["pan","pan_aadhaar"])} onVerify={() => verify("pan")} running={running === "pan"} value={values.panNumber || ""} checked={attempted("pan")} verified={verified("pan")} error={verificationErrors.pan} required={required.has("pan_number")} />
         <VerificationText checks={[currentCheck("pan")]} />

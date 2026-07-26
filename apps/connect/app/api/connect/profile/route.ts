@@ -5,6 +5,7 @@ import { connectSessionCookieName, findConnectAccounts } from "../../../../src/l
 import { saveProfileVerifications } from "../../../../src/lib/profile-verifications";
 import { supabaseAdmin } from "../../../../src/lib/supabase-admin";
 import { loadWorkforceCategoryRules } from "../../../../src/lib/workforce-category-rules";
+import { assertMinimumProfileAge } from "../../../../src/lib/profile-age";
 
 type EmployeeProfileRow = {
   id: string;
@@ -289,6 +290,8 @@ export async function POST(request: Request) {
       throw new Error("Profile cannot be edited after submission.");
     }
     const manualReviewRequired = String(formData.get("manual_review_required") ?? "") === "true";
+    const dateOfBirth = normalizeDate(formData.get("date_of_birth"));
+    assertMinimumProfileAge(dateOfBirth);
 
     const uploads = await Promise.all([
       uploadProfileFile(formData.get("aadhaar_front"), account.companyId, account.id, "aadhaar-front"),
@@ -301,7 +304,7 @@ export async function POST(request: Request) {
 
     const updatePayload: Record<string, unknown> = {
       gender: cleanText(formData.get("gender")),
-      date_of_birth: normalizeDate(formData.get("date_of_birth")),
+      date_of_birth: dateOfBirth,
       aadhaar_number: normalizeAadhaar(formData.get("aadhaar_number")),
       pan_number: normalizePan(formData.get("pan_number")),
       eshram_uan: cleanDigits(formData.get("eshram_uan")),

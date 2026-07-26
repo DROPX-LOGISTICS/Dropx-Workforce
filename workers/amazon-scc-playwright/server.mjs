@@ -690,7 +690,13 @@ function hasMfaOrHumanBlocker(text) {
   return /otp|one time password|two.?step|multi.?factor|captcha|approve.*notification|authentication required|enter(?:\s+the)?\s+verification code|verification code\s+(?:sent|required|expires)/i.test(text);
 }
 
+function isAuthenticatedPortalPage(text, url) {
+  return /\/station\/dashboard\//i.test(String(url || "")) &&
+    /station command center/i.test(String(text || ""));
+}
+
 function isLoginVisible(text, url) {
+  if (isAuthenticatedPortalPage(text, url)) return false;
   if (/signin|login/i.test(url)) return true;
   return /(?:^|\n)\s*(?:sign in|log in|login)\s*(?:$|\n)|enter\s+(?:your\s+)?(?:password|email|username)/i.test(text);
 }
@@ -764,7 +770,8 @@ async function waitForLoginToClear(page, waitMs) {
     await page.waitForTimeout(3000).catch(() => null);
     await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => null);
     const text = await page.locator("body").innerText({ timeout: 5000 }).catch(() => "");
-    if (!hasMfaOrHumanBlocker(text) && !isLoginVisible(text, page.url())) {
+    if (isAuthenticatedPortalPage(text, page.url()) ||
+      (!hasMfaOrHumanBlocker(text) && !isLoginVisible(text, page.url()))) {
       return true;
     }
   }
@@ -868,7 +875,9 @@ async function maybeLogin(page, payload, initialUrl = "") {
   await page.waitForTimeout(750);
 
   let text = await page.locator("body").innerText({ timeout: 10000 }).catch(() => "");
-  if (!isLoginVisible(text, page.url())) return { loggedIn: true, message: "Session already active." };
+  if (isAuthenticatedPortalPage(text, page.url()) || !isLoginVisible(text, page.url())) {
+    return { loggedIn: true, message: "Session already active." };
+  }
 
   if (!String(payload.username ?? "").trim() || !String(payload.password ?? "").trim()) {
     const portalName = portalShortName(payload);
@@ -1206,7 +1215,7 @@ function countPendingRows(tables) {
 
 function summarizeDriverReconciliation(evidence, stationCode, checkDate, associatesOverride = null) {
   const text = evidence.text || "";
-  if (hasMfaOrHumanBlocker(text)) {
+  if (hasMfaOrHumanBlocker(text) && !isAuthenticatedPortalPage(text, evidence.url)) {
     return {
       status: "Manual Review",
       pending_count: 0,
@@ -1251,7 +1260,7 @@ function summarizeDriverReconciliation(evidence, stationCode, checkDate, associa
 
 function summarizePreparedDeposit(evidence, stationCode, checkDate) {
   const text = evidence.text || "";
-  if (hasMfaOrHumanBlocker(text)) {
+  if (hasMfaOrHumanBlocker(text) && !isAuthenticatedPortalPage(text, evidence.url)) {
     return {
       status: "Manual Review",
       pending_count: 0,
@@ -1484,7 +1493,9 @@ async function runSccWarmup(payload) {
 
     const loginResult = await maybeLogin(page, warmupPayload);
     const text = await page.locator("body").innerText({ timeout: 10000 }).catch(() => "");
-    const stillBlocked = !loginResult.loggedIn || hasMfaOrHumanBlocker(text) || isLoginVisible(text, page.url());
+    const authenticatedPage = isAuthenticatedPortalPage(text, page.url());
+    const stillBlocked = !loginResult.loggedIn ||
+      (!authenticatedPage && (hasMfaOrHumanBlocker(text) || isLoginVisible(text, page.url())));
 
     if (stillBlocked) {
       const debugScreenshot = await captureDebug(page, warmupPayload.run_id || "warmup", "login-blocked");

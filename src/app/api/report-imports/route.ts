@@ -998,8 +998,16 @@ async function insertInChunks<T extends Record<string, unknown>>(table: string, 
 async function upsertInChunks<T extends Record<string, unknown>>(table: string, rows: T[], onConflict: string, chunkSize = 500) {
   if (!supabaseAdmin || !rows.length) return;
   for (let index = 0; index < rows.length; index += chunkSize) {
-    const result = await supabaseAdmin.from(table).upsert(rows.slice(index, index + chunkSize) as never[], { onConflict });
-    if (result.error) throw new Error(`${table} upsert rows ${index + 1}-${Math.min(index + chunkSize, rows.length)} on ${onConflict}: ${readableError(result.error)}`);
+    const chunk = rows.slice(index, index + chunkSize);
+    const result = await supabaseAdmin.from(table).upsert(chunk as never[], { onConflict });
+    if (result.error) {
+      const timedOut = /statement timeout|57014|canceling statement/i.test(readableError(result.error));
+      if (timedOut && chunkSize > 100) {
+        await upsertInChunks(table, chunk, onConflict, Math.max(100, Math.floor(chunkSize / 3)));
+        continue;
+      }
+      throw new Error(`${table} upsert rows ${index + 1}-${Math.min(index + chunkSize, rows.length)} on ${onConflict}: ${readableError(result.error)}`);
+    }
   }
 }
 

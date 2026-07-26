@@ -49,7 +49,7 @@ export default async function CapacityShipmentEvidencePage({ searchParams }: { s
 
   return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">
     <PageHead eyebrow="Shipment evidence" title={`${station || "Station"} tracking IDs`} subtitle="Tracking-level evidence behind capacity and shipment-size metrics." />
-    <div className="capacity-station-toolbar"><a className="button secondary compact" href={`/capacity/${station}?from=${from}&to=${to}`}>← Station capacity</a><span className="status-pill neutral">{classified.length}{(result.data?.length ?? 0) >= 1000 ? "+" : ""} rows</span></div>
+    <div className="capacity-station-toolbar"><a className="button secondary compact" href={`/ops-pulse/capacity/${station}?from=${from}&to=${to}`}>← Station capacity</a><span className="status-pill neutral">{classified.length}{(result.data?.length ?? 0) >= 1000 ? "+" : ""} rows</span></div>
     {result.error || sizeResult.error ? <div className="message-panel error">{result.error?.message || sizeResult.error}</div> : null}
     <section className="panel"><div className="panel-head"><div><h2>Applied evidence</h2><p className="subtle">{from || "All dates"} to {to || "latest"}{pincode ? ` · pincode ${pincode}` : ""}{associate ? ` · ID ${associate}` : ""}{size ? ` · ${size}` : ""}</p></div></div>
       <div className="table-wrap"><table className="capacity-daily-table"><thead><tr><th>Date</th><th>Tracking ID</th><th>Associate</th><th>Pincode</th><th>Weight</th><th>Dimensions cm</th><th>Classification</th></tr></thead><tbody>

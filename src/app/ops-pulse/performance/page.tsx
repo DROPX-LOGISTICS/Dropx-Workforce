@@ -255,7 +255,7 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
     const nextDirection = dailySort === `metric_${index}_asc` ? "desc" : "asc";
     const params = new URLSearchParams({ view: "daily", from, to, sort: `metric_${index}_${nextDirection}` });
     if (selectedCodes.length !== permittedCodes.length) params.set("stations", selectedCodes.join(","));
-    return `/performance?${params.toString()}`;
+    return `/ops-pulse/performance?${params.toString()}`;
   };
   const shipments = (shipmentResult.data ?? []) as ShipmentFact[];
   const locationByCode = new Map(permittedLocations.map((location) => [location.station_code, location]));

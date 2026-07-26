@@ -7,6 +7,10 @@ export type CapacityStationDay = {
   low_volume_ids: number | string;
   delivered: number | string;
   shipment_count: number | string;
+  inbound: number | string;
+  detail_active_ids: number | string;
+  daily_count_active_ids: number | string;
+  volume_source: string;
 };
 
 export type CapacityAssociateDay = {

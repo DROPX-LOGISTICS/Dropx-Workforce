@@ -97,6 +97,7 @@ const sourceLabels: Record<SourceType, string> = {
   daily_edsp_metrics: "Daily EDSP metrics"
 };
 const HASH_LOOKUP_CHUNK_SIZE = 25;
+const TRACKING_LOOKUP_CHUNK_SIZE = 400;
 
 function clean(value: unknown) {
   return String(value ?? "").trim().replace(/^'+/, "").replace(/'+$/, "");
@@ -1014,10 +1015,10 @@ async function upsertInChunks<T extends Record<string, unknown>>(table: string, 
 async function countExistingShipmentFacts(table: "delivered_shipment_facts" | "inbound_shipment_facts", companyId: string, trackingIds: string[]) {
   if (!supabaseAdmin || !trackingIds.length) return 0;
   let count = 0;
-  for (let index = 0; index < trackingIds.length; index += HASH_LOOKUP_CHUNK_SIZE) {
+  for (let index = 0; index < trackingIds.length; index += TRACKING_LOOKUP_CHUNK_SIZE) {
     const result = await supabaseAdmin.from(table).select("tracking_id")
       .eq("company_id", companyId)
-      .in("tracking_id", trackingIds.slice(index, index + HASH_LOOKUP_CHUNK_SIZE));
+      .in("tracking_id", trackingIds.slice(index, index + TRACKING_LOOKUP_CHUNK_SIZE));
     if (result.error) throw new Error(result.error.message);
     count += result.data?.length ?? 0;
   }

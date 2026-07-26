@@ -86,7 +86,11 @@ export function AssociateEntryBuilder({
                 >
                   <option value="">Select associate</option>
                   {associates.map((option) => (
-                    <option key={option.providerEmployeeId} value={option.providerEmployeeId}>
+                    <option
+                      disabled={rows.some((row) => row.key !== entry.key && row.providerEmployeeId === option.providerEmployeeId)}
+                      key={option.providerEmployeeId}
+                      value={option.providerEmployeeId}
+                    >
                       {option.name} · {option.providerEmployeeId}
                     </option>
                   ))}

@@ -226,6 +226,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
     ? result.rows.filter((row) => row.location_id === defaultLocationId || row.station_code === selectedStation?.station_code)
     : result.rows;
   const savedRows = rows.filter((row) => row.reconciliation_id);
+  const availableRows = rows.filter((row) => row.source_associate_name && !row.reconciliation_id);
   const completed = savedRows.filter((row) => row.reconciliation_status === "Completed").length;
   const expectedTotal = savedRows.reduce((sum, row) => sum + amountValue(row.expected_amount), 0);
   const collectedTotal = savedRows.reduce((sum, row) => sum + amountValue(row.collected_amount), 0);
@@ -513,12 +514,11 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                 <h2>Collect cash</h2>
                 <p className="subtle">Select associate, count denominations and save.</p>
               </div>
-              <span className="count-badge">{rows.length} associates</span>
+              <span className="count-badge">{availableRows.length} available</span>
             </div>
             {defaultLocationId && selectedStation ? (
               <AssociateEntryBuilder
-                associates={rows
-                  .filter((row) => row.source_associate_name)
+                associates={availableRows
                   .map((row) => ({
                     name: row.source_associate_name ?? "",
                     providerEmployeeId: row.provider_employee_id,

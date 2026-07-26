@@ -1,18 +1,19 @@
 import { AppShell } from "@/components/app-shell";
+import { CapacityAiAction, CapacityAiActionProvider, type CapacityAiFact } from "@/components/capacity-ai-actions";
+import { CapacityScopeFilter } from "@/components/capacity-scope-filter";
 import { CapacityWorkspaceTabs } from "@/components/capacity-workspace-tabs";
 import { PageHead } from "@/components/page-head";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCapacityRules } from "@/lib/ops-pulse/capacity";
+import { loadCapacityGroundUpdates } from "@/lib/ops-pulse/capacity-ground";
 import { loadCapacityAssociateDays, loadCapacityStationDays } from "@/lib/ops-pulse/capacity-shipments";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
-import { operatingModeForLocation, resolveOperatingContext } from "@/lib/ops-pulse/operating-context";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { isAmazonEdspXptLocation } from "@/lib/ops-pulse/operating-context";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = { lens?: string; station?: string; from?: string; to?: string };
-type ReviewRow = { id: string; description: string | null; updated_at: string };
+type SearchParams = { lens?: string; station?: string; stations?: string; ground_date?: string; from?: string; to?: string; sort?: string; dir?: string };
 type CapacityView = {
   stationCode: string; stationName: string; latestDate: string | null; operationalHeadcount: number; consistentHeadcount: number; occasionalHeadcount: number;
   consistencyDays: number; currentHeadcount: number; averageHeadcount: number;
@@ -29,43 +30,26 @@ function dateShift(value: string, days: number) {
 function today() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()); }
 function num(value: unknown) { const parsed = Number(value ?? 0); return Number.isFinite(parsed) ? parsed : 0; }
 function fmt(value: number, digits = 0) { return value.toLocaleString("en-IN", { maximumFractionDigits: digits }); }
-
-async function aiReasons(rows: CapacityView[]) {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key || String(process.env.CAPACITY_AI_REASONING_ENABLED ?? "true").toLowerCase() === "false" || !rows.length) return {};
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST", signal: controller.signal,
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: process.env.OPENAI_VALIDATION_MODEL || "gpt-4o-mini",
-        temperature: 0.1,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: "You are a logistics workforce planning analyst. Return JSON mapping stationCode to one concise operational sentence. Use only supplied facts. Never invent causes. Mention hire, surplus, balanced, risk, attrition or missing configuration as applicable." },
-          { role: "user", content: JSON.stringify(rows.map(({ reason, ...row }) => row)) }
-        ]
-      })
-    });
-    clearTimeout(timeout);
-    if (!response.ok) return {};
-    const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-    return JSON.parse(body.choices?.[0]?.message?.content ?? "{}") as Record<string, string>;
-  } catch {
-    return {};
-  }
+function scopeCodes(value: string | undefined, allowed: string[]) {
+  if (!value) return allowed;
+  if (value === "_none") return [];
+  const requested = value.split(",").map((code) => code.trim().toUpperCase());
+  return allowed.filter((code) => requested.includes(code));
 }
 
 export default async function CapacityPage({ searchParams }: { searchParams?: SearchParams }) {
   const authorization = await requirePagePermission("cps_associates", "access");
   const companyId = requireCompanyId(authorization);
   const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
-  const locations = resolveOperatingContext(locationResult.locations).selectedLocations.filter((location) => operatingModeForLocation(location) !== "amazon_now");
+  const permittedLocations = locationResult.locations.filter(isAmazonEdspXptLocation);
+  const selectedCodes = scopeCodes(searchParams?.stations, permittedLocations.map((location) => location.station_code));
+  const locations = permittedLocations.filter((location) => selectedCodes.includes(location.station_code));
   const codes = locations.map((location) => location.station_code);
+  const sort = ["station", "system", "regular", "adhoc", "consistent", "delivered", "inbound", "spr", "required", "source", "decision"].includes(String(searchParams?.sort)) ? String(searchParams?.sort) : "station";
+  const dir = searchParams?.dir === "desc" ? "desc" : "asc";
   const lens = ["movement", "outlook"].includes(String(searchParams?.lens)) ? String(searchParams?.lens) : "current";
   const end = today();
+  const groundDate = /^\d{4}-\d{2}-\d{2}$/.test(String(searchParams?.ground_date)) ? String(searchParams?.ground_date) : dateShift(end, -1);
   const selectedStationCode = codes.includes(String(searchParams?.station ?? "").toUpperCase()) ? String(searchParams?.station).toUpperCase() : null;
   const detailFrom = /^\d{4}-\d{2}-\d{2}$/.test(String(searchParams?.from)) ? String(searchParams?.from) : `${end.slice(0, 8)}01`;
   const detailTo = /^\d{4}-\d{2}-\d{2}$/.test(String(searchParams?.to)) ? String(searchParams?.to) : end;
@@ -77,23 +61,20 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
     selectedStationCode
       ? loadCapacityAssociateDays(companyId, [selectedStationCode], detailFrom, detailTo)
       : Promise.resolve({ data: [], error: null }),
-    supabaseAdmin ? supabaseAdmin.from("report_import_master").select("id,description,updated_at")
-      .eq("company_id", companyId).eq("parser_type", "capacity_daily_review").order("updated_at", { ascending: false }).limit(5000)
-      : { data: [] as ReviewRow[], error: null }
+    loadCapacityGroundUpdates(companyId, groundDate, groundDate)
   ]);
   const rules = new Map(ruleResult.rows.map((rule) => [rule.stationCode, rule]));
   const allRows = shipmentResult.data ?? [];
   const allAssociateRows = associateResult.data ?? [];
-  const allReviews = ((reviewResult.data ?? []) as ReviewRow[]).map((row) => {
-    try { return { id: row.id, updatedAt: row.updated_at, ...(JSON.parse(row.description ?? "{}") as Record<string, unknown>) }; }
-    catch { return null; }
-  }).filter(Boolean) as Array<Record<string, unknown>>;
-  const latestReviewByStation = new Map<string, Record<string, unknown>>();
+  const allReviews = reviewResult.rows;
+  const latestReviewByStation = new Map<string, typeof allReviews[number]>();
   allReviews.forEach((review) => {
-    const stationCode = String(review.stationCode ?? "");
+    const stationCode = review.stationCode;
     const current = latestReviewByStation.get(stationCode);
-    if (!current || String(review.reviewDate ?? "") > String(current.reviewDate ?? "")) latestReviewByStation.set(stationCode, review);
+    if (!current || review.workDate > current.workDate) latestReviewByStation.set(stationCode, review);
   });
+  const regularCount = (review: typeof allReviews[number] | undefined) => review ? num(review.regularBike) + num(review.regularVan) : 0;
+  const adHocCount = (review: typeof allReviews[number] | undefined) => review ? num(review.adHocBike) + num(review.adHocVan) : 0;
   const views: CapacityView[] = locations.map((location) => {
     const rule = rules.get(location.station_code);
     const rows = allRows.filter((row) => row.station_code === location.station_code);
@@ -154,7 +135,56 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
       : `Headcount is aligned to recent demand at ${fmt(currentSpr, 1)} SPR.`;
     return { stationCode: location.station_code, stationName: location.station_name || location.city || location.station_code, latestDate, operationalHeadcount, consistentHeadcount, occasionalHeadcount, consistencyDays: consistencyDates.length, currentHeadcount, averageHeadcount, averageVolume, averageInbound, sourceLabel, currentSpr, targetSpr: rule?.targetSpr ?? null, maxSafeSpr: rule?.maxSafeSpr ?? null, requiredHeadcount, gap, additions, leavers, attritionRate, status, reason };
   });
-  const generatedReasons = await aiReasons(views);
+  const overviewSortValue = (row: CapacityView) => {
+    const review = latestReviewByStation.get(row.stationCode);
+    if (sort === "station") return row.stationCode;
+    if (sort === "system") return row.operationalHeadcount;
+    if (sort === "regular") return review ? regularCount(review) : -1;
+    if (sort === "adhoc") return review ? adHocCount(review) : -1;
+    if (sort === "consistent") return row.consistentHeadcount;
+    if (sort === "delivered") return row.averageVolume;
+    if (sort === "inbound") return row.averageInbound;
+    if (sort === "spr") return row.currentSpr;
+    if (sort === "required") return row.requiredHeadcount ?? -1;
+    if (sort === "source") return row.sourceLabel;
+    return row.gap ?? 0;
+  };
+  views.sort((left, right) => {
+    const a = overviewSortValue(left);
+    const b = overviewSortValue(right);
+    const compared = typeof a === "string" ? a.localeCompare(String(b)) : Number(a) - Number(b);
+    return dir === "asc" ? compared : -compared;
+  });
+  const sortParams = new URLSearchParams();
+  if (searchParams?.stations) sortParams.set("stations", searchParams.stations);
+  if (searchParams?.lens) sortParams.set("lens", searchParams.lens);
+  sortParams.set("ground_date", groundDate);
+  const sortHref = (key: string) => {
+    const params = new URLSearchParams(sortParams);
+    params.set("sort", key);
+    params.set("dir", sort === key && dir === "asc" ? "desc" : "asc");
+    return `/ops-pulse/capacity?${params.toString()}`;
+  };
+  const sortMark = (key: string) => sort === key ? (dir === "asc" ? "↑" : "↓") : "↕";
+  const scopeStations = permittedLocations.map((location) => ({ code: location.station_code, name: location.station_name || location.city || location.station_code, cluster: location.cluster || "", region: location.region || "" }));
+  const aiDefaults = Object.fromEntries(views.map((row) => [row.stationCode, row.reason]));
+  const aiFacts: CapacityAiFact[] = views.map((row) => {
+    const review = latestReviewByStation.get(row.stationCode);
+    return {
+      stationCode: row.stationCode,
+      systemIds: row.operationalHeadcount,
+      regularIds: review ? regularCount(review) : null,
+      adHocIds: review ? adHocCount(review) : null,
+      averageDelivered: Number(row.averageVolume.toFixed(1)),
+      averageInbound: Number(row.averageInbound.toFixed(1)),
+      spr: Number(row.currentSpr.toFixed(1)),
+      targetSpr: row.targetSpr,
+      maxSafeSpr: row.maxSafeSpr,
+      requiredIds: row.requiredHeadcount,
+      gap: row.gap,
+      status: row.status
+    };
+  });
   const selectedStation = selectedStationCode ? views.find((row) => row.stationCode === selectedStationCode) ?? null : null;
   const selectedDailyRows = selectedStationCode
     ? allRows.filter((row) => row.station_code === selectedStationCode && row.work_date >= detailFrom && row.work_date <= detailTo)
@@ -193,27 +223,26 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
   const hiringNeed = views.reduce((sum, row) => sum + Math.max(0, row.gap ?? 0), 0);
   const overloaded = views.filter((row) => row.status === "risk").length;
   const reviewedStations = views.filter((row) => latestReviewByStation.has(row.stationCode));
-  const actualRegular = reviewedStations.reduce((sum, row) => sum + num(latestReviewByStation.get(row.stationCode)?.regularPresent), 0);
-  const adHocTotal = reviewedStations.reduce((sum, row) => sum + num(latestReviewByStation.get(row.stationCode)?.adHocPresent), 0);
-  const regularStrength = reviewedStations.reduce((sum, row) => sum + num(latestReviewByStation.get(row.stationCode)?.regularStrength), 0);
-  const absentTotal = reviewedStations.reduce((sum, row) => sum + num(latestReviewByStation.get(row.stationCode)?.absent), 0);
-  const networkAbsenteeism = regularStrength ? absentTotal / regularStrength * 100 : 0;
+  const actualRegular = reviewedStations.reduce((sum, row) => sum + regularCount(latestReviewByStation.get(row.stationCode)), 0);
+  const adHocTotal = reviewedStations.reduce((sum, row) => sum + adHocCount(latestReviewByStation.get(row.stationCode)), 0);
+  const classifiedTotal = reviewedStations.reduce((sum, row) => sum + num(latestReviewByStation.get(row.stationCode)?.classifiedIds), 0);
 
   return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">
     <PageHead eyebrow="Workforce Planning" title="Capacity" subtitle="Headcount, allocation productivity, attrition signals and demand-based hiring recommendations." />
     <CapacityWorkspaceTabs active="overview" />
+    <div className="capacity-filter-row"><CapacityScopeFilter selectedCodes={codes} stations={scopeStations}/><form className="capacity-ground-date-filter" method="get"><input name="stations" type="hidden" value={searchParams?.stations ?? ""}/><label>Ground date<input defaultValue={groundDate} name="ground_date" type="date"/></label><button className="button compact">View</button></form></div>
     <div className="capacity-basis-strip"><strong>Planning basis</strong><span>Blended road IDs from Daily Shipment Count + delivered detail · delivered volume prefers tracking detail · inbound remains a separate demand signal</span></div>
-    {locationResult.error || ruleResult.error || shipmentResult.error || associateResult.error || reviewResult.error ? <div className="message-panel error">{locationResult.error || ruleResult.error || shipmentResult.error?.message || associateResult.error?.message || reviewResult.error?.message}</div> : null}
-    <section className="performance-summary-grid"><article><span>Road-active IDs</span><strong>{fmt(totalRoadActive)}</strong><small>System shipment IDs</small></article><article><span>Ops-confirmed regular</span><strong>{reviewedStations.length ? fmt(actualRegular) : "—"}</strong><small>{reviewedStations.length}/{views.length} stations reviewed</small></article><article><span>Ad hoc dependency</span><strong>{reviewedStations.length ? fmt(adHocTotal) : "—"}</strong><small>Temporary resources confirmed</small></article><article><span>Absenteeism</span><strong>{reviewedStations.length ? `${fmt(networkAbsenteeism, 1)}%` : "—"}</strong><small>Based on Ops-confirmed regular strength</small></article><article><span>Additional hiring</span><strong>{fmt(hiringNeed)}</strong><small>System demand requirement {fmt(totalRequired)}</small></article></section>
-    <section className="panel"><div className="panel-head"><div><h2>Station capacity plan</h2><p className="subtle">System headcount is the latest road-active ID count. Open a station for associate movement and day-level evidence.</p></div><a className="button secondary compact" href="/master/capacity">Capacity Master</a></div>
-      <div className="table-wrap"><table className="capacity-table"><thead><tr><th>Station</th><th>System IDs</th><th>Actual regular</th><th>Ad hoc</th><th>Consistent IDs</th><th>Avg delivered</th><th>Avg inbound</th><th>SPR</th><th>Required HC</th><th>Source</th><th>Decision</th></tr></thead><tbody>
-        {views.map((row) => { const review = latestReviewByStation.get(row.stationCode); const reliableHeadcount = review ? num(review.regularPresent) : row.consistentHeadcount || row.operationalHeadcount; const reliableGap = row.requiredHeadcount == null ? null : row.requiredHeadcount - reliableHeadcount; const reliableStatus = row.status === "no_data" ? "No data" : reliableGap && reliableGap > 0 ? `${review ? "Hire" : "System: hire"} ${reliableGap}` : reliableGap != null && reliableGap < -1 ? `${review ? "Surplus" : "System: surplus"} ${Math.abs(reliableGap)}` : review ? "Balanced" : "System: balanced"; return <tr key={row.stationCode}><td><a className="capacity-station-link" href={`/ops-pulse/capacity/${row.stationCode}?from=${detailFrom}&to=${detailTo}`}><strong>{row.stationCode}</strong><small>{row.stationName}<br/>{review ? `Ops reviewed · ${review.reviewDate}` : row.latestDate ? `System data · ${row.latestDate}` : "No shipment IDs"}</small></a></td><td><strong>{fmt(row.operationalHeadcount)}</strong></td><td>{review ? fmt(num(review.regularPresent)) : "—"}</td><td>{review ? fmt(num(review.adHocPresent)) : "—"}</td><td><strong>{fmt(row.consistentHeadcount)}</strong><small>{row.consistencyDays ? `≥ ${Math.ceil(row.consistencyDays * 2 / 3)} of ${row.consistencyDays} days` : "No source days"}</small></td><td>{fmt(row.averageVolume)}</td><td>{row.averageInbound ? fmt(row.averageInbound) : "—"}</td><td><strong className={row.status === "risk" ? "metric-bad-text" : ""}>{row.status === "no_data" ? "—" : fmt(row.currentSpr, 1)}</strong></td><td>{row.requiredHeadcount ?? "—"}</td><td><small>{row.sourceLabel}</small></td><td><span className={`capacity-decision ${reliableGap && reliableGap > 0 ? "hire" : reliableGap != null && reliableGap < -1 ? "surplus" : row.status === "no_data" ? "unconfigured" : "balanced"}`}>{reliableStatus}</span></td></tr>; })}
+    {locationResult.error || ruleResult.error || shipmentResult.error || associateResult.error || reviewResult.error ? <div className="message-panel error">{locationResult.error || ruleResult.error || shipmentResult.error?.message || associateResult.error?.message || reviewResult.error}</div> : null}
+    <section className="performance-summary-grid"><article><span>Road-active IDs</span><strong>{fmt(totalRoadActive)}</strong><small>Latest system shipment IDs</small></article><article><span>Ground classified</span><strong>{reviewedStations.length ? fmt(classifiedTotal) : "—"}</strong><small>{groundDate} · {reviewedStations.length}/{views.length} updated</small></article><article><span>Regular IDs</span><strong>{reviewedStations.length ? fmt(actualRegular) : "—"}</strong><small>Regular bike + regular van</small></article><article><span>Ad hoc IDs</span><strong>{reviewedStations.length ? fmt(adHocTotal) : "—"}</strong><small>Ad hoc bike + ad hoc van</small></article><article><span>Additional hiring</span><strong>{fmt(hiringNeed)}</strong><small>Rolling demand requirement {fmt(totalRequired)}</small></article></section>
+    <CapacityAiActionProvider defaults={aiDefaults} facts={aiFacts}><section className="panel"><div className="panel-head"><div><h2>Station capacity plan</h2><p className="subtle">Ground headcount is day-level; demand and SPR use the recent planning window.</p></div><div className="capacity-panel-actions"><a className="button secondary compact" href={`/ops-pulse/capacity/daily?date=${groundDate}${searchParams?.stations ? `&stations=${encodeURIComponent(searchParams.stations)}` : ""}`}>Update ground data</a><a className="button secondary compact" href="/master/capacity">Capacity Master</a></div></div>
+      <div className="table-wrap"><table className="capacity-table"><thead><tr><th><a href={sortHref("station")}>Station {sortMark("station")}</a></th><th><a href={sortHref("system")}>System IDs {sortMark("system")}</a></th><th><a href={sortHref("regular")}>Regular {sortMark("regular")}</a></th><th><a href={sortHref("adhoc")}>Ad hoc {sortMark("adhoc")}</a></th><th><a href={sortHref("consistent")}>Consistent IDs {sortMark("consistent")}</a></th><th><a href={sortHref("delivered")}>Avg delivered {sortMark("delivered")}</a></th><th><a href={sortHref("inbound")}>Avg inbound {sortMark("inbound")}</a></th><th><a href={sortHref("spr")}>SPR {sortMark("spr")}</a></th><th><a href={sortHref("required")}>Required HC {sortMark("required")}</a></th><th><a href={sortHref("decision")}>Position {sortMark("decision")}</a></th><th>AI action</th></tr></thead><tbody>
+        {views.map((row) => { const review = latestReviewByStation.get(row.stationCode); const reliableHeadcount = review ? regularCount(review) : row.consistentHeadcount || row.operationalHeadcount; const reliableGap = row.requiredHeadcount == null ? null : row.requiredHeadcount - reliableHeadcount; const reliableStatus = row.status === "no_data" ? "No data" : reliableGap && reliableGap > 0 ? `${review ? "Hire" : "System: hire"} ${reliableGap}` : reliableGap != null && reliableGap < -1 ? `${review ? "Surplus" : "System: surplus"} ${Math.abs(reliableGap)}` : review ? "Balanced" : "System: balanced"; return <tr key={row.stationCode}><td><a className="capacity-station-link" href={`/ops-pulse/capacity/${row.stationCode}?from=${detailFrom}&to=${detailTo}`}><strong>{row.stationCode}</strong><small>{row.stationName}<br/>{review ? `Ground updated · ${review.workDate}` : `No ground update · ${groundDate}`}</small></a></td><td><strong>{fmt(row.operationalHeadcount)}</strong><small>{row.latestDate || "No source day"}</small></td><td>{review ? fmt(regularCount(review)) : "—"}</td><td>{review ? fmt(adHocCount(review)) : "—"}</td><td><strong>{fmt(row.consistentHeadcount)}</strong><small>{row.consistencyDays ? `≥ ${Math.ceil(row.consistencyDays * 2 / 3)} of ${row.consistencyDays} days` : "No source days"}</small></td><td>{fmt(row.averageVolume)}</td><td>{row.averageInbound ? fmt(row.averageInbound) : "—"}</td><td><strong className={row.status === "risk" ? "metric-bad-text" : ""}>{row.status === "no_data" ? "—" : fmt(row.currentSpr, 1)}</strong></td><td>{row.requiredHeadcount ?? "—"}</td><td><span className={`capacity-decision ${reliableGap && reliableGap > 0 ? "hire" : reliableGap != null && reliableGap < -1 ? "surplus" : row.status === "no_data" ? "unconfigured" : "balanced"}`}>{reliableStatus}</span></td><td><CapacityAiAction stationCode={row.stationCode}/></td></tr>; })}
       </tbody></table></div>
-    </section>
+    </section></CapacityAiActionProvider>
     {selectedStation ? <section className="panel capacity-detail" id="station-detail">
       <div className="panel-head"><div><span className="eyebrow">Station detail</span><h2>{selectedStation.stationCode} · {selectedStation.stationName}</h2></div><a className="button secondary compact" href={`/ops-pulse/capacity?lens=${lens}`}>Close</a></div>
       <form className="capacity-detail-filter" method="get"><input type="hidden" name="lens" value={lens}/><input type="hidden" name="station" value={selectedStation.stationCode}/><label>From<input type="date" name="from" defaultValue={detailFrom}/></label><label>To<input type="date" name="to" defaultValue={detailTo}/></label><button className="button compact" type="submit">Apply</button></form>
-      <div className="capacity-action-line"><strong>Action</strong><span>{generatedReasons[selectedStation.stationCode] || selectedStation.reason}</span></div>
+      <div className="capacity-action-line"><strong>Action</strong><span>{selectedStation.reason}</span></div>
       {dailyDetail.length ? <div className="capacity-detail-grid">
         <div className="capacity-trend" aria-label="Daily delivery trend">{dailyDetail.map((day) => <div className="capacity-trend-column" key={day.date} title={`${day.date}: ${fmt(day.delivered)} delivered, ${day.associates} associates, ${fmt(day.spr, 1)} SPR`}><span>{fmt(day.delivered)}</span><i style={{ height: `${Math.max(4, day.delivered / maxDailyDelivery * 100)}%` }}/><small>{day.date.slice(8)}</small></div>)}</div>
         <div className="table-wrap"><table className="capacity-daily-table"><thead><tr><th>Date</th><th>Road IDs</th><th>Delivered</th><th>Inbound</th><th>SPR</th><th>Source</th></tr></thead><tbody>{dailyDetail.map((day) => <tr key={day.date}><td>{day.date.split("-").reverse().join("/")}</td><td>{day.associates}</td><td>{fmt(day.delivered)}</td><td>{day.inbound ? fmt(day.inbound) : "—"}</td><td><strong>{fmt(day.spr, 1)}</strong></td><td><small>{day.source}</small></td></tr>)}</tbody></table></div>

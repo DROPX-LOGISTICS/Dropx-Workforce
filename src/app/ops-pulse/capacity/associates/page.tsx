@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { CapacityScopeFilter } from "@/components/capacity-scope-filter";
 import { CapacityWorkspaceTabs } from "@/components/capacity-workspace-tabs";
 import { PageHead } from "@/components/page-head";
 import { requirePagePermission } from "@/lib/authorization";
@@ -6,26 +7,33 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { loadCapacityRules } from "@/lib/ops-pulse/capacity";
 import { loadCapacityAssociateDays } from "@/lib/ops-pulse/capacity-shipments";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
-import { operatingModeForLocation, resolveOperatingContext } from "@/lib/ops-pulse/operating-context";
+import { isAmazonEdspXptLocation } from "@/lib/ops-pulse/operating-context";
 
 export const dynamic = "force-dynamic";
-type SearchParams = { from?: string; to?: string; preset?: string; station?: string; band?: string; sort?: string; dir?: string };
+type SearchParams = { from?: string; to?: string; preset?: string; station?: string; stations?: string; band?: string; sort?: string; dir?: string };
 function today() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()); }
 function shift(value: string, days: number) { const date = new Date(`${value}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); }
 function valid(value: unknown) { return /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")); }
 function num(value: unknown) { const parsed = Number(value ?? 0); return Number.isFinite(parsed) ? parsed : 0; }
 function fmt(value: number, digits = 0) { return value.toLocaleString("en-IN", { maximumFractionDigits: digits }); }
+function scopeCodes(value: string | undefined, allowed: string[]) {
+  if (!value) return allowed;
+  if (value === "_none") return [];
+  const requested = value.split(",").map((code) => code.trim().toUpperCase());
+  return allowed.filter((code) => requested.includes(code));
+}
 
 export default async function SprAssociatesPage({ searchParams }: { searchParams?: SearchParams }) {
   const authorization = await requirePagePermission("cps_associates", "access");
   const companyId = requireCompanyId(authorization);
   const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
-  const locations = resolveOperatingContext(locationResult.locations).selectedLocations.filter((location) => operatingModeForLocation(location) !== "amazon_now");
+  const locations = locationResult.locations.filter(isAmazonEdspXptLocation);
   const requestedStation = String(searchParams?.station ?? "").trim().toUpperCase();
   const selectedStation = locations.some((location) => location.station_code === requestedStation) ? requestedStation : "";
-  const queryLocations = selectedStation ? locations.filter((location) => location.station_code === selectedStation) : locations;
+  const selectedCodes = selectedStation ? [selectedStation] : scopeCodes(searchParams?.stations, locations.map((location) => location.station_code));
+  const queryLocations = locations.filter((location) => selectedCodes.includes(location.station_code));
   const band = ["all", "low", "target", "high"].includes(String(searchParams?.band)) ? String(searchParams?.band) : "all";
-  const sort = ["average", "peak", "delivered", "days", "highDays", "station"].includes(String(searchParams?.sort)) ? String(searchParams?.sort) : "average";
+  const sort = ["name", "average", "peak", "delivered", "days", "highDays", "station", "level"].includes(String(searchParams?.sort)) ? String(searchParams?.sort) : "average";
   const dir = searchParams?.dir === "asc" ? "asc" : "desc";
   const end = valid(searchParams?.to) ? String(searchParams?.to) : today();
   const preset = ["wtd", "mtd", "ytd", "custom"].includes(String(searchParams?.preset)) ? String(searchParams?.preset) : "mtd";
@@ -53,7 +61,7 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
     return { stationCode, id, name: idRows.find((row) => row.associate_name)?.associate_name || "Unmapped name", dates: dates.length, delivered, average, peak: Math.max(0, ...daily), highDays: daily.filter((value) => value > safe).length, target, safe, level };
   });
   const filteredAssociates = allAssociates.filter((row) => band === "all" || row.level === band);
-  const sortValue = (row: typeof allAssociates[number]) => sort === "peak" ? row.peak : sort === "delivered" ? row.delivered : sort === "days" ? row.dates : sort === "highDays" ? row.highDays : sort === "station" ? row.stationCode : row.average;
+  const sortValue = (row: typeof allAssociates[number]) => sort === "name" ? row.name : sort === "peak" ? row.peak : sort === "delivered" ? row.delivered : sort === "days" ? row.dates : sort === "highDays" ? row.highDays : sort === "station" ? row.stationCode : sort === "level" ? row.level : row.average;
   const associates = filteredAssociates.sort((a, b) => {
     const left = sortValue(a);
     const right = sortValue(b);
@@ -63,7 +71,9 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
   const lowCount = allAssociates.filter((row) => row.level === "low").length;
   const targetCount = allAssociates.filter((row) => row.level === "target").length;
   const highCount = allAssociates.filter((row) => row.level === "high").length;
-  const paramsForSort = new URLSearchParams({ preset, from: start, to: end, station: selectedStation, band });
+  const paramsForSort = new URLSearchParams({ preset, from: start, to: end, band });
+  if (selectedStation) paramsForSort.set("station", selectedStation);
+  if (searchParams?.stations) paramsForSort.set("stations", searchParams.stations);
   const sortHref = (key: string) => {
     const next = new URLSearchParams(paramsForSort);
     next.set("sort", key);
@@ -71,14 +81,16 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
     return `/ops-pulse/capacity/associates?${next.toString()}`;
   };
   const sortMark = (key: string) => sort === key ? (dir === "asc" ? "↑" : "↓") : "↕";
+  const scopeStations = locations.map((location) => ({ code: location.station_code, name: location.station_name || location.city || location.station_code, cluster: location.cluster || "", region: location.region || "" }));
 
   return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">
     <PageHead eyebrow="Associate Productivity" title="Associate SPR" subtitle="Complete associate-level delivered allocation across any station and date range." />
     <CapacityWorkspaceTabs active="associates" />
+    <div className="capacity-filter-row"><CapacityScopeFilter selectedCodes={selectedCodes} stations={scopeStations}/></div>
     {locationResult.error || ruleResult.error || associateResult.error ? <div className="message-panel error">{locationResult.error || ruleResult.error || associateResult.error?.message}</div> : null}
-    <form className="capacity-period-filter capacity-associate-filter" method="get"><label>Station<select name="station" defaultValue={selectedStation}><option value="">All stations</option>{locations.map((location) => <option key={location.id} value={location.station_code}>{location.station_code} · {location.station_name || location.city || ""}</option>)}</select></label><label>SPR level<select name="band" defaultValue={band}><option value="all">All SPR levels</option><option value="low">Below target</option><option value="target">Target to safe</option><option value="high">Above safe</option></select></label><label>Period<select name="preset" defaultValue={preset}><option value="wtd">Week to date</option><option value="mtd">Month to date</option><option value="ytd">Year to date</option><option value="custom">Custom</option></select></label><label>From<input type="date" name="from" defaultValue={start}/></label><label>To<input type="date" name="to" defaultValue={end}/></label><button className="button compact">Apply</button></form>
-    <section className="performance-summary-grid"><article><span>All associates</span><strong>{allAssociates.length}</strong><small>{selectedStation || `${queryLocations.length} stations`}</small></article><article><span>Below target</span><strong>{lowCount}</strong><small>Average below station target SPR</small></article><article><span>Target to safe</span><strong>{targetCount}</strong><small>Within configured range</small></article><article><span>Above safe</span><strong>{highCount}</strong><small>Average above safe SPR</small></article></section>
-    <section className="panel"><div className="panel-head"><div><h2>Associate productivity</h2><p className="subtle">SPR is total delivered divided by days the ID appeared in shipment data.</p></div><span className="status-pill neutral">{associates.length} shown</span></div><div className="table-wrap"><table className="capacity-daily-table"><thead><tr><th>Associate</th><th><a href={sortHref("station")}>Station <small>{sortMark("station")}</small></a></th><th><a href={sortHref("days")}>Days worked <small>{sortMark("days")}</small></a></th><th><a href={sortHref("delivered")}>Total delivered <small>{sortMark("delivered")}</small></a></th><th><a href={sortHref("average")}>Average SPR <small>{sortMark("average")}</small></a></th><th><a href={sortHref("peak")}>Peak <small>{sortMark("peak")}</small></a></th><th><a href={sortHref("highDays")}>High days <small>{sortMark("highDays")}</small></a></th><th>SPR position</th></tr></thead><tbody>
+    <form className="capacity-period-filter capacity-associate-filter" method="get"><input name="stations" type="hidden" value={searchParams?.stations ?? ""}/><label>SPR level<select name="band" defaultValue={band}><option value="all">All SPR levels</option><option value="low">Below target</option><option value="target">Target to safe</option><option value="high">Above safe</option></select></label><label>Period<select name="preset" defaultValue={preset}><option value="wtd">Week to date</option><option value="mtd">Month to date</option><option value="ytd">Year to date</option><option value="custom">Custom</option></select></label><label>From<input type="date" name="from" defaultValue={start}/></label><label>To<input type="date" name="to" defaultValue={end}/></label><button className="button compact">Apply</button></form>
+    <section className="performance-summary-grid"><article><span>All associates</span><strong>{allAssociates.length}</strong><small>{`${queryLocations.length} stations`}</small></article><article><span>Below target</span><strong>{lowCount}</strong><small>Average below station target SPR</small></article><article><span>Target to safe</span><strong>{targetCount}</strong><small>Within configured range</small></article><article><span>Above safe</span><strong>{highCount}</strong><small>Average above safe SPR</small></article></section>
+    <section className="panel"><div className="panel-head"><div><h2>Associate productivity</h2><p className="subtle">SPR is total delivered divided by days the ID appeared in shipment data.</p></div><span className="status-pill neutral">{associates.length} shown</span></div><div className="table-wrap"><table className="capacity-daily-table"><thead><tr><th><a href={sortHref("name")}>Associate <small>{sortMark("name")}</small></a></th><th><a href={sortHref("station")}>Station <small>{sortMark("station")}</small></a></th><th><a href={sortHref("days")}>Days worked <small>{sortMark("days")}</small></a></th><th><a href={sortHref("delivered")}>Total delivered <small>{sortMark("delivered")}</small></a></th><th><a href={sortHref("average")}>Average SPR <small>{sortMark("average")}</small></a></th><th><a href={sortHref("peak")}>Peak <small>{sortMark("peak")}</small></a></th><th><a href={sortHref("highDays")}>High days <small>{sortMark("highDays")}</small></a></th><th><a href={sortHref("level")}>SPR position <small>{sortMark("level")}</small></a></th></tr></thead><tbody>
       {associates.map((row) => <tr key={`${row.stationCode}-${row.id}`}><td><a className="capacity-station-link" href={`/ops-pulse/capacity/associates/${encodeURIComponent(row.id)}?station=${row.stationCode}&from=${start}&to=${end}`}><strong>{row.name}</strong><small>{row.id}</small></a></td><td><a href={`/ops-pulse/capacity/${row.stationCode}`}>{row.stationCode}</a></td><td>{row.dates}</td><td>{fmt(row.delivered)}</td><td><strong className={row.level === "high" ? "metric-bad-text" : row.level === "low" ? "metric-warn-text" : "metric-good-text"}>{fmt(row.average, 1)}</strong></td><td>{fmt(row.peak)}</td><td>{row.highDays}</td><td><span className={`capacity-decision ${row.level === "high" ? "risk" : row.level === "low" ? "unconfigured" : "balanced"}`}>{row.level === "high" ? `Above ${fmt(row.safe, 1)}` : row.level === "low" ? `Below ${fmt(row.target, 1)}` : `${fmt(row.target, 1)}–${fmt(row.safe, 1)}`}</span></td></tr>)}
       {!associates.length ? <tr><td className="empty-cell" colSpan={8}>No associates match these filters.</td></tr> : null}
     </tbody></table></div></section>

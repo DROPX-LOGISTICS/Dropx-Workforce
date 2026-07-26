@@ -39,6 +39,119 @@ export type CapacityPincode = {
   average_cubic_cm3: number | string | null;
 };
 
+type ShipmentCountAssociateDay = {
+  client: string;
+  station_code: string;
+  work_date: string;
+  provider_employee_id: string;
+  provider_employee_name: string | null;
+  total_delivery: number | string | null;
+};
+
+const ASSOCIATE_PAGE_SIZE = 1000;
+
+function associateKey(stationCode: string, workDate: string, associateId: string) {
+  return `${stationCode.trim().toUpperCase()}|${workDate}|${associateId.trim().toUpperCase()}`;
+}
+
+function normalizedAssociateName(value: string | null | undefined) {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9]/gi, "")
+    .toUpperCase();
+}
+
+async function loadShipmentCountAssociateDays(companyId: string, stationCodes: string[], from: string, to: string) {
+  if (!supabaseAdmin || !stationCodes.length) {
+    return { data: [] as ShipmentCountAssociateDay[], error: null };
+  }
+
+  const stationChunks: string[][] = [];
+  for (let index = 0; index < stationCodes.length; index += 6) {
+    stationChunks.push(stationCodes.slice(index, index + 6));
+  }
+
+  const chunks = await Promise.all(stationChunks.map(async (codes) => {
+    const rows: ShipmentCountAssociateDay[] = [];
+    for (let fromRow = 0; ; fromRow += ASSOCIATE_PAGE_SIZE) {
+      const result = await supabaseAdmin!
+        .from("cps_shipment_daily")
+        .select("client,station_code,work_date,provider_employee_id,provider_employee_name,total_delivery")
+        .eq("company_id", companyId)
+        .in("station_code", codes)
+        .gte("work_date", from)
+        .lte("work_date", to)
+        .not("provider_employee_id", "is", null)
+        .order("work_date", { ascending: true })
+        .order("station_code", { ascending: true })
+        .order("provider_employee_id", { ascending: true })
+        .order("client", { ascending: true })
+        .range(fromRow, fromRow + ASSOCIATE_PAGE_SIZE - 1);
+
+      if (result.error) return { data: rows, error: result.error };
+      const page = (result.data ?? []) as ShipmentCountAssociateDay[];
+      rows.push(...page);
+      if (page.length < ASSOCIATE_PAGE_SIZE) break;
+    }
+    return { data: rows, error: null };
+  }));
+
+  return {
+    data: chunks.flatMap((chunk) => chunk.data),
+    error: chunks.find((chunk) => chunk.error)?.error ?? null
+  };
+}
+
+export function mergeCapacityAssociateDays(
+  detailedRows: CapacityAssociateDay[],
+  shipmentCountRows: ShipmentCountAssociateDay[]
+) {
+  const merged = [...detailedRows];
+  const detailedKeys = new Set(detailedRows.map((row) => associateKey(row.station_code, row.work_date, row.associate_id)));
+  const detailedNameKeys = new Set(detailedRows.flatMap((row) => {
+    const name = normalizedAssociateName(row.associate_name);
+    return name ? [`${row.station_code.trim().toUpperCase()}|${row.work_date}|${name}`] : [];
+  }));
+  const fallbackByKey = new Map<string, CapacityAssociateDay>();
+
+  shipmentCountRows.forEach((row) => {
+    const associateId = String(row.provider_employee_id ?? "").trim();
+    if (!associateId) return;
+    const key = associateKey(row.station_code, row.work_date, associateId);
+    if (detailedKeys.has(key)) return;
+    const name = String(row.provider_employee_name ?? "").trim() || null;
+    const normalizedName = normalizedAssociateName(name);
+    if (normalizedName && detailedNameKeys.has(`${row.station_code.trim().toUpperCase()}|${row.work_date}|${normalizedName}`)) return;
+
+    const delivered = Number(row.total_delivery ?? 0);
+    const current = fallbackByKey.get(key);
+    if (current) {
+      current.delivered = Number(current.delivered) + (Number.isFinite(delivered) ? delivered : 0);
+      current.unclassified = current.delivered;
+      if (!current.associate_name && name) current.associate_name = name;
+      return;
+    }
+    fallbackByKey.set(key, {
+      station_code: row.station_code,
+      work_date: row.work_date,
+      associate_id: associateId,
+      associate_name: name,
+      delivered: Number.isFinite(delivered) ? delivered : 0,
+      volumetric: 0,
+      small: 0,
+      unclassified: Number.isFinite(delivered) ? delivered : 0
+    });
+  });
+
+  merged.push(...fallbackByKey.values());
+  return merged.sort((left, right) =>
+    left.work_date.localeCompare(right.work_date)
+    || left.station_code.localeCompare(right.station_code)
+    || left.associate_id.localeCompare(right.associate_id)
+  );
+}
+
 const cachedCapacityStationDays = unstable_cache(async (companyId: string, stationCodes: string[], from: string, to: string) => {
   if (!supabaseAdmin || !stationCodes.length) return { data: [] as CapacityStationDay[], error: null };
   const chunks: string[][] = [];
@@ -58,14 +171,23 @@ export async function loadCapacityStationDays(companyId: string, stationCodes: s
 
 const cachedCapacityAssociateDays = unstable_cache(async (companyId: string, stationCodes: string[], from: string, to: string) => {
   if (!supabaseAdmin || !stationCodes.length) return { data: [] as CapacityAssociateDay[], error: null };
-  const result = await supabaseAdmin.rpc("capacity_associate_daily", {
-    p_company_id: companyId,
-    p_station_codes: stationCodes,
-    p_from: from,
-    p_to: to
-  });
-  return { data: (result.data ?? []) as CapacityAssociateDay[], error: result.error };
-}, ["capacity-associate-days"], { revalidate: 120 });
+  const [detailResult, countResult] = await Promise.all([
+    supabaseAdmin.rpc("capacity_associate_daily", {
+      p_company_id: companyId,
+      p_station_codes: stationCodes,
+      p_from: from,
+      p_to: to
+    }),
+    loadShipmentCountAssociateDays(companyId, stationCodes, from, to)
+  ]);
+  return {
+    data: mergeCapacityAssociateDays(
+      (detailResult.data ?? []) as CapacityAssociateDay[],
+      countResult.data
+    ),
+    error: detailResult.error ?? countResult.error
+  };
+}, ["capacity-associate-days-v2"], { revalidate: 120 });
 
 export async function loadCapacityAssociateDays(companyId: string, stationCodes: string[], from: string, to: string) {
   return cachedCapacityAssociateDays(companyId, [...stationCodes].sort(), from, to);

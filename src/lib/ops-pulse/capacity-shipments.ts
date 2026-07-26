@@ -74,7 +74,8 @@ async function loadShipmentCountAssociateDays(companyId: string, stationCodes: s
 
   const chunks = await Promise.all(stationChunks.map(async (codes) => {
     const rows: ShipmentCountAssociateDay[] = [];
-    for (let fromRow = 0; ; fromRow += ASSOCIATE_PAGE_SIZE) {
+    let fromRow = 0;
+    for (;;) {
       const result = await supabaseAdmin!
         .from("cps_shipment_daily")
         .select("client,station_code,work_date,provider_employee_id,provider_employee_name,total_delivery")
@@ -91,8 +92,12 @@ async function loadShipmentCountAssociateDays(companyId: string, stationCodes: s
 
       if (result.error) return { data: rows, error: result.error };
       const page = (result.data ?? []) as ShipmentCountAssociateDay[];
+      if (!page.length) break;
       rows.push(...page);
-      if (page.length < ASSOCIATE_PAGE_SIZE) break;
+      // Supabase may enforce a lower server-side maximum than the requested
+      // range. Advancing by the actual page size prevents silently skipping
+      // later dates when that happens.
+      fromRow += page.length;
     }
     return { data: rows, error: null };
   }));

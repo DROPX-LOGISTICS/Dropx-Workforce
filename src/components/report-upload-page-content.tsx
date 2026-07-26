@@ -15,6 +15,7 @@ type ImportBatch = {
   row_count: number;
   imported_row_count: number;
   skipped_row_count: number;
+  station_code: string | null;
   status: string;
   message: string | null;
   report_from: string | null;
@@ -126,7 +127,7 @@ async function loadBatches(companyId: string | null) {
   if (!companyId || !supabaseAdmin) return { rows: [] as ImportBatch[], error: null as string | null };
   const { data, error } = await supabaseAdmin
     .from("report_import_batches")
-    .select("id, source_type, file_name, row_count, imported_row_count, skipped_row_count, status, message, report_from, report_to, created_at")
+    .select("id, source_type, station_code, file_name, row_count, imported_row_count, skipped_row_count, status, message, report_from, report_to, created_at")
     .eq("company_id", companyId)
     .order("created_at", { ascending: false })
     .limit(500);
@@ -208,6 +209,15 @@ export async function ReportUploadPageContent({
     return missing.length ? [{ report, missing }] : [];
   });
   const recentBatches = batches.slice(0, 10);
+  const shipmentCoverageDates = Array.from({ length: 7 }, (_, index) => addDays(today, -index));
+  const shipmentCoverage = shipmentCoverageDates.map((coverageDate) => {
+    const findBatch = (sourceType: string) => batches.find((batch) => successfulBatchCoversDate(batch, sourceType, coverageDate));
+    return {
+      date: coverageDate,
+      delivered: findBatch("delivered_shipment_detail"),
+      inbound: findBatch("inbound_shipment_detail")
+    };
+  });
 
   return (
     <AppShell active={active} pageCode={pageCode}>
@@ -228,6 +238,26 @@ export async function ReportUploadPageContent({
           <Link className="button secondary compact" href="/master/imports">Manage reports</Link>
         </div>
         <ReportImportUploader reports={reports} stations={shipmentStations} compact />
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div><h2>Shipment coverage</h2><p className="subtle">Latest seven days. Re-uploading refreshes existing Tracking IDs without double-counting.</p></div>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Delivered</th><th>Inbound</th></tr></thead>
+            <tbody>
+              {shipmentCoverage.map((row) => (
+                <tr key={`shipment-coverage-${row.date}`}>
+                  <td><strong>{displayDate(row.date)}</strong></td>
+                  <td>{row.delivered ? <><StatusPill status="Uploaded" /> <span className="subtle">{row.delivered.station_code || "Detected"} · {row.delivered.file_name}</span></> : <StatusPill status="Missing" />}</td>
+                  <td>{row.inbound ? <><StatusPill status="Uploaded" /> <span className="subtle">{row.inbound.station_code || "Detected"} · {row.inbound.file_name}</span></> : <StatusPill status="Missing" />}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {coverageGaps.length ? (

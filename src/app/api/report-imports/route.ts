@@ -1016,6 +1016,20 @@ async function countExistingShipmentFacts(table: "delivered_shipment_facts" | "i
   return count;
 }
 
+async function shipmentParentCodes(companyId: string, stationCodes: string[]) {
+  if (!supabaseAdmin || !stationCodes.length) return [];
+  const result = await supabaseAdmin.from("stations").select("id, station_code, parent_station_id")
+    .eq("company_id", companyId)
+    .eq("is_active", true);
+  if (result.error) throw new Error(result.error.message);
+  const codeById = new Map((result.data ?? []).map((row) => [row.id, normalizeStation(row.station_code)]));
+  const rowByCode = new Map((result.data ?? []).map((row) => [normalizeStation(row.station_code), row]));
+  return Array.from(new Set(stationCodes.map((stationCode) => {
+    const row = rowByCode.get(normalizeStation(stationCode));
+    return row?.parent_station_id ? codeById.get(row.parent_station_id) ?? normalizeStation(stationCode) : normalizeStation(stationCode);
+  }))).filter(Boolean).sort();
+}
+
 export async function GET() {
   if (!supabaseAdmin) return Response.json({ error: "Supabase service key is not configured." }, { status: 500 });
   const authorization = await getAuthorization();
@@ -1061,7 +1075,25 @@ export async function POST(request: Request) {
   if (master.error) return databaseSetupError(master.error.message);
   if (!master.data) return Response.json({ error: "Select an active report from Import Master." }, { status: 400 });
   const masterData = master.data;
-  if (masterData.requires_station || masterData.requires_report_date) {
+  const isShipmentDetail = masterData.parser_type === "delivered_shipment_detail" || masterData.parser_type === "inbound_shipment_detail";
+  if (isShipmentDetail && !selectedStation) {
+    const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
+    if (locationResult.error) return Response.json({ error: locationResult.error }, { status: 500 });
+    const parentLocations = locationResult.locations.filter((location) => {
+      const provider = providerName(location).toUpperCase();
+      const model = locationModelName(location).toUpperCase();
+      return provider.includes("AMAZON") && ["DSP", "EDSP"].includes(model);
+    });
+    parentLocations.forEach((location) => shipmentStationCodes.add(normalizeStation(location.station_code)));
+    if (parentLocations.length) {
+      const children = await db.from("stations").select("station_code")
+        .eq("company_id", companyId)
+        .in("parent_station_id", parentLocations.map((location) => location.id))
+        .eq("is_active", true);
+      if (children.error) return databaseSetupError(children.error.message);
+      (children.data ?? []).forEach((child) => shipmentStationCodes.add(normalizeStation(child.station_code)));
+    }
+  } else if (masterData.requires_station || masterData.requires_report_date) {
     if ((masterData.requires_station && !selectedStation) || (masterData.requires_report_date && !selectedReportDate)) {
       return Response.json({ error: "Select the station and data date." }, { status: 400 });
     }
@@ -1107,7 +1139,7 @@ export async function POST(request: Request) {
     file_name: fileName,
     file_size: fileSize,
     source_type: sourceType,
-    station_code: selectedStation || null,
+    station_code: selectedStation || (isShipmentDetail ? "Auto-detect" : null),
     status: "Processing"
   }).select("id").single());
   if (batch.error) return databaseSetupError(batch.error.message);
@@ -1208,6 +1240,8 @@ export async function POST(request: Request) {
         750
       ));
       const dates = parsedFacts.facts.map((row) => row.work_date).sort();
+      const detectedParents = await importStep("Resolve detected parent stations", () =>
+        shipmentParentCodes(companyId, parsedFacts.facts.map((row) => row.station_code)));
       const duplicateRows = parsedFacts.sourceRows - parsedFacts.rejected.length - parsedFacts.facts.length;
       const skipped = parsedFacts.rejected.length;
       const volumeReady = parsedFacts.facts.filter((row) => row.cubic_volume_cm3 != null && row.actual_weight_kg != null).length;
@@ -1220,6 +1254,7 @@ export async function POST(request: Request) {
         report_to: dates.at(-1) ?? null,
         row_count: parsedFacts.sourceRows,
         skipped_row_count: skipped,
+        station_code: detectedParents.join(", ") || "Auto-detect",
         status: "Completed"
       }).eq("id", batch.data.id).eq("company_id", companyId));
       if (update.error) throw new Error(update.error.message);
@@ -1245,6 +1280,8 @@ export async function POST(request: Request) {
         750
       ));
       const dates = parsedFacts.facts.map((row) => row.expected_arrival_date).sort();
+      const detectedParents = await importStep("Resolve detected parent stations", () =>
+        shipmentParentCodes(companyId, parsedFacts.facts.map((row) => row.station_code)));
       const duplicateRows = parsedFacts.sourceRows - parsedFacts.rejected.length - parsedFacts.facts.length;
       const skipped = parsedFacts.rejected.length;
       const volumeReady = parsedFacts.facts.filter((row) => row.cubic_volume_cm3 != null && row.actual_weight_kg != null).length;
@@ -1257,6 +1294,7 @@ export async function POST(request: Request) {
         report_to: dates.at(-1) ?? null,
         row_count: parsedFacts.sourceRows,
         skipped_row_count: skipped,
+        station_code: detectedParents.join(", ") || "Auto-detect",
         status: "Completed"
       }).eq("id", batch.data.id).eq("company_id", companyId));
       if (update.error) throw new Error(update.error.message);

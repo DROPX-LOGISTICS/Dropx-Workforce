@@ -148,7 +148,7 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
         </label>
         {compact ? (
           <button className={`button ${isPending ? "loading" : ""}`} disabled={isPending || !sourceType || (requiresStation && !effectiveStationCode) || (requiresReportDate && !reportDate)} onClick={upload} type="button">
-            {isPending ? "Importing..." : "Upload"}
+            {isPending ? "Importing..." : selected?.parser_type === "delivered_shipment_detail" || selected?.parser_type === "inbound_shipment_detail" ? "Upload / refresh" : "Upload"}
           </button>
         ) : null}
       </div>

@@ -29,7 +29,10 @@ export function StatusPill({ status }: { status: string }) {
         || lower.includes("hold")
         || lower.includes("missing")
         || lower.includes("not cleared")
+        || lower.includes("short")
         ? "bad"
+        : lower.includes("excess")
+          ? "warn"
         : "";
 
   return <span className={`status-pill ${tone}`}>{status}</span>;

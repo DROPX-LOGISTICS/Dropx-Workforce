@@ -20,6 +20,7 @@ export type CodDayClosure = {
   submission_status: string;
   manager_status: string;
   override_reason: string | null;
+  validation_snapshot: Record<string, unknown>;
   submitted_at: string;
   driver_check_status: CodGateStatus;
   driver_exception_reason: string | null;
@@ -91,7 +92,7 @@ export async function loadCodDayClosures(companyId: string, businessDate: string
   const [closures, runs] = await Promise.all([
     supabaseAdmin
       .from("cod_day_closures")
-      .select("id, business_date, location_id, station_code, collected_cod, amazon_open_remittance_expected, amazon_open_remittance_count, difference_amount, driver_reconciliation_pending, no_deposit_liability, validation_status, submission_status, manager_status, override_reason, submitted_at, driver_check_status, driver_exception_reason, driver_exception_manager_remarks, deposit_check_status, deposit_exception_reason, deposit_exception_manager_remarks, is_final_submitted, final_submitted_at")
+      .select("id, business_date, location_id, station_code, collected_cod, amazon_open_remittance_expected, amazon_open_remittance_count, difference_amount, driver_reconciliation_pending, no_deposit_liability, validation_status, submission_status, manager_status, override_reason, validation_snapshot, submitted_at, driver_check_status, driver_exception_reason, driver_exception_manager_remarks, deposit_check_status, deposit_exception_reason, deposit_exception_manager_remarks, is_final_submitted, final_submitted_at")
       .eq("company_id", companyId)
       .eq("business_date", businessDate)
       .in("location_id", locationIds)
@@ -244,6 +245,9 @@ export async function finalizeCodClosure({
   if (!driverCleared) throw new Error("Driver Reconciliation must pass or receive manager approval before final submission.");
 
   const deposit = depositDetails(depositRun);
+  const existingSnapshot = rawObject(closure.validation_snapshot);
+  const cashSubmission = rawObject(existingSnapshot.cash_submission);
+  const cashVariance = amount(cashSubmission.difference_amount);
   const collectedCod = Number((reconciliations.data ?? []).reduce((sum, row) => sum + amount(row.collected_amount), 0).toFixed(2));
   const difference = Number((collectedCod - deposit.openExpected).toFixed(2));
   const depositPassed = runStatus(depositRun) === "Passed" && deposit.noLiability &&
@@ -261,10 +265,15 @@ export async function finalizeCodClosure({
     no_deposit_liability: deposit.noLiability,
     driver_check_status: closure.driver_check_status === "Exception approved" ? "Exception approved" : "Passed",
     deposit_check_status: closure.deposit_check_status === "Exception approved" ? "Exception approved" : "Passed",
-    validation_status: Math.abs(difference) <= 1 ? "Matched" : "Mismatch",
+    validation_status: Math.abs(cashVariance) >= 0.01 || Math.abs(difference) > 1 ? "Mismatch" : "Matched",
     submission_status: "Submitted",
-    manager_status: "Not required",
-    validation_snapshot: { driver: driverRun, deposit: depositRun, open_remittances: deposit.openRemittances },
+    manager_status: Math.abs(cashVariance) >= 0.01 ? closure.manager_status : "Not required",
+    validation_snapshot: {
+      ...existingSnapshot,
+      driver: driverRun,
+      deposit: depositRun,
+      open_remittances: deposit.openRemittances
+    },
     submitted_by: userId,
     submitted_at: now,
     final_submitted_by: userId,

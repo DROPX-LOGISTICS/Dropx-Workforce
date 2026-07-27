@@ -87,6 +87,14 @@ function workerLinks() {
   }
 }
 
+function portalRunStatusLabel(status: string, checkType: string) {
+  if (status === "Fail" && checkType === "driver_reconciliation") return "Pending recon found";
+  if (status === "Pass" && checkType === "driver_reconciliation") return "Driver recon cleared";
+  if (status === "Error") return "Validation unavailable";
+  if (status === "Manual Review") return "Manual login required";
+  return status;
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function PortalChecksPage({ searchParams }: { searchParams?: SearchParams }) {
@@ -191,7 +199,13 @@ export default async function PortalChecksPage({ searchParams }: { searchParams?
                 <label>Status
                   <select className="field" name="status" defaultValue={searchParams?.status ?? ""}>
                     <option value="">All statuses</option>
-                    {["Queued", "Running", "Pass", "Fail", "Manual Review", "Error", "Skipped"].map((status) => <option key={status}>{status}</option>)}
+                    <option value="Queued">Queued</option>
+                    <option value="Running">Running</option>
+                    <option value="Pass">Cleared</option>
+                    <option value="Fail">Pending recon found</option>
+                    <option value="Manual Review">Manual login required</option>
+                    <option value="Error">Validation unavailable</option>
+                    <option value="Skipped">Skipped</option>
                   </select>
                 </label>
                 <label>Check type
@@ -216,7 +230,7 @@ export default async function PortalChecksPage({ searchParams }: { searchParams?
           <section className="summary-grid">
             <div className="metric-card"><span>Queued / running</span><strong>{queued}</strong><small>{formatDate(checkDate)}</small></div>
             <div className="metric-card"><span>Passed</span><strong>{passed}</strong><small>Completed with no pending liability</small></div>
-            <div className="metric-card"><span>Needs action</span><strong>{failed}</strong><small>Fail, error, or manual review</small></div>
+            <div className="metric-card"><span>Needs action</span><strong>{failed}</strong><small>Pending recon or validation issue</small></div>
             <div className="metric-card"><span>Pending amount</span><strong>{formatAmount(pendingAmount)}</strong><small>Reported by portal worker</small></div>
           </section>
 
@@ -250,7 +264,7 @@ export default async function PortalChecksPage({ searchParams }: { searchParams?
                       <td><strong>{locationLabel(Array.isArray(row.stations) ? row.stations[0] : row.stations) || row.station_code}</strong></td>
                       <td>{row.portal_station_code ?? "-"}</td>
                       <td>{portalCheckLabel(row.check_type)}</td>
-                      <td><StatusPill status={row.status} /></td>
+                      <td><StatusPill status={portalRunStatusLabel(row.status, row.check_type)} /></td>
                       <td>{row.pending_count}</td>
                       <td>{formatAmount(row.pending_amount)}</td>
                       <td>{row.attempt_count}</td>

@@ -27,13 +27,22 @@ export function PortalCheckProgress({
   const seconds = Math.floor((remaining % 60000) / 1000);
   const active = ["Queued", "Running", "Fail", "Manual Review", "Error"].includes(status) && attemptCount < 3;
   const exhausted = attemptCount >= 3 && !["Pass", "Skipped"].includes(status);
+  const displayStatus = status === "Fail" && checkLabel.includes("Driver")
+    ? "Pending recon found"
+    : status === "Pass" && checkLabel.includes("Driver")
+      ? "Driver recon cleared"
+      : status === "Error"
+        ? "Validation unavailable"
+        : status === "Manual Review"
+          ? "Manual login required"
+          : status || "Not run";
   const checkedLabel = lastCheckedAt
     ? new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(new Date(lastCheckedAt))
     : "Not checked";
 
   return (
     <div className={`portal-check-progress ${exhausted ? "exhausted" : active ? "active" : ""}`}>
-      <div><span>{checkLabel}</span><strong>{status || "Not run"}</strong></div>
+      <div><span>{checkLabel}</span><strong>{displayStatus}</strong></div>
       <div><span>Automation attempts</span><strong>{Math.min(attemptCount, 3)} / 3</strong></div>
       <div>
         <span>{active ? "Next update / retry" : exhausted ? "Escalation" : "Last checked"}</span>

@@ -25,10 +25,10 @@ import {
   addManualExecutiveReconciliation,
   deleteExecutiveReconciliation,
   queueCodClosureCheck,
-  refreshExecutiveReconciliationRoster,
   requestCodGateException,
   reviewCodGateException,
   saveExecutiveReconciliation,
+  submitCodCashCollection,
   submitCodDayClosure
 } from "./actions";
 import { LiveCacheRefresh } from "./live-cache-refresh";
@@ -37,6 +37,7 @@ import { loadCodDayClosures, loadCodManagerNotifications } from "@/lib/ops-pulse
 import { canAccessCodAudit, loadCodAuditRows } from "@/lib/ops-pulse/cod-audit";
 import { PortalCheckProgress } from "./portal-check-progress";
 import { resolveOperatingContext } from "@/lib/ops-pulse/operating-context";
+import { CashSubmissionButton } from "./cash-submission-button";
 
 export const maxDuration = 300;
 
@@ -252,8 +253,34 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
     run && ["Queued", "Running", "Fail", "Manual Review", "Error"].includes(run.status) && Number(run.attempt_count ?? 0) < 3
   );
   const selectedClosure = closures.find((closure) => closure.location_id === defaultLocationId) ?? null;
+  const closureSnapshot = objectValue(selectedClosure?.validation_snapshot);
+  const cashSubmissionSnapshot = objectValue(closureSnapshot.cash_submission);
+  const cashSubmitted = Boolean(cashSubmissionSnapshot.submitted_at) && selectedClosure?.submission_status !== "Draft";
+  const submittedDifference = amountValue(String(cashSubmissionSnapshot.difference_amount ?? 0));
+  const cashSubmissionStatus = !cashSubmitted
+    ? "Draft"
+    : submittedDifference < 0
+      ? "Submitted with shortage"
+      : submittedDifference > 0
+        ? "Submitted with excess"
+        : "Submitted";
+  const currentVarianceType = netDifference < 0 ? "short" : netDifference > 0 ? "excess" : "balanced";
+  const currentVarianceLabel = netDifference < 0
+    ? `COD short ${formatAmount(Math.abs(netDifference))}`
+    : netDifference > 0
+      ? `COD excess ${formatAmount(netDifference)}`
+      : "No COD variance";
   const driverCleared = selectedClosure?.driver_check_status === "Passed" ||
     selectedClosure?.driver_check_status === "Exception approved";
+  const driverDisplayStatus = driverRun?.status === "Pass"
+    ? "Driver recon cleared"
+    : driverRun?.status === "Fail"
+      ? `Pending recon found${Number(driverRun.pending_count ?? 0) ? ` · ${driverRun.pending_count}` : ""}`
+      : driverRun?.status === "Error"
+        ? "Validation unavailable"
+        : driverRun?.status === "Manual Review"
+          ? "Manual login required"
+          : selectedClosure?.driver_check_status ?? "Not run";
   const depositAmountDifference = Number((
     collectedTotal - amountValue(selectedClosure?.amazon_open_remittance_expected)
   ).toFixed(2));
@@ -323,45 +350,67 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                   <button className="button secondary" type="submit">Apply</button>
                 </div>
               </form>
-              {permission.canEdit ? (
-                <form action={refreshExecutiveReconciliationRoster} className="form-actions align-right scc-refresh-form">
-                  <input type="hidden" name="return_href" value={returnHref} />
-                  <input type="hidden" name="business_date" value={result.businessDate} />
-                  <input type="hidden" name="location_id" value={defaultLocationId} />
-                  <SubmitButton disabled={!defaultLocationId}>Fetch DER</SubmitButton>
-                </form>
-              ) : null}
             </div>
           </section>
 
           <section className="summary-grid reconciliation-summary">
-            <div className="metric-card"><span>DER roster</span><strong>{sccRows}</strong><small>{workerReady ? "Browser task connected" : "Worker setup required"}</small></div>
-            <div className="metric-card"><span>Cash entered</span><strong>{savedRows.length} / {sccRows || rows.length}</strong><small>{completed} balanced</small></div>
+            <div className="metric-card"><span>Associates</span><strong>{rows.length}</strong><small>{sccRows ? `${sccRows} validated in SCC` : "From station shipment data"}</small></div>
+            <div className="metric-card"><span>Cash entered</span><strong>{savedRows.length}</strong><small>{completed} balanced</small></div>
             <div className="metric-card"><span>Collected</span><strong>{formatAmount(collectedTotal)}</strong><small>Expected {formatAmount(expectedTotal)}</small></div>
-            <div className="metric-card"><span>Difference</span><strong className={moneyClass(netDifference)}>{differenceLabel(netDifference)}</strong><small>Correct before final close</small></div>
+            <div className="metric-card"><span>COD variance</span><strong className={moneyClass(netDifference)}>{differenceLabel(netDifference)}</strong><small>Short or excess can be submitted</small></div>
           </section>
 
-          <details className="panel reconciliation-closure-panel">
-            <summary className="panel-head">
+          <section className="panel reconciliation-closure-panel">
+            <div className="panel-head">
               <div>
-                <h2>Validate & close</h2>
+                <h2>Submit & validate</h2>
                 <p className="subtle">{selectedStation ? `${selectedStation.station_code} · ${result.businessDate}` : "Select a station"}</p>
               </div>
-              <StatusPill status={selectedClosure?.is_final_submitted ? "Final submitted" : selectedClosure?.submission_status ?? "Draft"} />
-            </summary>
+              <StatusPill status={selectedClosure?.is_final_submitted ? "Final submitted" : cashSubmissionStatus} />
+            </div>
             <div className="panel-body">
               <div className="reconciliation-lifecycle" aria-label="COD closure lifecycle">
-                <div className={sccRows ? "complete" : "current"}><i>1</i><span>DER roster</span><strong>{sccRows ? `${sccRows} fetched` : "Fetch"}</strong></div>
-                <div className={savedRows.length && Math.abs(netDifference) <= 1 ? "complete" : sccRows ? "current" : ""}><i>2</i><span>Cash collection</span><strong>{savedRows.length ? `${completed}/${savedRows.length} balanced` : "Pending"}</strong></div>
-                <div className={driverCleared ? "complete" : savedRows.length ? "current" : ""}><i>3</i><span>Driver recon</span><strong>{selectedClosure?.driver_check_status ?? "Not run"}</strong></div>
+                <div className={savedRows.length ? "complete" : "current"}><i>1</i><span>Cash sheet</span><strong>{savedRows.length ? `${savedRows.length} entered` : "Start"}</strong></div>
+                <div className={cashSubmitted ? "complete" : savedRows.length ? "current" : ""}><i>2</i><span>Submit COD</span><strong>{cashSubmissionStatus}</strong></div>
+                <div className={driverCleared ? "complete" : cashSubmitted ? "current" : ""}><i>3</i><span>Driver recon</span><strong>{driverDisplayStatus}</strong></div>
                 <div className={selectedClosure?.is_final_submitted ? "complete" : driverCleared ? "current" : ""}><i>4</i><span>Deposit & close</span><strong>{selectedClosure?.is_final_submitted ? "Closed" : depositDisplayStatus}</strong></div>
               </div>
               {defaultLocationId ? (
-                <div className="reconciliation-gates">
+                <>
+                  <section className={`cash-submission-card ${currentVarianceType}`}>
+                    <div>
+                      <span>Cash submission</span>
+                      <strong>{currentVarianceLabel}</strong>
+                      <small>
+                        Expected {formatAmount(expectedTotal)} · Collected {formatAmount(collectedTotal)}
+                        {cashSubmitted ? ` · Last submitted ${formatDateTime(String(cashSubmissionSnapshot.submitted_at ?? ""))}` : ""}
+                      </small>
+                    </div>
+                    <form action={submitCodCashCollection}>
+                      <input type="hidden" name="return_href" value={returnHref} />
+                      <input type="hidden" name="business_date" value={result.businessDate} />
+                      <input type="hidden" name="location_id" value={defaultLocationId} />
+                      <CashSubmissionButton
+                        disabled={!permission.canEdit || !savedRows.length || Boolean(selectedClosure?.is_final_submitted)}
+                        varianceLabel={currentVarianceLabel}
+                        varianceType={currentVarianceType}
+                      />
+                    </form>
+                  </section>
+                  {cashSubmitted && submittedDifference !== 0 ? (
+                    <div className="cash-exception-strip">
+                      <StatusPill status={cashSubmissionStatus} />
+                      <span>
+                        Manager notification: {selectedClosure?.manager_status === "Pending" ? "sent / pending review" : selectedClosure?.manager_status ?? "pending"}.
+                        Driver Reconciliation continues independently.
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="reconciliation-gates">
                   <section className="reconciliation-gate">
                     <div className="reconciliation-gate-head">
                       <div><span>Validation 1</span><strong>Driver reconciliation</strong></div>
-                      <StatusPill status={selectedClosure?.driver_check_status ?? "Not run"} />
+                      <StatusPill status={driverDisplayStatus} />
                     </div>
                     <PortalCheckProgress
                       attemptCount={Number(driverRun?.attempt_count ?? 0)}
@@ -376,8 +425,8 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                       <input type="hidden" name="business_date" value={result.businessDate} />
                       <input type="hidden" name="location_id" value={defaultLocationId} />
                       <input type="hidden" name="check_type" value="driver_reconciliation" />
-                      <SubmitButton className="button secondary" disabled={!permission.canEdit || selectedClosure?.is_final_submitted}>
-                        Validate DER
+                      <SubmitButton className="button secondary" disabled={!permission.canEdit || !cashSubmitted || selectedClosure?.is_final_submitted}>
+                        {cashSubmitted ? "Recheck SCC" : "Submit cash first"}
                       </SubmitButton>
                     </form>
                     {selectedClosure && ["Pending", "Manual Review", "Error", "Exception rejected"].includes(selectedClosure.driver_check_status) ? (
@@ -484,6 +533,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     </form>
                   </section>
                 </div>
+                </>
               ) : <p className="subtle">Select one station to submit its day closure.</p>}
               {managerNotifications.length ? (
                 <details className="reconciliation-support-panel">
@@ -506,7 +556,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                 </details>
               ) : null}
             </div>
-          </details>
+          </section>
 
           <section className="panel">
             <div className="panel-head">

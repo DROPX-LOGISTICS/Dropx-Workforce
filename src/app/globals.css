@@ -9661,6 +9661,100 @@ tbody tr:hover td {
   min-height: 98px;
 }
 
+.cash-submission-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  background: #f0fdf4;
+}
+
+.cash-submission-card.short {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.cash-submission-card.excess {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.cash-submission-card > div {
+  display: grid;
+  gap: 3px;
+}
+
+.cash-submission-card > div > span {
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.cash-submission-card > div > strong {
+  color: #172033;
+  font-size: 17px;
+}
+
+.cash-submission-card > div > small {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.cash-submit-confirm {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 720px;
+  padding: 10px 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.cash-submit-confirm.short {
+  border-color: #fecaca;
+}
+
+.cash-submit-confirm > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 260px;
+}
+
+.cash-submit-confirm span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.cash-submit-confirm .form-actions {
+  flex-wrap: nowrap;
+}
+
+.button.danger-button {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.cash-exception-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 9px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fff7f7;
+  color: #7f1d1d;
+  font-size: 12px;
+}
+
 .reconciliation-closure-panel > summary {
   cursor: pointer;
   list-style: none;
@@ -9998,6 +10092,21 @@ tbody tr:hover td {
 
   .reconciliation-gate.final > .form-actions {
     margin: 0 !important;
+  }
+
+  .cash-submission-card,
+  .cash-submit-confirm,
+  .cash-exception-strip {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cash-submit-confirm > div:first-child {
+    min-width: 0;
+  }
+
+  .cash-submit-confirm .form-actions {
+    flex-wrap: wrap;
   }
 
   .reconciliation-entry-grid {

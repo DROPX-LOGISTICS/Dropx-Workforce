@@ -4951,6 +4951,10 @@ tbody tr:hover td {
   min-width: 1180px;
 }
 
+.capacity-decision-summary {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .capacity-decision-table th,
 .capacity-decision-table td {
   vertical-align: middle;
@@ -13115,6 +13119,10 @@ td strong,
 }
 
 @media (max-width: 1100px) {
+  .capacity-decision-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .capacity-detail-grid {
     grid-template-columns: 1fr;
   }
@@ -13134,6 +13142,10 @@ td strong,
 }
 
 @media (max-width: 720px) {
+  .capacity-decision-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .capacity-tabs-toolbar {
     align-items: stretch;
     flex-direction: column;

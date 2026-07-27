@@ -181,6 +181,16 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
   }).sort((left, right) => right.recommendation.rank - left.recommendation.rank || right.high - left.high || left.stationCode.localeCompare(right.stationCode));
   const stationsForAction = stationRecommendations.filter((row) => row.recommendation.rank >= 3).length;
   const associateActions = allAssociates.filter((row) => row.evidenceReady && (row.level === "high" || row.level === "low")).length;
+  const recommendationRank: Record<string, number> = { "Target required": 6, "Reduce workload": 5, "Allocation review": 4, "Monitor peaks": 3, Observe: 2, Maintain: 1 };
+  const recommendationAssociates = [...associates];
+  if (!searchParams?.sort) recommendationAssociates.sort((left, right) => {
+    const rank = (recommendationRank[right.recommendation.label] ?? 0) - (recommendationRank[left.recommendation.label] ?? 0);
+    if (rank) return rank;
+    const leftGap = left.level === "high" ? left.average - (left.safe ?? left.average) : left.level === "low" ? (left.target ?? left.average) - left.average : 0;
+    const rightGap = right.level === "high" ? right.average - (right.safe ?? right.average) : right.level === "low" ? (right.target ?? right.average) - right.average : 0;
+    return rightGap - leftGap;
+  });
+  const shownRecommendationAssociates = recommendationAssociates.slice(0, 200);
   const paramsForSort = new URLSearchParams({ preset, from: start, to: end, band });
   if (selectedStation) paramsForSort.set("station", selectedStation);
   if (searchParams?.stations) paramsForSort.set("stations", searchParams.stations);
@@ -208,7 +218,7 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
         {!associates.length ? <tr><td className="empty-cell" colSpan={8}>No associates match these filters.</td></tr> : null}
       </tbody></table></div></section>
     </> : <>
-      <section className="performance-summary-grid capacity-spr-recommendation-summary">
+      <section className="performance-summary-grid capacity-decision-summary capacity-spr-recommendation-summary">
         <article><span>Stations for action</span><strong>{stationsForAction}</strong><small>Rebalance or allocation review</small></article>
         <article><span>Associate actions</span><strong>{associateActions}</strong><small>At least 3 active days</small></article>
         <article><span>Above safe</span><strong>{highCount}</strong><small>Route relief candidates</small></article>
@@ -225,10 +235,10 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
       </section>
 
       <section className="panel capacity-spr-associate-actions">
-        <div className="panel-head"><div><h2>Associate recommendations</h2><p className="subtle">Actions use station targets and require at least 3 active days.</p></div><span className="status-pill neutral">{associates.length} shown</span></div>
+        <div className="panel-head"><div><h2>Associate recommendations</h2><p className="subtle">Actions use station targets and require at least 3 active days. Highest-priority rows appear first.</p></div><span className="status-pill neutral">{shownRecommendationAssociates.length} of {associates.length}</span></div>
         <div className="table-wrap"><table className="capacity-daily-table capacity-spr-recommendation-table"><thead><tr><th><a href={sortHref("name")}>Associate <small>{sortMark("name")}</small></a></th><th><a href={sortHref("station")}>Station <small>{sortMark("station")}</small></a></th><th><a href={sortHref("days")}>Days <small>{sortMark("days")}</small></a></th><th><a href={sortHref("average")}>Average SPR <small>{sortMark("average")}</small></a></th><th>Target range</th><th><a href={sortHref("highDays")}>High days <small>{sortMark("highDays")}</small></a></th><th>Recommendation</th><th>Action</th></tr></thead><tbody>
-          {associates.map((row) => <tr key={associateIdentityKey(row.stationCode, row.id, row.name)}><td><a className="capacity-station-link" href={`/ops-pulse/capacity/associates/${encodeURIComponent(row.id)}?station=${row.stationCode}&from=${start}&to=${end}&name=${encodeURIComponent(row.name)}`}><strong>{row.name}</strong><small>{row.id}</small></a></td><td>{row.stationCode}</td><td>{row.dates}</td><td><strong className={row.level === "high" ? "metric-bad-text" : row.level === "low" ? "metric-warn-text" : row.level === "target" ? "metric-good-text" : ""}>{fmt(row.average, 1)}</strong></td><td>{row.target == null || row.safe == null ? "—" : `${fmt(row.target, 1)}–${fmt(row.safe, 1)}`}</td><td>{row.highDays}</td><td><span className={`capacity-decision ${row.recommendation.tone}`}>{row.recommendation.label}</span></td><td><span className="capacity-spr-action">{row.recommendation.action}</span></td></tr>)}
-          {!associates.length ? <tr><td className="empty-cell" colSpan={8}>No associates match these filters.</td></tr> : null}
+          {shownRecommendationAssociates.map((row) => <tr key={associateIdentityKey(row.stationCode, row.id, row.name)}><td><a className="capacity-station-link" href={`/ops-pulse/capacity/associates/${encodeURIComponent(row.id)}?station=${row.stationCode}&from=${start}&to=${end}&name=${encodeURIComponent(row.name)}`}><strong>{row.name}</strong><small>{row.id}</small></a></td><td>{row.stationCode}</td><td>{row.dates}</td><td><strong className={row.level === "high" ? "metric-bad-text" : row.level === "low" ? "metric-warn-text" : row.level === "target" ? "metric-good-text" : ""}>{fmt(row.average, 1)}</strong></td><td>{row.target == null || row.safe == null ? "—" : `${fmt(row.target, 1)}–${fmt(row.safe, 1)}`}</td><td>{row.highDays}</td><td><span className={`capacity-decision ${row.recommendation.tone}`}>{row.recommendation.label}</span></td><td><span className="capacity-spr-action">{row.recommendation.action}</span></td></tr>)}
+          {!shownRecommendationAssociates.length ? <tr><td className="empty-cell" colSpan={8}>No associates match these filters.</td></tr> : null}
         </tbody></table></div>
       </section>
     </>}

@@ -5701,6 +5701,7 @@ tbody tr:hover td {
 .capacity-spr-recommendation-table { min-width:1280px; }
 .capacity-spr-recommendation-table th,
 .capacity-spr-recommendation-table td { vertical-align:top; }
+.capacity-spr-recommendation-table .capacity-station-link small { color:#667085; display:block; margin-top:2px; }
 .capacity-spr-action { color:#475467; display:block; font-size:10px; line-height:1.4; min-width:210px; max-width:320px; }
 .capacity-spr-associate-actions { margin-top:14px; }
 .capacity-bulk-form { display:flex; align-items:flex-end; gap:8px; }

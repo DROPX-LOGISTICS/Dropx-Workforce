@@ -4,7 +4,7 @@ import { PageHead } from "@/components/page-head";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCapacityRules } from "@/lib/ops-pulse/capacity";
-import { loadCapacityAssociateDays } from "@/lib/ops-pulse/capacity-shipments";
+import { capacityWorkload, loadShipmentCountAssociateDays } from "@/lib/ops-pulse/capacity-shipments";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { associateMatches } from "@/lib/ops-pulse/associate-identity";
 import { notFound } from "next/navigation";
@@ -14,7 +14,6 @@ type SearchParams = { station?: string; from?: string; to?: string; name?: strin
 function today() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()); }
 function yesterday() { const date = new Date(`${today()}T00:00:00Z`); date.setUTCDate(date.getUTCDate() - 1); return date.toISOString().slice(0, 10); }
 function valid(value: unknown) { return /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")); }
-function num(value: unknown) { const parsed = Number(value ?? 0); return Number.isFinite(parsed) ? parsed : 0; }
 function fmt(value: number, digits = 0) { return value.toLocaleString("en-IN", { maximumFractionDigits: digits }); }
 
 export default async function AssociateCapacityPage({ params, searchParams }: { params: { id: string }; searchParams?: SearchParams }) {
@@ -28,18 +27,18 @@ export default async function AssociateCapacityPage({ params, searchParams }: { 
   const end = valid(searchParams?.to) ? String(searchParams?.to) : yesterday();
   const start = valid(searchParams?.from) ? String(searchParams?.from) : end;
   const [shipmentResult, ruleResult] = await Promise.all([
-    loadCapacityAssociateDays(companyId, [station], start, end),
+    loadShipmentCountAssociateDays(companyId, [station], start, end),
     loadCapacityRules(companyId)
   ]);
   const requestedName = String(searchParams?.name ?? "").trim();
-  const rows = (shipmentResult.data ?? []).filter((row) => associateMatches(id, requestedName, row.associate_id, row.associate_name));
+  const rows = (shipmentResult.data ?? []).filter((row) => associateMatches(id, requestedName, row.provider_employee_id, row.provider_employee_name));
   const dates = [...new Set(rows.map((row) => row.work_date))].sort();
-  const daily = dates.map((date) => ({ date, delivered: rows.filter((row) => row.work_date === date).reduce((sum, row) => sum + num(row.delivered), 0) }));
+  const daily = dates.map((date) => ({ date, delivered: rows.filter((row) => row.work_date === date).reduce((sum, row) => sum + capacityWorkload(row), 0) }));
   const total = daily.reduce((sum, row) => sum + row.delivered, 0);
   const average = daily.length ? total / daily.length : 0;
   const peak = Math.max(0, ...daily.map((row) => row.delivered));
   const safe = ruleResult.rows.find((rule) => rule.stationCode === station)?.maxSafeSpr ?? 70;
-  const name = requestedName || rows.find((row) => row.associate_name)?.associate_name || id;
+  const name = requestedName || rows.find((row) => row.provider_employee_name)?.provider_employee_name || id;
   const highDays = daily.filter((row) => row.delivered > safe).length;
 
   return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">

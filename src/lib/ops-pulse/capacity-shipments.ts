@@ -111,7 +111,7 @@ function exactRawMetric(raw: Record<string, unknown> | null, aliases: string[]) 
   return numberValue(entry?.[1]);
 }
 
-function capacityWorkload(row: Pick<ShipmentCountAssociateDay, "amazon_delivery" | "swa_delivery" | "c_return" | "total_delivery">) {
+export function capacityWorkload(row: Pick<ShipmentCountAssociateDay, "amazon_delivery" | "swa_delivery" | "c_return" | "total_delivery">) {
   const amazon = numberValue(row.amazon_delivery);
   const swa = numberValue(row.swa_delivery);
   const returned = numberValue(row.c_return);

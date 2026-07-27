@@ -6,7 +6,7 @@ import { PageHead } from "@/components/page-head";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCapacityRules } from "@/lib/ops-pulse/capacity";
-import { loadCapacityAssociateDays } from "@/lib/ops-pulse/capacity-shipments";
+import { capacityWorkload, loadShipmentCountAssociateDays } from "@/lib/ops-pulse/capacity-shipments";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { isAmazonEdspXptLocation } from "@/lib/ops-pulse/operating-context";
 import { associateIdentityKey } from "@/lib/ops-pulse/associate-identity";
@@ -17,7 +17,6 @@ function today() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kol
 function shift(value: string, days: number) { const date = new Date(`${value}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); }
 function yesterday() { return shift(today(), -1); }
 function valid(value: unknown) { return /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")); }
-function num(value: unknown) { const parsed = Number(value ?? 0); return Number.isFinite(parsed) ? parsed : 0; }
 function fmt(value: number, digits = 0) { return value.toLocaleString("en-IN", { maximumFractionDigits: digits }); }
 function scopeCodes(value: string | undefined, allowed: string[]) {
   if (!value) return allowed;
@@ -47,24 +46,26 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
     : preset === "ytd" ? `${end.slice(0, 4)}-01-01` : `${end.slice(0, 8)}01`;
   const [ruleResult, associateResult] = await Promise.all([
     loadCapacityRules(companyId),
-    loadCapacityAssociateDays(companyId, queryLocations.map((location) => location.station_code), start, end)
+    loadShipmentCountAssociateDays(companyId, queryLocations.map((location) => location.station_code), start, end)
   ]);
   const rows = associateResult.data ?? [];
   const ruleMap = new Map(ruleResult.rows.map((rule) => [rule.stationCode, rule]));
   const aggregateMap = new Map<string, { stationCode: string; id: string; name: string; daily: Map<string, number>; delivered: number }>();
   rows.forEach((row) => {
-    const key = associateIdentityKey(row.station_code, row.associate_id, row.associate_name);
+    const associateId = String(row.provider_employee_id ?? "").trim();
+    if (!associateId) return;
+    const key = associateIdentityKey(row.station_code, associateId, row.provider_employee_name);
     const current = aggregateMap.get(key) ?? {
       stationCode: row.station_code,
-      id: row.associate_id,
-      name: row.associate_name || "Unmapped name",
+      id: associateId,
+      name: row.provider_employee_name || "Unmapped name",
       daily: new Map<string, number>(),
       delivered: 0
     };
-    const delivered = num(row.delivered);
+    const delivered = capacityWorkload(row);
     current.delivered += delivered;
     current.daily.set(row.work_date, (current.daily.get(row.work_date) ?? 0) + delivered);
-    if (current.name === "Unmapped name" && row.associate_name) current.name = row.associate_name;
+    if (current.name === "Unmapped name" && row.provider_employee_name) current.name = row.provider_employee_name;
     aggregateMap.set(key, current);
   });
   const allAssociates = [...aggregateMap.values()].map((aggregate) => {

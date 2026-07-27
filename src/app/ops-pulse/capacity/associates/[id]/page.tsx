@@ -11,6 +11,7 @@ import { notFound } from "next/navigation";
 export const dynamic = "force-dynamic";
 type SearchParams = { station?: string; from?: string; to?: string };
 function today() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()); }
+function yesterday() { const date = new Date(`${today()}T00:00:00Z`); date.setUTCDate(date.getUTCDate() - 1); return date.toISOString().slice(0, 10); }
 function valid(value: unknown) { return /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")); }
 function num(value: unknown) { const parsed = Number(value ?? 0); return Number.isFinite(parsed) ? parsed : 0; }
 function fmt(value: number, digits = 0) { return value.toLocaleString("en-IN", { maximumFractionDigits: digits }); }
@@ -23,8 +24,8 @@ export default async function AssociateCapacityPage({ params, searchParams }: { 
   const allowedCodes = locationResult.locations.map((location) => location.station_code);
   const station = String(searchParams?.station ?? "").toUpperCase();
   if (!allowedCodes.includes(station)) notFound();
-  const end = valid(searchParams?.to) ? String(searchParams?.to) : today();
-  const start = valid(searchParams?.from) ? String(searchParams?.from) : `${end.slice(0, 8)}01`;
+  const end = valid(searchParams?.to) ? String(searchParams?.to) : yesterday();
+  const start = valid(searchParams?.from) ? String(searchParams?.from) : end;
   const [shipmentResult, ruleResult] = await Promise.all([
     loadCapacityAssociateDays(companyId, [station], start, end),
     loadCapacityRules(companyId)

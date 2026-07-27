@@ -162,28 +162,32 @@ export async function notifyCodManager({
   title: string;
 }) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
-  const { data: station } = await supabaseAdmin
-    .from("stations")
-    .select("station_manager_email")
-    .eq("company_id", companyId)
-    .eq("id", locationId)
-    .maybeSingle();
-  const email = station?.station_manager_email?.trim() || null;
+  const [stationResult, settingResult] = await Promise.all([
+    supabaseAdmin.from("stations").select("station_manager_email")
+      .eq("company_id", companyId).eq("id", locationId).maybeSingle(),
+    supabaseAdmin.from("cod_station_settings").select("escalation_email")
+      .eq("company_id", companyId).eq("location_id", locationId).maybeSingle()
+  ]);
+  const emails = [
+    stationResult.data?.station_manager_email,
+    ...String(settingResult.data?.escalation_email ?? "").split(/[;,]/)
+  ].map((email) => String(email ?? "").trim().toLowerCase()).filter(Boolean);
+  const recipients = [...new Set(emails)];
   const notification = await supabaseAdmin.from("cod_manager_notifications").insert({
     company_id: companyId,
     closure_id: closureId,
     location_id: locationId,
-    recipient_email: email,
+    recipient_email: recipients.join(", ") || null,
     notification_type: notificationType,
     title,
     message,
-    email_status: email ? "Pending" : "Skipped"
+    email_status: recipients.length ? "Pending" : "Skipped"
   }).select("id").single();
   if (notification.error) throw new Error(notification.error.message);
 
-  if (email && notification.data?.id) {
+  if (recipients.length && notification.data?.id) {
     try {
-      await sendEmail({ companyId, to: [email], subject: title, body: `${message}\n\nStation: ${stationCode}` });
+      await sendEmail({ companyId, to: recipients, subject: title, body: `${message}\n\nStation: ${stationCode}` });
       await supabaseAdmin.from("cod_manager_notifications").update({ email_status: "Sent" }).eq("id", notification.data.id);
     } catch (error) {
       await supabaseAdmin.from("cod_manager_notifications").update({

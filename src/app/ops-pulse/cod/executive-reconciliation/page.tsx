@@ -23,6 +23,7 @@ import {
 import { isSupabaseAdminConfigured } from "@/lib/supabase-admin";
 import {
   addManualExecutiveReconciliation,
+  continueCodWithPendingDriverReconciliation,
   deleteExecutiveReconciliation,
   queueCodClosureCheck,
   requestCodGateException,
@@ -284,7 +285,9 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
         ? "Validation unavailable"
         : driverRun?.status === "Manual Review"
           ? "Manual login required"
-          : selectedClosure?.driver_check_status ?? "Not run";
+      : selectedClosure?.driver_exception_reason?.startsWith("Continued with SCC pending.")
+        ? "Continued with pending · notified"
+        : selectedClosure?.driver_check_status ?? "Not run";
   const depositAmountDifference = Number((
     collectedTotal - amountValue(selectedClosure?.amazon_open_remittance_expected)
   ).toFixed(2));
@@ -297,16 +300,13 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
     ? "Pending"
     : selectedClosure?.deposit_check_status ?? "Locked";
   const canManagerReview = auditAllowed;
-  const requestedStep = ["1", "2", "3", "4"].includes(String(searchParams?.step)) ? Number(searchParams?.step) : 1;
-  const rosterReady = rows.length > 0;
+  const requestedStep = ["1", "2", "3"].includes(String(searchParams?.step)) ? Number(searchParams?.step) : 1;
   const cashReady = savedRows.length > 0;
-  const activeStep = requestedStep >= 4 && !driverCleared
-    ? cashReady ? 3 : rosterReady ? 2 : 1
-    : requestedStep >= 3 && !cashReady
-      ? rosterReady ? 2 : 1
-      : requestedStep >= 2 && !rosterReady
-        ? 1
-        : requestedStep;
+  const activeStep = requestedStep >= 3 && !driverCleared
+    ? cashReady ? 2 : 1
+    : requestedStep >= 2 && !cashReady
+      ? 1
+      : requestedStep;
   const stepHref = (step: number) => currentHref({
     date: result.businessDate,
     location: defaultLocationId,
@@ -375,51 +375,36 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
           </section>
 
           <nav className="reconciliation-wizard" aria-label="Executive reconciliation steps">
-            <a className={`${activeStep === 1 ? "current" : ""} ${rosterReady ? "complete" : ""}`} href={stepHref(1)}>
-              <i>1</i><span><strong>Driver list</strong><small>Load and verify SCC roster</small></span>
+            <a className={`${activeStep === 1 ? "current" : ""} ${cashReady ? "complete" : ""}`} href={stepHref(1)}>
+              <i>1</i><span><strong>Cash sheet</strong><small>Select drivers and count cash</small></span>
             </a>
-            <a className={`${activeStep === 2 ? "current" : ""} ${cashReady ? "complete" : ""} ${!rosterReady ? "locked" : ""}`} href={rosterReady ? stepHref(2) : stepHref(1)} aria-disabled={!rosterReady}>
-              <i>2</i><span><strong>Count cash</strong><small>Enter associate collections</small></span>
+            <a className={`${activeStep === 2 ? "current" : ""} ${driverCleared ? "complete" : ""} ${!cashReady ? "locked" : ""}`} href={cashReady ? stepHref(2) : stepHref(1)} aria-disabled={!cashReady}>
+              <i>2</i><span><strong>Driver validation</strong><small>Submit COD and check SCC</small></span>
             </a>
-            <a className={`${activeStep === 3 ? "current" : ""} ${driverCleared ? "complete" : ""} ${!cashReady ? "locked" : ""}`} href={cashReady ? stepHref(3) : stepHref(rosterReady ? 2 : 1)} aria-disabled={!cashReady}>
-              <i>3</i><span><strong>Driver validation</strong><small>Submit COD and clear SCC</small></span>
-            </a>
-            <a className={`${activeStep === 4 ? "current" : ""} ${selectedClosure?.is_final_submitted ? "complete" : ""} ${!driverCleared ? "locked" : ""}`} href={driverCleared ? stepHref(4) : stepHref(cashReady ? 3 : rosterReady ? 2 : 1)} aria-disabled={!driverCleared}>
-              <i>4</i><span><strong>Deposit & close</strong><small>Validate bank deposit and lock</small></span>
+            <a className={`${activeStep === 3 ? "current" : ""} ${selectedClosure?.is_final_submitted ? "complete" : ""} ${!driverCleared ? "locked" : ""}`} href={driverCleared ? stepHref(3) : stepHref(cashReady ? 2 : 1)} aria-disabled={!driverCleared}>
+              <i>3</i><span><strong>Deposit & summary</strong><small>Match bank deposit and close</small></span>
             </a>
           </nav>
 
           {activeStep === 1 ? (
             <section className="panel reconciliation-stage">
               <div className="panel-head">
-                <div><span className="stage-kicker">Step 1 of 4</span><h2>Verify the driver list</h2><p className="subtle">Load the SCC roster for this station and date. Review the associates before counting cash.</p></div>
-                <StatusPill status={rosterReady ? `${rows.length} drivers ready` : "Roster required"} />
+                <div><span className="stage-kicker">Step 1 of 3</span><h2>Associate cash sheet</h2><p className="subtle">Select one driver or add all available drivers, then enter the expected COD and denomination count.</p></div>
+                <StatusPill status={rows.length ? `${availableRows.length} available` : "Driver sync required"} />
               </div>
-              <div className="panel-body reconciliation-roster-start">
+              <div className="panel-body reconciliation-cash-source">
                 <div className="reconciliation-stage-action">
-                  <div><strong>{selectedStation ? `${selectedStation.station_code} · ${result.businessDate}` : "Select a station"}</strong><span>{rosterReady ? `${sccRows} SCC-validated · ${availableRows.length} awaiting cash entry · ${savedRows.length} already entered` : "No driver rows are available yet."}</span></div>
+                  <div><strong>{selectedStation ? `${selectedStation.station_code} · ${result.businessDate}` : "Select a station"}</strong><span>{rows.length ? `${rows.length} drivers loaded · ${savedRows.length} cash rows saved` : "Load SCC drivers before adding cash rows."}</span></div>
                   {defaultLocationId ? (
                     <form action={refreshExecutiveReconciliationRoster}>
                       <input type="hidden" name="return_href" value={stepHref(1)} />
                       <input type="hidden" name="business_date" value={result.businessDate} />
                       <input type="hidden" name="location_id" value={defaultLocationId} />
                       <SubmitButton className="button secondary" disabled={!permission.canEdit || Boolean(selectedClosure?.is_final_submitted)}>
-                        {rosterReady ? "Refresh SCC driver list" : "Load SCC driver list"}
+                        {rows.length ? "Refresh drivers" : "Load drivers"}
                       </SubmitButton>
                     </form>
                   ) : null}
-                </div>
-                {rosterReady ? (
-                  <div className="reconciliation-roster-preview">
-                    {rows.slice(0, 12).map((row) => (
-                      <div key={row.key}><span><strong>{executiveDisplayName(row)}</strong><small>{row.provider_employee_id}</small></span><StatusPill status={row.reconciliation_id ? row.reconciliation_status : "Ready"} /></div>
-                    ))}
-                    {rows.length > 12 ? <p className="subtle">+ {rows.length - 12} more drivers loaded</p> : null}
-                  </div>
-                ) : <div className="reconciliation-empty-stage">Load the SCC list to begin. The next step remains locked until drivers are available.</div>}
-                <div className="reconciliation-stage-footer">
-                  <span>Confirm the station and business date before continuing.</span>
-                  {rosterReady ? <a className="button" href={stepHref(2)}>Continue to cash count →</a> : <button className="button" disabled>Continue to cash count</button>}
                 </div>
               </div>
             </section>
@@ -432,15 +417,23 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
             <div className="metric-card"><span>COD variance</span><strong className={moneyClass(netDifference)}>{differenceLabel(netDifference)}</strong><small>Short or excess can be submitted</small></div>
           </section>
 
-          <section className={`panel reconciliation-closure-panel ${activeStep !== 3 && activeStep !== 4 ? "reconciliation-step-hidden" : ""}`}>
+          <section className={`panel reconciliation-closure-panel ${activeStep !== 2 && activeStep !== 3 ? "reconciliation-step-hidden" : ""}`}>
             <div className="panel-head">
               <div>
-                <h2>Submit & validate</h2>
+                <h2>{activeStep === 2 ? "Submit cash & validate drivers" : "Bank deposit & closure summary"}</h2>
                 <p className="subtle">{selectedStation ? `${selectedStation.station_code} · ${result.businessDate}` : "Select a station"}</p>
               </div>
               <StatusPill status={selectedClosure?.is_final_submitted ? "Final submitted" : cashSubmissionStatus} />
             </div>
             <div className="panel-body">
+              {activeStep === 3 ? (
+                <section className="reconciliation-final-summary">
+                  <div><span>Cash submitted</span><strong>{formatAmount(collectedTotal)}</strong><small>{currentVarianceLabel}</small></div>
+                  <div><span>SCC driver check</span><strong>{driverDisplayStatus}</strong><small>{Number(driverRun?.pending_count ?? 0)} pending · {formatAmount(driverRun?.pending_amount)}</small></div>
+                  <div><span>Bank expected</span><strong>{formatAmount(selectedClosure?.amazon_open_remittance_expected)}</strong><small>{selectedClosure?.amazon_open_remittance_count ?? 0} open remittances</small></div>
+                  <div><span>Deposit difference</span><strong className={moneyClass(depositAmountDifference)}>{differenceLabel(depositAmountDifference)}</strong><small>{depositDisplayStatus}</small></div>
+                </section>
+              ) : null}
               <div className="reconciliation-lifecycle reconciliation-step-hidden" aria-label="COD closure lifecycle">
                 <div className={savedRows.length ? "complete" : "current"}><i>1</i><span>Cash sheet</span><strong>{savedRows.length ? `${savedRows.length} entered` : "Start"}</strong></div>
                 <div className={cashSubmitted ? "complete" : savedRows.length ? "current" : ""}><i>2</i><span>Submit COD</span><strong>{cashSubmissionStatus}</strong></div>
@@ -449,7 +442,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
               </div>
               {defaultLocationId ? (
                 <>
-                  <section className={`cash-submission-card ${currentVarianceType} ${activeStep !== 3 ? "reconciliation-step-hidden" : ""}`}>
+                  <section className={`cash-submission-card ${currentVarianceType} ${activeStep !== 2 ? "reconciliation-step-hidden" : ""}`}>
                     <div>
                       <span>Cash submission</span>
                       <strong>{currentVarianceLabel}</strong>
@@ -469,7 +462,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                       />
                     </form>
                   </section>
-                  {activeStep === 3 && cashSubmitted && submittedDifference !== 0 ? (
+                  {activeStep === 2 && cashSubmitted && submittedDifference !== 0 ? (
                     <div className="cash-exception-strip">
                       <StatusPill status={cashSubmissionStatus} />
                       <span>
@@ -479,7 +472,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     </div>
                   ) : null}
                   <div className="reconciliation-gates">
-                  <section className={`reconciliation-gate ${activeStep !== 3 ? "reconciliation-step-hidden" : ""}`}>
+                  <section className={`reconciliation-gate ${activeStep !== 2 ? "reconciliation-step-hidden" : ""}`}>
                     <div className="reconciliation-gate-head">
                       <div><span>Validation 1</span><strong>Driver reconciliation</strong></div>
                       <StatusPill status={driverDisplayStatus} />
@@ -503,14 +496,13 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     </form>
                     {selectedClosure && ["Pending", "Manual Review", "Error", "Exception rejected"].includes(selectedClosure.driver_check_status) ? (
                       <details className="reconciliation-exception">
-                        <summary>Request exception</summary>
-                        <form action={requestCodGateException} className="form-grid three">
+                        <summary>Continue with SCC pending</summary>
+                        <form action={continueCodWithPendingDriverReconciliation} className="form-grid three">
                           <input type="hidden" name="return_href" value={returnHref} />
                           <input type="hidden" name="business_date" value={result.businessDate} />
                           <input type="hidden" name="location_id" value={defaultLocationId} />
-                          <input type="hidden" name="gate" value="driver" />
-                          <label className="span-2">Reason<textarea className="field" name="exception_reason" rows={2} required /></label>
-                          <div className="form-actions align-right"><SubmitButton>Send to manager</SubmitButton></div>
+                          <label className="span-2">Reason<textarea className="field" name="exception_reason" rows={2} placeholder="Why the station is proceeding with SCC pending" required /></label>
+                          <div className="form-actions align-right"><SubmitButton>Continue & notify</SubmitButton></div>
                         </form>
                       </details>
                     ) : null}
@@ -534,7 +526,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     ) : null}
                   </section>
 
-                  <section className={`reconciliation-gate ${!driverCleared ? "locked" : ""} ${activeStep !== 4 ? "reconciliation-step-hidden" : ""}`}>
+                  <section className={`reconciliation-gate ${!driverCleared ? "locked" : ""} ${activeStep !== 3 ? "reconciliation-step-hidden" : ""}`}>
                     <div className="reconciliation-gate-head">
                       <div><span>Validation 2</span><strong>Bank deposit</strong></div>
                       <StatusPill status={depositDisplayStatus} />
@@ -589,7 +581,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     ) : null}
                   </section>
 
-                  <section className={`reconciliation-gate final ${!depositCleared ? "locked" : ""} ${activeStep !== 4 ? "reconciliation-step-hidden" : ""}`}>
+                  <section className={`reconciliation-gate final ${!depositCleared ? "locked" : ""} ${activeStep !== 3 ? "reconciliation-step-hidden" : ""}`}>
                     <div className="reconciliation-gate-head">
                       <div><span>Final</span><strong>Close station day</strong></div>
                       <StatusPill status={selectedClosure?.is_final_submitted ? "Final submitted" : "Pending"} />
@@ -607,7 +599,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                 </div>
                 </>
               ) : <p className="subtle">Select one station to submit its day closure.</p>}
-              {activeStep === 4 && managerNotifications.length ? (
+              {activeStep === 3 && managerNotifications.length ? (
                 <details className="reconciliation-support-panel">
                   <summary>Manager notifications ({managerNotifications.length})</summary>
                   <div className="table-wrap">
@@ -630,7 +622,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
             </div>
           </section>
 
-          <section className={`panel ${activeStep !== 2 ? "reconciliation-step-hidden" : ""}`}>
+          <section className={`panel ${activeStep !== 1 ? "reconciliation-step-hidden" : ""}`}>
             <div className="panel-head">
               <div>
                 <h2>Collect cash</h2>
@@ -659,7 +651,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
             )}
           </section>
 
-          <section className={`panel ${activeStep !== 2 ? "reconciliation-step-hidden" : ""}`}>
+          <section className={`panel ${activeStep !== 1 ? "reconciliation-step-hidden" : ""}`}>
             <div className="panel-head">
               <div>
                 <h2>Saved cash</h2>
@@ -749,10 +741,10 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                 </tbody>
               </table>
             </div>
-            {savedRows.length ? <div className="reconciliation-stage-footer"><span>Review differences before submitting COD.</span><a className="button" href={stepHref(3)}>Continue to driver validation →</a></div> : null}
+            {savedRows.length ? <div className="reconciliation-stage-footer"><span>Review differences before submitting COD.</span><a className="button" href={stepHref(2)}>Continue to driver validation →</a></div> : null}
           </section>
 
-          {activeStep === 4 && auditAllowed ? (
+          {activeStep === 3 && auditAllowed ? (
             <details className="panel reconciliation-support-panel">
               <summary>Activity history ({auditRows.length})</summary>
               <div className="reconciliation-support-toolbar">
@@ -781,7 +773,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
             </details>
           ) : null}
 
-          {activeStep === 2 && permission.canAdd ? (
+          {activeStep === 1 && permission.canAdd ? (
             <details className="panel reconciliation-support-panel">
               <summary>Add associate missing from DER</summary>
               <div className="panel-body">

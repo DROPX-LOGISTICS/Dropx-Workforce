@@ -9894,7 +9894,7 @@ tbody tr:hover td {
 
 .reconciliation-wizard {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -10053,6 +10053,40 @@ tbody tr:hover td {
 .reconciliation-stage-footer {
   padding-top: 10px;
   border-top: 1px solid #e2e8f0;
+}
+
+.reconciliation-final-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.reconciliation-final-summary > div {
+  display: grid;
+  gap: 3px;
+  padding: 11px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.reconciliation-final-summary span {
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.reconciliation-final-summary strong {
+  color: #172033;
+  font-size: 15px;
+}
+
+.reconciliation-final-summary small {
+  color: #64748b;
+  font-size: 10px;
 }
 
 .cash-submission-card {
@@ -10464,6 +10498,10 @@ tbody tr:hover td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .reconciliation-final-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .reconciliation-control-bar .panel-body {
     display: block;
   }
@@ -10483,7 +10521,8 @@ tbody tr:hover td {
 
 @media (max-width: 760px) {
   .reconciliation-wizard,
-  .reconciliation-roster-preview {
+  .reconciliation-roster-preview,
+  .reconciliation-final-summary {
     grid-template-columns: 1fr;
   }
 

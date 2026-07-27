@@ -93,6 +93,16 @@ export function AssociateEntryBuilder({
     ]);
   }
 
+  function addAllDrivers() {
+    setRows(associates.map((associate, index) => ({
+      key: index + 1,
+      providerEmployeeId: associate.providerEmployeeId,
+      expectedAmount: Number(associate.pendingAmount) > 0 ? String(associate.pendingAmount) : "",
+      cashOtherAmount: "",
+      denominationCounts: emptyDenominations()
+    })));
+  }
+
   function removeRow(key: number) {
     setRows((current) => current.length === 1 ? current : current.filter((row) => row.key !== key));
   }
@@ -226,6 +236,9 @@ export function AssociateEntryBuilder({
       <div className="form-actions reconciliation-add-action">
         <button className="button secondary" type="button" onClick={addRow} disabled={!associates.length || !canEdit}>
           + Add associate
+        </button>
+        <button className="button secondary" type="button" onClick={addAllDrivers} disabled={!associates.length || !canEdit}>
+          Add all drivers
         </button>
         <span className="subtle">{associates.length ? `${associates.length} associates available for ${stationCode} · ${stationLabel}` : "Run SCC sync to load the station roster."}</span>
       </div>

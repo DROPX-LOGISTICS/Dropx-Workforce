@@ -1117,6 +1117,73 @@ export async function requestCodGateException(formData: FormData) {
   }
 }
 
+export async function continueCodWithPendingDriverReconciliation(formData: FormData) {
+  const authorization = await requirePagePermission("cod_executive_reconciliation", "edit");
+  const companyId = requireCompanyId(authorization);
+  const returnHref = safeReturnHref(formData.get("return_href"));
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    const businessDate = required(formData.get("business_date"), "Business date");
+    const locationId = required(formData.get("location_id"), "Station");
+    const reason = required(formData.get("exception_reason"), "Reason");
+    const station = await stationForInput(companyId, locationId, null);
+    assertLocationAccess(authorization, station.id);
+    await assertClosureEditable(companyId, businessDate, locationId);
+
+    const [closureResult, runResult] = await Promise.all([
+      supabaseAdmin.from("cod_day_closures").select("id,driver_check_status")
+        .eq("company_id", companyId).eq("business_date", businessDate).eq("location_id", locationId).maybeSingle(),
+      supabaseAdmin.from("ops_portal_check_runs").select("status,pending_count,pending_amount,summary")
+        .eq("company_id", companyId).eq("check_date", businessDate).eq("location_id", locationId)
+        .eq("check_type", "driver_reconciliation").maybeSingle()
+    ]);
+    if (closureResult.error) throw new Error(closureResult.error.message);
+    if (runResult.error) throw new Error(runResult.error.message);
+    if (!closureResult.data?.id) throw new Error("Submit COD and run Driver Reconciliation first.");
+    if (!runResult.data || runResult.data.status === "Pass") throw new Error("No pending Driver Reconciliation exception is available.");
+
+    const pendingCount = Number(runResult.data.pending_count ?? 0);
+    const pendingAmount = Number(runResult.data.pending_amount ?? 0);
+    const now = new Date().toISOString();
+    const continuationReason = `Continued with SCC pending. ${reason}`;
+    const updated = await supabaseAdmin.from("cod_day_closures").update({
+      driver_check_status: "Exception approved",
+      driver_exception_reason: continuationReason,
+      driver_exception_requested_by: authorization.userId,
+      driver_exception_requested_at: now,
+      driver_exception_manager_remarks: "Operational continuation recorded; manager and Control Tower notified.",
+      deposit_check_status: "Not run",
+      manager_status: "Pending",
+      updated_at: now
+    }).eq("id", closureResult.data.id);
+    if (updated.error) throw new Error(updated.error.message);
+
+    await notifyCodManager({
+      closureId: closureResult.data.id,
+      companyId,
+      locationId,
+      stationCode: station.station_code,
+      notificationType: "Driver Reconciliation pending continuation",
+      title: `SCC pending continuation: ${station.station_code} on ${businessDate}`,
+      message: `The station continued with ${pendingCount} SCC associate reconciliation${pendingCount === 1 ? "" : "s"} pending for ₹${pendingAmount.toFixed(2)}. Reason: ${reason}. Bank Deposit validation is now permitted; the pending SCC remains visible in the closure summary.`
+    });
+    await writeCodAudit({
+      action: "Continued with Driver Reconciliation pending",
+      after: { pending_count: pendingCount, pending_amount: pendingAmount, reason, status: "Exception approved" },
+      authorization,
+      businessDate,
+      closureId: closureResult.data.id,
+      locationId,
+      stationCode: station.station_code
+    });
+    revalidatePath(pagePath);
+    redirectWithFlash({ notice: "Continued with SCC pending. Manager and Control Tower notifications were created." }, returnHref);
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    redirectWithFlash({ error: error instanceof Error ? error.message : "Unable to continue with SCC pending." }, returnHref);
+  }
+}
+
 export async function reviewCodGateException(formData: FormData) {
   const authorization = await requirePagePermission("cod_executive_reconciliation", "edit");
   const companyId = requireCompanyId(authorization);

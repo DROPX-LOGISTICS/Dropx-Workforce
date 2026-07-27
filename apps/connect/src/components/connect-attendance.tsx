@@ -20,6 +20,7 @@ type Row = {
   status: string;
   inTime: string;
   outTime: string;
+  punches: string[];
   workHours: string;
   punchCount: number;
   remark: string;
@@ -62,6 +63,7 @@ function emptyAttendanceRow(date: string): Row {
     status: "",
     inTime: "",
     outTime: "",
+    punches: [],
     workHours: "",
     punchCount: 0,
     remark: "",
@@ -153,10 +155,10 @@ export function ConnectAttendance({ account }: { account: Account }) {
             </button>)}
           </div> : null}
           {tab === "punches" ? <div className="dx-punches">
-            {(data.rows.length ? [...data.rows].reverse() : []).flatMap((row) => [
-              row.inTime ? <div key={`${row.date}-in`}><Fingerprint /><span>{row.date.split("-").reverse().join("/")}</span><strong>{row.inTime}</strong></div> : null,
-              row.outTime ? <div key={`${row.date}-out`}><Fingerprint /><span>{row.date.split("-").reverse().join("/")}</span><strong>{row.outTime}</strong></div> : null
-            ])}
+            {(data.rows.length ? [...data.rows].reverse() : []).flatMap((row) => {
+              const punches = row.punches?.length ? row.punches : [row.inTime, row.outTime].filter(Boolean);
+              return punches.map((time, index) => <div key={`${row.date}-${index}-${time}`}><Fingerprint /><span>{row.date.split("-").reverse().join("/")}</span><strong>{time}</strong></div>);
+            })}
           </div> : null}
         </div>
         {tab === "calendar" && selected ? <div className="dx-selected-day">
@@ -252,6 +254,7 @@ function RegularizationSheet({
           <option value="">Select reason</option>
           <option value="missed_in">Missed IN punch</option>
           <option value="missed_out">Missed OUT punch</option>
+          <option value="missed_both">Missed both punches</option>
           <option value="incorrect_in">Incorrect IN time</option>
           <option value="incorrect_out">Incorrect OUT time</option>
           <option value="other">Other</option>

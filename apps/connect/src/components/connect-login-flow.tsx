@@ -26,7 +26,7 @@ function landingPage(account: AppAccount): Step {
 }
 
 function Loader({ text }: { text: string }) {
-  return <div className="dx-loader fullscreen"><span /><small>{text}</small></div>;
+  return <div className="dx-loader fullscreen"><span />{text ? <small>{text}</small> : null}</div>;
 }
 
 export function ConnectLoginFlow() {
@@ -119,7 +119,8 @@ export function ConnectLoginFlow() {
   }
   async function logout() {
     await fetch("/api/connect/auth/session", { method: "DELETE" });
-    setAccounts([]); setAccount(null); setAvatar(""); setDrawer(false); setProfileMenu(false); setStep("mobile"); setNotice("Logged out.");
+    setCountryCode("91"); setMobile(""); setPin(""); setConfirmPin(""); setOtp("");
+    setAccounts([]); setLockedAccounts([]); setAccount(null); setAvatar(""); setDrawer(false); setProfileMenu(false); setStep("mobile"); setNotice("Logged out."); setError("");
   }
   async function saveDefaultAccount(nextKey: string) {
     setPending(true); setError(""); setNotice("");
@@ -192,7 +193,11 @@ export function ConnectLoginFlow() {
         timeout: 60000
       } });
       route(lockedAccounts);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Biometric verification was cancelled."); }
+    } catch (reason) {
+      setPin("");
+      setStep("pin");
+      setError(reason instanceof Error ? reason.message : "Biometric verification was cancelled.");
+    }
     finally { setPending(false); }
   }
   function choose(next: AppAccount) {
@@ -213,8 +218,20 @@ export function ConnectLoginFlow() {
     setStep(next);
   }
 
+  async function profileSubmitted() {
+    const response = await fetch("/api/connect/auth/session", { cache: "no-store" });
+    const payload = await response.json();
+    if (!response.ok || !payload.authenticated) return;
+    const rows = (payload.accounts ?? []).filter((row: AppAccount) => row.profileType !== "user");
+    const refreshed = rows.find((row: AppAccount) => account && accountKey(row) === accountKey(account)) ?? null;
+    setAccounts(rows);
+    setAccount(refreshed);
+    setAvatar(refreshed?.profilePhotoUrl || "");
+    setStep(refreshed ? landingPage(refreshed) : "accounts");
+  }
+
   const loggedIn = ["accounts","dashboard","profile","attendance","settings"].includes(step);
-  if (checking) return <div className="dx-auth"><div className="dx-auth-brand"><Image alt="DropX" height={82} src="/dropx-logo.png" width={232} /></div><Loader text="Checking login..." /></div>;
+  if (checking) return <div className="dx-auth"><Loader text="" /></div>;
 
   return <div className={`dx-app ${loggedIn ? "logged-in" : ""}`}>
     {loggedIn ? <header className="dx-header">
@@ -239,8 +256,8 @@ export function ConnectLoginFlow() {
     {!loggedIn ? <div className="dx-auth">
       <div className="dx-auth-brand"><Image alt="DropX" height={82} priority src="/dropx-logo.png" width={232} /><h1>Sign in with your mobile number</h1></div>
       {error ? <div className="dx-alert error">{error}</div> : null}{notice ? <div className="dx-alert success">{notice}</div> : null}
-      {step === "mobile" ? <form onSubmit={start}><label>Country code<select value={countryCode} onChange={(e) => setCountryCode(e.target.value)}>{countryCodeOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}</select></label><label>Mobile number<input inputMode="tel" onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 15))} placeholder="Enter registered mobile number" value={mobile} /></label><button disabled={pending || mobile.length < 6}>{pending ? "Checking..." : "Continue"}</button></form> : null}
-      {step === "pin" ? <form onSubmit={verifyPin}><label>App PIN<input inputMode="numeric" maxLength={6} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" value={pin} /></label><button disabled={pending || pin.length !== 6}>Sign in</button><button className="text" onClick={resetPin} type="button">Reset PIN</button><button className="text" onClick={() => setStep("mobile")} type="button">Change mobile number</button></form> : null}
+      {step === "mobile" ? <form autoComplete="off" onSubmit={start}><label>Country code<select value={countryCode} onChange={(e) => setCountryCode(e.target.value)}>{countryCodeOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}</select></label><label>Mobile number<input autoComplete="off" inputMode="tel" name="dropx-mobile-login" onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 15))} placeholder="Enter registered mobile number" value={mobile} /></label><button disabled={pending || mobile.length < 6}>{pending ? "Checking..." : "Continue"}</button></form> : null}
+      {step === "pin" ? <form autoComplete="off" onSubmit={verifyPin}><label>App PIN<input autoComplete="new-password" inputMode="numeric" maxLength={6} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" value={pin} /></label><button disabled={pending || pin.length !== 6}>{pending ? "Signing in..." : "Sign in"}</button><button className="text" onClick={resetPin} type="button">Reset PIN</button><button className="text" onClick={() => setStep("mobile")} type="button">Change mobile number</button></form> : null}
       {step === "otp" ? <form onSubmit={(e) => { e.preventDefault(); if (otp.length === 6) setStep("createPin"); }}><label>WhatsApp OTP<input inputMode="numeric" maxLength={6} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} value={otp} /></label><button disabled={otp.length !== 6}>Continue</button></form> : null}
       {step === "createPin" ? <form onSubmit={savePin}><label>Create app PIN<input inputMode="numeric" maxLength={6} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" value={pin} /></label><label>Re-enter app PIN<input inputMode="numeric" maxLength={6} onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))} type="password" value={confirmPin} /></label><button disabled={pending || pin.length !== 6}>Save PIN</button></form> : null}
       {step === "unlock" ? <form onSubmit={(e) => { e.preventDefault(); unlock(); }}><div className="dx-unlock"><Fingerprint /><strong>Unlock DropX One</strong><small>Use Face ID or your device security to continue.</small></div><button disabled={pending}>{pending ? "Unlocking..." : "Unlock"}</button><button className="text" onClick={() => { setPin(""); setStep("pin"); }} type="button">Use PIN</button></form> : null}
@@ -249,7 +266,7 @@ export function ConnectLoginFlow() {
       {error ? <div className="dx-alert error">{error}<button onClick={() => setError("")}><X /></button></div> : null}
       {step === "accounts" ? <section className="dx-accounts"><h1>Choose account</h1>{accounts.map((row) => <button key={accountKey(row)} onClick={() => choose(row)}><i>{row.profilePhotoUrl ? <img alt="" src={row.profilePhotoUrl} /> : <UsersRound />}</i><span><strong>{row.companyName}</strong><em>{row.name || row.reference}</em><small>{row.reference} {row.biometricId ? ` | ${row.biometricId}` : ""}</small></span><ChevronRight /></button>)}</section> : null}
       {step === "dashboard" && account ? <ConnectDashboard account={account} onAttendance={() => open("attendance")} onProfile={() => open("profile")} /> : null}
-      {step === "profile" && account ? <ConnectProfileApp account={account} onPhoto={(url) => setAvatar(url)} /> : null}
+      {step === "profile" && account ? <ConnectProfileApp account={account} onPhoto={(url) => setAvatar(url)} onSubmitted={profileSubmitted} /> : null}
       {step === "attendance" && account ? <ConnectAttendance account={account} /> : null}
       {step === "settings" ? <section className="dx-settings"><h1>Settings</h1><label>Default account<select disabled={pending} value={defaultKey} onChange={(e) => saveDefaultAccount(e.target.value)}><option value="">Select default account</option>{accounts.map((row) => <option key={accountKey(row)} value={accountKey(row)}>{row.companyName} - {row.reference || row.name}</option>)}</select></label><label className="toggle"><span><strong>Enable biometric login</strong><small>Use Face ID or device authentication when available.</small></span><input defaultChecked={localStorage.getItem(biometricKey) === "true"} onChange={(e) => enrollBiometric(e.target.checked)} type="checkbox" /></label><button onClick={resetPin}>Change PIN</button></section> : null}
     </main>}

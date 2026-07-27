@@ -302,7 +302,7 @@ function ReadTile({ label, value, verified, url, full }: { label: string; value?
   </a>;
 }
 
-export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; onPhoto?: (url: string) => void }) {
+export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: AppAccount; onPhoto?: (url: string) => void; onSubmitted?: () => Promise<void> | void }) {
   const executive = account.profileType !== "employee" && account.profileType !== "user";
   const endpoint = executive ? "/api/connect/field-executive-profile" : "/api/connect/profile";
   const query = executive
@@ -529,6 +529,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
       setNotice("Profile saved.");
       setConfirmationOpen(false);
       if (payload.profile.profilePhotoUrl) onPhoto?.(payload.profile.profilePhotoUrl);
+      await onSubmitted?.();
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to save profile.");

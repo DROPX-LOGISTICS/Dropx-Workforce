@@ -18,7 +18,7 @@ create table if not exists public.attendance_regularization_requests (
   requested_in_time time not null,
   requested_out_time time not null,
   reason_code text not null check (
-    reason_code in ('missed_in', 'missed_out', 'incorrect_in', 'incorrect_out', 'other')
+    reason_code in ('missed_in', 'missed_out', 'missed_both', 'incorrect_in', 'incorrect_out', 'other')
   ),
   remarks text not null,
   attachment_path text,

@@ -19,6 +19,7 @@ export type AttendanceReportRow = {
   punchDate: string;
   inTime: string;
   outTime: string;
+  punchTimes: string[];
   workHours: string;
   punchCount: number;
   status: string;
@@ -497,6 +498,7 @@ export async function loadAttendanceReportRows({
       punchDate: row.punch_date,
       inTime: formatTime(row.in_time),
       outTime: formatTime(row.out_time),
+      punchTimes: punches.map((punch) => formatTime(punch.punch_time)),
       workHours: formatDuration(row.work_minutes),
       punchCount: Number(row.punch_count ?? 0),
       status: row.status ?? "P",

@@ -36,6 +36,7 @@ type AttendanceRow = {
   status: string;
   inTime: string;
   outTime: string;
+  punches: string[];
   workHours: string;
   punchCount: number;
   remark: string;
@@ -204,7 +205,6 @@ export function ConnectDashboard({
   return <section className="dx-dashboard">
     <header className="dx-dashboard-greeting">
       <h1>{greeting}, {firstName}</h1>
-      <p>{account.reference || "-"}{account.role ? ` - ${account.role}` : ""}</p>
     </header>
 
     <section className="dx-dashboard-card today">

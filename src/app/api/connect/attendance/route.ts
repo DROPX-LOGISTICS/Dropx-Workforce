@@ -154,6 +154,7 @@ export async function GET(request: NextRequest) {
       status: row.status,
       inTime: row.inTime,
       outTime: row.outTime,
+      punches: row.punchTimes,
       workHours: row.workHours,
       punchCount: row.punchCount,
       remark: row.remark,
@@ -167,6 +168,7 @@ export async function GET(request: NextRequest) {
           status: "",
           inTime: "",
           outTime: "",
+          punches: [],
           workHours: "",
           punchCount: 0,
           remark: "",
@@ -213,7 +215,7 @@ export async function POST(request: NextRequest) {
       throw new Error("Requested IN and OUT times are required.");
     }
     if (requestedOutTime <= requestedInTime) throw new Error("Requested OUT time must be after IN time.");
-    if (!["missed_in", "missed_out", "incorrect_in", "incorrect_out", "other"].includes(reasonCode)) {
+    if (!["missed_in", "missed_out", "missed_both", "incorrect_in", "incorrect_out", "other"].includes(reasonCode)) {
       throw new Error("Select a regularization reason.");
     }
     if (remarks.length < 5) throw new Error("Enter a short explanation.");

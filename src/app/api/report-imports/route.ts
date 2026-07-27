@@ -724,9 +724,17 @@ function parseDeliveredShipmentFacts(rows: SheetRow[], companyId: string, batchI
   return { facts: [...byTrackingId.values()], rejected, sourceRows: records.length };
 }
 
-function parseInboundShipmentFacts(rows: SheetRow[], companyId: string, batchId: string, selectedStation: string, selectedDate: string, allowedStations: Set<string>) {
-  const headerIndex = locateHeader(rows, ["Tracking ID"]);
+function parseInboundShipmentFacts(rows: SheetRow[], companyId: string, batchId: string, selectedStation: string, selectedDate: string, allowedStations: Set<string>, fileName: string) {
+  const headerIndex = locateHeader(rows, ["Tracking ID", "Tracking Number", "Shipment ID", "Container Id", "Container ID"]);
   const records = rowsToRecords(rows, headerIndex);
+  const headers = rows[headerIndex].map(key);
+  const isContainerHierarchy = headers.includes(key("Container Id")) && !headers.some((header) =>
+    [key("Tracking ID"), key("Tracking Number"), key("Shipment ID")].includes(header));
+  const normalizedFileName = key(fileName);
+  const fileStation = [...allowedStations]
+    .sort((left, right) => right.length - left.length)
+    .find((station) => normalizedFileName.includes(key(station))) ?? "";
+  const fallbackStation = selectedStation || fileStation;
   const rejected: Array<{ rowNumber: number; issue: string }> = [];
   const byTrackingId = new Map<string, InboundShipmentFact>();
   const embeddedDates = new Set(records.map(({ raw }) => parseDate(findValue(raw, [
@@ -735,16 +743,20 @@ function parseInboundShipmentFacts(rows: SheetRow[], companyId: string, batchId:
   ]))).filter(Boolean));
   const preserveEmbeddedDates = embeddedDates.size > 1;
   records.forEach(({ raw, rowNumber }) => {
-    const trackingId = clean(findValue(raw, ["Tracking ID", "Tracking Number", "Shipment ID"]));
-    const stationCode = normalizeStation(findValue(raw, ["Station", "Station Code", "Delivery Station"])) || selectedStation;
+    const trackingId = clean(findValue(raw, ["Tracking ID", "Tracking Number", "Shipment ID", "Container Id", "Container ID"]));
+    const stationCode = normalizeStation(findValue(raw, ["Station", "Station Code", "Delivery Station"])) || fallbackStation;
     const embeddedArrivalDate = parseDate(findValue(raw, [
       "Estimated Arrival Date", "Expected Arrival Date", "Arrival Date",
       "Promised Delivery Date", "Scheduled Delivery Start time"
     ]));
     const expectedArrivalDate = preserveEmbeddedDates ? embeddedArrivalDate : selectedDate || embeddedArrivalDate;
     const postalCode = clean(findValue(raw, ["Postal", "Pincode", "Postal Code"])).match(/\d{6}/)?.[0] ?? "";
-    if (!trackingId || !stationCode || !expectedArrivalDate || !postalCode) {
-      rejected.push({ rowNumber, issue: "Missing tracking ID, station, expected-arrival date or postal code." });
+    const containerCount = clean(findValue(raw, ["Container Count"]));
+    if (isContainerHierarchy && containerCount && !/^0\s*items?$/i.test(containerCount)) return;
+    if (!trackingId || !stationCode || !expectedArrivalDate || (!isContainerHierarchy && !postalCode)) {
+      rejected.push({ rowNumber, issue: isContainerHierarchy
+        ? "Missing container ID, station code in filename, or selected inbound date."
+        : "Missing tracking ID, station, expected-arrival date or postal code." });
       return;
     }
     if (!allowedStations.has(stationCode)) {
@@ -766,10 +778,10 @@ function parseInboundShipmentFacts(rows: SheetRow[], companyId: string, batchId:
       expected_arrival_date: expectedArrivalDate,
       height_cm: heightCm,
       length_cm: lengthCm,
-      package_count: Math.max(1, toNumber(findValue(raw, ["Package Count"])) || 1),
+      package_count: isContainerHierarchy ? 1 : Math.max(1, toNumber(findValue(raw, ["Package Count"])) || 1),
       postal_code: postalCode,
-      raw_payload: {},
-      shipment_state: clean(findValue(raw, ["State", "Shipment State"])) || null,
+      raw_payload: isContainerHierarchy ? { source_format: "container_hierarchy" } : {},
+      shipment_state: isContainerHierarchy ? "Inbound container" : clean(findValue(raw, ["State", "Shipment State"])) || null,
       snapshot_at: timestamp(findValue(raw, ["Last Updated Time", "Snapshot Time", "Report Time"])),
       source_batch_id: batchId,
       station_code: stationCode,
@@ -1119,7 +1131,7 @@ export async function POST(request: Request) {
   // Ignore stale/hidden browser fields when Import Master says that the file
   // itself is authoritative for station and date detection.
   const selectedStation = masterData.requires_station ? requestedStation : "";
-  const selectedReportDate = masterData.requires_report_date ? requestedReportDate : null;
+  const selectedReportDate = isShipmentDetail ? requestedReportDate : masterData.requires_report_date ? requestedReportDate : null;
   const shipmentStationCodes = new Set<string>(selectedStation ? [selectedStation] : []);
   if (isShipmentDetail && !selectedStation) {
     // Report-import permission is the authority for this workflow. Auto-detection
@@ -1351,7 +1363,7 @@ export async function POST(request: Request) {
     }
     if (masterData.parser_type === "inbound_shipment_detail") {
       const parsedFacts = await importStep("Parse inbound shipment details", () => Promise.resolve(
-        parseInboundShipmentFacts(workbookRows, companyId, batch.data.id, selectedStation, selectedReportDate ?? "", shipmentStationCodes)
+        parseInboundShipmentFacts(workbookRows, companyId, batch.data.id, selectedStation, selectedReportDate ?? "", shipmentStationCodes, fileName)
       ));
       if (!parsedFacts.facts.length) {
         const issueCounts = new Map<string, number>();

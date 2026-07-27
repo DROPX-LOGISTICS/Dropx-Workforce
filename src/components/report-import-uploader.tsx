@@ -44,7 +44,7 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
     const payload = new FormData();
     payload.append("source_type", sourceType);
     if (requiresStation) payload.append("station_code", effectiveStationCode);
-    if (requiresReportDate) payload.append("report_date", reportDate);
+    if (requiresReportDate || isShipmentImport) payload.append("report_date", reportDate);
     startTransition(async () => {
       if (file.size > 3.5 * 1024 * 1024) {
         const signedResponse = await fetch("/api/report-imports/upload-url", {
@@ -175,7 +175,7 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
           </button>
         ) : null}
       </div>
-      {compact && isShipmentImport ? <p className="shipment-upload-note">Station and dates are detected from the file. Existing Tracking IDs are refreshed without double-counting.</p> : null}
+      {compact && isShipmentImport ? <p className="shipment-upload-note">Station is detected from the file or filename; the selected checklist date is used when the file has no date. Existing IDs are refreshed without double-counting.</p> : null}
       {!compact ? <div className="dropzone" style={{ minHeight: 120 }}>
         <div>
           <h2>{selected?.name ?? "No active reports"}</h2>

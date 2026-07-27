@@ -302,11 +302,14 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     helper: model.providers?.name ?? undefined,
     providerId: model.provider_id
   }));
-  const managerOptions = users
+  const eligibleManagerUsers = users
     .filter((user) => {
       const role = userRoles.find((item) => item.id === user.role_id);
-      return user.email && role?.location_access_mode !== "all_locations";
-    })
+      return user.email &&
+        String(role?.code ?? "").trim().toUpperCase() !== "LOCATION" &&
+        String(user.role ?? "").trim().toUpperCase() !== "LOCATION";
+    });
+  const managerOptions = eligibleManagerUsers
     .map((user) => {
       const role = userRoles.find((item) => item.id === user.role_id)?.name || user.role;
       const scopeEmails = descendantUserEmails(users, user.id);
@@ -317,8 +320,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         scopeValues: scopeEmails.length ? scopeEmails : [normalizeEmail(user.email)]
       };
     });
-  const hierarchyUserOptions = users
-    .filter((user) => user.email)
+  const hierarchyUserOptions = eligibleManagerUsers
     .map((user) => ({
       value: user.email ?? "",
       label: user.full_name || user.email || "Unnamed user",
@@ -380,7 +382,6 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               <label>Address line 2<input className="field" name="address_line2" placeholder="Enter address line 2" /></label>
               <label>City<input className="field" name="city" placeholder="Enter city" /></label>
               <label>State<SearchableSelect name="state" options={[...indiaStateOptions]} placeholder="Select state" required /></label>
-              <label>Region<input className="field" name="region" placeholder="Example: KL, AP, ODCG" required /></label>
               <label>Manager<SearchableSelect name="station_manager_email" options={hierarchyUserOptions} placeholder="Select manager" required /></label>
               <label>Postal code<input className="field" name="postal_code" placeholder="Enter postal code" /></label>
               <label>Latitude<input className="field" name="latitude" placeholder="Enter latitude" step="any" type="number" min="-90" max="90" /></label>
@@ -419,7 +420,6 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               <label>Address line 2<input className="field" name="address_line2" defaultValue={editLocation.address_line2 ?? ""} /></label>
               <label>City<input className="field" name="city" defaultValue={editLocation.city ?? ""} /></label>
               <label>State<SearchableSelect name="state" options={[...indiaStateOptions]} defaultValue={indiaStateCode(editLocation.state)} placeholder="Select state" required /></label>
-              <label>Region<input className="field" name="region" defaultValue={editLocation.region ?? ""} required /></label>
               <label>Manager<SearchableSelect name="station_manager_email" options={hierarchyUserOptions} defaultValue={editLocation.station_manager_email ?? ""} placeholder="Select manager" required /></label>
               <label>Postal code<input className="field" name="postal_code" defaultValue={editLocation.postal_code ?? ""} /></label>
               <label>Latitude<input className="field" name="latitude" defaultValue={editLocation.latitude ?? ""} step="any" type="number" min="-90" max="90" /></label>

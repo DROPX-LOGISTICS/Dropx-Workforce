@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { indiaStateCode, indiaStateOptions } from "@/lib/india-states";
 import { StatusPill } from "./status-pill";
 
 type ProviderRow = {
@@ -345,7 +346,7 @@ export function MasterDataLists({
   const [locationSearch, setLocationSearch] = useState("");
   const [locationProviders, setLocationProviders] = useState<string[]>([]);
   const [locationModels, setLocationModels] = useState<string[]>([]);
-  const [locationRegions, setLocationRegions] = useState<string[]>([]);
+  const [locationStates, setLocationStates] = useState<string[]>([]);
   const [locationManagers, setLocationManagers] = useState<string[]>([]);
   const [providersPage, setProvidersPage] = useState(1);
   const [modelsPage, setModelsPage] = useState(1);
@@ -373,36 +374,29 @@ export function MasterDataLists({
     }))),
     [locations]
   );
-  const locationRegionOptions = useMemo(
-    () => uniqueOptions(locations.map((location) => ({
-      label: location.region || "",
-      value: location.region || ""
-    }))),
-    [locations]
+  const locationStateOptions = useMemo(
+    () => indiaStateOptions.map((state) => ({
+      label: state.label,
+      value: state.value,
+      helper: state.helper
+    })),
+    []
   );
   const locationManagerOptions = useMemo(
-    () => {
-      const locationManagerEmails = new Set(
-        locations.map((location) => (location.station_manager_email ?? "").trim().toLowerCase()).filter(Boolean)
-      );
-      return uniqueDetailedOptions(managerOptions.filter((manager) => {
-        const scopeValues = manager.scopeValues?.length ? manager.scopeValues : [manager.value];
-        return scopeValues.some((email) => locationManagerEmails.has(email.trim().toLowerCase()));
-      }));
-    },
-    [locations, managerOptions]
+    () => uniqueDetailedOptions(managerOptions),
+    [managerOptions]
   );
   const filteredLocations = useMemo(
     () => locations.filter((location) => {
       const matchesProvider = !locationProviders.length || locationProviders.some((provider) => sameText(location.providers?.code || location.providers?.name, provider));
       const matchesModel = !locationModels.length || locationModels.some((model) => sameText(location.location_models?.code || location.location_models?.name, model));
-      const matchesRegion = !locationRegions.length || locationRegions.some((region) => sameText(location.region, region));
+      const matchesState = !locationStates.length || locationStates.some((state) => sameText(indiaStateCode(location.state), state));
       const managerScopes = locationManagers.flatMap((manager) => {
         const option = locationManagerOptions.find((item) => sameText(item.value, manager));
         return option?.scopeValues?.length ? option.scopeValues : [manager];
       });
       const matchesManager = !locationManagers.length || managerScopes.some((manager) => sameText(location.station_manager_email, manager));
-      return matchesProvider && matchesModel && matchesRegion && matchesManager && searchMatch([
+      return matchesProvider && matchesModel && matchesState && matchesManager && searchMatch([
         location.station_code,
         location.station_name,
         location.address,
@@ -424,7 +418,7 @@ export function MasterDataLists({
         location.location_models?.code
       ], locationSearch);
     }),
-    [locationManagerOptions, locationManagers, locationModels, locationProviders, locationRegions, locationSearch, locations]
+    [locationManagerOptions, locationManagers, locationModels, locationProviders, locationSearch, locationStates, locations]
   );
 
   const paginatedProviders = paginate(filteredProviders, providersPage);
@@ -456,8 +450,8 @@ export function MasterDataLists({
     setLocationsPage(1);
   }
 
-  function updateLocationRegions(values: string[]) {
-    setLocationRegions(values);
+  function updateLocationStates(values: string[]) {
+    setLocationStates(values);
     setLocationsPage(1);
   }
 
@@ -478,7 +472,7 @@ export function MasterDataLists({
             <SearchField onChange={updateLocationSearch} placeholder="Search locations" value={locationSearch} />
             <MultiCheckFilter allLabel="All providers" label="Provider" onChange={updateLocationProviders} options={locationProviderOptions} selected={locationProviders} />
             <MultiCheckFilter allLabel="All models" label="Model" onChange={updateLocationModels} options={locationModelOptions} selected={locationModels} />
-            <MultiCheckFilter allLabel="All regions" label="Region" onChange={updateLocationRegions} options={locationRegionOptions} selected={locationRegions} />
+            <MultiCheckFilter allLabel="All states" label="State" onChange={updateLocationStates} options={locationStateOptions} selected={locationStates} />
             <MultiCheckFilter allLabel="All managers" label="Manager" onChange={updateLocationManagers} options={locationManagerOptions} selected={locationManagers} />
             {canAdd ? <Link className="button" href="/master/location?add=location" scroll={false}>Add location</Link> : null}
           </div>
@@ -489,7 +483,7 @@ export function MasterDataLists({
               <tr>
                 <th>Code</th>
                 <th>Location</th>
-                <th>Region</th>
+                <th>State</th>
                 <th>Manager</th>
                 <th>Provider</th>
                 <th>Model</th>
@@ -505,7 +499,7 @@ export function MasterDataLists({
                 <tr key={row.id}>
                   <td><strong>{row.station_code}</strong></td>
                   <td>{row.station_name && !sameText(row.station_name, row.station_code) ? row.station_name : "-"}</td>
-                  <td>{row.region || "-"}</td>
+                  <td>{indiaStateCode(row.state) || row.state || "-"}</td>
                   <td>{managerOptions.find((manager) => sameText(manager.value, row.station_manager_email))?.label || row.station_manager_email || "-"}</td>
                   <td>{row.providers?.name || "-"}</td>
                   <td>{row.location_models?.code || "-"}</td>

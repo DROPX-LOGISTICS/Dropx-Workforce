@@ -532,7 +532,6 @@ export async function createLocation(formData: FormData) {
   const city = clean(formData.get("city"));
   const state = indiaStateCode(required(formData.get("state"), "State"));
   if (!state) throw new Error("Select a valid state");
-  const region = required(formData.get("region"), "Region").toUpperCase();
   const postalCode = clean(formData.get("postal_code"));
   const latitude = optionalCoordinate(formData.get("latitude"), "Latitude", -90, 90);
   const longitude = optionalCoordinate(formData.get("longitude"), "Longitude", -180, 180);
@@ -554,7 +553,6 @@ export async function createLocation(formData: FormData) {
     address_line2: addressLine2,
     city,
     state,
-    region,
     cluster: null,
     postal_code: postalCode,
     latitude,
@@ -593,7 +591,6 @@ export async function updateLocation(formData: FormData) {
   const city = clean(formData.get("city"));
   const state = indiaStateCode(required(formData.get("state"), "State"));
   if (!state) throw new Error("Select a valid state");
-  const region = required(formData.get("region"), "Region").toUpperCase();
   const postalCode = clean(formData.get("postal_code"));
   const latitude = optionalCoordinate(formData.get("latitude"), "Latitude", -90, 90);
   const longitude = optionalCoordinate(formData.get("longitude"), "Longitude", -180, 180);
@@ -625,7 +622,6 @@ export async function updateLocation(formData: FormData) {
       address_line2: addressLine2,
       city,
       state,
-      region,
       cluster: null,
       postal_code: postalCode,
       latitude,

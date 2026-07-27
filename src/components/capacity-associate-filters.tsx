@@ -16,13 +16,17 @@ export function CapacityAssociateFilters({
   end,
   preset,
   start,
+  station,
   stations,
+  view,
 }: {
   band: string;
   end: string;
   preset: string;
   start: string;
+  station?: string;
   stations: string;
+  view?: string;
 }) {
   const [period, setPeriod] = useState(preset);
   const [from, setFrom] = useState(start);
@@ -44,6 +48,8 @@ export function CapacityAssociateFilters({
 
   return <form className="capacity-period-filter capacity-associate-filter" method="get">
     <input name="stations" type="hidden" value={stations}/>
+    {station ? <input name="station" type="hidden" value={station}/> : null}
+    {view ? <input name="view" type="hidden" value={view}/> : null}
     <label>SPR level<select name="band" defaultValue={band}><option value="all">All SPR levels</option><option value="low">Below target</option><option value="target">Target to safe</option><option value="high">Above safe</option></select></label>
     <label>Period<select name="preset" onChange={(event) => changePeriod(event.target.value)} value={period}><option value="yesterday">Yesterday</option><option value="wtd">Week to date</option><option value="mtd">Month to date</option><option value="ytd">Year to date</option><option value="custom">Custom</option></select></label>
     <label>From<input name="from" onChange={(event) => { setFrom(event.target.value); setPeriod("custom"); }} type="date" value={from}/></label>

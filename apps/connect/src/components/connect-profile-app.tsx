@@ -413,6 +413,9 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
       setError(blockedCheck.message || "A required identity verification did not match. Registration cannot be submitted.");
       return;
     }
+    if (!window.confirm("Submit this registration? Please confirm that the details are correct. You may not be able to edit it after submission.")) {
+      return;
+    }
 
     setSaving(true);
     try {
@@ -477,7 +480,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
         });
         return { ...current, uploads, uploadUrls };
       });
-      setNotice("Draft saved. You can continue from Android or web.");
+      setNotice("Details saved in draft");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to save draft.");
     } finally {
@@ -711,7 +714,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
       <button className="dx-draft-save" disabled={saving || draftSaving} onClick={saveDraft} type="button">
         {draftSaving ? "Saving draft..." : "Save draft"}
       </button>
-      <button className="dx-save" disabled={saving || draftSaving} type="submit">{saving ? "Saving..." : "Save profile"}</button>
+      <button className="dx-save" disabled={saving || draftSaving} type="submit">{saving ? "Submitting..." : "Submit"}</button>
     </div>
   </form>;
 }

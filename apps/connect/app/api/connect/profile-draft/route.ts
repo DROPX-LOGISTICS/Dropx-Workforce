@@ -181,7 +181,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       draft: await serializeDraft(account.id, account.companyId, account.profileType),
-      notice: "Draft saved."
+      notice: "Details saved in draft"
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to save draft." }, { status: 400 });

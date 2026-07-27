@@ -131,7 +131,7 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
     const review = latestReviewByStation.get(stationCode);
     const regularIds = review ? regularCount(review) : null;
     const externalIds = review ? externalCount(review) : null;
-    const reliableIds = regularIds ?? consistentIds;
+    const reliableIds = regularIds ?? systemIds;
     const spr = averageSystemIds ? averageWorkload / averageSystemIds : 0;
     const hasData = rows.length > 0 && averageWorkload > 0;
     const requiredIds = rule && hasData
@@ -156,7 +156,7 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
         : status === "risk"
           ? `SPR ${fmt(spr, 1)} is above the safe limit ${fmt(rule!.maxSafeSpr, 1)}; rebalance volume or add temporary capacity.`
           : status === "hire"
-            ? `Recent operations require ${requiredIds} DAs, a ${gap}-DA gap against ${review ? "ground-confirmed regular capacity" : "consistent system IDs"}.`
+            ? `Recent operations require ${requiredIds} DAs, a ${gap}-DA gap against ${review ? "ground-confirmed regular capacity" : "latest system IDs"}.`
             : status === "surplus"
               ? `${Math.abs(gap ?? 0)} DAs are above the current rolling requirement; review deployment before hiring.`
               : `Capacity is aligned to the rolling workload at ${fmt(spr, 1)} SPR.`;

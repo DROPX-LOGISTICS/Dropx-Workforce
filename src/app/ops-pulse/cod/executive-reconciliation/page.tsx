@@ -250,7 +250,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
   const driverRun = portalRunsResult.rows.find((run) => run.check_type === "driver_reconciliation");
   const depositRun = portalRunsResult.rows.find((run) => run.check_type === "prepared_deposit");
   const hasActivePortalCheck = [driverRun, depositRun].some((run) =>
-    run && ["Queued", "Running", "Fail", "Manual Review", "Error"].includes(run.status) && Number(run.attempt_count ?? 0) < 3
+    run && ["Queued", "Running", "Manual Review", "Error"].includes(run.status) && Number(run.attempt_count ?? 0) < 3
   );
   const selectedClosure = closures.find((closure) => closure.location_id === defaultLocationId) ?? null;
   const closureSnapshot = objectValue(selectedClosure?.validation_snapshot);

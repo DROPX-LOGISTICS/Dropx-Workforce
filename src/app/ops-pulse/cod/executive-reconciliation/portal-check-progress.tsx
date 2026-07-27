@@ -25,8 +25,8 @@ export function PortalCheckProgress({
   const remaining = nextCheckAt ? Math.max(0, new Date(nextCheckAt).getTime() - now) : 0;
   const minutes = Math.floor(remaining / 60000);
   const seconds = Math.floor((remaining % 60000) / 1000);
-  const active = ["Queued", "Running", "Fail", "Manual Review", "Error"].includes(status) && attemptCount < 3;
-  const exhausted = attemptCount >= 3 && !["Pass", "Skipped"].includes(status);
+  const active = ["Queued", "Running", "Manual Review", "Error"].includes(status) && attemptCount < 3;
+  const exhausted = attemptCount >= 3 && !["Pass", "Fail", "Skipped"].includes(status);
   const displayStatus = status === "Fail" && checkLabel.includes("Driver")
     ? "Pending recon found"
     : status === "Pass" && checkLabel.includes("Driver")

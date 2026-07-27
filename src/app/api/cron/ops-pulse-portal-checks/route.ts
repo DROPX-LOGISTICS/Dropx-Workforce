@@ -380,7 +380,7 @@ async function processRun(run: PortalRun, workerUrl: string, workerSecret: strin
       raw_result: rawResult,
       error_message: status === "Error" ? String(result.error_message ?? "Portal worker returned an error.") : null,
       last_checked_at: new Date().toISOString(),
-      next_check_at: status === "Pass" || status === "Skipped"
+      next_check_at: ["Pass", "Fail", "Skipped"].includes(status)
         ? null
         : retryAt(setting.portal_check_interval_minutes)
     });
@@ -452,7 +452,7 @@ export async function GET(request: Request) {
   const runsResult = await supabaseAdmin
     .from("ops_portal_check_runs")
     .select(PORTAL_RUN_SELECT)
-    .in("status", ["Queued", "Fail", "Manual Review", "Error"])
+    .in("status", ["Queued", "Manual Review", "Error"])
     .or(`next_check_at.is.null,next_check_at.lte.${now}`)
     .order("created_at", { ascending: true })
     .limit(10);

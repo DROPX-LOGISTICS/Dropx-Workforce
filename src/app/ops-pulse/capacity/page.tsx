@@ -106,8 +106,12 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
   });
   const actionQueue = [...snapshot.stations]
     .filter((row) => priority[row.decision.status] >= 3 || row.dataState !== "ready")
-    .sort((a, b) => (a.dataState !== "ready" ? 20 : priority[a.decision.status]) - (b.dataState !== "ready" ? 20 : priority[b.decision.status]))
-    .reverse()
+    .sort((a, b) => {
+      const score = (row: CapacityStationSnapshot) =>
+        (row.dataState !== "ready" ? 1000 : priority[row.decision.status] * 100)
+        + Math.max(0, row.modelledGap ?? 0);
+      return score(b) - score(a);
+    })
     .slice(0, 8);
   const sortHref = (key: string) => {
     const params = new URLSearchParams();
@@ -143,7 +147,7 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
       <div><span>Fresh stations</span><strong>{snapshot.summary.sourceReady}/{snapshot.summary.stations}</strong></div>
       <div><span>Ground ready</span><strong>{snapshot.summary.groundReady}/{snapshot.summary.stations}</strong></div>
       <p>{snapshot.summary.stale
-        ? `${snapshot.summary.stale} station${snapshot.summary.stale === 1 ? "" : "s"} have stale or missing source data. Hiring remains evidence-gated.`
+        ? `${snapshot.summary.stale} station${snapshot.summary.stale === 1 ? " has" : "s have"} stale or missing source data. Hiring remains evidence-gated.`
         : "All selected stations have current workload data. Ground-matched stations can proceed to workforce review."}</p>
     </section>
 

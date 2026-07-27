@@ -22,7 +22,10 @@ export function operatingModeForLocation(location: CodLocationRow): OperatingMod
 export function isAmazonEdspXptLocation(location: CodLocationRow) {
   const model = locationModelName(location).toUpperCase();
   const provider = providerName(location).toUpperCase();
-  return provider.includes("AMAZON") && (model === "EDSP" || model === "XPT");
+  const code = String(location.station_code ?? "").trim().toUpperCase();
+  const name = String(location.station_name ?? "").trim().toUpperCase();
+  const nonOperational = /^(TEST|DEMO)(?:_|$)/.test(code) || /^(TEST|DEMO)(?:\s|$)/.test(name);
+  return !nonOperational && provider.includes("AMAZON") && (model === "EDSP" || model === "XPT");
 }
 
 export function locationsForMode(locations: CodLocationRow[], mode: OperatingMode) {

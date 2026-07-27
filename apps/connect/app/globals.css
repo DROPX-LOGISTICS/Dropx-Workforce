@@ -8030,3 +8030,79 @@ tr:last-child td {
   visibility: hidden;
   pointer-events: none;
 }
+
+.dx-submit-confirmation-backdrop {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(20, 20, 20, 0.55);
+}
+
+.dx-submit-confirmation {
+  width: min(390px, 100%);
+  padding: 24px;
+  background: #fff8f3;
+  border-radius: 16px;
+  box-shadow: 0 24px 70px rgba(27, 20, 16, 0.24);
+}
+
+.dx-submit-confirmation h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.dx-submit-confirmation > p {
+  margin: 14px 0 20px;
+  color: #56514c;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.dx-submit-confirmation > div:last-child {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.dx-confirm-cancel,
+.dx-confirm-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.dx-confirm-cancel {
+  color: #a93237;
+  background: #fff;
+  border: 1px solid #d9d2c9;
+}
+
+.dx-confirm-submit {
+  color: #fff;
+  background: #e82d32;
+  border: 1px solid #e82d32;
+}
+
+.dx-confirm-cancel:disabled,
+.dx-confirm-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.dx-button-spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: dx-spin 0.75s linear infinite;
+}

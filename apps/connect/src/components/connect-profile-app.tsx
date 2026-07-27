@@ -319,6 +319,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [draftSaving, setDraftSaving] = useState(false);
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -464,7 +465,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
     }
   }
 
-  async function save(event: FormEvent<HTMLFormElement>) {
+  function prepareSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setNotice("");
@@ -504,13 +505,16 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
       setError(blockedCheck.message || "A required identity verification did not match. Registration cannot be submitted.");
       return;
     }
-    if (!window.confirm("Submit this registration? Please confirm that the details are correct. You may not be able to edit it after submission.")) {
-      return;
-    }
+    setConfirmationOpen(true);
+  }
 
+  async function submitProfile() {
+    if (!formRef.current || saving) return;
     setSaving(true);
+    setError("");
+    setNotice("");
     try {
-      const data = new FormData(event.currentTarget);
+      const data = new FormData(formRef.current);
       data.set(executive ? "executive_id" : "employee_id", account.id);
       if (executive) data.set("profile_type", account.profileType);
       const currentChecks = Object.values(verifications).filter((item) => currentCheck(item.kind) === item);
@@ -523,6 +527,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
       if (!response.ok) throw new Error(payload.error || "Unable to save profile.");
       setProfile(payload.profile);
       setNotice("Profile saved.");
+      setConfirmationOpen(false);
       if (payload.profile.profilePhotoUrl) onPhoto?.(payload.profile.profilePhotoUrl);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (reason) {
@@ -705,7 +710,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
   const vehicleCheck = currentCheck("vehicle");
   const drivingEnabled = ["driving_license_no","driving_license_exp_date","vehicle_reg_no","vehicle_reg_exp_date","vehicle_insurance_exp_date","vehicle_pollution_exp_date"].some((field) => enabled.has(field));
 
-  return <form className="dx-profile-form" onSubmit={save} ref={formRef}>
+  return <form className="dx-profile-form" onSubmit={prepareSubmit} ref={formRef}>
     <p className="dx-company">{account.companyName}</p>
     {profile.status.trim().toLowerCase() === "returned" && profile.returnRemarks ? (
       <aside className="dx-return-notice">
@@ -815,6 +820,21 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
       </button>
       <button className="dx-save" disabled={saving || draftSaving} type="submit">{saving ? "Submitting..." : "Submit"}</button>
     </div>
+    {confirmationOpen ? (
+      <div className="dx-submit-confirmation-backdrop" role="presentation">
+        <section aria-labelledby="dx-submit-confirmation-title" aria-modal="true" className="dx-submit-confirmation" role="alertdialog">
+          <h2 id="dx-submit-confirmation-title">Submit registration?</h2>
+          <p>Please confirm that the details are correct. You may not be able to edit the registration after submission.</p>
+          {error ? <div className="dx-alert error">{error}</div> : null}
+          <div>
+            <button className="dx-confirm-cancel" disabled={saving} onClick={() => setConfirmationOpen(false)} type="button">Cancel</button>
+            <button className="dx-confirm-submit" disabled={saving} onClick={submitProfile} type="button">
+              {saving ? <><span className="dx-button-spinner" aria-hidden="true" />Submitting...</> : "Submit"}
+            </button>
+          </div>
+        </section>
+      </div>
+    ) : null}
   </form>;
 }
 

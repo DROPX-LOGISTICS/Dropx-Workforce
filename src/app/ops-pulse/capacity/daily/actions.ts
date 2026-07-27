@@ -14,7 +14,7 @@ function integer(formData: FormData, name: string) {
   if (!raw) return { valid: true, value: null };
   const value = Number(raw);
   return Number.isInteger(value) && value >= 0
-    ? { valid: true, value }
+    ? { valid: true, value: value === 0 ? null : value }
     : { valid: false, value: null };
 }
 

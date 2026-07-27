@@ -281,7 +281,9 @@ export async function POST(request: NextRequest) {
       if (!pan || !aadhar) throw new Error("PAN and Aadhaar number are required.");
       const { body } = await callIdspay("/srv2/validation/pan-aadhaar-link", { ...credentials, pan, aadhar, aadhaar: aadhar });
       const code = Number(body?.result_code);
-      const resultCode = text(body?.result?.code).toUpperCase();
+      const resultCode = text(
+        body?.data?.code || body?.result?.code || body?.code
+      ).toUpperCase();
       const resultMessage = text(body?.result?.message).toLowerCase();
       const responseText = deepText(body).toLowerCase();
       const verified = code === 101 ||
@@ -293,9 +295,12 @@ export async function POST(request: NextRequest) {
         verified,
         manualReview: !verified,
         inputKey: inputKey([pan, aadhar]),
-        message: text(body?.data?.message) ||
-          text(body?.result?.message) ||
-          (verified ? "PAN Aadhaar link verified." : "PAN Aadhaar link verification failed.")
+        message: resultCode === "LINK-001"
+          ? "Pan and Aadhaar Linked"
+          : text(body?.data?.message) ||
+            text(body?.result?.message) ||
+            text(body?.message) ||
+            (verified ? "PAN Aadhaar link verified." : "PAN Aadhaar link verification failed.")
       };
       return verifiedResponse(result);
     }

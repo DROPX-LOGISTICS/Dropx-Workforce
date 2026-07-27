@@ -587,8 +587,10 @@ function parseFuel(raw: RawRecord, rowNumber: number, provider: "IOC" | "BPCL"):
 
 function parseCashbook(raw: RawRecord): NormalizedImport | null {
   const expenseDate = parseDate(findValue(raw, ["Date", "Expense Date", "Payment Date", "Txn Date"]));
-  const stationCode = normalizeStation(findValue(raw, ["Station Code", "Station", "Location", "Hub"]));
-  const amount = Math.abs(toNumber(findValue(raw, ["Amount", "Debit", "Expense Amount", "Paid Amount"])));
+  const stationCode = normalizeStation(findValue(raw, ["Station Code", "Station", "Location", "Location Code", "Branch", "Hub"]));
+  const amount = Math.abs(toNumber(findValue(raw, ["Amount", "Debit", "Expenses", "Expense Amount", "Paid Amount"])));
+  const paymentStatus = clean(findValue(raw, ["Payment Status", "Status"])).toLowerCase();
+  if (paymentStatus && !["success", "successful", "completed", "paid"].includes(paymentStatus)) return null;
   if (!expenseDate || !stationCode || amount <= 0) return null;
   const head = cashbookHead(raw);
   return {
@@ -600,7 +602,8 @@ function parseCashbook(raw: RawRecord): NormalizedImport | null {
       cps_sub_head: findValue(raw, ["Sub Head", "Sub Category"]),
       expense_date: expenseDate,
       expense_type: findValue(raw, ["Expense Type", "Type"]),
-      remarks: findValue(raw, ["Remarks", "Narration", "Description"]),
+      remarks: findValue(raw, ["Remarks", "Remark", "Narration", "Description", "Note"]),
+      transaction_id: findValue(raw, ["Txn Id", "Txn ID", "Transaction ID"]),
       station_code: stationCode
     },
     stationCode,
@@ -612,7 +615,7 @@ function parseFile(sourceType: CoreSourceType, rows: SheetRow[]) {
   const headerIndex = locateHeader(rows, sourceType === "amazon_shipments"
     ? ["holder_employee_id", "Station Code", "Delivered"]
     : sourceType === "cashbook"
-      ? ["Amount", "Station Code", "Expense Date"]
+      ? ["Amount", "Expenses", "Station Code", "Branch", "Expense Date", "Date"]
       : ["Transaction ID", "Txn ID", "Vehicle Number"]);
   const records = rowsToRecords(rows, headerIndex);
   return records.map(({ raw, rowNumber }) => {

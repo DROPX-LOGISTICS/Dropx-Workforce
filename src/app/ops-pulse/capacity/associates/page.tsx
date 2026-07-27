@@ -111,8 +111,7 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
 
   return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">
     <PageHead eyebrow="Associate Productivity" title="Associate SPR" subtitle="Amazon Daily Shipment Count productivity across any station and date range." />
-    <CapacityWorkspaceTabs active="associates" />
-    <div className="capacity-filter-row"><CapacityScopeFilter selectedCodes={selectedCodes} stations={scopeStations}/></div>
+    <div className="capacity-tabs-toolbar"><CapacityWorkspaceTabs active="associates" /><CapacityScopeFilter selectedCodes={selectedCodes} stations={scopeStations}/></div>
     {locationResult.error || ruleResult.error || associateResult.error ? <div className="message-panel error">{locationResult.error || ruleResult.error || associateResult.error?.message}</div> : null}
     <CapacityAssociateFilters band={band} end={end} preset={preset} start={start} stations={searchParams?.stations ?? ""}/>
     <section className="performance-summary-grid"><article><span>All associates</span><strong>{allAssociates.length}</strong><small>{`${queryLocations.length} stations`}</small></article><article><span>Below target</span><strong>{lowCount}</strong><small>Average below station target SPR</small></article><article><span>Target to safe</span><strong>{targetCount}</strong><small>Within configured range</small></article><article><span>Above safe</span><strong>{highCount}</strong><small>Average above safe SPR</small></article></section>

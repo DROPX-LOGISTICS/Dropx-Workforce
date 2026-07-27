@@ -138,8 +138,7 @@ export default async function DeliveryDataPage({ searchParams }: { searchParams?
 
   return <AppShell active="Capacity" pageCode="cps_shipments"><div className="ops-command-center shipment-workspace">
     <PageHead eyebrow="Capacity" title="Delivery Data" subtitle="Capacity workload = Amazon delivery + SMD + SWA delivery + C-return." />
-    <CapacityWorkspaceTabs active="delivery" />
-    <div className="capacity-filter-row"><CapacityScopeFilter selectedCodes={codes} stations={scopeStations}/></div>
+    <div className="capacity-tabs-toolbar"><CapacityWorkspaceTabs active="delivery" /><CapacityScopeFilter selectedCodes={codes} stations={scopeStations}/></div>
     <section className="ops-control-strip"><div className="ops-context-summary"><span>{selectedDay ? "Associate detail" : selectedStation ? "Daily detail" : "Station overview"}</span><strong>{selectedDay || selectedStation || `${stationRows.length} stations with data`}</strong><small>{from} to {to}</small></div><form className="ops-date-controls"><input name="stations" type="hidden" value={searchParams?.stations ?? ""}/>{selectedStation ? <input name="station" type="hidden" value={selectedStation}/> : null}{selectedDay ? <input name="day" type="hidden" value={selectedDay}/> : null}<label>From<input name="from" type="date" defaultValue={from}/></label><label>To<input name="to" type="date" defaultValue={to}/></label><button>Apply range</button></form></section>
     <nav className="shipment-breadcrumbs"><Link href={`/ops-pulse/performance/shipments?${base}`}>All stations</Link>{selectedStation ? <><span>›</span><Link href={`/ops-pulse/performance/shipments?${base}&station=${selectedStation}`}>{selectedStation}</Link></> : null}{selectedDay ? <><span>›</span><strong>{selectedDay}</strong></> : null}</nav>
     {error ? <section className="panel message-panel error"><div className="panel-body">{error}</div></section> : null}

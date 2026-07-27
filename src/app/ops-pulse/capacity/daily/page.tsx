@@ -65,11 +65,10 @@ export default async function DailyCapacityPage({ searchParams }: { searchParams
 
   return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">
     <PageHead eyebrow="Daily Capacity" title="Ground Update" subtitle="Previous-day packages and actual staffing in one shared workspace." />
-    <CapacityWorkspaceTabs active="daily" />
-    <div className="capacity-daily-toolbar">
+    <div className="capacity-tabs-toolbar"><CapacityWorkspaceTabs active="daily" /><div className="capacity-daily-toolbar">
       <CapacityScopeFilter selectedCodes={codes} stations={scopeStations}/>
       <form method="get"><input name="stations" type="hidden" value={searchParams?.stations ?? ""}/><label>Date<input defaultValue={workDate} name="date" type="date"/></label><button className="button compact">View</button></form>
-    </div>
+    </div></div>
     {searchParams?.saved ? <div className="message-panel success">{searchParams.saved} station update{searchParams.saved === "1" ? "" : "s"} saved.</div> : null}
     {searchParams?.error || locationResult.error || sourceResult.error || groundResult.error ? <div className="message-panel error">{searchParams?.error || locationResult.error || sourceResult.error?.message || groundResult.error}</div> : null}
     <section className="panel capacity-daily-entry-panel"><div className="panel-head"><div><h2>{workDate.split("-").reverse().join("/")} ground capacity</h2><p className="subtle">Inbound is system-filled. Enter assigned packages and the previous day&apos;s actual staffing.</p></div></div>

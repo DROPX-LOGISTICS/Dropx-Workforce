@@ -11930,6 +11930,22 @@ td strong,
   margin-bottom: 14px;
 }
 
+.capacity-tabs-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.capacity-tabs-toolbar .performance-workspace-tabs {
+  margin-bottom: 0;
+}
+
+.capacity-tabs-toolbar .capacity-daily-toolbar {
+  margin-bottom: 0;
+}
+
 .capacity-ground-date-filter {
   align-items: end;
   display: flex;
@@ -11971,7 +11987,7 @@ td strong,
 
 .capacity-scope-filter {
   position: relative;
-  width: min(190px, 100%);
+  width: min(164px, 100%);
   z-index: 24;
 }
 
@@ -11985,8 +12001,8 @@ td strong,
   gap: 2px 8px;
   grid-template-columns: 1fr auto;
   list-style: none;
-  min-height: 38px;
-  padding: 5px 9px;
+  min-height: 32px;
+  padding: 4px 8px;
 }
 
 .capacity-scope-filter > summary::-webkit-details-marker {
@@ -11995,14 +12011,14 @@ td strong,
 
 .capacity-scope-filter > summary span {
   color: #64748b;
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 800;
   letter-spacing: .06em;
   text-transform: uppercase;
 }
 
 .capacity-scope-filter > summary strong {
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .capacity-scope-filter > summary i {
@@ -12015,8 +12031,8 @@ td strong,
   border: 1px solid #dbe2ea;
   border-radius: 12px;
   box-shadow: 0 18px 45px rgb(15 23 42 / 16%);
-  min-width: min(340px, calc(100vw - 32px));
-  padding: 9px;
+  min-width: min(310px, calc(100vw - 32px));
+  padding: 8px;
   position: absolute;
   right: 0;
   top: calc(100% + 7px);
@@ -12115,7 +12131,7 @@ td strong,
 }
 
 .capacity-daily-toolbar {
-  justify-content: space-between;
+  justify-content: flex-end;
 }
 
 .capacity-daily-toolbar form {
@@ -12898,6 +12914,11 @@ td strong,
 }
 
 @media (max-width: 720px) {
+  .capacity-tabs-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .capacity-filter-row,
   .capacity-daily-toolbar {
     align-items: stretch;
@@ -12908,8 +12929,8 @@ td strong,
     justify-content: flex-end;
   }
 
-  .capacity-scope-filter {
-    width: 100%;
+  .capacity-tabs-toolbar > .capacity-scope-filter {
+    align-self: flex-end;
   }
 
   .capacity-scope-popover {

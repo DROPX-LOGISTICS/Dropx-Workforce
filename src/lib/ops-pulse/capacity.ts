@@ -7,8 +7,27 @@ export type CapacityRule = {
   maxSafeSpr: number;
   bufferPercent: number;
   recentDays: number;
+  minimumMatchedDays?: number;
+  associateDropPercent?: number;
+  volumeSpikePercent?: number;
   isActive: boolean;
 };
+
+export const CAPACITY_PLANNING_DEFAULTS = {
+  baselineDays: 14,
+  minimumMatchedDays: 7,
+  associateDropPercent: 20,
+  volumeSpikePercent: 30
+} as const;
+
+export function capacityPlanningSettings(rule: CapacityRule | undefined) {
+  return {
+    baselineDays: Math.max(CAPACITY_PLANNING_DEFAULTS.baselineDays, Number(rule?.recentDays) || CAPACITY_PLANNING_DEFAULTS.baselineDays),
+    minimumMatchedDays: Math.max(1, Number(rule?.minimumMatchedDays) || CAPACITY_PLANNING_DEFAULTS.minimumMatchedDays),
+    associateDropPercent: Math.max(1, Number(rule?.associateDropPercent) || CAPACITY_PLANNING_DEFAULTS.associateDropPercent),
+    volumeSpikePercent: Math.max(1, Number(rule?.volumeSpikePercent) || CAPACITY_PLANNING_DEFAULTS.volumeSpikePercent)
+  };
+}
 
 export type CapacityRegionMap = {
   id?: string;

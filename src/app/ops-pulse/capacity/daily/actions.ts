@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { isCompanyOwner, requirePagePermission } from "@/lib/authorization";
+import { canEditHistoricalCapacity, requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCapacityStationDays } from "@/lib/ops-pulse/capacity-shipments";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
@@ -42,8 +42,11 @@ export async function saveCapacityGroundUpdates(formData: FormData) {
     redirect(`${back}&error=${encodeURIComponent("Select at least one permitted station and enter a valid date.")}`);
   }
   if (!supabaseAdmin) redirect(`${back}&error=${encodeURIComponent("Database service is unavailable.")}`);
-  if (workDate < shift(today(), -1) && !isCompanyOwner(authorization)) {
-    redirect(`${back}&error=${encodeURIComponent("This date is locked. Only the company owner can correct records after the next-day review.")}`);
+  if (workDate > today()) {
+    redirect(`${back}&error=${encodeURIComponent("Future ground updates are not allowed.")}`);
+  }
+  if (workDate < today() && !canEditHistoricalCapacity(authorization)) {
+    redirect(`${back}&error=${encodeURIComponent("Your role does not have Historical Ground Update permission.")}`);
   }
   const sourceResult = await loadCapacityStationDays(companyId, stationCodes, workDate, workDate);
   if (sourceResult.error) redirect(`${back}&error=${encodeURIComponent(sourceResult.error.message)}`);

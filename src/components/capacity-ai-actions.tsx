@@ -15,6 +15,11 @@ export type CapacityAiFact = {
   requiredIds: number | null;
   gap: number | null;
   status: string;
+  matchedDays?: number;
+  baselineDays?: number;
+  peakFlex?: number;
+  confidence?: string;
+  sustainedShortage?: boolean;
 };
 
 const CapacityActionContext = createContext<Record<string, string>>({});

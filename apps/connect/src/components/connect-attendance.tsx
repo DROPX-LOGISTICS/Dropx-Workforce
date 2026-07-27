@@ -149,15 +149,15 @@ export function ConnectAttendance({ account }: { account: Account }) {
             <div className="dx-legend"><span className="present">Present</span><span className="absent">Absent</span><span className="miss">Mis Punch</span><span className="off">Off / Future</span></div>
           </div> : null}
           {tab === "list" ? <div className="dx-attendance-list">
-            {(data.rows.length ? [...data.rows].reverse() : []).map((row) => <button key={row.date} onClick={() => { setSelected(row); setTab("calendar"); }}>
+            {[...data.rows].sort((left, right) => right.date.localeCompare(left.date)).map((row) => <button key={row.date} onClick={() => { setSelected(row); setTab("calendar"); }}>
               <header><strong>{row.date.split("-").reverse().join("/")}</strong><em className={dayStatus(row, false)}>{row.status === "P" ? "Present" : row.status === "A" ? "Absent" : row.status}</em></header>
               <span><small>IN</small>{row.inTime || "--:--"}</span><span><small>OUT</small>{row.outTime || "--:--"}</span><span><small>HRS</small>{row.workHours || "00:00"}</span>
             </button>)}
           </div> : null}
           {tab === "punches" ? <div className="dx-punches">
-            {(data.rows.length ? [...data.rows].reverse() : []).flatMap((row) => {
+            {[...data.rows].sort((left, right) => right.date.localeCompare(left.date)).flatMap((row) => {
               const punches = row.punches?.length ? row.punches : [row.inTime, row.outTime].filter(Boolean);
-              return punches.map((time, index) => <div key={`${row.date}-${index}-${time}`}><Fingerprint /><span>{row.date.split("-").reverse().join("/")}</span><strong>{time}</strong></div>);
+              return [...punches].sort((left, right) => right.localeCompare(left)).map((time, index) => <div key={`${row.date}-${index}-${time}`}><Fingerprint /><span>{row.date.split("-").reverse().join("/")}</span><strong>{time}</strong></div>);
             })}
           </div> : null}
         </div>

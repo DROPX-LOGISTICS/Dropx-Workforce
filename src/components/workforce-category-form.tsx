@@ -31,6 +31,8 @@ function PageAccessSelect({ initialPages }: { initialPages: string[] }) {
   const [selected, setSelected] = useState<string[]>(initialPages);
   const rootRef = useRef<HTMLDivElement>(null);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const allSelected = appPageOptions.every((page) => selectedSet.has(page.value));
+  const someSelected = appPageOptions.some((page) => selectedSet.has(page.value));
   const visibleOptions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return appPageOptions;
@@ -120,6 +122,19 @@ function PageAccessSelect({ initialPages }: { initialPages: string[] }) {
               <button className="button secondary" onClick={() => setSelected([])} type="button">Clear</button>
             ) : null}
           </div>
+          <label className="multi-select-all">
+            <input
+              checked={allSelected}
+              className="matrix-checkbox"
+              onChange={() => setSelected(allSelected ? [] : appPageOptions.map((page) => page.value))}
+              ref={(node) => {
+                if (node) node.indeterminate = someSelected && !allSelected;
+              }}
+              type="checkbox"
+            />
+            <span><strong>Select all</strong></span>
+            <small>{selected.length} of {appPageOptions.length} selected</small>
+          </label>
           <div className="multi-select-options" role="listbox">
             {visibleOptions.map((page) => (
               <label className="multi-select-option" key={page.value}>

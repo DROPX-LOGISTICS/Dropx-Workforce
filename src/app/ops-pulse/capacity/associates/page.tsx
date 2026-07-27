@@ -9,6 +9,7 @@ import { loadCapacityRules } from "@/lib/ops-pulse/capacity";
 import { loadCapacityAssociateDays } from "@/lib/ops-pulse/capacity-shipments";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { isAmazonEdspXptLocation } from "@/lib/ops-pulse/operating-context";
+import { associateIdentityKey } from "@/lib/ops-pulse/associate-identity";
 
 export const dynamic = "force-dynamic";
 type SearchParams = { from?: string; to?: string; preset?: string; station?: string; stations?: string; band?: string; sort?: string; dir?: string };
@@ -52,7 +53,7 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
   const ruleMap = new Map(ruleResult.rows.map((rule) => [rule.stationCode, rule]));
   const aggregateMap = new Map<string, { stationCode: string; id: string; name: string; daily: Map<string, number>; delivered: number }>();
   rows.forEach((row) => {
-    const key = `${row.station_code}|${row.associate_id}`;
+    const key = associateIdentityKey(row.station_code, row.associate_id, row.associate_name);
     const current = aggregateMap.get(key) ?? {
       stationCode: row.station_code,
       id: row.associate_id,
@@ -116,7 +117,7 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
     <CapacityAssociateFilters band={band} end={end} preset={preset} start={start} stations={searchParams?.stations ?? ""}/>
     <section className="performance-summary-grid"><article><span>All associates</span><strong>{allAssociates.length}</strong><small>{`${queryLocations.length} stations`}</small></article><article><span>Below target</span><strong>{lowCount}</strong><small>Average below station target SPR</small></article><article><span>Target to safe</span><strong>{targetCount}</strong><small>Within configured range</small></article><article><span>Above safe</span><strong>{highCount}</strong><small>Average above safe SPR</small></article></section>
     <section className="panel"><div className="panel-head"><div><h2>Associate productivity</h2><p className="subtle">Source: Amazon Daily Shipment Count. Workload = Delivery + C-Return + SWA; SPR = workload ÷ active days.</p></div><span className="status-pill neutral">{associates.length} shown</span></div><div className="table-wrap"><table className="capacity-daily-table"><thead><tr><th><a href={sortHref("name")}>Associate <small>{sortMark("name")}</small></a></th><th><a href={sortHref("station")}>Station <small>{sortMark("station")}</small></a></th><th><a href={sortHref("days")}>Active days <small>{sortMark("days")}</small></a></th><th><a href={sortHref("delivered")}>Total workload <small>{sortMark("delivered")}</small></a></th><th><a href={sortHref("average")}>Average SPR <small>{sortMark("average")}</small></a></th><th><a href={sortHref("peak")}>Peak <small>{sortMark("peak")}</small></a></th><th><a href={sortHref("highDays")}>High days <small>{sortMark("highDays")}</small></a></th><th><a href={sortHref("level")}>SPR position <small>{sortMark("level")}</small></a></th></tr></thead><tbody>
-      {associates.map((row) => <tr key={`${row.stationCode}-${row.id}`}><td><a className="capacity-station-link" href={`/ops-pulse/capacity/associates/${encodeURIComponent(row.id)}?station=${row.stationCode}&from=${start}&to=${end}`}><strong>{row.name}</strong><small>{row.id}</small></a></td><td><a href={`/ops-pulse/capacity/${row.stationCode}`}>{row.stationCode}</a></td><td>{row.dates}</td><td>{fmt(row.delivered)}</td><td><strong className={row.level === "high" ? "metric-bad-text" : row.level === "low" ? "metric-warn-text" : "metric-good-text"}>{fmt(row.average, 1)}</strong></td><td>{fmt(row.peak)}</td><td>{row.highDays}</td><td><span className={`capacity-decision ${row.level === "high" ? "risk" : row.level === "low" ? "unconfigured" : "balanced"}`}>{row.level === "high" ? `Above ${fmt(row.safe, 1)}` : row.level === "low" ? `Below ${fmt(row.target, 1)}` : `${fmt(row.target, 1)}–${fmt(row.safe, 1)}`}</span></td></tr>)}
+      {associates.map((row) => <tr key={associateIdentityKey(row.stationCode, row.id, row.name)}><td><a className="capacity-station-link" href={`/ops-pulse/capacity/associates/${encodeURIComponent(row.id)}?station=${row.stationCode}&from=${start}&to=${end}&name=${encodeURIComponent(row.name)}`}><strong>{row.name}</strong><small>{row.id}</small></a></td><td><a href={`/ops-pulse/capacity/${row.stationCode}`}>{row.stationCode}</a></td><td>{row.dates}</td><td>{fmt(row.delivered)}</td><td><strong className={row.level === "high" ? "metric-bad-text" : row.level === "low" ? "metric-warn-text" : "metric-good-text"}>{fmt(row.average, 1)}</strong></td><td>{fmt(row.peak)}</td><td>{row.highDays}</td><td><span className={`capacity-decision ${row.level === "high" ? "risk" : row.level === "low" ? "unconfigured" : "balanced"}`}>{row.level === "high" ? `Above ${fmt(row.safe, 1)}` : row.level === "low" ? `Below ${fmt(row.target, 1)}` : `${fmt(row.target, 1)}–${fmt(row.safe, 1)}`}</span></td></tr>)}
       {!associates.length ? <tr><td className="empty-cell" colSpan={8}>No associates match these filters.</td></tr> : null}
     </tbody></table></div></section>
   </div></AppShell>;

@@ -249,6 +249,7 @@ export async function POST(request: NextRequest) {
     if (kind === "pan") {
       const panNumber = text(payload.panNumber).toUpperCase();
       if (!panNumber) throw new Error("PAN number is required.");
+      if (!/^[A-Z0-9]{10}$/.test(panNumber)) throw new Error("Invalid PAN.");
       const { body } = await callIdspay("/pan/verification", { ...credentials, pan_number: panNumber });
       const apiName = compact(findFirstString(body, ["full_name", "fullName", "name", "pan_name", "panName"]));
       const apiSuccess = body?.data?.success === true || body?.status?.type === "success";
@@ -277,8 +278,10 @@ export async function POST(request: NextRequest) {
 
     if (kind === "pan_aadhaar") {
       const pan = text(payload.panNumber).toUpperCase();
-      const aadhar = onlyDigits(payload.aadhaarNumber);
+      const aadhar = text(payload.aadhaarNumber);
       if (!pan || !aadhar) throw new Error("PAN and Aadhaar number are required.");
+      if (!/^[A-Z0-9]{10}$/.test(pan)) throw new Error("Invalid PAN.");
+      if (!/^\d{12}$/.test(aadhar)) throw new Error("Invalid Aadhaar number.");
       const { body } = await callIdspay("/srv2/validation/pan-aadhaar-link", { ...credentials, pan, aadhar, aadhaar: aadhar });
       const code = Number(body?.result_code);
       const resultCode = text(
@@ -309,6 +312,7 @@ export async function POST(request: NextRequest) {
       const dlNumber = text(payload.drivingLicenseNo).toUpperCase();
       const dob = idspayDob(payload.dateOfBirth);
       if (!dlNumber || !dob) throw new Error("DL number and date of birth are required.");
+      if (!/^[A-Z0-9]{4,30}$/.test(dlNumber)) throw new Error("Invalid DL No.");
       const { body } = await callIdspay("/srv2/validation/dl", { ...credentials, dlNumber, dob });
       const details = body?.data?.details_of_driving_licence ?? {};
       const apiName = compact(details?.name || findFirstString(body, ["name", "full_name", "fullName"]));
@@ -347,6 +351,7 @@ export async function POST(request: NextRequest) {
     if (kind === "vehicle") {
       const regNo = text(payload.vehicleRegNo).toUpperCase();
       if (!regNo) throw new Error("Vehicle registration number is required.");
+      if (!/^[A-Z0-9]{4,30}$/.test(regNo)) throw new Error("Invalid vehicle number.");
       const { body } = await callIdspay("/srv2/validation/rc", { ...credentials, reg_no: regNo });
       const data = body?.data ?? {};
       const verified = body?.status?.type === "success" || body?.success === true;
@@ -368,6 +373,8 @@ export async function POST(request: NextRequest) {
       const creditorAccountId = text(payload.bankAccountNo);
       const ifscCode = text(payload.ifsc).toUpperCase();
       if (!creditorAccountId || !ifscCode) throw new Error("Bank account number and IFSC are required.");
+      if (!/^[A-Z0-9]{4,30}$/.test(creditorAccountId.toUpperCase())) throw new Error("Invalid bank account number.");
+      if (!/^[A-Z0-9]{11}$/.test(ifscCode)) throw new Error("Invalid IFSC.");
       const { body } = await callIdspay("/idfc/beneficiary", { ...credentials, creditorAccountId, ifscCode });
       const resource = body?.data?.beneValidationResp?.resourceData ?? {};
       const verified = text(body?.data?.beneValidationResp?.metaData?.status).toUpperCase() === "SUCCESS";
@@ -381,8 +388,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (kind === "pf_uan") {
-      const uan = onlyDigits(payload.pfUan ?? payload.uan);
+      const uan = text(payload.pfUan ?? payload.uan);
       if (!uan) throw new Error("PF UAN is required.");
+      if (!/^\d{12}$/.test(uan)) throw new Error("Invalid PF UAN.");
       const { body } = await callIdspay("/srv3/uan-direct", { ...credentials, uan });
       const apiName = uanName(body);
       const apiSuccess = body?.status?.type === "success" || text(body?.message).toLowerCase() === "success";

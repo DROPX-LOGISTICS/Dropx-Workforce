@@ -12,7 +12,6 @@ export function associateIdentityKey(stationCode: string, id: string, name: stri
 }
 
 export function associateMatches(id: string, requestedName: string, rowId: string, rowName: string | null | undefined) {
-  if (rowId !== id) return false;
-  if (!requestedName || !isScientificAssociateId(id)) return true;
-  return normalizeAssociateName(rowName) === normalizeAssociateName(requestedName);
+  if (requestedName) return normalizeAssociateName(rowName) === normalizeAssociateName(requestedName);
+  return rowId === id;
 }

@@ -9,7 +9,7 @@ import { loadCapacityRules } from "@/lib/ops-pulse/capacity";
 import { capacityWorkload, loadShipmentCountAssociateDays } from "@/lib/ops-pulse/capacity-shipments";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { isAmazonEdspXptLocation } from "@/lib/ops-pulse/operating-context";
-import { associateIdentityKey } from "@/lib/ops-pulse/associate-identity";
+import { associateIdentityKey, isScientificAssociateId, normalizeAssociateName } from "@/lib/ops-pulse/associate-identity";
 
 export const dynamic = "force-dynamic";
 type SearchParams = { from?: string; to?: string; preset?: string; station?: string; stations?: string; band?: string; sort?: string; dir?: string };
@@ -68,9 +68,26 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
     if (current.name === "Unmapped name" && row.provider_employee_name) current.name = row.provider_employee_name;
     aggregateMap.set(key, current);
   });
-  const allAssociates = [...aggregateMap.values()].map((aggregate) => {
+  const personMap = new Map<string, { stationCode: string; id: string; name: string; daily: Map<string, number> }>();
+  aggregateMap.forEach((aggregate) => {
+    const normalizedName = normalizeAssociateName(aggregate.name);
+    const personKey = normalizedName && aggregate.name !== "Unmapped name"
+      ? `${aggregate.stationCode}|${normalizedName}`
+      : associateIdentityKey(aggregate.stationCode, aggregate.id, null);
+    const current = personMap.get(personKey) ?? {
+      stationCode: aggregate.stationCode,
+      id: aggregate.id,
+      name: aggregate.name,
+      daily: new Map<string, number>()
+    };
+    aggregate.daily.forEach((value, date) => current.daily.set(date, Math.max(current.daily.get(date) ?? 0, value)));
+    if (isScientificAssociateId(current.id) && !isScientificAssociateId(aggregate.id)) current.id = aggregate.id;
+    personMap.set(personKey, current);
+  });
+  const allAssociates = [...personMap.values()].map((aggregate) => {
     const daily = [...aggregate.daily.values()];
-    const average = daily.length ? aggregate.delivered / daily.length : 0;
+    const delivered = daily.reduce((sum, value) => sum + value, 0);
+    const average = daily.length ? delivered / daily.length : 0;
     const target = ruleMap.get(aggregate.stationCode)?.targetSpr ?? 60;
     const safe = ruleMap.get(aggregate.stationCode)?.maxSafeSpr ?? 70;
     const level = average > safe ? "high" : average < target ? "low" : "target";
@@ -79,7 +96,7 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
       id: aggregate.id,
       name: aggregate.name,
       dates: daily.length,
-      delivered: aggregate.delivered,
+      delivered,
       average,
       peak: Math.max(0, ...daily),
       highDays: daily.filter((value) => value > safe).length,

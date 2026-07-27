@@ -32,8 +32,17 @@ export default async function AssociateCapacityPage({ params, searchParams }: { 
   ]);
   const requestedName = String(searchParams?.name ?? "").trim();
   const rows = (shipmentResult.data ?? []).filter((row) => associateMatches(id, requestedName, row.provider_employee_id, row.provider_employee_name));
-  const dates = [...new Set(rows.map((row) => row.work_date))].sort();
-  const daily = dates.map((date) => ({ date, delivered: rows.filter((row) => row.work_date === date).reduce((sum, row) => sum + capacityWorkload(row), 0) }));
+  const totalsByIdentityDay = new Map<string, number>();
+  rows.forEach((row) => {
+    const key = `${row.work_date}|${row.provider_employee_id}`;
+    totalsByIdentityDay.set(key, (totalsByIdentityDay.get(key) ?? 0) + capacityWorkload(row));
+  });
+  const dailyMap = new Map<string, number>();
+  totalsByIdentityDay.forEach((value, key) => {
+    const date = key.slice(0, 10);
+    dailyMap.set(date, Math.max(dailyMap.get(date) ?? 0, value));
+  });
+  const daily = [...dailyMap.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([date, delivered]) => ({ date, delivered }));
   const total = daily.reduce((sum, row) => sum + row.delivered, 0);
   const average = daily.length ? total / daily.length : 0;
   const peak = Math.max(0, ...daily.map((row) => row.delivered));

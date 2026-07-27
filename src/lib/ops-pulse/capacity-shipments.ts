@@ -68,6 +68,7 @@ export type CapacityDeliveryBreakdown = {
   total_activity: number | string | null;
   smd_delivery: number;
   smd2_delivery: number;
+  base_amazon_delivery: number;
 };
 
 type ShipmentAuditRow = {
@@ -273,9 +274,9 @@ async function loadCapacityDeliverySource(companyId: string, stationCodes: strin
         .order("provider_employee_id", { ascending: true })
         .range(fromRow, fromRow + ASSOCIATE_PAGE_SIZE - 1);
       if (result.error) return { data: rows, error: result.error };
-      const page = (result.data ?? []) as Omit<CapacityDeliveryBreakdown, "smd_delivery" | "smd2_delivery">[];
+      const page = (result.data ?? []) as Omit<CapacityDeliveryBreakdown, "smd_delivery" | "smd2_delivery" | "base_amazon_delivery">[];
       if (!page.length) break;
-      rows.push(...page.map((row) => ({ ...row, smd_delivery: 0, smd2_delivery: 0 })));
+      rows.push(...page.map((row) => ({ ...row, smd_delivery: 0, smd2_delivery: 0, base_amazon_delivery: 0 })));
       fromRow += page.length;
     }
     return { data: rows, error: null };
@@ -357,7 +358,17 @@ export async function loadCapacityDeliveryBreakdown(companyId: string, stationCo
   return {
     data: source.data.map((row) => {
       const smd = smdByAssociateDay.get(`${row.work_date}|${row.station_code}|${row.provider_employee_id}`);
-      return { ...row, smd_delivery: smd?.smd ?? 0, smd2_delivery: smd?.smd2 ?? 0 };
+      const smdDelivery = smd?.smd ?? 0;
+      const smd2Delivery = smd?.smd2 ?? 0;
+      return {
+        ...row,
+        smd_delivery: smdDelivery,
+        smd2_delivery: smd2Delivery,
+        // The imported aggregate stores Amazon delivery with SMD/SMD2 included.
+        // Expose its base separately so the UI can show the requested formula
+        // without adding SMD twice.
+        base_amazon_delivery: Math.max(numberValue(row.amazon_delivery) - smdDelivery - smd2Delivery, 0)
+      };
     }),
     error: audit.error
   };
@@ -393,7 +404,7 @@ const cachedCapacityStationDays = unstable_cache(async (companyId: string, stati
     data: rows,
     error: results.find((result) => result.error)?.error ?? returnResults.find((result) => result.error)?.error ?? null
   };
-}, ["capacity-station-days-v2"], { revalidate: 60 });
+}, ["capacity-station-days-v3"], { revalidate: 60 });
 
 export async function loadCapacityStationDays(companyId: string, stationCodes: string[], from: string, to: string) {
   return cachedCapacityStationDays(companyId, [...stationCodes].sort(), from, to);

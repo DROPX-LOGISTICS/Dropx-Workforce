@@ -27,6 +27,7 @@ import {
   queueCodClosureCheck,
   requestCodGateException,
   reviewCodGateException,
+  refreshExecutiveReconciliationRoster,
   saveExecutiveReconciliation,
   submitCodCashCollection,
   submitCodDayClosure
@@ -45,6 +46,7 @@ type SearchParams = {
   date?: string;
   location?: string;
   status?: string;
+  step?: string;
 };
 
 const denominations = [
@@ -81,6 +83,7 @@ function currentHref(searchParams?: SearchParams) {
   if (searchParams?.date) query.set("date", searchParams.date);
   if (searchParams?.location) query.set("location", searchParams.location);
   if (searchParams?.status) query.set("status", searchParams.status);
+  if (searchParams?.step) query.set("step", searchParams.step);
   const suffix = query.toString();
   return `/ops-pulse/cod/executive-reconciliation${suffix ? `?${suffix}` : ""}`;
 }
@@ -213,7 +216,8 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
   const returnHref = currentHref({
     date: searchParams?.date ?? result.businessDate,
     location: defaultLocationId,
-    status: searchParams?.status ?? ""
+    status: searchParams?.status ?? "",
+    step: searchParams?.step ?? "1"
   });
   const resultSetupError = result.error && isMissingCodSetup({ message: result.error }) ? result.error : null;
   const setupError = resultSetupError;
@@ -293,6 +297,15 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
     ? "Pending"
     : selectedClosure?.deposit_check_status ?? "Locked";
   const canManagerReview = auditAllowed;
+  const activeStep = ["1", "2", "3", "4"].includes(String(searchParams?.step)) ? Number(searchParams?.step) : 1;
+  const stepHref = (step: number) => currentHref({
+    date: result.businessDate,
+    location: defaultLocationId,
+    status: searchParams?.status ?? "",
+    step: String(step)
+  });
+  const rosterReady = rows.length > 0;
+  const cashReady = savedRows.length > 0;
   return (
     <AppShell active="COD" pageCode="cod_executive_reconciliation">
       <PageHead
@@ -346,6 +359,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     {executiveReconciliationStatuses.map((status) => <option key={status}>{status}</option>)}
                   </select>
                 </label>
+                <input type="hidden" name="step" value="1" />
                 <div className="form-actions cod-filter-actions align-right">
                   <button className="button secondary" type="submit">Apply</button>
                 </div>
@@ -353,14 +367,65 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
             </div>
           </section>
 
-          <section className="summary-grid reconciliation-summary">
+          <nav className="reconciliation-wizard" aria-label="Executive reconciliation steps">
+            <a className={`${activeStep === 1 ? "current" : ""} ${rosterReady ? "complete" : ""}`} href={stepHref(1)}>
+              <i>1</i><span><strong>Driver list</strong><small>Load and verify SCC roster</small></span>
+            </a>
+            <a className={`${activeStep === 2 ? "current" : ""} ${cashReady ? "complete" : ""} ${!rosterReady ? "locked" : ""}`} href={rosterReady ? stepHref(2) : stepHref(1)} aria-disabled={!rosterReady}>
+              <i>2</i><span><strong>Count cash</strong><small>Enter associate collections</small></span>
+            </a>
+            <a className={`${activeStep === 3 ? "current" : ""} ${driverCleared ? "complete" : ""} ${!cashReady ? "locked" : ""}`} href={cashReady ? stepHref(3) : stepHref(rosterReady ? 2 : 1)} aria-disabled={!cashReady}>
+              <i>3</i><span><strong>Driver validation</strong><small>Submit COD and clear SCC</small></span>
+            </a>
+            <a className={`${activeStep === 4 ? "current" : ""} ${selectedClosure?.is_final_submitted ? "complete" : ""} ${!driverCleared ? "locked" : ""}`} href={driverCleared ? stepHref(4) : stepHref(cashReady ? 3 : rosterReady ? 2 : 1)} aria-disabled={!driverCleared}>
+              <i>4</i><span><strong>Deposit & close</strong><small>Validate bank deposit and lock</small></span>
+            </a>
+          </nav>
+
+          {activeStep === 1 ? (
+            <section className="panel reconciliation-stage">
+              <div className="panel-head">
+                <div><span className="stage-kicker">Step 1 of 4</span><h2>Verify the driver list</h2><p className="subtle">Load the SCC roster for this station and date. Review the associates before counting cash.</p></div>
+                <StatusPill status={rosterReady ? `${rows.length} drivers ready` : "Roster required"} />
+              </div>
+              <div className="panel-body reconciliation-roster-start">
+                <div className="reconciliation-stage-action">
+                  <div><strong>{selectedStation ? `${selectedStation.station_code} · ${result.businessDate}` : "Select a station"}</strong><span>{rosterReady ? `${sccRows} SCC-validated · ${availableRows.length} awaiting cash entry · ${savedRows.length} already entered` : "No driver rows are available yet."}</span></div>
+                  {defaultLocationId ? (
+                    <form action={refreshExecutiveReconciliationRoster}>
+                      <input type="hidden" name="return_href" value={stepHref(1)} />
+                      <input type="hidden" name="business_date" value={result.businessDate} />
+                      <input type="hidden" name="location_id" value={defaultLocationId} />
+                      <SubmitButton className="button secondary" disabled={!permission.canEdit || Boolean(selectedClosure?.is_final_submitted)}>
+                        {rosterReady ? "Refresh SCC driver list" : "Load SCC driver list"}
+                      </SubmitButton>
+                    </form>
+                  ) : null}
+                </div>
+                {rosterReady ? (
+                  <div className="reconciliation-roster-preview">
+                    {rows.slice(0, 12).map((row) => (
+                      <div key={row.key}><span><strong>{executiveDisplayName(row)}</strong><small>{row.provider_employee_id}</small></span><StatusPill status={row.reconciliation_id ? row.reconciliation_status : "Ready"} /></div>
+                    ))}
+                    {rows.length > 12 ? <p className="subtle">+ {rows.length - 12} more drivers loaded</p> : null}
+                  </div>
+                ) : <div className="reconciliation-empty-stage">Load the SCC list to begin. The next step remains locked until drivers are available.</div>}
+                <div className="reconciliation-stage-footer">
+                  <span>Confirm the station and business date before continuing.</span>
+                  {rosterReady ? <a className="button" href={stepHref(2)}>Continue to cash count →</a> : <button className="button" disabled>Continue to cash count</button>}
+                </div>
+              </div>
+            </section>
+          ) : null}
+
+          <section className={`summary-grid reconciliation-summary ${activeStep === 1 ? "reconciliation-step-hidden" : ""}`}>
             <div className="metric-card"><span>Associates</span><strong>{rows.length}</strong><small>{sccRows ? `${sccRows} validated in SCC` : "From station shipment data"}</small></div>
             <div className="metric-card"><span>Cash entered</span><strong>{savedRows.length}</strong><small>{completed} balanced</small></div>
             <div className="metric-card"><span>Collected</span><strong>{formatAmount(collectedTotal)}</strong><small>Expected {formatAmount(expectedTotal)}</small></div>
             <div className="metric-card"><span>COD variance</span><strong className={moneyClass(netDifference)}>{differenceLabel(netDifference)}</strong><small>Short or excess can be submitted</small></div>
           </section>
 
-          <section className="panel reconciliation-closure-panel">
+          <section className={`panel reconciliation-closure-panel ${activeStep !== 3 && activeStep !== 4 ? "reconciliation-step-hidden" : ""}`}>
             <div className="panel-head">
               <div>
                 <h2>Submit & validate</h2>
@@ -369,7 +434,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
               <StatusPill status={selectedClosure?.is_final_submitted ? "Final submitted" : cashSubmissionStatus} />
             </div>
             <div className="panel-body">
-              <div className="reconciliation-lifecycle" aria-label="COD closure lifecycle">
+              <div className="reconciliation-lifecycle reconciliation-step-hidden" aria-label="COD closure lifecycle">
                 <div className={savedRows.length ? "complete" : "current"}><i>1</i><span>Cash sheet</span><strong>{savedRows.length ? `${savedRows.length} entered` : "Start"}</strong></div>
                 <div className={cashSubmitted ? "complete" : savedRows.length ? "current" : ""}><i>2</i><span>Submit COD</span><strong>{cashSubmissionStatus}</strong></div>
                 <div className={driverCleared ? "complete" : cashSubmitted ? "current" : ""}><i>3</i><span>Driver recon</span><strong>{driverDisplayStatus}</strong></div>
@@ -377,7 +442,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
               </div>
               {defaultLocationId ? (
                 <>
-                  <section className={`cash-submission-card ${currentVarianceType}`}>
+                  <section className={`cash-submission-card ${currentVarianceType} ${activeStep !== 3 ? "reconciliation-step-hidden" : ""}`}>
                     <div>
                       <span>Cash submission</span>
                       <strong>{currentVarianceLabel}</strong>
@@ -397,7 +462,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                       />
                     </form>
                   </section>
-                  {cashSubmitted && submittedDifference !== 0 ? (
+                  {activeStep === 3 && cashSubmitted && submittedDifference !== 0 ? (
                     <div className="cash-exception-strip">
                       <StatusPill status={cashSubmissionStatus} />
                       <span>
@@ -407,7 +472,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     </div>
                   ) : null}
                   <div className="reconciliation-gates">
-                  <section className="reconciliation-gate">
+                  <section className={`reconciliation-gate ${activeStep !== 3 ? "reconciliation-step-hidden" : ""}`}>
                     <div className="reconciliation-gate-head">
                       <div><span>Validation 1</span><strong>Driver reconciliation</strong></div>
                       <StatusPill status={driverDisplayStatus} />
@@ -462,7 +527,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     ) : null}
                   </section>
 
-                  <section className={`reconciliation-gate ${!driverCleared ? "locked" : ""}`}>
+                  <section className={`reconciliation-gate ${!driverCleared ? "locked" : ""} ${activeStep !== 4 ? "reconciliation-step-hidden" : ""}`}>
                     <div className="reconciliation-gate-head">
                       <div><span>Validation 2</span><strong>Bank deposit</strong></div>
                       <StatusPill status={depositDisplayStatus} />
@@ -517,7 +582,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                     ) : null}
                   </section>
 
-                  <section className={`reconciliation-gate final ${!depositCleared ? "locked" : ""}`}>
+                  <section className={`reconciliation-gate final ${!depositCleared ? "locked" : ""} ${activeStep !== 4 ? "reconciliation-step-hidden" : ""}`}>
                     <div className="reconciliation-gate-head">
                       <div><span>Final</span><strong>Close station day</strong></div>
                       <StatusPill status={selectedClosure?.is_final_submitted ? "Final submitted" : "Pending"} />
@@ -535,7 +600,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                 </div>
                 </>
               ) : <p className="subtle">Select one station to submit its day closure.</p>}
-              {managerNotifications.length ? (
+              {activeStep === 4 && managerNotifications.length ? (
                 <details className="reconciliation-support-panel">
                   <summary>Manager notifications ({managerNotifications.length})</summary>
                   <div className="table-wrap">
@@ -558,7 +623,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
             </div>
           </section>
 
-          <section className="panel">
+          <section className={`panel ${activeStep !== 2 ? "reconciliation-step-hidden" : ""}`}>
             <div className="panel-head">
               <div>
                 <h2>Collect cash</h2>
@@ -587,7 +652,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
             )}
           </section>
 
-          <section className="panel">
+          <section className={`panel ${activeStep !== 2 ? "reconciliation-step-hidden" : ""}`}>
             <div className="panel-head">
               <div>
                 <h2>Saved cash</h2>
@@ -677,9 +742,10 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                 </tbody>
               </table>
             </div>
+            {savedRows.length ? <div className="reconciliation-stage-footer"><span>Review differences before submitting COD.</span><a className="button" href={stepHref(3)}>Continue to driver validation →</a></div> : null}
           </section>
 
-          {auditAllowed ? (
+          {activeStep === 4 && auditAllowed ? (
             <details className="panel reconciliation-support-panel">
               <summary>Activity history ({auditRows.length})</summary>
               <div className="reconciliation-support-toolbar">
@@ -708,7 +774,7 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
             </details>
           ) : null}
 
-          {permission.canAdd ? (
+          {activeStep === 2 && permission.canAdd ? (
             <details className="panel reconciliation-support-panel">
               <summary>Add associate missing from DER</summary>
               <div className="panel-body">

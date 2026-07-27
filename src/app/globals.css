@@ -9888,6 +9888,173 @@ tbody tr:hover td {
   min-height: 98px;
 }
 
+.reconciliation-step-hidden {
+  display: none !important;
+}
+
+.reconciliation-wizard {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.reconciliation-wizard > a {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  background: #fff;
+  color: #475569;
+  text-decoration: none;
+}
+
+.reconciliation-wizard i {
+  display: grid;
+  flex: 0 0 28px;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #64748b;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.reconciliation-wizard span {
+  display: grid;
+  min-width: 0;
+}
+
+.reconciliation-wizard strong {
+  color: #1e293b;
+  font-size: 12px;
+}
+
+.reconciliation-wizard small {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reconciliation-wizard a.current {
+  border-color: #fb923c;
+  background: #fff7ed;
+}
+
+.reconciliation-wizard a.current i {
+  background: #f4511e;
+  color: #fff;
+}
+
+.reconciliation-wizard a.complete:not(.current) {
+  border-color: #bbf7d0;
+}
+
+.reconciliation-wizard a.complete:not(.current) i {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.reconciliation-wizard a.locked {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.stage-kicker {
+  color: #ea580c;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.reconciliation-roster-start {
+  display: grid;
+  gap: 12px;
+}
+
+.reconciliation-stage-action,
+.reconciliation-stage-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.reconciliation-stage-action > div {
+  display: grid;
+  gap: 3px;
+}
+
+.reconciliation-stage-action span,
+.reconciliation-stage-footer > span {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.reconciliation-roster-preview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.reconciliation-roster-preview > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.reconciliation-roster-preview > div > span {
+  display: grid;
+  min-width: 0;
+}
+
+.reconciliation-roster-preview strong,
+.reconciliation-roster-preview small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reconciliation-roster-preview strong {
+  color: #1e293b;
+  font-size: 11px;
+}
+
+.reconciliation-roster-preview small {
+  color: #64748b;
+  font-size: 9px;
+}
+
+.reconciliation-empty-stage {
+  padding: 22px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  text-align: center;
+}
+
+.reconciliation-stage-footer {
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+}
+
 .cash-submission-card {
   display: flex;
   align-items: center;
@@ -10289,6 +10456,14 @@ tbody tr:hover td {
 }
 
 @media (max-width: 1050px) {
+  .reconciliation-wizard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reconciliation-roster-preview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .reconciliation-control-bar .panel-body {
     display: block;
   }
@@ -10307,6 +10482,17 @@ tbody tr:hover td {
 }
 
 @media (max-width: 760px) {
+  .reconciliation-wizard,
+  .reconciliation-roster-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .reconciliation-stage-action,
+  .reconciliation-stage-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .reconciliation-lifecycle,
   .reconciliation-gates {
     grid-template-columns: 1fr;

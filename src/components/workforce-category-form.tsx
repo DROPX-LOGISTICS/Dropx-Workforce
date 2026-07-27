@@ -11,8 +11,7 @@ import { SubmitButton } from "@/components/submit-button";
 
 const appPageOptions = [
   { value: "dashboard", label: "Dashboard" },
-  { value: "attendance", label: "Attendance" },
-  { value: "settings", label: "Settings" }
+  { value: "attendance", label: "Attendance" }
 ] as const;
 
 export type WorkforceCategoryInitial = {
@@ -165,7 +164,8 @@ export function WorkforceCategoryForm({
   submitLabel: string;
 }) {
   const rules = normalizeCategoryProfileFieldRules(initial?.profile_field_rules);
-  const selectedPages = initial?.app_page_access ?? ["dashboard", "attendance", "settings"];
+  const selectedPages = (initial?.app_page_access ?? ["dashboard", "attendance"])
+    .filter((page) => appPageOptions.some((option) => option.value === page));
 
   return (
     <form action={action} className="designation-form">
@@ -201,7 +201,7 @@ export function WorkforceCategoryForm({
       <section className="workforce-category-page-access">
         <div>
           <strong>DropX One page access</strong>
-          <p className="subtle">Choose the account pages available for this category. My Profile is always available.</p>
+          <p className="subtle">Choose category-controlled pages. My Profile and Settings are always available.</p>
         </div>
         <PageAccessSelect initialPages={selectedPages} />
       </section>

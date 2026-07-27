@@ -38,7 +38,7 @@ function categoryRules(formData: FormData) {
   });
 }
 
-const allowedAppPages = new Set(["dashboard", "attendance", "settings"]);
+const allowedAppPages = new Set(["dashboard", "attendance"]);
 
 function appPageAccess(formData: FormData) {
   return Array.from(new Set(

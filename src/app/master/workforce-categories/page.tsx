@@ -96,9 +96,13 @@ export default async function WorkforceCategoriesPage({
                   <tr key={category.id}>
                     <td><strong>{category.code}</strong></td>
                     <td>{category.name}</td>
-                    <td>{category.app_page_access?.length
-                      ? category.app_page_access.map((page) => page.replaceAll("_", " ")).join(", ")
-                      : "My Profile only"}</td>
+                    <td>{[
+                      ...(category.app_page_access ?? [])
+                        .filter((page) => page === "dashboard" || page === "attendance")
+                        .map((page) => page.replaceAll("_", " ")),
+                      "settings",
+                      "my profile"
+                    ].join(", ")}</td>
                     <td>{category.is_system ? "System" : "Custom"}</td>
                     <td><StatusPill status={category.is_active ? "Active" : "Inactive"} /></td>
                     <td>{permission.canEdit ? <PendingLink className="button secondary compact" href={`/master/workforce-categories?edit=${category.id}`} scroll={false}>Edit</PendingLink> : "-"}</td>

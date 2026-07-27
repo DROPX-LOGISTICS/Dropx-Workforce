@@ -16,13 +16,12 @@ const accountKey = (account: AppAccount) => `${account.profileType}:${account.co
 const active = (account?: AppAccount | null) => account?.status?.toLowerCase() === "active";
 const defaultPageAccess = ["dashboard", "attendance", "settings"];
 const allowed = (account: AppAccount | null, page: "dashboard" | "attendance" | "settings") =>
-  (account?.pageAccess ?? defaultPageAccess).includes(page);
+  page === "settings" || (account?.pageAccess ?? defaultPageAccess).includes(page);
 
 function landingPage(account: AppAccount): Step {
   if (!active(account)) return "profile";
   if (allowed(account, "dashboard")) return "dashboard";
   if (allowed(account, "attendance")) return "attendance";
-  if (allowed(account, "settings")) return "settings";
   return "profile";
 }
 
@@ -176,13 +175,12 @@ export function ConnectLoginFlow() {
       setStep("accounts");
       return;
     }
-    if (!active(account) && next !== "profile") {
+    if (!active(account) && next !== "profile" && next !== "settings") {
       setStep("profile");
       return;
     }
     if (next === "dashboard" && !allowed(account, "dashboard")) return;
     if (next === "attendance" && !allowed(account, "attendance")) return;
-    if (next === "settings" && !allowed(account, "settings")) return;
     setStep(next);
   }
 
@@ -204,7 +202,7 @@ export function ConnectLoginFlow() {
         {allowed(account, "dashboard") ? <button onClick={() => open("dashboard")}><Gauge />Dashboard<ChevronRight /></button> : null}
         <button onClick={() => open("profile")}><UserRound />My Profile<ChevronRight /></button>
         {allowed(account, "attendance") ? <button onClick={() => open("attendance")}><Fingerprint />Attendance<ChevronRight /></button> : null}
-        {allowed(account, "settings") ? <button onClick={() => open("settings")}><Settings />Settings<ChevronRight /></button> : null}
+        <button onClick={() => open("settings")}><Settings />Settings<ChevronRight /></button>
       </nav>
       <button className="signout" onClick={logout}><LogOut />Sign out</button>
     </aside></> : null}

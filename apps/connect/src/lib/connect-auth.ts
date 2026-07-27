@@ -21,6 +21,7 @@ export type ConnectAccount = {
   biometricId: string | null;
   profilePhotoUrl: string | null;
   pageAccess: string[];
+  isDefault: boolean;
   companyName: string;
   label: string;
 };
@@ -245,6 +246,18 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       pageAccessByCategory.set(`${category.company_id}:${category.code}`, pages);
     }
   }
+  const preferenceResult = await supabaseAdmin
+    .from("mob_app_user_preferences")
+    .select("default_company_id, default_profile_type, default_account_id")
+    .eq("country_code", countryCode)
+    .eq("mobile_number", mobile)
+    .maybeSingle();
+  const preferenceTableMissing = isMissingColumnError(preferenceResult.error) ||
+    String(preferenceResult.error?.message ?? "").toLowerCase().includes("mob_app_user_preferences");
+  if (preferenceResult.error && !preferenceTableMissing) {
+    throw new Error(preferenceResult.error.message);
+  }
+  const defaultPreference = preferenceResult.error ? null : preferenceResult.data;
 
   return Promise.all(accounts
     .filter((account) => companyNameById.has(account.company_id))
@@ -262,6 +275,10 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       pageAccess: account.profile_type === "user"
         ? defaultPageAccess
         : pageAccessByCategory.get(`${account.company_id}:${categoryCodeForProfile(account.profile_type)}`) ?? defaultPageAccess,
+      isDefault: account.profile_type !== "user" &&
+        defaultPreference?.default_company_id === account.company_id &&
+        defaultPreference?.default_profile_type === account.profile_type &&
+        defaultPreference?.default_account_id === account.id,
       companyName: companyNameById.get(account.company_id) ?? "Company",
       label: accountLabel(account, companyNameById)
     })));

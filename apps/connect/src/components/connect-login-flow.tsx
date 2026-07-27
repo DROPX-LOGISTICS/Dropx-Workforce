@@ -50,8 +50,11 @@ export function ConnectLoginFlow() {
 
   function route(rows: AppAccount[]) {
     const filtered = rows.filter((row) => row.profileType !== "user");
-    const saved = localStorage.getItem(defaultKeyName) || "";
-    const selected = filtered.find((row) => accountKey(row) === saved) ?? (filtered.length === 1 ? filtered[0] : null);
+    const serverDefault = filtered.find((row) => row.isDefault);
+    const saved = serverDefault ? accountKey(serverDefault) : "";
+    if (saved) localStorage.setItem(defaultKeyName, saved);
+    else localStorage.removeItem(defaultKeyName);
+    const selected = serverDefault ?? (filtered.length === 1 ? filtered[0] : null);
     setAccounts(filtered); setDefaultKey(saved); setAccount(selected); setAvatar(selected?.profilePhotoUrl || "");
     setStep(selected ? landingPage(selected) : "accounts");
   }
@@ -117,6 +120,32 @@ export function ConnectLoginFlow() {
   async function logout() {
     await fetch("/api/connect/auth/session", { method: "DELETE" });
     setAccounts([]); setAccount(null); setAvatar(""); setDrawer(false); setProfileMenu(false); setStep("mobile"); setNotice("Logged out.");
+  }
+  async function saveDefaultAccount(nextKey: string) {
+    setPending(true); setError(""); setNotice("");
+    const selected = accounts.find((row) => accountKey(row) === nextKey);
+    try {
+      const response = await fetch("/api/connect/preferences", {
+        method: selected ? "PUT" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: selected ? JSON.stringify({
+          accountId: selected.id,
+          companyId: selected.companyId,
+          profileType: selected.profileType
+        }) : undefined
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Unable to save default account.");
+      setDefaultKey(nextKey);
+      setAccounts((current) => current.map((row) => ({ ...row, isDefault: selected ? accountKey(row) === nextKey : false })));
+      if (nextKey) localStorage.setItem(defaultKeyName, nextKey);
+      else localStorage.removeItem(defaultKeyName);
+      setNotice(selected ? "Default account saved." : "Default account removed.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to save default account.");
+    } finally {
+      setPending(false);
+    }
   }
   function bytes(value: string) {
     const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - value.length % 4) % 4);
@@ -217,11 +246,12 @@ export function ConnectLoginFlow() {
       {step === "unlock" ? <form onSubmit={(e) => { e.preventDefault(); unlock(); }}><div className="dx-unlock"><Fingerprint /><strong>Unlock DropX One</strong><small>Use Face ID or your device security to continue.</small></div><button disabled={pending}>{pending ? "Unlocking..." : "Unlock"}</button><button className="text" onClick={() => { setPin(""); setStep("pin"); }} type="button">Use PIN</button></form> : null}
     </div> : <main className="dx-content">
       {notice ? <div className="dx-alert success">{notice}<button onClick={() => setNotice("")}><X /></button></div> : null}
+      {error ? <div className="dx-alert error">{error}<button onClick={() => setError("")}><X /></button></div> : null}
       {step === "accounts" ? <section className="dx-accounts"><h1>Choose account</h1>{accounts.map((row) => <button key={accountKey(row)} onClick={() => choose(row)}><i>{row.profilePhotoUrl ? <img alt="" src={row.profilePhotoUrl} /> : <UsersRound />}</i><span><strong>{row.companyName}</strong><em>{row.name || row.reference}</em><small>{row.reference} {row.biometricId ? ` | ${row.biometricId}` : ""}</small></span><ChevronRight /></button>)}</section> : null}
       {step === "dashboard" && account ? <ConnectDashboard account={account} onAttendance={() => open("attendance")} onProfile={() => open("profile")} /> : null}
       {step === "profile" && account ? <ConnectProfileApp account={account} onPhoto={(url) => setAvatar(url)} /> : null}
       {step === "attendance" && account ? <ConnectAttendance account={account} /> : null}
-      {step === "settings" ? <section className="dx-settings"><h1>Settings</h1><label>Default account<select value={defaultKey} onChange={(e) => { setDefaultKey(e.target.value); localStorage.setItem(defaultKeyName, e.target.value); }}><option value="">Select default account</option>{accounts.map((row) => <option key={accountKey(row)} value={accountKey(row)}>{row.companyName} - {row.reference || row.name}</option>)}</select></label><label className="toggle"><span><strong>Enable biometric login</strong><small>Use Face ID or device authentication when available.</small></span><input defaultChecked={localStorage.getItem(biometricKey) === "true"} onChange={(e) => enrollBiometric(e.target.checked)} type="checkbox" /></label><button onClick={resetPin}>Change PIN</button></section> : null}
+      {step === "settings" ? <section className="dx-settings"><h1>Settings</h1><label>Default account<select disabled={pending} value={defaultKey} onChange={(e) => saveDefaultAccount(e.target.value)}><option value="">Select default account</option>{accounts.map((row) => <option key={accountKey(row)} value={accountKey(row)}>{row.companyName} - {row.reference || row.name}</option>)}</select></label><label className="toggle"><span><strong>Enable biometric login</strong><small>Use Face ID or device authentication when available.</small></span><input defaultChecked={localStorage.getItem(biometricKey) === "true"} onChange={(e) => enrollBiometric(e.target.checked)} type="checkbox" /></label><button onClick={resetPin}>Change PIN</button></section> : null}
     </main>}
   </div>;
 }

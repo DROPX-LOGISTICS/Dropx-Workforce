@@ -20,6 +20,7 @@ export type AppAccount = {
   biometricId?: string | null;
   profilePhotoUrl?: string | null;
   pageAccess?: string[];
+  isDefault?: boolean;
 };
 
 type Profile = {

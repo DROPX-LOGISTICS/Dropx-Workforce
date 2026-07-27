@@ -10612,36 +10612,96 @@ tbody tr:hover td {
   margin: 5px 0 0;
 }
 
-.workforce-category-page-options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(120px, 1fr));
-  gap: 10px;
+.workforce-page-select {
+  position: relative;
+  min-width: 0;
 }
 
-.workforce-category-page-options label {
+.workforce-page-select-trigger {
   display: flex;
-  gap: 9px;
   align-items: center;
-  min-height: 42px;
-  padding: 0 12px;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 46px;
+  padding: 6px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--surface-soft);
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.workforce-page-select-trigger.open,
+.workforce-page-select-trigger:focus-visible {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(245, 164, 0, 0.14);
+  outline: 0;
+}
+
+.workforce-page-tags {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.workforce-page-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 3px 6px 3px 10px;
+  border: 1px solid #f1c3a7;
+  border-radius: 5px;
+  background: #fff5ed;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.workforce-page-tag button {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  place-items: center;
+  background: transparent;
+  color: #9a3412;
   cursor: pointer;
 }
 
-.workforce-category-page-options input {
-  width: 17px;
-  height: 17px;
-  accent-color: var(--orange);
+.workforce-page-tag button:hover,
+.workforce-page-tag button:focus-visible {
+  background: #ffe3d1;
+  outline: 0;
+}
+
+.workforce-page-placeholder {
+  align-self: center;
+  padding-left: 2px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.workforce-page-select-menu {
+  z-index: 70;
+}
+
+.workforce-page-select-menu .multi-select-search {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.workforce-page-select-menu .multi-select-options {
+  max-height: 250px;
 }
 
 @media (max-width: 760px) {
   .workforce-category-page-access {
-    grid-template-columns: 1fr;
-  }
-
-  .workforce-category-page-options {
     grid-template-columns: 1fr;
   }
 }

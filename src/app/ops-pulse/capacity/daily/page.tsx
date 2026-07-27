@@ -3,7 +3,7 @@ import { CapacityDailyEditor } from "@/components/capacity-daily-editor";
 import { CapacityScopeFilter } from "@/components/capacity-scope-filter";
 import { CapacityWorkspaceTabs } from "@/components/capacity-workspace-tabs";
 import { PageHead } from "@/components/page-head";
-import { requirePagePermission } from "@/lib/authorization";
+import { hasPermission, isCompanyOwner, requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCapacityGroundUpdates } from "@/lib/ops-pulse/capacity-ground";
 import { loadCapacityStationDays } from "@/lib/ops-pulse/capacity-shipments";
@@ -30,6 +30,9 @@ export default async function DailyCapacityPage({ searchParams }: { searchParams
   const allCodes = locations.map((location) => location.station_code);
   const codes = selectedCodes(searchParams?.stations, allCodes);
   const workDate = validDate(searchParams?.date) ? String(searchParams?.date) : shift(today(), -1);
+  const editableFrom = shift(today(), -1);
+  const canEdit = hasPermission(authorization, "cps_associates", "edit")
+    && (workDate >= editableFrom || isCompanyOwner(authorization));
   const [sourceResult, groundResult] = await Promise.all([
     loadCapacityStationDays(companyId, codes, workDate, workDate),
     loadCapacityGroundUpdates(companyId, workDate, workDate)
@@ -45,14 +48,14 @@ export default async function DailyCapacityPage({ searchParams }: { searchParams
       region: location.region || "",
       cluster: location.cluster || "",
       inbound: Number(source?.inbound ?? 0),
-      saved: Boolean(ground),
-      assignedPackages: Number(ground?.assignedPackages ?? 0),
-      regularBike: Number(ground?.regularBike ?? 0),
-      regularVan: Number(ground?.regularVan ?? 0),
-      regularVanVehicle: Number(ground?.regularVanVehicle ?? 0),
-      adHocBike: Number(ground?.adHocBike ?? 0),
-      adHocVanVehicle: Number(ground?.adHocVanVehicle ?? 0),
-      adHocVan: Number(ground?.adHocVan ?? 0),
+      saved: Boolean(ground && Number(ground.classifiedIds ?? 0) > 0),
+      assignedPackages: ground?.assignedPackages ?? null,
+      regularBike: ground?.regularBike ?? null,
+      regularVan: ground?.regularVan ?? null,
+      regularVanVehicle: ground?.regularVanVehicle ?? null,
+      adHocBike: ground?.adHocBike ?? null,
+      adHocVanVehicle: ground?.adHocVanVehicle ?? null,
+      adHocVan: ground?.adHocVan ?? null,
       updatedAt: ground?.updatedAt ?? null
     };
   });
@@ -69,8 +72,9 @@ export default async function DailyCapacityPage({ searchParams }: { searchParams
     {searchParams?.saved ? <div className="message-panel success">{searchParams.saved} station update{searchParams.saved === "1" ? "" : "s"} saved.</div> : null}
     {searchParams?.error || locationResult.error || sourceResult.error || groundResult.error ? <div className="message-panel error">{searchParams?.error || locationResult.error || sourceResult.error?.message || groundResult.error}</div> : null}
     <section className="panel capacity-daily-entry-panel"><div className="panel-head"><div><h2>{workDate.split("-").reverse().join("/")} ground capacity</h2><p className="subtle">Inbound is system-filled. Enter assigned packages and the previous day&apos;s actual staffing.</p></div></div>
+      {!canEdit ? <div className="capacity-edit-lock"><strong>Read only</strong><span>This date is locked after the next-day review. Only the company owner can correct older records.</span></div> : null}
       <div className="capacity-counting-note"><strong>Counting rule</strong><span>DA columns count people. External Bike/Van DA means a temporary associate hired from outside. Van Count columns count vehicles only.</span></div>
-      <CapacityDailyEditor returnQuery={returnQuery} rows={rows} workDate={workDate}/>
+      <CapacityDailyEditor canEdit={canEdit} returnQuery={returnQuery} rows={rows} workDate={workDate}/>
     </section>
   </div></AppShell>;
 }

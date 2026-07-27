@@ -10,31 +10,42 @@ export type CapacityDailyEditorRow = {
   cluster: string;
   inbound: number;
   saved: boolean;
-  assignedPackages: number;
-  regularBike: number;
-  regularVan: number;
-  regularVanVehicle: number;
-  adHocBike: number;
-  adHocVanVehicle: number;
-  adHocVan: number;
+  assignedPackages: number | null;
+  regularBike: number | null;
+  regularVan: number | null;
+  regularVanVehicle: number | null;
+  adHocBike: number | null;
+  adHocVanVehicle: number | null;
+  adHocVan: number | null;
   updatedAt: string | null;
 };
 
-type Counts = Pick<CapacityDailyEditorRow, "assignedPackages" | "regularBike" | "regularVan" | "regularVanVehicle" | "adHocBike" | "adHocVanVehicle" | "adHocVan">;
+type CountKey = "assignedPackages" | "regularBike" | "regularVan" | "regularVanVehicle" | "adHocBike" | "adHocVanVehicle" | "adHocVan";
+type Counts = Record<CountKey, string>;
 type SortKey = "station" | "region" | "cluster" | "inbound" | "assigned" | "regularBike" | "regularVan" | "regularVanVehicle" | "adHocBike" | "adHocVanVehicle" | "adHocVan" | "updated";
 
-export function CapacityDailyEditor({ rows, workDate, returnQuery }: { rows: CapacityDailyEditorRow[]; workDate: string; returnQuery: string }) {
+function inputValue(value: number | null) { return value == null ? "" : String(value); }
+
+export function CapacityDailyEditor({ rows, workDate, returnQuery, canEdit }: { rows: CapacityDailyEditorRow[]; workDate: string; returnQuery: string; canEdit: boolean }) {
   const [values, setValues] = useState<Record<string, Counts>>(() => Object.fromEntries(rows.map((row) => [row.stationCode, {
-    assignedPackages: row.assignedPackages, regularBike: row.regularBike, regularVan: row.regularVan, adHocBike: row.adHocBike,
-    regularVanVehicle: row.regularVanVehicle, adHocVanVehicle: row.adHocVanVehicle, adHocVan: row.adHocVan
+    assignedPackages: inputValue(row.assignedPackages), regularBike: inputValue(row.regularBike), regularVan: inputValue(row.regularVan), adHocBike: inputValue(row.adHocBike),
+    regularVanVehicle: inputValue(row.regularVanVehicle), adHocVanVehicle: inputValue(row.adHocVanVehicle), adHocVan: inputValue(row.adHocVan)
   }])));
   const [dirty, setDirty] = useState<string[]>([]);
   const [sort, setSort] = useState<SortKey>("station");
   const [direction, setDirection] = useState<"asc" | "desc">("asc");
 
-  function update(stationCode: string, key: keyof Counts, raw: string) {
-    const value = Math.max(0, Math.floor(Number(raw) || 0));
+  function update(stationCode: string, key: CountKey, raw: string) {
+    const value = raw === "" ? "" : String(Math.max(0, Math.floor(Number(raw) || 0)));
     setValues((current) => ({ ...current, [stationCode]: { ...current[stationCode], [key]: value } }));
+    setDirty((current) => current.includes(stationCode) ? current : [...current, stationCode]);
+  }
+
+  function clear(stationCode: string) {
+    setValues((current) => ({ ...current, [stationCode]: {
+      assignedPackages: "", regularBike: "", regularVan: "", regularVanVehicle: "",
+      adHocBike: "", adHocVan: "", adHocVanVehicle: ""
+    } }));
     setDirty((current) => current.includes(stationCode) ? current : [...current, stationCode]);
   }
 
@@ -44,9 +55,9 @@ export function CapacityDailyEditor({ rows, workDate, returnQuery }: { rows: Cap
     if (sort === "region") return row.region;
     if (sort === "cluster") return row.cluster;
     if (sort === "inbound") return row.inbound;
-    if (sort === "assigned") return counts.assignedPackages;
+    if (sort === "assigned") return counts.assignedPackages === "" ? -1 : Number(counts.assignedPackages);
     if (sort === "updated") return row.updatedAt ?? "";
-    return counts[sort];
+    return counts[sort] === "" ? -1 : Number(counts[sort]);
   }
 
   const sortedRows = useMemo(() => [...rows].sort((left, right) => {
@@ -73,7 +84,7 @@ export function CapacityDailyEditor({ rows, workDate, returnQuery }: { rows: Cap
       <span><strong>{rows.length}</strong> stations</span>
       <span className="matched"><strong>{updated}</strong> updated</span>
       <span><strong>{rows.length - updated}</strong> pending</span>
-      <button className="button compact" disabled={!dirty.length} type="submit">Save {dirty.length ? `${dirty.length} update${dirty.length === 1 ? "" : "s"}` : "updates"}</button>
+      <button className="button compact" disabled={!canEdit || !dirty.length} type="submit">Save {dirty.length ? `${dirty.length} update${dirty.length === 1 ? "" : "s"}` : "updates"}</button>
     </div>
     <div className="table-wrap"><table className="capacity-daily-entry-table"><thead><tr>
       <th>{heading("Station", "station")}</th><th>{heading("Region", "region")}</th><th>{heading("Cluster", "cluster")}</th>
@@ -87,9 +98,9 @@ export function CapacityDailyEditor({ rows, workDate, returnQuery }: { rows: Cap
       return <tr className={dirty.includes(row.stationCode) ? "edited" : ""} key={row.stationCode}>
         <td><strong>{row.stationCode}</strong><small>{row.stationName}</small></td><td>{row.region || "—"}</td><td>{row.cluster || "—"}</td>
         <td><strong>{row.inbound.toLocaleString("en-IN")}</strong></td>
-        <td><input aria-label={`${row.stationCode} assigned packages`} min="0" name={`assigned_${row.stationCode}`} onChange={(event) => update(row.stationCode, "assignedPackages", event.target.value)} type="number" value={counts.assignedPackages}/></td>
-        {(["regularBike", "regularVan", "regularVanVehicle", "adHocBike", "adHocVan", "adHocVanVehicle"] as const).map((key) => <td key={key}><input aria-label={`${row.stationCode} ${key}`} min="0" name={`${key === "adHocBike" ? "adhoc_bike" : key === "adHocVanVehicle" ? "adhoc_van_vehicle" : key === "adHocVan" ? "adhoc_van" : key === "regularBike" ? "regular_bike" : key === "regularVanVehicle" ? "regular_van_vehicle" : "regular_van"}_${row.stationCode}`} onChange={(event) => update(row.stationCode, key, event.target.value)} type="number" value={counts[key]}/></td>)}
-        <td>{row.updatedAt ? <><strong>Saved</strong><small>{row.updatedAt.slice(0, 10)}</small></> : "—"}</td>
+        <td><input aria-label={`${row.stationCode} assigned packages`} disabled={!canEdit} min="0" name={`assigned_${row.stationCode}`} onChange={(event) => update(row.stationCode, "assignedPackages", event.target.value)} placeholder="—" type="number" value={counts.assignedPackages}/></td>
+        {(["regularBike", "regularVan", "regularVanVehicle", "adHocBike", "adHocVan", "adHocVanVehicle"] as const).map((key) => <td key={key}><input aria-label={`${row.stationCode} ${key}`} disabled={!canEdit} min="0" name={`${key === "adHocBike" ? "adhoc_bike" : key === "adHocVanVehicle" ? "adhoc_van_vehicle" : key === "adHocVan" ? "adhoc_van" : key === "regularBike" ? "regular_bike" : key === "regularVanVehicle" ? "regular_van_vehicle" : "regular_van"}_${row.stationCode}`} onChange={(event) => update(row.stationCode, key, event.target.value)} placeholder="—" type="number" value={counts[key]}/></td>)}
+        <td>{row.updatedAt ? <><strong>Saved</strong><small>{row.updatedAt.slice(0, 10)}</small>{canEdit ? <button className="capacity-clear-update" onClick={() => clear(row.stationCode)} type="button">Remove</button> : null}</> : "—"}</td>
       </tr>;
     })}{!rows.length ? <tr><td className="empty-cell" colSpan={12}>No stations match the selected scope.</td></tr> : null}</tbody></table></div>
   </form>;

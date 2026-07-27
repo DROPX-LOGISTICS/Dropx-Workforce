@@ -69,6 +69,7 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
   const allReviews = reviewResult.rows;
   const latestReviewByStation = new Map<string, typeof allReviews[number]>();
   allReviews.forEach((review) => {
+    if (num(review.classifiedIds) <= 0) return;
     const stationCode = review.stationCode;
     const current = latestReviewByStation.get(stationCode);
     if (!current || review.workDate > current.workDate) latestReviewByStation.set(stationCode, review);

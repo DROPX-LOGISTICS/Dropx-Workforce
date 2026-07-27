@@ -479,7 +479,7 @@ export function MasterDataLists({
             <MultiCheckFilter allLabel="All providers" label="Provider" onChange={updateLocationProviders} options={locationProviderOptions} selected={locationProviders} />
             <MultiCheckFilter allLabel="All models" label="Model" onChange={updateLocationModels} options={locationModelOptions} selected={locationModels} />
             <MultiCheckFilter allLabel="All regions" label="Region" onChange={updateLocationRegions} options={locationRegionOptions} selected={locationRegions} />
-            <MultiCheckFilter allLabel="All cluster managers" label="Cluster Manager" onChange={updateLocationManagers} options={locationManagerOptions} selected={locationManagers} />
+            <MultiCheckFilter allLabel="All managers" label="Manager" onChange={updateLocationManagers} options={locationManagerOptions} selected={locationManagers} />
             {canAdd ? <Link className="button" href="/master/location?add=location" scroll={false}>Add location</Link> : null}
           </div>
         </div>
@@ -490,11 +490,10 @@ export function MasterDataLists({
                 <th>Code</th>
                 <th>Location</th>
                 <th>Region</th>
-                <th>AOM</th>
-                <th>Cluster Manager</th>
+                <th>Manager</th>
                 <th>Provider</th>
                 <th>Model</th>
-                <th>Shipment parent</th>
+                <th>Parent Location</th>
                 <th>Address</th>
                 <th>Contact</th>
                 <th>Status</th>
@@ -507,8 +506,7 @@ export function MasterDataLists({
                   <td><strong>{row.station_code}</strong></td>
                   <td>{row.station_name && !sameText(row.station_name, row.station_code) ? row.station_name : "-"}</td>
                   <td>{row.region || "-"}</td>
-                  <td>{row.aom || "-"}</td>
-                  <td>{row.cluster_manager || "-"}</td>
+                  <td>{managerOptions.find((manager) => sameText(manager.value, row.station_manager_email))?.label || row.station_manager_email || "-"}</td>
                   <td>{row.providers?.name || "-"}</td>
                   <td>{row.location_models?.code || "-"}</td>
                   <td>{row.parent_station_id ? locations.find((location) => location.id === row.parent_station_id)?.station_code || "Mapped" : "-"}</td>
@@ -537,8 +535,6 @@ export function MasterDataLists({
                   </td>
                   <td>
                     {row.station_email || "-"}
-                    <br />
-                    <span className="subtle">{row.station_manager_email || "-"}</span>
                   </td>
                   <td><StatusPill status={row.is_active ? "Active" : "Inactive"} /></td>
                   {canEdit ? <td className="action-cell"><EditButton href={editHref("location", row.id)} label={`Edit ${row.station_code}`} /></td> : null}

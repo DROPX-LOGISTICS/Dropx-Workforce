@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
+import { indiaStateCode } from "@/lib/india-states";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 function clean(value: FormDataEntryValue | null) {
@@ -33,18 +34,6 @@ function optionalCoordinate(value: FormDataEntryValue | null, field: string, min
 
 function normalizeEmail(value: string | null | undefined) {
   return String(value ?? "").trim().toLowerCase();
-}
-
-async function hierarchyUserName(email: string | null, companyId: string) {
-  if (!email || !supabaseAdmin) return null;
-  const { data, error } = await supabaseAdmin
-    .from("profiles")
-    .select("full_name,email")
-    .eq("company_id", companyId)
-    .ilike("email", email)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return clean(data?.full_name) ?? clean(data?.email);
 }
 
 function isMissingSchemaError(message: string) {
@@ -541,21 +530,16 @@ export async function createLocation(formData: FormData) {
   const addressLine1 = required(formData.get("address_line1"), "Address line 1");
   const addressLine2 = clean(formData.get("address_line2"));
   const city = clean(formData.get("city"));
-  const state = clean(formData.get("state"));
+  const state = indiaStateCode(required(formData.get("state"), "State"));
+  if (!state) throw new Error("Select a valid state");
   const region = required(formData.get("region"), "Region").toUpperCase();
-  const aomEmail = clean(formData.get("aom_email"))?.toLowerCase() ?? null;
-  const clusterManagerEmail = required(formData.get("cluster_manager_email"), "Cluster Manager").toLowerCase();
-  const [aom, clusterManager] = await Promise.all([
-    hierarchyUserName(aomEmail, companyId),
-    hierarchyUserName(clusterManagerEmail, companyId)
-  ]);
   const postalCode = clean(formData.get("postal_code"));
   const latitude = optionalCoordinate(formData.get("latitude"), "Latitude", -90, 90);
   const longitude = optionalCoordinate(formData.get("longitude"), "Longitude", -180, 180);
   const stationEmail = clean(formData.get("station_email"));
   const parentStationId = clean(formData.get("parent_station_id"));
-  const stationManagerEmail = clean(formData.get("station_manager_email"))?.toLowerCase() ?? null;
-  const stationReportingEmail = stationManagerEmail ?? clusterManagerEmail;
+  const stationManagerEmail = required(formData.get("station_manager_email"), "Manager").toLowerCase();
+  const stationReportingEmail = stationManagerEmail;
   const hideFromLocationList = formData.get("hide_from_location_list") === "on";
   const address = [addressLine1, addressLine2, city, state, postalCode].filter(Boolean).join(", ");
   const accessProfiles = await locationAccessProfiles(stationReportingEmail, companyId);
@@ -571,8 +555,6 @@ export async function createLocation(formData: FormData) {
     city,
     state,
     region,
-    aom,
-    cluster_manager: clusterManager,
     cluster: null,
     postal_code: postalCode,
     latitude,
@@ -609,21 +591,16 @@ export async function updateLocation(formData: FormData) {
   const addressLine1 = required(formData.get("address_line1"), "Address line 1");
   const addressLine2 = clean(formData.get("address_line2"));
   const city = clean(formData.get("city"));
-  const state = clean(formData.get("state"));
+  const state = indiaStateCode(required(formData.get("state"), "State"));
+  if (!state) throw new Error("Select a valid state");
   const region = required(formData.get("region"), "Region").toUpperCase();
-  const aomEmail = clean(formData.get("aom_email"))?.toLowerCase() ?? null;
-  const clusterManagerEmail = required(formData.get("cluster_manager_email"), "Cluster Manager").toLowerCase();
-  const [aom, clusterManager] = await Promise.all([
-    hierarchyUserName(aomEmail, companyId),
-    hierarchyUserName(clusterManagerEmail, companyId)
-  ]);
   const postalCode = clean(formData.get("postal_code"));
   const latitude = optionalCoordinate(formData.get("latitude"), "Latitude", -90, 90);
   const longitude = optionalCoordinate(formData.get("longitude"), "Longitude", -180, 180);
   const stationEmail = clean(formData.get("station_email"));
   const parentStationId = clean(formData.get("parent_station_id"));
-  const stationManagerEmail = clean(formData.get("station_manager_email"))?.toLowerCase() ?? null;
-  const stationReportingEmail = stationManagerEmail ?? clusterManagerEmail;
+  const stationManagerEmail = required(formData.get("station_manager_email"), "Manager").toLowerCase();
+  const stationReportingEmail = stationManagerEmail;
   const isActive = formData.get("is_active") !== "inactive";
   const hideFromLocationList = formData.get("hide_from_location_list") === "on";
   const address = [addressLine1, addressLine2, city, state, postalCode].filter(Boolean).join(", ");
@@ -649,8 +626,6 @@ export async function updateLocation(formData: FormData) {
       city,
       state,
       region,
-      aom,
-      cluster_manager: clusterManager,
       cluster: null,
       postal_code: postalCode,
       latitude,

@@ -8,6 +8,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { indiaStateCode, indiaStateOptions } from "@/lib/india-states";
 import {
   createLocation,
   deleteLocation,
@@ -133,45 +134,6 @@ function locationsForAuthorization(locations: LocationRow[], authorization: Awai
     return false;
   });
 }
-
-const stateOptions = [
-  { value: "AP", label: "AP", helper: "Andhra Pradesh" },
-  { value: "AR", label: "AR", helper: "Arunachal Pradesh" },
-  { value: "AS", label: "AS", helper: "Assam" },
-  { value: "BR", label: "BR", helper: "Bihar" },
-  { value: "CG", label: "CG", helper: "Chhattisgarh" },
-  { value: "GA", label: "GA", helper: "Goa" },
-  { value: "GJ", label: "GJ", helper: "Gujarat" },
-  { value: "HR", label: "HR", helper: "Haryana" },
-  { value: "HP", label: "HP", helper: "Himachal Pradesh" },
-  { value: "JH", label: "JH", helper: "Jharkhand" },
-  { value: "KA", label: "KA", helper: "Karnataka" },
-  { value: "KL", label: "KL", helper: "Kerala" },
-  { value: "MP", label: "MP", helper: "Madhya Pradesh" },
-  { value: "MH", label: "MH", helper: "Maharashtra" },
-  { value: "MN", label: "MN", helper: "Manipur" },
-  { value: "ML", label: "ML", helper: "Meghalaya" },
-  { value: "MZ", label: "MZ", helper: "Mizoram" },
-  { value: "NL", label: "NL", helper: "Nagaland" },
-  { value: "OD", label: "OD", helper: "Odisha" },
-  { value: "PB", label: "PB", helper: "Punjab" },
-  { value: "RJ", label: "RJ", helper: "Rajasthan" },
-  { value: "SK", label: "SK", helper: "Sikkim" },
-  { value: "TN", label: "TN", helper: "Tamil Nadu" },
-  { value: "TS", label: "TS", helper: "Telangana" },
-  { value: "TR", label: "TR", helper: "Tripura" },
-  { value: "UP", label: "UP", helper: "Uttar Pradesh" },
-  { value: "UK", label: "UK", helper: "Uttarakhand" },
-  { value: "WB", label: "WB", helper: "West Bengal" },
-  { value: "AN", label: "AN", helper: "Andaman and Nicobar Islands" },
-  { value: "CH", label: "CH", helper: "Chandigarh" },
-  { value: "DN", label: "DN", helper: "Dadra and Nagar Haveli and Daman and Diu" },
-  { value: "DL", label: "DL", helper: "Delhi" },
-  { value: "JK", label: "JK", helper: "Jammu and Kashmir" },
-  { value: "LA", label: "LA", helper: "Ladakh" },
-  { value: "LD", label: "LD", helper: "Lakshadweep" },
-  { value: "PY", label: "PY", helper: "Puducherry" }
-];
 
 async function loadMasterData(companyId: string) {
   if (!supabaseAdmin) {
@@ -362,10 +324,6 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       label: user.full_name || user.email || "Unnamed user",
       helper: [userRoles.find((item) => item.id === user.role_id)?.name || user.role, user.email].filter(Boolean).join(" - ")
     }));
-  const hierarchyUserEmail = (value: string | null) => {
-    const normalized = String(value ?? "").trim().toLowerCase();
-    return users.find((user) => normalizeEmail(user.email) === normalized || String(user.full_name ?? "").trim().toLowerCase() === normalized)?.email ?? "";
-  };
   const parentStationOptions = locations
     .filter((location) => location.id !== editLocation?.id && location.is_active && location.location_models?.code !== "XPT")
     .map((location) => ({
@@ -421,16 +379,14 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               <label>Address line 1<input className="field" name="address_line1" placeholder="Enter address line 1" required /></label>
               <label>Address line 2<input className="field" name="address_line2" placeholder="Enter address line 2" /></label>
               <label>City<input className="field" name="city" placeholder="Enter city" /></label>
-              <label>State<input className="field" name="state" placeholder="Enter full state name" required /></label>
+              <label>State<SearchableSelect name="state" options={[...indiaStateOptions]} placeholder="Select state" required /></label>
               <label>Region<input className="field" name="region" placeholder="Example: KL, AP, ODCG" required /></label>
-              <label>AOM<SearchableSelect name="aom_email" options={hierarchyUserOptions} placeholder="Select AOM" /></label>
-              <label>Cluster Manager<SearchableSelect name="cluster_manager_email" options={hierarchyUserOptions} placeholder="Select cluster manager" required /></label>
-              <label>Station Manager / TL<SearchableSelect name="station_manager_email" options={hierarchyUserOptions} placeholder="Select station manager or TL" /></label>
+              <label>Manager<SearchableSelect name="station_manager_email" options={hierarchyUserOptions} placeholder="Select manager" required /></label>
               <label>Postal code<input className="field" name="postal_code" placeholder="Enter postal code" /></label>
               <label>Latitude<input className="field" name="latitude" placeholder="Enter latitude" step="any" type="number" min="-90" max="90" /></label>
               <label>Longitude<input className="field" name="longitude" placeholder="Enter longitude" step="any" type="number" min="-180" max="180" /></label>
               <label>Location email<input className="field" name="station_email" placeholder="Enter location email" /></label>
-              <label>Shipment parent station<SearchableSelect name="parent_station_id" options={parentStationOptions} placeholder="Only for XPT locations" /></label>
+              <label>Parent Location<SearchableSelect name="parent_station_id" options={parentStationOptions} placeholder="Select parent location" /></label>
               <label className="check-row span-3">
                 <input name="hide_from_location_list" type="checkbox" />
                 <span>Hide from location list</span>
@@ -462,16 +418,14 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               <label>Address line 1<input className="field" name="address_line1" defaultValue={editLocation.address_line1 || editLocation.address || ""} required /></label>
               <label>Address line 2<input className="field" name="address_line2" defaultValue={editLocation.address_line2 ?? ""} /></label>
               <label>City<input className="field" name="city" defaultValue={editLocation.city ?? ""} /></label>
-              <label>State<input className="field" name="state" defaultValue={editLocation.state ?? ""} required /></label>
+              <label>State<SearchableSelect name="state" options={[...indiaStateOptions]} defaultValue={indiaStateCode(editLocation.state)} placeholder="Select state" required /></label>
               <label>Region<input className="field" name="region" defaultValue={editLocation.region ?? ""} required /></label>
-              <label>AOM<SearchableSelect name="aom_email" options={hierarchyUserOptions} defaultValue={hierarchyUserEmail(editLocation.aom)} placeholder="Select AOM" /></label>
-              <label>Cluster Manager<SearchableSelect name="cluster_manager_email" options={hierarchyUserOptions} defaultValue={hierarchyUserEmail(editLocation.cluster_manager)} placeholder="Select cluster manager" required /></label>
-              <label>Station Manager / TL<SearchableSelect name="station_manager_email" options={hierarchyUserOptions} defaultValue={editLocation.station_manager_email ?? ""} placeholder="Select station manager or TL" /></label>
+              <label>Manager<SearchableSelect name="station_manager_email" options={hierarchyUserOptions} defaultValue={editLocation.station_manager_email ?? ""} placeholder="Select manager" required /></label>
               <label>Postal code<input className="field" name="postal_code" defaultValue={editLocation.postal_code ?? ""} /></label>
               <label>Latitude<input className="field" name="latitude" defaultValue={editLocation.latitude ?? ""} step="any" type="number" min="-90" max="90" /></label>
               <label>Longitude<input className="field" name="longitude" defaultValue={editLocation.longitude ?? ""} step="any" type="number" min="-180" max="180" /></label>
               <label>Location email<input className="field" name="station_email" defaultValue={editLocation.station_email ?? ""} /></label>
-              <label>Shipment parent station<SearchableSelect name="parent_station_id" options={parentStationOptions} defaultValue={editLocation.parent_station_id ?? ""} placeholder="Only for XPT locations" /></label>
+              <label>Parent Location<SearchableSelect name="parent_station_id" options={parentStationOptions} defaultValue={editLocation.parent_station_id ?? ""} placeholder="Select parent location" /></label>
               <label>Status
                 <select className="select" name="is_active" defaultValue={editLocation.is_active ? "active" : "inactive"}>
                   <option value="active">Active</option>

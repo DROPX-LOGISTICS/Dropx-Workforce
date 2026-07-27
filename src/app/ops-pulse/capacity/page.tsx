@@ -106,7 +106,9 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
   const scopeStations = permittedLocations.map((location) => ({ code: location.station_code, name: location.station_name || location.city || location.station_code, cluster: location.cluster || "", region: location.region || "" }));
   const selectedStation = selectedStationCode ? views.find((row) => row.stationCode === selectedStationCode) ?? null : null;
   const selectedAlert = selectedStation?.alerts.find((alert) => alert.id === searchParams?.alert) ?? null;
-  const alerts = views.flatMap((row) => row.alerts).sort((a, b) =>
+  const alerts = views.flatMap((row) => row.alerts)
+    .filter((alert) => alert.date === reportingDate)
+    .sort((a, b) =>
     Number(b.severity === "critical") - Number(a.severity === "critical") || b.date.localeCompare(a.date)
   );
   const aiDefaults = Object.fromEntries(views.map((row) => [row.stationCode, row.action]));

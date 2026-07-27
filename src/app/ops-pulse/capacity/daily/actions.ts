@@ -14,7 +14,7 @@ function integer(formData: FormData, name: string) {
   if (!raw) return { valid: true, value: null };
   const value = Number(raw);
   return Number.isInteger(value) && value >= 0
-    ? { valid: true, value: value === 0 ? null : value }
+    ? { valid: true, value }
     : { valid: false, value: null };
 }
 
@@ -68,7 +68,7 @@ export async function saveCapacityGroundUpdates(formData: FormData) {
     const source = sourceMap.get(stationCode);
     const sourceReady = Boolean(source && (Number(source.detail_active_ids) > 0 || Number(source.daily_count_active_ids) > 0 || Number(source.delivered) > 0));
     const systemIdsAtSave = sourceReady ? Number(source?.active_ids ?? 0) : null;
-    const hasGroundHeadcount = [regularBike, regularVan, adHocBike, adHocVan].some((value) => value != null && value > 0);
+    const hasGroundHeadcount = [regularBike, regularVan, adHocBike, adHocVan].some((value) => value != null);
     const classifiedIds = hasGroundHeadcount
       ? (regularBike ?? 0) + (regularVan ?? 0) + (adHocBike ?? 0) + (adHocVan ?? 0)
       : null;

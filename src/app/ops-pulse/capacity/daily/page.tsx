@@ -38,7 +38,8 @@ export default async function DailyCapacityPage({ searchParams }: { searchParams
   ]);
   const sourceMap = new Map((sourceResult.data ?? []).map((row) => [row.station_code, row]));
   const groundMap = new Map(groundResult.rows.map((row) => [row.stationCode, row]));
-  const positiveOrBlank = (value: number | null | undefined) => Number(value) > 0 ? Number(value) : null;
+  const savedValueOrBlank = (groundExists: boolean, value: number | null | undefined) =>
+    groundExists && value != null ? Number(value) : null;
   const rows = locations.filter((location) => codes.includes(location.station_code)).map((location) => {
     const source = sourceMap.get(location.station_code);
     const ground = groundMap.get(location.station_code);
@@ -48,14 +49,14 @@ export default async function DailyCapacityPage({ searchParams }: { searchParams
       region: location.region || "",
       cluster: location.cluster || "",
       inbound: Number(source?.inbound ?? 0),
-      saved: Boolean(ground && Number(ground.classifiedIds ?? 0) > 0),
-      assignedPackages: positiveOrBlank(ground?.assignedPackages),
-      regularBike: positiveOrBlank(ground?.regularBike),
-      regularVan: positiveOrBlank(ground?.regularVan),
-      regularVanVehicle: positiveOrBlank(ground?.regularVanVehicle),
-      adHocBike: positiveOrBlank(ground?.adHocBike),
-      adHocVanVehicle: positiveOrBlank(ground?.adHocVanVehicle),
-      adHocVan: positiveOrBlank(ground?.adHocVan),
+      saved: Boolean(ground),
+      assignedPackages: savedValueOrBlank(Boolean(ground), ground?.assignedPackages),
+      regularBike: savedValueOrBlank(Boolean(ground), ground?.regularBike),
+      regularVan: savedValueOrBlank(Boolean(ground), ground?.regularVan),
+      regularVanVehicle: savedValueOrBlank(Boolean(ground), ground?.regularVanVehicle),
+      adHocBike: savedValueOrBlank(Boolean(ground), ground?.adHocBike),
+      adHocVanVehicle: savedValueOrBlank(Boolean(ground), ground?.adHocVanVehicle),
+      adHocVan: savedValueOrBlank(Boolean(ground), ground?.adHocVan),
       updatedAt: ground?.updatedAt ?? null
     };
   });

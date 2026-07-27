@@ -1,6 +1,8 @@
 import { getAuthorization, hasPermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { loadCapacitySnapshot, type CapacityStationSnapshot } from "@/lib/ops-pulse/capacity-snapshot";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
+import { isAmazonEdspXptLocation } from "@/lib/ops-pulse/operating-context";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +31,55 @@ type StationSnapshot = {
 };
 function formatNumber(value: number, digits = 0) {
   return value.toLocaleString("en-IN", { maximumFractionDigits: digits, minimumFractionDigits: digits });
+}
+
+function capacityHelp() {
+  return "I’m DropX Ops AI. For Capacity, I can explain station SPR, headcount gaps, data freshness, ground-update readiness, peak flex and hiring evidence. Try “Why is GDRD under action?”, “Which stations need flex?” or “Is the ground data ready?”";
+}
+
+function capacityLine(row: CapacityStationSnapshot) {
+  const target = row.targetSpr == null ? "target not configured" : `target ${formatNumber(row.targetSpr, 1)}`;
+  const gap = row.modelledGap == null ? "gap unavailable" : `${row.modelledGap > 0 ? "+" : ""}${row.modelledGap} ${row.groundRegular == null ? "modelled" : "ground-based"} gap`;
+  const freshness = row.latestDate ? `as of ${row.latestDate}` : "source date unavailable";
+  return `${row.stationCode}: SPR ${formatNumber(row.spr, 1)} (${target}), ${gap}, ${row.decision.label}; ${freshness}.`;
+}
+
+function capacityAnswer(question: string, rows: CapacityStationSnapshot[], from: string, to: string) {
+  const q = question.toLowerCase();
+  if (!rows.length) return "No Amazon EDSP/XPT Capacity stations are available in your permitted scope.";
+  const scopeNote = `Capacity period ${from} to ${to}. SPR uses canonical workload (Amazon + SMD + SWA + C-return) divided by average road-active IDs.`;
+  if (/who are you|what can you do|help|capabilit/.test(q)) return capacityHelp();
+  if (/fresh|stale|data ready|source ready|missing data/.test(q)) {
+    const issues = rows.filter((row) => row.dataState !== "ready");
+    return issues.length
+      ? `Capacity source issues:\n${issues.slice(0, 15).map((row) => `${row.stationCode}: ${row.dataState}${row.freshnessDays == null ? "" : ` (${row.freshnessDays} days behind)`}.`).join("\n")}\n${scopeNote}`
+      : `All ${rows.length} permitted Capacity stations have current source data. ${scopeNote}`;
+  }
+  if (/ground|matched|update ready/.test(q)) {
+    const pending = rows.filter((row) => !row.groundReady);
+    return pending.length
+      ? `${pending.length}/${rows.length} stations are not ground-ready:\n${pending.slice(0, 15).map((row) => `${row.stationCode}: ${row.decision.matchedDays}/${row.decision.minimumMatchedDays} required matched days.`).join("\n")}`
+      : `All ${rows.length} stations meet their configured ground-match gate.`;
+  }
+  if (/hire|hiring|permanent gap/.test(q)) {
+    const candidates = rows.filter((row) => row.decision.status === "hire_candidate");
+    return candidates.length
+      ? `Evidence-cleared hiring candidates:\n${candidates.map(capacityLine).join("\n")}\n${scopeNote}`
+      : `No station is currently evidence-cleared for permanent hiring. A positive modelled gap alone is not a hiring approval. ${scopeNote}`;
+  }
+  if (/flex|peak|temporary/.test(q)) {
+    const flex = rows.filter((row) => row.decision.peakFlex > 0).sort((a, b) => b.decision.peakFlex - a.decision.peakFlex);
+    return flex.length
+      ? `Peak-flex requirement:\n${flex.slice(0, 15).map((row) => `${row.stationCode}: +${row.decision.peakFlex} temporary resource${row.decision.peakFlex === 1 ? "" : "s"} at P90; ${row.decision.confidence} confidence.`).join("\n")}\n${scopeNote}`
+      : `No peak-flex requirement is calculated for the selected Capacity scope. ${scopeNote}`;
+  }
+  if (/why|explain|action|decision/.test(q)) {
+    return `${rows.slice(0, 12).map((row) => `${capacityLine(row)} ${row.action} Evidence: ${row.decision.sourceDays} source days, ${row.decision.matchedDays}/${row.decision.minimumMatchedDays} ground-matched days, ${row.decision.confidence} confidence.`).join("\n")}\n${scopeNote}`;
+  }
+  if (/\bspr\b|capacity|headcount|workforce|require/.test(q)) {
+    return `${rows.slice(0, 15).map(capacityLine).join("\n")}\n${scopeNote}`;
+  }
+  return capacityHelp();
 }
 function operationalAnswer(question: string, rows: StationSnapshot[], from: string, to: string) {
   const q = question.toLowerCase();
@@ -66,12 +117,32 @@ export async function POST(request: Request) {
   const question = String(body.question ?? "").trim().slice(0, 800);
   if (!question) return Response.json({ error: "Ask a question." }, { status: 400 });
   const companyId = requireCompanyId(authorization);
+  if (/who are you|what can you do|help|capabilit/i.test(question)) {
+    return Response.json({ answer: capacityHelp(), mode: "help" });
+  }
   const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const mentioned = locationResult.locations.filter((location) => new RegExp(`\\b${location.station_code}\\b`, "i").test(question));
   const locations = mentioned.length ? mentioned : locationResult.locations;
   const codes = locations.map((row) => row.station_code);
   const ids = locations.map((row) => row.id);
   if (!codes.length) return Response.json({ error: "No permitted stations are available." }, { status: 403 });
+  const pageContext = String(body.context ?? "");
+  const capacityIntent = /capacity|\bspr\b|headcount|workforce|hiring|ground update|peak flex/i.test(question)
+    || pageContext.includes("/ops-pulse/capacity");
+  if (capacityIntent) {
+    const capacityPermitted = locationResult.locations.filter(isAmazonEdspXptLocation);
+    const capacityMentioned = capacityPermitted.filter((location) => new RegExp(`\\b${location.station_code}\\b`, "i").test(question));
+    const capacityLocations = capacityMentioned.length ? capacityMentioned : capacityPermitted;
+    const reportingDate = indiaDate(-1);
+    const snapshot = await loadCapacitySnapshot({ companyId, locations: capacityLocations, reportingDate });
+    return Response.json({
+      answer: capacityAnswer(question, snapshot.stations, snapshot.from, reportingDate),
+      mode: "capacity",
+      asOf: snapshot.scopeDataDate,
+      coverage: snapshot.scopeCoverage,
+      stations: snapshot.stations.map((row) => row.stationCode)
+    });
+  }
   const to = indiaDate();
   const from = /\b(today|today's|current day)\b/i.test(question) ? to : /\byesterday\b/i.test(question) ? indiaDate(-1) : indiaDate(-30);
   const rangeTo = /\byesterday\b/i.test(question) ? indiaDate(-1) : to;

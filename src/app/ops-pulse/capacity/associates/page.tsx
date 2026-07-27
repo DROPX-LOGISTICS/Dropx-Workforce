@@ -13,7 +13,7 @@ import { isAmazonEdspXptLocation } from "@/lib/ops-pulse/operating-context";
 import { associateIdentityKey, isScientificAssociateId, normalizeAssociateName } from "@/lib/ops-pulse/associate-identity";
 
 export const dynamic = "force-dynamic";
-type SearchParams = { from?: string; to?: string; preset?: string; station?: string; stations?: string; band?: string; sort?: string; dir?: string; view?: string };
+type SearchParams = { from?: string; to?: string; preset?: string; station?: string; stations?: string; band?: string; sort?: string; dir?: string; view?: string; page?: string };
 function today() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()); }
 function shift(value: string, days: number) { const date = new Date(`${value}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); }
 function yesterday() { return shift(today(), -1); }
@@ -131,6 +131,10 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
     const compared = typeof left === "string" ? left.localeCompare(String(right)) : Number(left) - Number(right);
     return dir === "asc" ? compared : -compared;
   });
+  const pageSize = 100;
+  const pageCount = Math.max(1, Math.ceil(associates.length / pageSize));
+  const currentPage = Math.min(pageCount, Math.max(1, Number.parseInt(String(searchParams?.page ?? "1"), 10) || 1));
+  const shownAssociates = associates.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const lowCount = allAssociates.filter((row) => row.level === "low").length;
   const targetCount = allAssociates.filter((row) => row.level === "target").length;
   const highCount = allAssociates.filter((row) => row.level === "high").length;
@@ -202,6 +206,13 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
     return `/ops-pulse/capacity/associates?${next.toString()}`;
   };
   const sortMark = (key: string) => sort === key ? (dir === "asc" ? "↑" : "↓") : "↕";
+  const pageHref = (page: number) => {
+    const next = new URLSearchParams(paramsForSort);
+    next.set("sort", sort);
+    next.set("dir", dir);
+    next.set("page", String(page));
+    return `/ops-pulse/capacity/associates?${next.toString()}`;
+  };
   const scopeStations = locations.map((location) => ({ code: location.station_code, name: location.station_name || location.city || location.station_code, cluster: location.cluster || "", region: location.region || "" }));
 
   return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">
@@ -213,8 +224,8 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
 
     {activeView === "productivity" ? <>
       <section className="performance-summary-grid"><article><span>All associates</span><strong>{allAssociates.length}</strong><small>{`${queryLocations.length} stations`}</small></article><article><span>Below target</span><strong>{lowCount}</strong><small>Average below station target SPR</small></article><article><span>Target to safe</span><strong>{targetCount}</strong><small>Within configured range</small></article><article><span>Above safe</span><strong>{highCount}</strong><small>Average above safe SPR</small></article></section>
-      <section className="panel"><div className="panel-head"><div><h2>Associate productivity</h2><p className="subtle">SPR = workload ÷ active days. Select an associate for the daily trend.</p></div><span className="status-pill neutral">{associates.length} shown</span></div><div className="table-wrap"><table className="capacity-daily-table"><thead><tr><th><a href={sortHref("name")}>Associate <small>{sortMark("name")}</small></a></th><th><a href={sortHref("station")}>Station <small>{sortMark("station")}</small></a></th><th><a href={sortHref("days")}>Active days <small>{sortMark("days")}</small></a></th><th><a href={sortHref("delivered")}>Total workload <small>{sortMark("delivered")}</small></a></th><th><a href={sortHref("average")}>Average SPR <small>{sortMark("average")}</small></a></th><th><a href={sortHref("peak")}>Peak <small>{sortMark("peak")}</small></a></th><th><a href={sortHref("highDays")}>High days <small>{sortMark("highDays")}</small></a></th><th><a href={sortHref("level")}>SPR position <small>{sortMark("level")}</small></a></th></tr></thead><tbody>
-        {associates.map((row) => <tr key={associateIdentityKey(row.stationCode, row.id, row.name)}><td><a className="capacity-station-link" href={`/ops-pulse/capacity/associates/${encodeURIComponent(row.id)}?station=${row.stationCode}&from=${start}&to=${end}&name=${encodeURIComponent(row.name)}`}><strong>{row.name}</strong><small>{row.id}</small></a></td><td><a href={`/ops-pulse/capacity/${row.stationCode}`}>{row.stationCode}</a></td><td>{row.dates}</td><td>{fmt(row.delivered)}</td><td><strong className={row.level === "high" ? "metric-bad-text" : row.level === "low" ? "metric-warn-text" : row.level === "target" ? "metric-good-text" : ""}>{fmt(row.average, 1)}</strong></td><td>{fmt(row.peak)}</td><td>{row.highDays}</td><td><span className={`capacity-decision ${row.level === "high" ? "risk" : row.level === "low" ? "unconfigured" : row.level === "target" ? "balanced" : "no_data"}`}>{row.level === "high" ? `Above ${fmt(row.safe ?? 0, 1)}` : row.level === "low" ? `Below ${fmt(row.target ?? 0, 1)}` : row.level === "target" ? `${fmt(row.target ?? 0, 1)}–${fmt(row.safe ?? 0, 1)}` : "Target required"}</span></td></tr>)}
+      <section className="panel"><div className="panel-head"><div><h2>Associate productivity</h2><p className="subtle">SPR = workload ÷ active days. Select an associate for the daily trend.</p></div><div className="capacity-table-pager"><span>{associates.length ? `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, associates.length)} of ${associates.length}` : "0 associates"}</span>{currentPage > 1 ? <a href={pageHref(currentPage - 1)}>←</a> : <i>←</i>}<b>{currentPage}/{pageCount}</b>{currentPage < pageCount ? <a href={pageHref(currentPage + 1)}>→</a> : <i>→</i>}</div></div><div className="table-wrap"><table className="capacity-daily-table"><thead><tr><th><a href={sortHref("name")}>Associate <small>{sortMark("name")}</small></a></th><th><a href={sortHref("station")}>Station <small>{sortMark("station")}</small></a></th><th><a href={sortHref("days")}>Active days <small>{sortMark("days")}</small></a></th><th><a href={sortHref("delivered")}>Total workload <small>{sortMark("delivered")}</small></a></th><th><a href={sortHref("average")}>Average SPR <small>{sortMark("average")}</small></a></th><th><a href={sortHref("peak")}>Peak <small>{sortMark("peak")}</small></a></th><th><a href={sortHref("highDays")}>High days <small>{sortMark("highDays")}</small></a></th><th><a href={sortHref("level")}>SPR position <small>{sortMark("level")}</small></a></th></tr></thead><tbody>
+        {shownAssociates.map((row) => <tr key={associateIdentityKey(row.stationCode, row.id, row.name)}><td><a className="capacity-station-link" href={`/ops-pulse/capacity/associates/${encodeURIComponent(row.id)}?station=${row.stationCode}&from=${start}&to=${end}&name=${encodeURIComponent(row.name)}`}><strong>{row.name}</strong><small>{row.id}</small></a></td><td><a href={`/ops-pulse/capacity/${row.stationCode}`}>{row.stationCode}</a></td><td>{row.dates}</td><td>{fmt(row.delivered)}</td><td><strong className={row.level === "high" ? "metric-bad-text" : row.level === "low" ? "metric-warn-text" : row.level === "target" ? "metric-good-text" : ""}>{fmt(row.average, 1)}</strong></td><td>{fmt(row.peak)}</td><td>{row.highDays}</td><td><span className={`capacity-decision ${row.level === "high" ? "risk" : row.level === "low" ? "unconfigured" : row.level === "target" ? "balanced" : "no_data"}`}>{row.level === "high" ? `Above ${fmt(row.safe ?? 0, 1)}` : row.level === "low" ? `Below ${fmt(row.target ?? 0, 1)}` : row.level === "target" ? `${fmt(row.target ?? 0, 1)}–${fmt(row.safe ?? 0, 1)}` : "Target required"}</span></td></tr>)}
         {!associates.length ? <tr><td className="empty-cell" colSpan={8}>No associates match these filters.</td></tr> : null}
       </tbody></table></div></section>
     </> : <>

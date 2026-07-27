@@ -135,7 +135,9 @@ export function buildCapacityPlanningDecision({
   const daily: CapacityPlanningDay[] = dates.map((date) => {
     const row = rowByDate.get(date)!;
     const ground = groundByDate.get(date);
-    const classified = ground && num(ground.classifiedIds) > 0 ? num(ground.classifiedIds) : null;
+    // A saved zero is an explicit ground confirmation (for example, no operation);
+    // absence of a saved row is the only "not updated" state.
+    const classified = ground ? num(ground.classifiedIds) : null;
     const regular = classified != null ? regularCount(ground) : null;
     const adHoc = classified != null ? adHocCount(ground) : null;
     const workload = num(row.delivered);

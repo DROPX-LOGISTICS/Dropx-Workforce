@@ -19,9 +19,9 @@ export async function submitCapacityRequest(formData: FormData) {
   const to = String(formData.get("to") ?? "");
   const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   if (!stationCode || !locationResult.locations.some((location) => location.station_code === stationCode) || !reason || (!adHocIds && !requestedAdditional)) {
-    redirect(`/capacity/${encodeURIComponent(stationCode)}?from=${from}&to=${to}&error=${encodeURIComponent("Enter ad hoc IDs or additional headcount required, with a reason.")}`);
+    redirect(`/ops-pulse/capacity/${encodeURIComponent(stationCode)}?from=${from}&to=${to}&error=${encodeURIComponent("Enter ad hoc IDs or additional headcount required, with a reason.")}`);
   }
-  if (!supabaseAdmin) redirect(`/capacity/${stationCode}?error=Service+unavailable`);
+  if (!supabaseAdmin) redirect(`/ops-pulse/capacity/${stationCode}?error=Service+unavailable`);
   const createdAt = new Date().toISOString();
   const sourceCode = `capacity_request_${stationCode.toLowerCase()}_${createdAt.replace(/[^0-9]/g, "")}`;
   const result = await supabaseAdmin.from("report_import_master").insert({
@@ -38,7 +38,7 @@ export async function submitCapacityRequest(formData: FormData) {
     updated_at: createdAt
   });
   revalidatePath(`/ops-pulse/capacity/${stationCode}`);
-  redirect(`/capacity/${stationCode}?from=${from}&to=${to}&${result.error ? `error=${encodeURIComponent(result.error.message)}` : "saved=1"}`);
+  redirect(`/ops-pulse/capacity/${stationCode}?from=${from}&to=${to}&${result.error ? `error=${encodeURIComponent(result.error.message)}` : "saved=1"}`);
 }
 
 export async function saveDailyCapacityReview(formData: FormData) {
@@ -56,9 +56,9 @@ export async function saveDailyCapacityReview(formData: FormData) {
   const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const validStation = locationResult.locations.some((location) => location.station_code === stationCode);
   if (!validStation || !/^\d{4}-\d{2}-\d{2}$/.test(reviewDate) || regularPresent > regularStrength || !note) {
-    redirect(`/capacity/${stationCode}?from=${from}&to=${to}&review_date=${reviewDate}&error=${encodeURIComponent("Enter valid regular strength, regular present and a review note. Regular present cannot exceed strength.")}`);
+    redirect(`/ops-pulse/capacity/${stationCode}?from=${from}&to=${to}&review_date=${reviewDate}&error=${encodeURIComponent("Enter valid regular strength, regular present and a review note. Regular present cannot exceed strength.")}`);
   }
-  if (!supabaseAdmin) redirect(`/capacity/${stationCode}?error=Service+unavailable`);
+  if (!supabaseAdmin) redirect(`/ops-pulse/capacity/${stationCode}?error=Service+unavailable`);
   const shipment = await loadCapacityStationDays(companyId, [stationCode], reviewDate, reviewDate);
   const systemRoadIds = Number(shipment.data[0]?.active_ids ?? 0);
   const actualActive = regularPresent + adHocPresent;
@@ -84,5 +84,5 @@ export async function saveDailyCapacityReview(formData: FormData) {
   }, { onConflict: "company_id,source_code" });
   revalidatePath(`/ops-pulse/capacity/${stationCode}`);
   revalidatePath("/ops-pulse/capacity");
-  redirect(`/capacity/${stationCode}?from=${from}&to=${to}&review_date=${reviewDate}&${result.error ? `error=${encodeURIComponent(result.error.message)}` : "review_saved=1"}`);
+  redirect(`/ops-pulse/capacity/${stationCode}?from=${from}&to=${to}&review_date=${reviewDate}&${result.error ? `error=${encodeURIComponent(result.error.message)}` : "review_saved=1"}`);
 }

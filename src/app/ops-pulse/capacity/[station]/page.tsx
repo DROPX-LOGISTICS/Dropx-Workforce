@@ -16,11 +16,12 @@ import { submitCapacityRequest } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = { from?: string; to?: string; saved?: string; error?: string };
+type SearchParams = { from?: string; to?: string; saved?: string; error?: string; service?: string };
 type RequestRow = { id: string; description: string | null; updated_at: string };
 type RateCardRow = { id: string; name: string; pay_type: string | null; status: string; effective_from: string; effective_to: string | null; rate_card_lines?: Array<{ metric_code: string; rate: number | string; unit: string | null }> | null };
 type StationMapRow = { latitude: number | string | null; longitude: number | string | null; postal_code: string | null; address: string | null };
 function today() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()); }
+function yesterday() { const date = new Date(`${today()}T00:00:00Z`); date.setUTCDate(date.getUTCDate() - 1); return date.toISOString().slice(0, 10); }
 function validDate(value: unknown) { return /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")); }
 function num(value: unknown) { const parsed = Number(value ?? 0); return Number.isFinite(parsed) ? parsed : 0; }
 function fmt(value: number, digits = 0) { return value.toLocaleString("en-IN", { maximumFractionDigits: digits }); }
@@ -32,12 +33,13 @@ export default async function CapacityStationPage({ params, searchParams }: { pa
   const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const location = locationResult.locations.find((entry) => entry.station_code === stationCode);
   if (!location) notFound();
-  const end = validDate(searchParams?.to) ? String(searchParams?.to) : today();
+  const end = validDate(searchParams?.to) ? String(searchParams?.to) : yesterday();
   const start = validDate(searchParams?.from) ? String(searchParams?.from) : `${end.slice(0, 8)}01`;
+  const showService = searchParams?.service === "1";
   const [stationDailyResult, associateResult, pincodeResult, ruleResult, sizeResult, requestResult, reviewResult, stationMapResult, rateCardResult, capacityMapResult, serviceRouteResult] = await Promise.all([
     loadCapacityStationDays(companyId, [stationCode], start, end),
     loadCapacityAssociateDays(companyId, [stationCode], start, end),
-    loadCapacityPincodes(companyId, stationCode, start, end),
+    showService ? loadCapacityPincodes(companyId, stationCode, start, end) : { data: [], error: null },
     loadCapacityRules(companyId),
     loadShipmentSizeRule(companyId),
     supabaseAdmin ? supabaseAdmin.from("report_import_master").select("id,description,updated_at")
@@ -45,14 +47,14 @@ export default async function CapacityStationPage({ params, searchParams }: { pa
       .like("source_code", `capacity_request_${stationCode.toLowerCase()}_%`).order("updated_at", { ascending: false }).limit(10)
       : { data: [] as RequestRow[], error: null },
     loadCapacityGroundUpdates(companyId, start, end),
-    supabaseAdmin ? supabaseAdmin.from("stations").select("latitude,longitude,postal_code,address")
+    showService && supabaseAdmin ? supabaseAdmin.from("stations").select("latitude,longitude,postal_code,address")
       .eq("company_id", companyId).eq("station_code", stationCode).maybeSingle()
       : { data: null as StationMapRow | null, error: null },
-    supabaseAdmin ? supabaseAdmin.from("rate_cards").select("id,name,pay_type,status,effective_from,effective_to,rate_card_lines(metric_code,rate,unit)")
+    showService && supabaseAdmin ? supabaseAdmin.from("rate_cards").select("id,name,pay_type,status,effective_from,effective_to,rate_card_lines(metric_code,rate,unit)")
       .eq("station_id", location.id).in("status", ["active", "approved"]).order("effective_from", { ascending: false }).limit(10)
       : { data: [] as RateCardRow[], error: null },
-    loadCapacityRegionMaps(companyId),
-    loadCapacityServiceRoutes(companyId, stationCode)
+    showService ? loadCapacityRegionMaps(companyId) : { rows: [], error: null },
+    showService ? loadCapacityServiceRoutes(companyId, stationCode) : { rows: [], error: null }
   ]);
   const rows = associateResult.data ?? [];
   const daily = (stationDailyResult.data ?? []).map((row) => {
@@ -109,7 +111,7 @@ export default async function CapacityStationPage({ params, searchParams }: { pa
     map.matchField === "station" ? stationCode : map.matchField === "state" ? location.state : location.region
   ));
   const capacityMapUrl = capacityMap ? capacityMapEmbedUrl(capacityMap.mapUrl) : null;
-  const stationLayer = capacityMap ? await loadGoogleMyMapsStationLayer(companyId, capacityMap.mapUrl, stationCode) : { features: [], error: null };
+  const stationLayer = showService && capacityMap ? await loadGoogleMyMapsStationLayer(companyId, capacityMap.mapUrl, stationCode) : { features: [], error: null };
   const fallbackAction = !daily.length ? "No shipment-ID data is available for this date range."
     : requiredIds != null && requiredIds > averageIds ? `Average demand requires ${requiredIds} IDs including ${buffer}% buffer; current daily average is ${fmt(averageIds, 1)}.`
     : requiredIds != null ? `Average road-active capacity covers demand; validate ad hoc IDs before closing hiring requirements.` : "Configure target SPR in Capacity Master to calculate required IDs.";
@@ -133,13 +135,13 @@ export default async function CapacityStationPage({ params, searchParams }: { pa
       <div className="panel"><div className="panel-head"><div><h2>Operations update</h2><p className="subtle">Record ad hoc IDs or request additional capacity with ground context.</p></div></div><form action={submitCapacityRequest} className="capacity-request-form"><input type="hidden" name="station_code" value={stationCode}/><input type="hidden" name="from" value={start}/><input type="hidden" name="to" value={end}/><label>Ad hoc IDs used<input name="ad_hoc_ids" type="number" min="0" defaultValue="0"/></label><label>Additional IDs requested<input name="requested_additional" type="number" min="0" defaultValue="0"/></label><label className="wide">Reason / ground update<textarea name="reason" maxLength={1000} placeholder="Example: Three regular IDs are ad hoc and may not continue next week; request three permanent associates." required/></label><button className="button">Submit update</button></form>
       <div className="capacity-request-log">{requests.map((request) => <article key={String(request.id)}><strong>Request {Number(request.requestedAdditional ?? 0) ? `+${request.requestedAdditional} IDs` : "update"}</strong><span>{String(request.reason ?? "")}</span><small>{String(request.createdAt ?? request.updatedAt ?? "").slice(0, 10)} · {Number(request.adHocIds ?? 0)} ad hoc IDs</small></article>)}{!requests.length ? <p className="empty-cell">No operations updates yet.</p> : null}</div></div>
     </section>
-    <section className="panel capacity-area-pay"><div className="panel-head"><div><h2>Service-area intelligence</h2><p className="subtle">Use the approved map for service boundaries and the pincode table for actionable volume and ID demand.</p></div><a className="button secondary compact" href="/master/capacity">Manage map data</a></div>
+    {showService ? <><section className="panel capacity-area-pay"><div className="panel-head"><div><h2>Service-area intelligence</h2><p className="subtle">Use the approved map for service boundaries and the pincode table for actionable volume and ID demand.</p></div><a className="button secondary compact" href="/master/capacity">Manage map data</a></div>
       <div className="capacity-area-grid"><div className="capacity-map-card">
       {stationLayer.features.length ? <CapacityStationLayerMap stationCode={stationCode} features={stationLayer.features}/> : capacityMapUrl ? <iframe title={capacityMap?.name || `${stationCode} service-area map`} loading="lazy" referrerPolicy="no-referrer-when-downgrade" src={capacityMapUrl}/> : latitude && longitude ? <iframe title={`${stationCode} station map`} loading="lazy" referrerPolicy="no-referrer-when-downgrade" src={`https://www.google.com/maps?q=${latitude},${longitude}&z=12&output=embed`}/> : <div className="capacity-map-empty"><strong>Map not configured</strong><span>Add a station or region map in Capacity Master.</span></div>}
       <div className="capacity-map-meta"><strong>{capacityMap?.name || `${stationCode} service area`}</strong><span>{stationMap?.address || location.city || "Station coordinates not configured"}</span>{capacityMap ? <a href={capacityMap.mapUrl} target="_blank" rel="noreferrer">Open full map</a> : null}</div>
       </div>
       <div className="capacity-rate-list">{rateCards.flatMap((card) => (card.rate_card_lines ?? []).map((line) => <article key={`${card.id}-${line.metric_code}`}><div><strong>{line.metric_code.replace(/_/g, " ")}</strong><span>{card.name} · {card.pay_type || "Pay type not set"}</span></div><b>₹{fmt(num(line.rate), 2)} {line.unit || ""}</b></article>))}{!rateCards.length ? <div className="capacity-map-empty"><strong>No approved station rate card</strong><span>Configure bike/van and delivery rates before the hiring team uses pay guidance.</span></div> : null}<div className="capacity-source-gap"><strong>{pincodes.length} delivery pincodes detected</strong><span>{pincodeDelivered ? `${fmt(pincodeDelivered)} shipments mapped by pincode. ` : ""}{weightReady ? `${fmt(weightReady)} have weight; ` : ""}{dimensionReady ? `${fmt(dimensionReady)} have complete dimensions. ` : ""}Vehicle type is not present in the source, so bike/van capacity still requires an Area Capacity Master.</span></div></div>
     </div>{serviceRouteResult.rows.length ? <CapacityServiceMap routes={serviceRouteResult.rows} station={latitude && longitude ? { lat: latitude, lng: longitude, label: stationCode } : null}/> : null}</section>
-    <section className="panel"><div className="panel-head"><div><h2>Service-area demand</h2><p className="subtle">Action view: volume concentration, serving IDs and shipment-size mix. Select a count to inspect tracking IDs.</p></div><span className="status-pill neutral">{pincodes.length} pincodes</span></div><div className="table-wrap"><table className="capacity-daily-table"><thead><tr><th>Pincode</th><th>Delivered</th><th>Station share</th><th>Serving IDs</th><th>Volumetric</th><th>Small</th><th>Unclassified</th></tr></thead><tbody>{pincodes.slice(0, 25).map((row) => <tr key={row.postal_code}><td><strong>{row.postal_code}</strong></td><td><a href={`/ops-pulse/capacity/shipments?station=${stationCode}&pincode=${row.postal_code}&from=${start}&to=${end}`}>{fmt(num(row.delivered))}</a></td><td>{pincodeDelivered ? `${fmt(num(row.delivered) / pincodeDelivered * 100, 1)}%` : "—"}</td><td>{fmt(num(row.active_ids))}</td><td><a href={`/ops-pulse/capacity/shipments?station=${stationCode}&pincode=${row.postal_code}&size=volumetric&from=${start}&to=${end}`}>{fmt(num(row.volumetric))} · {num(row.delivered) ? `${fmt(num(row.volumetric) / num(row.delivered) * 100, 1)}%` : "—"}</a></td><td><a href={`/ops-pulse/capacity/shipments?station=${stationCode}&pincode=${row.postal_code}&size=small&from=${start}&to=${end}`}>{fmt(num(row.small))} · {num(row.delivered) ? `${fmt(num(row.small) / num(row.delivered) * 100, 1)}%` : "—"}</a></td><td className={num(row.unclassified) ? "metric-bad-text" : ""}>{fmt(num(row.unclassified))}</td></tr>)}{!pincodes.length ? <tr><td className="empty-cell" colSpan={7}>No pincode-level shipment facts are available for this range.</td></tr> : null}</tbody></table></div></section>
+    <section className="panel"><div className="panel-head"><div><h2>Service-area demand</h2><p className="subtle">Action view: volume concentration, serving IDs and shipment-size mix. Select a count to inspect tracking IDs.</p></div><span className="status-pill neutral">{pincodes.length} pincodes</span></div><div className="table-wrap"><table className="capacity-daily-table"><thead><tr><th>Pincode</th><th>Delivered</th><th>Station share</th><th>Serving IDs</th><th>Volumetric</th><th>Small</th><th>Unclassified</th></tr></thead><tbody>{pincodes.slice(0, 25).map((row) => <tr key={row.postal_code}><td><strong>{row.postal_code}</strong></td><td><a href={`/ops-pulse/capacity/shipments?station=${stationCode}&pincode=${row.postal_code}&from=${start}&to=${end}`}>{fmt(num(row.delivered))}</a></td><td>{pincodeDelivered ? `${fmt(num(row.delivered) / pincodeDelivered * 100, 1)}%` : "—"}</td><td>{fmt(num(row.active_ids))}</td><td><a href={`/ops-pulse/capacity/shipments?station=${stationCode}&pincode=${row.postal_code}&size=volumetric&from=${start}&to=${end}`}>{fmt(num(row.volumetric))} · {num(row.delivered) ? `${fmt(num(row.volumetric) / num(row.delivered) * 100, 1)}%` : "—"}</a></td><td><a href={`/ops-pulse/capacity/shipments?station=${stationCode}&pincode=${row.postal_code}&size=small&from=${start}&to=${end}`}>{fmt(num(row.small))} · {num(row.delivered) ? `${fmt(num(row.small) / num(row.delivered) * 100, 1)}%` : "—"}</a></td><td className={num(row.unclassified) ? "metric-bad-text" : ""}>{fmt(num(row.unclassified))}</td></tr>)}{!pincodes.length ? <tr><td className="empty-cell" colSpan={7}>No pincode-level shipment facts are available for this range.</td></tr> : null}</tbody></table></div></section></> : <section className="panel capacity-lazy-section"><div><span>Optional detail</span><h2>Service area, rates and pincode demand</h2><p>Load maps and shipment-level service-area evidence only when needed.</p></div><a className="button secondary" href={`/ops-pulse/capacity/${stationCode}?from=${start}&to=${end}&service=1`}>Load service detail</a></section>}
   </div></AppShell>;
 }

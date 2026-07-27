@@ -12803,6 +12803,383 @@ td strong,
   }
 }
 
+/* Capacity control tower */
+.capacity-control-tower {
+  --capacity-navy: #162033;
+  --capacity-orange: #f15a24;
+}
+
+.capacity-readiness-banner {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #dbe2ea;
+  border-left: 4px solid #12b76a;
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(90px, 130px)) minmax(260px, 1fr);
+  margin-bottom: 12px;
+  padding: 11px 14px;
+}
+
+.capacity-readiness-banner.warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+  border-left-color: #f59e0b;
+}
+
+.capacity-readiness-banner > div {
+  display: grid;
+  gap: 2px;
+}
+
+.capacity-readiness-banner span {
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.capacity-readiness-banner strong {
+  color: #172033;
+  font-size: 14px;
+}
+
+.capacity-readiness-banner p {
+  color: #475467;
+  font-size: 11px;
+  line-height: 1.45;
+  margin: 0;
+  text-align: right;
+}
+
+.capacity-hero-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.capacity-hero-grid article {
+  background: #fff;
+  border: 1px solid #e5eaf0;
+  border-radius: 14px;
+  display: grid;
+  gap: 4px;
+  min-height: 92px;
+  padding: 14px 16px;
+}
+
+.capacity-hero-grid span {
+  color: #667085;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.capacity-hero-grid strong {
+  color: #172033;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.capacity-hero-grid small {
+  color: #8a98ad;
+  font-size: 10px;
+}
+
+.capacity-control-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, .85fr);
+  margin-bottom: 12px;
+}
+
+.capacity-control-grid .panel,
+.capacity-scope-trend {
+  margin: 0;
+}
+
+.capacity-chart-legend {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.capacity-chart-legend span {
+  align-items: center;
+  color: #667085;
+  display: inline-flex;
+  font-size: 9px;
+  font-weight: 750;
+  gap: 5px;
+}
+
+.capacity-chart-legend span::before {
+  background: #98a2b3;
+  border-radius: 999px;
+  content: "";
+  height: 7px;
+  width: 7px;
+}
+
+.capacity-chart-legend .risk::before { background: #ef4444; }
+.capacity-chart-legend .warn::before { background: #f59e0b; }
+.capacity-chart-legend .balanced::before { background: #22c55e; }
+.capacity-chart-legend .workload::before { background: #f15a24; }
+.capacity-chart-legend .required::before { background: #172033; }
+
+.capacity-portfolio-chart {
+  background:
+    linear-gradient(to right, rgb(245 158 11 / 6%), transparent 48%, rgb(239 68 68 / 6%)),
+    linear-gradient(to top, rgb(34 197 94 / 5%), transparent);
+  border-top: 1px solid #eef1f5;
+  height: 290px;
+  overflow: hidden;
+  position: relative;
+}
+
+.capacity-portfolio-chart .axis {
+  background: #d7dee8;
+  display: block;
+  position: absolute;
+}
+
+.capacity-portfolio-chart .axis.vertical {
+  bottom: 18px;
+  left: 50%;
+  top: 18px;
+  width: 1px;
+}
+
+.capacity-portfolio-chart .axis.horizontal {
+  height: 1px;
+  left: 22px;
+  right: 22px;
+  top: 50%;
+}
+
+.capacity-portfolio-chart .axis-label {
+  color: #98a2b3;
+  font-size: 8px;
+  font-weight: 800;
+  position: absolute;
+  text-transform: uppercase;
+  z-index: 1;
+}
+
+.capacity-portfolio-chart .y-high { left: 8px; top: 8px; }
+.capacity-portfolio-chart .y-low { bottom: 8px; left: 8px; }
+.capacity-portfolio-chart .x-left { bottom: 8px; left: 42%; }
+.capacity-portfolio-chart .x-right { bottom: 8px; right: 8px; }
+
+.capacity-portfolio-bubble {
+  align-items: center;
+  background: #22c55e;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgb(15 23 42 / 14%);
+  color: #fff;
+  display: flex;
+  font-size: 7px;
+  font-weight: 900;
+  justify-content: center;
+  position: absolute;
+  text-decoration: none;
+  transform: translate(-50%, -50%);
+  transition: transform .14s ease, box-shadow .14s ease;
+  z-index: 2;
+}
+
+.capacity-portfolio-bubble:hover {
+  box-shadow: 0 8px 20px rgb(15 23 42 / 25%);
+  transform: translate(-50%, -50%) scale(1.12);
+  z-index: 4;
+}
+
+.capacity-portfolio-bubble.risk { background: #ef4444; }
+.capacity-portfolio-bubble.warn,
+.capacity-portfolio-bubble.surplus { background: #f59e0b; }
+.capacity-portfolio-bubble.unconfigured { background: #94a3b8; }
+
+.capacity-action-queue .panel-head a {
+  color: #e94f16;
+  font-size: 10px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.capacity-action-list {
+  display: grid;
+}
+
+.capacity-action-list > a {
+  align-items: center;
+  border-top: 1px solid #eef1f5;
+  color: inherit;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  min-height: 48px;
+  padding: 8px 13px;
+  text-decoration: none;
+}
+
+.capacity-action-list > a:hover { background: #fafbfc; }
+
+.capacity-action-code {
+  background: #dcfae6;
+  border-radius: 8px;
+  color: #067647;
+  font-size: 9px;
+  font-weight: 900;
+  padding: 7px 4px;
+  text-align: center;
+}
+
+.capacity-action-code.risk { background: #fee4e2; color: #b42318; }
+.capacity-action-code.warn,
+.capacity-action-code.surplus { background: #fef0c7; color: #b54708; }
+.capacity-action-code.unconfigured { background: #eef2f6; color: #475467; }
+
+.capacity-action-list span:nth-child(2) {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.capacity-action-list strong { font-size: 10px; }
+.capacity-action-list small {
+  color: #667085;
+  display: block;
+  font-size: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.capacity-action-list b { color: #98a2b3; }
+
+.capacity-scope-trend {
+  margin-bottom: 12px;
+}
+
+.capacity-trend-chart {
+  border-top: 1px solid #eef1f5;
+  padding: 10px 16px 8px;
+}
+
+.capacity-trend-chart svg {
+  height: 150px;
+  overflow: visible;
+  width: 100%;
+}
+
+.capacity-trend-chart line {
+  stroke: #edf1f5;
+  stroke-width: 1;
+}
+
+.capacity-trend-chart polyline {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.capacity-trend-chart polyline.workload { stroke: #f15a24; }
+.capacity-trend-chart polyline.required { stroke: #172033; stroke-dasharray: 5 4; }
+
+.capacity-trend-dates {
+  color: #98a2b3;
+  display: grid;
+  font-size: 8px;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  text-align: center;
+}
+
+.capacity-control-table { min-width: 1320px; }
+
+.capacity-data-state {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 9px;
+  font-weight: 850;
+  padding: 4px 7px;
+}
+
+.capacity-data-state.ready { background: #dcfae6; color: #067647; }
+.capacity-data-state.stale { background: #fef0c7; color: #b54708; }
+.capacity-data-state.missing { background: #fee4e2; color: #b42318; }
+
+.capacity-table-pager {
+  align-items: center;
+  color: #667085;
+  display: flex;
+  font-size: 10px;
+  gap: 7px;
+}
+
+.capacity-table-pager a,
+.capacity-table-pager i {
+  align-items: center;
+  border: 1px solid #dbe2ea;
+  border-radius: 7px;
+  color: #172033;
+  display: inline-flex;
+  font-style: normal;
+  height: 28px;
+  justify-content: center;
+  text-decoration: none;
+  width: 28px;
+}
+
+.capacity-table-pager i {
+  color: #c4cbd5;
+}
+
+.capacity-lazy-section {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 18px;
+}
+
+.capacity-lazy-section > div {
+  display: grid;
+  gap: 3px;
+}
+
+.capacity-lazy-section span {
+  color: #e94f16;
+  font-size: 9px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.capacity-lazy-section h2,
+.capacity-lazy-section p {
+  margin: 0;
+}
+
+.capacity-lazy-section p {
+  color: #667085;
+  font-size: 11px;
+}
+
+@media (max-width: 1100px) {
+  .capacity-readiness-banner {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .capacity-readiness-banner p {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+  .capacity-hero-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .capacity-control-grid { grid-template-columns: 1fr; }
+}
+
 .capacity-sort-button {
   align-items: center;
   background: transparent;

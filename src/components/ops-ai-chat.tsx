@@ -19,7 +19,15 @@ export function OpsAiChat() {
     setMessages((current) => [...current, { role: "user", text }]);
     setQuestion("");
     setLoading(true);
-    const result = await fetch("/api/ops-pulse/ai-chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: text }) }).then((response) => response.json()).catch(() => ({ error: "Unable to reach Ops AI." }));
+    const result = await fetch("/api/ops-pulse/ai-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: text,
+        context: window.location.pathname,
+        history: messages.slice(-6)
+      })
+    }).then((response) => response.json()).catch(() => ({ error: "Unable to reach Ops AI." }));
     setMessages((current) => [...current, { role: "assistant", text: result.answer || result.error || "No answer returned." }]);
     setLoading(false);
   }

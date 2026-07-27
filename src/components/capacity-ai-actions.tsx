@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext } from "react";
 
 export type CapacityAiFact = {
   stationCode: string;
@@ -33,26 +33,10 @@ export function CapacityAiActionProvider({
   defaults: Record<string, string>;
   facts: CapacityAiFact[];
 }) {
-  const [actions, setActions] = useState(defaults);
-  const body = useMemo(() => JSON.stringify({ facts, defaults }), [defaults, facts]);
-
-  useEffect(() => {
-    if (!facts.length) return;
-    const controller = new AbortController();
-    fetch("/api/ops-pulse/capacity/actions", {
-      body,
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-      signal: controller.signal
-    }).then((response) => response.ok ? response.json() : null)
-      .then((payload) => {
-        if (payload?.actions) setActions((current) => ({ ...current, ...payload.actions }));
-      })
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, [body, facts.length]);
-
-  return <CapacityActionContext.Provider value={actions}>{children}</CapacityActionContext.Provider>;
+  // Capacity decisions remain deterministic and auditable. The interactive AI
+  // explains these facts but never rewrites the operational action.
+  void facts;
+  return <CapacityActionContext.Provider value={defaults}>{children}</CapacityActionContext.Provider>;
 }
 
 export function CapacityAiAction({ stationCode }: { stationCode: string }) {

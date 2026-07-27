@@ -237,6 +237,15 @@ function findValueIncludes(raw: RawRecord, fragments: string[]) {
   return entry?.[1] ?? "";
 }
 
+function findValueIncludesPrioritized(raw: RawRecord, fragments: string[]) {
+  const entries = Object.entries(raw);
+  for (const fragment of fragments.map(metricKey)) {
+    const entry = entries.find(([label]) => metricKey(label).includes(fragment));
+    if (entry) return entry[1];
+  }
+  return "";
+}
+
 function rowHash(raw: RawRecord) {
   const stableRaw = Object.keys(raw).sort().reduce<Record<string, string>>((acc, column) => {
     acc[column] = raw[column];
@@ -409,10 +418,14 @@ function parseAmazon(raw: RawRecord, rowNumber: number): NormalizedImport | null
   const externalWorkerId = clean(findValue(raw, ["holder_employee_id", "Holder Employee ID", "Provider ID", "Driver ID", "DA ID", "Associate ID"]));
   if (!workDate || !stationCode) return null;
 
-  const delivered = toNumber(findValueIncludes(raw, ["finaldeliverycountexcludingswasmdsmd2", "finaldeliverycountexcludingswasmdsmd20", "finaldeliverycount", "delivered"]));
-  const smd = toNumber(findValueIncludes(raw, ["overalldeliveredsmd"]));
-  const smd2 = toNumber(findValueIncludes(raw, ["overalldeliveredsmd2", "overalldeliveredsmd20"]));
-  const swa = toNumber(findValueIncludes(raw, ["overalldeliveredswa"])) + toNumber(findValueIncludes(raw, ["overalldeliveredswaconsumable"]));
+  const delivered = toNumber(
+    findValueIncludesPrioritized(raw, ["finaldeliverycountexcludingswasmdsmd2", "finaldeliverycountexcludingswasmdsmd20", "finaldeliverycount"])
+    || findValue(raw, ["Delivered"])
+  );
+  const smd = toNumber(findValue(raw, ["Overall Delivered SMD"]));
+  const smd2 = toNumber(findValue(raw, ["Overall Delivered SMD2", "Overall Delivered SMD 2.0", "Overall Delivered SMD2.0"]));
+  const swa = toNumber(findValue(raw, ["Overall Delivered SWA"]))
+    + toNumber(findValue(raw, ["Overall Delivered SWA Consumable", "Overall Delivered SWA-Consumable"]));
   const shipmentType = clean(findValue(raw, ["Shipment Type", "Type"]));
   const finalCReturn = toNumber(findValue(raw, ["final_creturn_count", "Final CReturn Count", "C Return", "C_Return"]));
   const amazonDelivery = delivered + smd + smd2;
@@ -430,6 +443,7 @@ function parseAmazon(raw: RawRecord, rowNumber: number): NormalizedImport | null
       ...amazonWeekInfo(workDate),
       amazon_delivery: amazonDelivery,
       assigned_count: assignedCount,
+      base_amazon_delivery: delivered,
       client: "Amazon",
       c_return: cReturn,
       final_creturn_count: finalCReturn,
@@ -438,6 +452,8 @@ function parseAmazon(raw: RawRecord, rowNumber: number): NormalizedImport | null
       provider_employee_id: externalWorkerId || `ROW-${rowNumber}`,
       provider_employee_name: findValue(raw, ["Name", "Associate Name", "Driver Name"]),
       shipment_type: shipmentType,
+      smd_delivery: smd,
+      smd2_delivery: smd2,
       swa_delivery: swa,
       total_activity: totalActivity,
       total_delivery: totalDelivery,

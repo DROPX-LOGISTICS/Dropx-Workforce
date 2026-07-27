@@ -297,15 +297,22 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
     ? "Pending"
     : selectedClosure?.deposit_check_status ?? "Locked";
   const canManagerReview = auditAllowed;
-  const activeStep = ["1", "2", "3", "4"].includes(String(searchParams?.step)) ? Number(searchParams?.step) : 1;
+  const requestedStep = ["1", "2", "3", "4"].includes(String(searchParams?.step)) ? Number(searchParams?.step) : 1;
+  const rosterReady = rows.length > 0;
+  const cashReady = savedRows.length > 0;
+  const activeStep = requestedStep >= 4 && !driverCleared
+    ? cashReady ? 3 : rosterReady ? 2 : 1
+    : requestedStep >= 3 && !cashReady
+      ? rosterReady ? 2 : 1
+      : requestedStep >= 2 && !rosterReady
+        ? 1
+        : requestedStep;
   const stepHref = (step: number) => currentHref({
     date: result.businessDate,
     location: defaultLocationId,
     status: searchParams?.status ?? "",
     step: String(step)
   });
-  const rosterReady = rows.length > 0;
-  const cashReady = savedRows.length > 0;
   return (
     <AppShell active="COD" pageCode="cod_executive_reconciliation">
       <PageHead

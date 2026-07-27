@@ -17,6 +17,10 @@ function isCleanOpsPath(path: string) {
   return path === "/" || CLEAN_OPS_ROOTS.some((root) => path === root || path.startsWith(`${root}/`));
 }
 
+function isAssetPath(path: string) {
+  return /\.[a-z0-9]{2,8}$/i.test(path);
+}
+
 function encodeCookieValue(value: string) {
   const bytes = new TextEncoder().encode(value);
   let binary = "";
@@ -68,7 +72,7 @@ export async function middleware(request: NextRequest) {
     !path.startsWith("/api/") &&
     !path.startsWith("/auth/") &&
     !path.startsWith("/_next/") &&
-    !path.includes(".")
+    !isAssetPath(path)
   ) {
     return NextResponse.redirect(new URL("/", "https://dashboard.dropxlogistics.com"));
   }
@@ -83,7 +87,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("https://admin-panel.dropxlogistics.com/", request.url));
   }
 
-  if (path === "/login" || path.startsWith("/api/") || path.startsWith("/auth/") || path.startsWith("/_next/") || path.includes(".")) {
+  if (path === "/login" || path.startsWith("/api/") || path.startsWith("/auth/") || path.startsWith("/_next/") || isAssetPath(path)) {
     return NextResponse.next();
   }
 

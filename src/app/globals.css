@@ -11971,7 +11971,7 @@ td strong,
 
 .capacity-scope-filter {
   position: relative;
-  width: min(280px, 100%);
+  width: min(190px, 100%);
   z-index: 24;
 }
 
@@ -11985,8 +11985,8 @@ td strong,
   gap: 2px 8px;
   grid-template-columns: 1fr auto;
   list-style: none;
-  min-height: 48px;
-  padding: 7px 11px;
+  min-height: 38px;
+  padding: 5px 9px;
 }
 
 .capacity-scope-filter > summary::-webkit-details-marker {
@@ -11995,14 +11995,14 @@ td strong,
 
 .capacity-scope-filter > summary span {
   color: #64748b;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
   letter-spacing: .06em;
   text-transform: uppercase;
 }
 
 .capacity-scope-filter > summary strong {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .capacity-scope-filter > summary i {
@@ -12015,8 +12015,8 @@ td strong,
   border: 1px solid #dbe2ea;
   border-radius: 12px;
   box-shadow: 0 18px 45px rgb(15 23 42 / 16%);
-  min-width: min(760px, calc(100vw - 360px));
-  padding: 12px;
+  min-width: min(340px, calc(100vw - 32px));
+  padding: 9px;
   position: absolute;
   right: 0;
   top: calc(100% + 7px);
@@ -12026,7 +12026,7 @@ td strong,
   display: grid;
   gap: 7px;
   grid-template-columns: 1fr auto auto;
-  margin-bottom: 10px;
+  margin-bottom: 7px;
 }
 
 .capacity-scope-search input,
@@ -12035,7 +12035,8 @@ td strong,
   border: 1px solid #dbe2ea;
   border-radius: 8px;
   font: inherit;
-  padding: 8px 10px;
+  min-width: 0;
+  padding: 7px 8px;
 }
 
 .capacity-scope-search button {
@@ -12043,53 +12044,43 @@ td strong,
   font-weight: 750;
 }
 
-.capacity-scope-groups {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: .75fr 1fr 1.35fr;
-  max-height: 340px;
-}
-
-.capacity-scope-groups section {
+.capacity-station-options {
   border: 1px solid #edf0f4;
   border-radius: 9px;
+  max-height: 270px;
   overflow: auto;
-  padding: 7px;
+  padding: 5px;
 }
 
-.capacity-scope-groups h4 {
-  color: #64748b;
-  font-size: 10px;
-  letter-spacing: .06em;
-  margin: 3px 5px 7px;
-  text-transform: uppercase;
-}
-
-.capacity-scope-groups label {
+.capacity-station-options label {
   align-items: center;
   border-radius: 7px;
   display: flex;
   gap: 8px;
-  padding: 7px 5px;
+  padding: 6px 5px;
 }
 
-.capacity-scope-groups label:hover {
+.capacity-station-options label:hover {
   background: #f8fafc;
 }
 
-.capacity-scope-groups label span {
+.capacity-station-options label span {
   display: grid;
   gap: 1px;
+  min-width: 0;
 }
 
-.capacity-scope-groups label strong {
+.capacity-station-options label strong {
   font-size: 11px;
 }
 
-.capacity-scope-groups label small,
-.capacity-scope-groups p {
+.capacity-station-options label small,
+.capacity-station-options p {
   color: #64748b;
   font-size: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .capacity-scope-popover footer {
@@ -12888,10 +12879,6 @@ td strong,
 }
 
 @media (max-width: 1100px) {
-  .capacity-scope-popover {
-    min-width: min(720px, calc(100vw - 40px));
-  }
-
   .capacity-detail-grid {
     grid-template-columns: 1fr;
   }
@@ -12931,9 +12918,6 @@ td strong,
     right: auto;
   }
 
-  .capacity-scope-groups {
-    grid-template-columns: 1fr;
-  }
 }
 
 .form-grid label:has(.profile-verification-inline) {

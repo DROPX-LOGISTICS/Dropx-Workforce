@@ -106,8 +106,8 @@ function normalizeAadhaar(value: FormDataEntryValue | null) {
 function normalizePan(value: FormDataEntryValue | null) {
   const text = String(value ?? "").trim().toUpperCase();
   if (!text) return null;
-  if (!/^[A-Z]{3}P[A-Z][0-9]{4}[A-Z]$/.test(text)) {
-    throw new Error("PAN must be 10 characters and the 4th character must be P.");
+  if (!/^[A-Z0-9]{10}$/.test(text)) {
+    throw new Error("PAN must contain exactly 10 letters or digits.");
   }
   return text;
 }
@@ -116,6 +116,36 @@ function normalizeAlphaNum(value: FormDataEntryValue | null, label: string) {
   const text = String(value ?? "").trim().toUpperCase();
   if (!text) return null;
   if (!/^[A-Z0-9]+$/.test(text)) throw new Error(`${label} can contain only letters and numbers.`);
+  return text;
+}
+
+function normalizeAlphaNumLength(
+  value: FormDataEntryValue | null,
+  label: string,
+  minLength: number,
+  maxLength: number
+) {
+  const text = String(value ?? "").trim().toUpperCase();
+  if (!text) return null;
+  if (!/^[A-Z0-9]+$/.test(text) || text.length < minLength || text.length > maxLength) {
+    const length = minLength === maxLength ? `exactly ${minLength}` : `${minLength} to ${maxLength}`;
+    throw new Error(`${label} must contain ${length} letters or digits.`);
+  }
+  return text;
+}
+
+function normalizeDigitsLength(
+  value: FormDataEntryValue | null,
+  label: string,
+  minLength: number,
+  maxLength: number
+) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  if (!/^\d+$/.test(text) || text.length < minLength || text.length > maxLength) {
+    const length = minLength === maxLength ? `exactly ${minLength}` : `${minLength} to ${maxLength}`;
+    throw new Error(`${label} must contain ${length} digits.`);
+  }
   return text;
 }
 
@@ -317,23 +347,23 @@ export async function POST(request: Request) {
       date_of_birth: dateOfBirth,
       aadhaar_number: normalizeAadhaar(formData.get("aadhaar_number")),
       pan_number: normalizePan(formData.get("pan_number")),
-      eshram_uan: cleanDigits(formData.get("eshram_uan")),
+      eshram_uan: normalizeDigitsLength(formData.get("eshram_uan"), "eShram UAN", 12, 12),
       is_handicapped: cleanText(formData.get("is_handicapped")) === null ? null : cleanText(formData.get("is_handicapped")) === "true",
       address: cleanText(formData.get("address")),
       state: null,
-      pincode: cleanDigits(formData.get("pincode")),
+      pincode: normalizeDigitsLength(formData.get("pincode"), "Pincode", 6, 6),
       landmark: cleanText(formData.get("landmark")),
       state_code: cleanText(formData.get("state_code"))?.toUpperCase() ?? null,
       father_name: cleanText(formData.get("father_name")),
       blood_group: cleanText(formData.get("blood_group")),
-      bank_account_no: normalizeAlphaNum(formData.get("bank_account_no"), "Bank account no"),
-      ifsc: cleanText(formData.get("ifsc"))?.toUpperCase() ?? null,
+      bank_account_no: normalizeAlphaNumLength(formData.get("bank_account_no"), "Bank account number", 4, 30),
+      ifsc: normalizeAlphaNumLength(formData.get("ifsc"), "IFSC", 11, 11),
       emergency_contact_name: cleanText(formData.get("emergency_contact_name")),
-      emergency_contact_number: cleanDigits(formData.get("emergency_contact_number")),
+      emergency_contact_number: normalizeDigitsLength(formData.get("emergency_contact_number"), "Emergency contact number", 4, 30),
       emergency_contact_relation: cleanText(formData.get("emergency_contact_relation")),
-      driving_license_no: cleanText(formData.get("driving_license_no"))?.toUpperCase() ?? null,
+      driving_license_no: normalizeAlphaNumLength(formData.get("driving_license_no"), "Driving license number", 4, 30),
       driving_license_exp_date: normalizeDate(formData.get("driving_license_exp_date")),
-      vehicle_reg_no: cleanText(formData.get("vehicle_reg_no"))?.toUpperCase() ?? null,
+      vehicle_reg_no: normalizeAlphaNumLength(formData.get("vehicle_reg_no"), "Vehicle registration number", 4, 30),
       vehicle_reg_exp_date: normalizeDate(formData.get("vehicle_reg_exp_date")),
       vehicle_insurance_exp_date: normalizeDate(formData.get("vehicle_insurance_exp_date")),
       vehicle_pollution_exp_date: normalizeDate(formData.get("vehicle_pollution_exp_date")),
@@ -343,7 +373,7 @@ export async function POST(request: Request) {
       profile_completed_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-    const pfUan = normalizeAlphaNum(formData.get("pf_uan"), "PF UAN");
+    const pfUan = normalizeDigitsLength(formData.get("pf_uan"), "PF UAN", 12, 12);
     const pfAccountNo = normalizeAlphaNum(formData.get("pf_account_no"), "PF Account No");
     const esiNo = normalizeAlphaNum(formData.get("esi_no"), "ESI No");
     if (pfUan) updatePayload.pf_uan = pfUan;

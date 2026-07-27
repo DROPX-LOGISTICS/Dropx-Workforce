@@ -96,8 +96,8 @@ function requiredDigits(value: FormDataEntryValue | null, label: string) {
 
 function requiredPan(value: FormDataEntryValue | null) {
   const text = requiredText(value, "PAN number").toUpperCase();
-  if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(text)) {
-    throw new Error("PAN number format is invalid.");
+  if (!/^[A-Z0-9]{10}$/.test(text)) {
+    throw new Error("PAN must contain exactly 10 letters or digits.");
   }
   return text;
 }
@@ -113,8 +113,46 @@ function alphaNumValue(value: FormDataEntryValue | null, label: string, required
 }
 
 function requiredTwelveDigits(value: FormDataEntryValue | null, label: string) {
-  const text = requiredDigits(value, label);
+  const text = requiredText(value, label);
   if (!/^\d{12}$/.test(text)) throw new Error(`${label} must contain exactly 12 digits.`);
+  return text;
+}
+
+function digitsLengthValue(
+  value: FormDataEntryValue | null,
+  label: string,
+  minLength: number,
+  maxLength: number,
+  required = false
+) {
+  const text = cleanText(value);
+  if (!text) {
+    if (required) throw new Error(`${label} is required.`);
+    return null;
+  }
+  if (!/^\d+$/.test(text) || text.length < minLength || text.length > maxLength) {
+    const length = minLength === maxLength ? `exactly ${minLength}` : `${minLength} to ${maxLength}`;
+    throw new Error(`${label} must contain ${length} digits.`);
+  }
+  return text;
+}
+
+function alphaNumLengthValue(
+  value: FormDataEntryValue | null,
+  label: string,
+  minLength: number,
+  maxLength: number,
+  required = false
+) {
+  const text = cleanText(value)?.toUpperCase() ?? null;
+  if (!text) {
+    if (required) throw new Error(`${label} is required.`);
+    return null;
+  }
+  if (!/^[A-Z0-9]+$/.test(text) || text.length < minLength || text.length > maxLength) {
+    const length = minLength === maxLength ? `exactly ${minLength}` : `${minLength} to ${maxLength}`;
+    throw new Error(`${label} must contain ${length} letters or digits.`);
+  }
   return text;
 }
 
@@ -350,7 +388,7 @@ export async function POST(request: Request) {
     const isRequired = (key: string) => requiredFields.has(key);
     const textValue = (key: string, label: string) => isRequired(key) ? requiredText(formData.get(key), label) : cleanText(formData.get(key));
     const digitsValue = (key: string, label: string) => isRequired(key) ? requiredDigits(formData.get(key), label) : cleanDigits(formData.get(key));
-    const bankAccountValue = alphaNumValue(formData.get("bank_account_no"), "Bank account no", isRequired("bank_account_no"));
+    const bankAccountValue = alphaNumLengthValue(formData.get("bank_account_no"), "Bank account number", 4, 30, isRequired("bank_account_no"));
     const dateValue = (key: string, label: string) => normalizeDate(isRequired(key) ? requiredText(formData.get(key), label) : formData.get(key));
     const panValue = isRequired("pan_number") || cleanText(formData.get("pan_number")) ? requiredPan(formData.get("pan_number")) : null;
     const eshramValue = isRequired("eshram_uan") || cleanText(formData.get("eshram_uan")) ? requiredTwelveDigits(formData.get("eshram_uan"), "eShram UAN") : null;
@@ -363,7 +401,7 @@ export async function POST(request: Request) {
     const updatePayload: Record<string, unknown> = {
       gender: textValue("gender", "Gender"),
       date_of_birth: dateOfBirth,
-      aadhaar_number: digitsValue("aadhaar_number", "Aadhaar number"),
+      aadhaar_number: digitsLengthValue(formData.get("aadhaar_number"), "Aadhaar number", 12, 12, isRequired("aadhaar_number")),
       pan_number: panValue,
       eshram_uan: eshramValue,
       father_name: textValue("father_name", "Father name"),
@@ -371,19 +409,19 @@ export async function POST(request: Request) {
       is_handicapped: textValue("is_handicapped", "Handicapped") === "true",
       address: textValue("address", "Address"),
       state_code: textValue("state_code", "State code")?.toUpperCase() ?? null,
-      postal_pin: digitsValue("pincode", "Pincode"),
+      postal_pin: digitsLengthValue(formData.get("pincode"), "Pincode", 6, 6, isRequired("pincode")),
       landmark: textValue("landmark", "Landmark"),
       bank_account_no: bankAccountValue,
-      ifsc_code: textValue("ifsc", "IFSC")?.toUpperCase() ?? null,
+      ifsc_code: alphaNumLengthValue(formData.get("ifsc"), "IFSC", 11, 11, isRequired("ifsc")),
       pf_uan: pfUanValue,
       pf_account_no: pfAccountValue,
       esi_no: esiValue,
       emergency_contact_name: textValue("emergency_contact_name", "Emergency contact name"),
-      emergency_contact_number: digitsValue("emergency_contact_number", "Emergency contact number"),
+      emergency_contact_number: digitsLengthValue(formData.get("emergency_contact_number"), "Emergency contact number", 4, 30, isRequired("emergency_contact_number")),
       emergency_contact_relation: textValue("emergency_contact_relation", "Emergency relation"),
-      driving_license_no: textValue("driving_license_no", "Driving license no")?.toUpperCase() ?? null,
+      driving_license_no: alphaNumLengthValue(formData.get("driving_license_no"), "Driving license number", 4, 30, isRequired("driving_license_no")),
       driving_license_exp_date: dateValue("driving_license_exp_date", "DL expiry date"),
-      vehicle_reg_no: textValue("vehicle_reg_no", "Vehicle reg no")?.toUpperCase() ?? null,
+      vehicle_reg_no: alphaNumLengthValue(formData.get("vehicle_reg_no"), "Vehicle registration number", 4, 30, isRequired("vehicle_reg_no")),
       vehicle_reg_exp_date: dateValue("vehicle_reg_exp_date", "Reg expiry date"),
       vehicle_insurance_exp_date: dateValue("vehicle_insurance_exp_date", "Vehicle Insurance expiry"),
       vehicle_pollution_exp_date: dateValue("vehicle_pollution_exp_date", "Pollution expiry date"),

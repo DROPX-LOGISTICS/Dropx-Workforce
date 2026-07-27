@@ -2,6 +2,11 @@ import { createHash } from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { connectSessionCookieName, findConnectAccounts } from "../../../../src/lib/connect-auth";
+import {
+  deleteProfileDraft,
+  draftVerificationValues,
+  loadProfileDraft
+} from "../../../../src/lib/profile-drafts";
 import { saveProfileVerifications } from "../../../../src/lib/profile-verifications";
 import { supabaseAdmin } from "../../../../src/lib/supabase-admin";
 import { loadWorkforceCategoryRules } from "../../../../src/lib/workforce-category-rules";
@@ -321,6 +326,11 @@ export async function POST(request: Request) {
     if (!["pending", "returned"].includes(currentStatus)) {
       throw new Error("Profile cannot be edited after submission.");
     }
+    const draft = await loadProfileDraft({
+      accountId: account.id,
+      companyId: account.companyId,
+      profileType: account.profileType
+    });
     const designationResult = currentExecutive.designation
       ? await supabaseAdmin
         .from("designations")
@@ -391,11 +401,12 @@ export async function POST(request: Request) {
       .eq("company_id", account.companyId);
     if (profileUpdateResult.error) throw new Error(profileUpdateResult.error.message);
 
+    const verificationValues = formData.getAll("profile_verification_results");
     await saveProfileVerifications({
       accountId: account.id,
       companyId: account.companyId,
       profileType: account.profileType,
-      values: formData.getAll("profile_verification_results")
+      values: verificationValues.length ? verificationValues : draftVerificationValues(draft)
     });
 
     const uploads = await Promise.all([
@@ -406,7 +417,20 @@ export async function POST(request: Request) {
       uploadExecutiveFile(formData.get("dl_back"), account.companyId, account.id, "dl-back"),
       uploadExecutiveFile(formData.get("profile_photo"), account.companyId, account.id, "photo")
     ]);
-    const [aadhaarFrontPath, aadhaarBackPath, panUploadPath, dlFrontPath, dlBackPath, profilePhotoPath] = uploads;
+    const [
+      uploadedAadhaarFrontPath,
+      uploadedAadhaarBackPath,
+      uploadedPanPath,
+      uploadedDlFrontPath,
+      uploadedDlBackPath,
+      uploadedProfilePhotoPath
+    ] = uploads;
+    const aadhaarFrontPath = uploadedAadhaarFrontPath ?? draft?.filePaths.aadhaar_front ?? null;
+    const aadhaarBackPath = uploadedAadhaarBackPath ?? draft?.filePaths.aadhaar_back ?? null;
+    const panUploadPath = uploadedPanPath ?? draft?.filePaths.pan_upload ?? null;
+    const dlFrontPath = uploadedDlFrontPath ?? draft?.filePaths.dl_front ?? null;
+    const dlBackPath = uploadedDlBackPath ?? draft?.filePaths.dl_back ?? null;
+    const profilePhotoPath = uploadedProfilePhotoPath ?? draft?.filePaths.profile_photo ?? null;
     const uploadPayload: Record<string, unknown> = {};
     if (aadhaarFrontPath) uploadPayload.aadhaar_front_path = aadhaarFrontPath;
     if (aadhaarBackPath) uploadPayload.aadhaar_back_path = aadhaarBackPath;
@@ -425,6 +449,22 @@ export async function POST(request: Request) {
       }
     }
     const executive = await loadExecutive(account.id, account.companyId, account.profileType);
+    await deleteProfileDraft({
+      accountId: account.id,
+      companyId: account.companyId,
+      profileType: account.profileType
+    });
+    const obsoleteDraftPaths = [
+      uploadedAadhaarFrontPath ? draft?.filePaths.aadhaar_front : null,
+      uploadedAadhaarBackPath ? draft?.filePaths.aadhaar_back : null,
+      uploadedPanPath ? draft?.filePaths.pan_upload : null,
+      uploadedDlFrontPath ? draft?.filePaths.dl_front : null,
+      uploadedDlBackPath ? draft?.filePaths.dl_back : null,
+      uploadedProfilePhotoPath ? draft?.filePaths.profile_photo : null
+    ].filter((path): path is string => Boolean(path));
+    if (obsoleteDraftPaths.length) {
+      await supabaseAdmin.storage.from("employee-profile-documents").remove(obsoleteDraftPaths);
+    }
     return NextResponse.json({ ok: true, profile: await serializeExecutive(executive, account.profileType), notice: "Profile saved successfully." });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to save profile." }, { status: 400 });

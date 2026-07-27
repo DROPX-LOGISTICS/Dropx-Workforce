@@ -2,6 +2,11 @@ import { createHash } from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { connectSessionCookieName, findConnectAccounts } from "../../../../src/lib/connect-auth";
+import {
+  deleteProfileDraft,
+  draftVerificationValues,
+  loadProfileDraft
+} from "../../../../src/lib/profile-drafts";
 import { saveProfileVerifications } from "../../../../src/lib/profile-verifications";
 import { supabaseAdmin } from "../../../../src/lib/supabase-admin";
 import { loadWorkforceCategoryRules } from "../../../../src/lib/workforce-category-rules";
@@ -289,6 +294,11 @@ export async function POST(request: Request) {
     if (!["pending", "returned"].includes(currentStatus)) {
       throw new Error("Profile cannot be edited after submission.");
     }
+    const draft = await loadProfileDraft({
+      accountId: account.id,
+      companyId: account.companyId,
+      profileType: "employee"
+    });
     const manualReviewRequired = String(formData.get("manual_review_required") ?? "") === "true";
     const dateOfBirth = normalizeDate(formData.get("date_of_birth"));
     assertMinimumProfileAge(dateOfBirth);
@@ -339,7 +349,20 @@ export async function POST(request: Request) {
     if (pfUan) updatePayload.pf_uan = pfUan;
     if (pfAccountNo) updatePayload.pf_account_no = pfAccountNo;
     if (esiNo) updatePayload.esi_no = esiNo;
-    const [aadhaarFrontPath, aadhaarBackPath, panUploadPath, dlFrontPath, dlBackPath, profilePhotoPath] = uploads;
+    const [
+      uploadedAadhaarFrontPath,
+      uploadedAadhaarBackPath,
+      uploadedPanPath,
+      uploadedDlFrontPath,
+      uploadedDlBackPath,
+      uploadedProfilePhotoPath
+    ] = uploads;
+    const aadhaarFrontPath = uploadedAadhaarFrontPath ?? draft?.filePaths.aadhaar_front ?? null;
+    const aadhaarBackPath = uploadedAadhaarBackPath ?? draft?.filePaths.aadhaar_back ?? null;
+    const panUploadPath = uploadedPanPath ?? draft?.filePaths.pan_upload ?? null;
+    const dlFrontPath = uploadedDlFrontPath ?? draft?.filePaths.dl_front ?? null;
+    const dlBackPath = uploadedDlBackPath ?? draft?.filePaths.dl_back ?? null;
+    const profilePhotoPath = uploadedProfilePhotoPath ?? draft?.filePaths.profile_photo ?? null;
     if (aadhaarFrontPath) updatePayload.aadhaar_front_path = aadhaarFrontPath;
     if (aadhaarBackPath) updatePayload.aadhaar_back_path = aadhaarBackPath;
     if (panUploadPath) updatePayload.pan_upload_path = panUploadPath;
@@ -354,14 +377,31 @@ export async function POST(request: Request) {
       .eq("company_id", account.companyId);
     if (updateResult.error) throw new Error(updateResult.error.message);
 
+    const verificationValues = formData.getAll("profile_verification_results");
     await saveProfileVerifications({
       accountId: account.id,
       companyId: account.companyId,
       profileType: "employee",
-      values: formData.getAll("profile_verification_results")
+      values: verificationValues.length ? verificationValues : draftVerificationValues(draft)
     });
 
     const employee = await loadEmployee(account.id, account.companyId);
+    await deleteProfileDraft({
+      accountId: account.id,
+      companyId: account.companyId,
+      profileType: "employee"
+    });
+    const obsoleteDraftPaths = [
+      uploadedAadhaarFrontPath ? draft?.filePaths.aadhaar_front : null,
+      uploadedAadhaarBackPath ? draft?.filePaths.aadhaar_back : null,
+      uploadedPanPath ? draft?.filePaths.pan_upload : null,
+      uploadedDlFrontPath ? draft?.filePaths.dl_front : null,
+      uploadedDlBackPath ? draft?.filePaths.dl_back : null,
+      uploadedProfilePhotoPath ? draft?.filePaths.profile_photo : null
+    ].filter((path): path is string => Boolean(path));
+    if (obsoleteDraftPaths.length) {
+      await supabaseAdmin.storage.from("employee-profile-documents").remove(obsoleteDraftPaths);
+    }
     return NextResponse.json({ ok: true, profile: await serializeEmployee(employee), notice: "Profile saved successfully." });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to save profile." }, { status: 400 });

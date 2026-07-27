@@ -53,6 +53,14 @@ type Verification = {
   pollutionExpiryDate?: string;
 };
 
+type ProfileDraft = {
+  data: Record<string, string>;
+  verificationResults: Verification[];
+  uploads: Record<string, boolean>;
+  uploadUrls: Record<string, string>;
+  updatedAt: string;
+};
+
 const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const states = ["AN","AP","AR","AS","BR","CG","CH","DD","DL","DN","GA","GJ","HP","HR","JH","JK","KA","KL","LA","LD","MH","ML","MN","MP","MZ","NL","OD","PB","PY","RJ","SK","TN","TR","TS","UK","UP","WB"];
 const relations = ["Parent", "Spouse", "Child", "Other Relative", "Friend", "Other"];
@@ -82,6 +90,25 @@ const fieldValueKeys: Record<string, string> = {
   vehicle_insurance_exp_date: "insuranceExpiry",
   vehicle_pollution_exp_date: "pollutionExpiry"
 };
+const draftUploadSlots: Record<string, string> = {
+  aadhaar_front: "aadhaarFront",
+  aadhaar_back: "aadhaarBack",
+  pan_upload: "pan",
+  dl_front: "dlFront",
+  dl_back: "dlBack",
+  profile_photo: "photo"
+};
+
+function draftEditableValues(data: Record<string, string>) {
+  return Object.fromEntries(
+    Object.entries(data)
+      .filter(([key]) => key !== "has_pf_uan" && key !== "has_esi_no")
+      .map(([key, value]) => [
+        fieldValueKeys[key] ?? key.replace(/_([a-z])/g, (_, character) => character.toUpperCase()),
+        value
+      ])
+  );
+}
 
 function Spinner({ label = "Loading profile..." }: { label?: string }) {
   return <div className="dx-loader"><span /><small>{label}</small></div>;
@@ -215,6 +242,8 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     Promise.all([
@@ -223,13 +252,30 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
         if (!response.ok) throw new Error(payload.error);
         return payload.profile as Profile;
       }),
-      fetch(`/api/connect/verification?accountId=${account.id}&profileType=${account.profileType}`).then((response) => response.json())
-    ]).then(([next, checks]) => {
-      setProfile(next);
-      setValues(next.editable ?? {});
-      setPfAnswer(next.editable?.pfUan ? "yes" : "");
-      setEsiAnswer(next.editable?.esiNo ? "yes" : "");
-      setVerifications(Object.fromEntries((checks.verifications ?? []).map((item: Verification) => [item.kind, item])));
+      fetch(`/api/connect/verification?accountId=${account.id}&profileType=${account.profileType}`).then((response) => response.json()),
+      fetch(`/api/connect/profile-draft?accountId=${account.id}&profileType=${account.profileType}`).then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "Unable to load draft.");
+        return (payload.draft ?? null) as ProfileDraft | null;
+      })
+    ]).then(([nextProfile, checks, draft]) => {
+      const next = nextProfile as Profile;
+      const uploads = { ...next.uploads };
+      const uploadUrls = { ...next.uploadUrls };
+      if (draft) {
+        Object.entries(draftUploadSlots).forEach(([draftSlot, profileSlot]) => {
+          if (draft.uploads?.[draftSlot]) uploads[profileSlot] = true;
+          if (draft.uploadUrls?.[draftSlot]) uploadUrls[profileSlot] = draft.uploadUrls[draftSlot];
+        });
+      }
+      const editable = { ...(next.editable ?? {}), ...(draft ? draftEditableValues(draft.data) : {}) };
+      const draftChecks = draft?.verificationResults?.length ? draft.verificationResults : null;
+      setProfile({ ...next, uploads, uploadUrls });
+      setValues(editable);
+      setPfAnswer(draft?.data?.has_pf_uan ?? (editable.pfUan ? "yes" : ""));
+      setEsiAnswer(draft?.data?.has_esi_no ?? (editable.esiNo ? "yes" : ""));
+      setVerifications(Object.fromEntries((draftChecks ?? checks.verifications ?? []).map((item: Verification) => [item.kind, item])));
+      if (draft) setNotice("Draft restored.");
       if (next.profilePhotoUrl) onPhoto?.(next.profilePhotoUrl);
     }).catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load profile."));
   }, [account.id, account.profileType, endpoint, query]);
@@ -392,6 +438,53 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
     }
   }
 
+  async function saveDraft() {
+    if (!formRef.current) return;
+    setDraftSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const form = new FormData(formRef.current);
+      const draftData: Record<string, string> = {};
+      form.forEach((value, key) => {
+        if (typeof value === "string" && key !== "profile_verification_results") {
+          draftData[key] = value;
+        }
+      });
+      draftData.has_pf_uan = pfAnswer;
+      draftData.has_esi_no = esiAnswer;
+      const data = new FormData();
+      data.set("account_id", account.id);
+      data.set("profile_type", account.profileType);
+      data.set("draft_data", JSON.stringify(draftData));
+      const currentChecks = Object.values(verifications).filter((item) => currentCheck(item.kind) === item);
+      currentChecks.forEach((item) => data.append("profile_verification_results", JSON.stringify(item)));
+      for (const slot of Object.keys(draftUploadSlots)) {
+        const file = form.get(slot);
+        if (file instanceof File && file.size > 0) data.set(slot, file);
+      }
+      const response = await fetch("/api/connect/profile-draft", { method: "POST", body: data });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Unable to save draft.");
+      const draft = payload.draft as ProfileDraft;
+      setProfile((current) => {
+        if (!current) return current;
+        const uploads = { ...current.uploads };
+        const uploadUrls = { ...current.uploadUrls };
+        Object.entries(draftUploadSlots).forEach(([draftSlot, profileSlot]) => {
+          if (draft.uploads?.[draftSlot]) uploads[profileSlot] = true;
+          if (draft.uploadUrls?.[draftSlot]) uploadUrls[profileSlot] = draft.uploadUrls[draftSlot];
+        });
+        return { ...current, uploads, uploadUrls };
+      });
+      setNotice("Draft saved. You can continue from Android or web.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to save draft.");
+    } finally {
+      setDraftSaving(false);
+    }
+  }
+
   if (!profile && !error) return <Spinner />;
   if (!profile) return <div className="dx-alert error">{error}</div>;
 
@@ -510,7 +603,7 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
   const vehicleCheck = currentCheck("vehicle");
   const drivingEnabled = ["driving_license_no","driving_license_exp_date","vehicle_reg_no","vehicle_reg_exp_date","vehicle_insurance_exp_date","vehicle_pollution_exp_date"].some((field) => enabled.has(field));
 
-  return <form className="dx-profile-form" onSubmit={save}>
+  return <form className="dx-profile-form" onSubmit={save} ref={formRef}>
     <p className="dx-company">{account.companyName}</p>
     {profile.status.trim().toLowerCase() === "returned" && profile.returnRemarks ? (
       <aside className="dx-return-notice">
@@ -614,7 +707,12 @@ export function ConnectProfileApp({ account, onPhoto }: { account: AppAccount; o
     </ProfileSection>
     {error ? <div className="dx-alert error">{error}</div> : null}
     {notice ? <div className="dx-alert success">{notice}</div> : null}
-    <button className="dx-save" disabled={saving} type="submit">{saving ? "Saving..." : "Save profile"}</button>
+    <div className="dx-form-actions">
+      <button className="dx-draft-save" disabled={saving || draftSaving} onClick={saveDraft} type="button">
+        {draftSaving ? "Saving draft..." : "Save draft"}
+      </button>
+      <button className="dx-save" disabled={saving || draftSaving} type="submit">{saving ? "Saving..." : "Save profile"}</button>
+    </div>
   </form>;
 }
 

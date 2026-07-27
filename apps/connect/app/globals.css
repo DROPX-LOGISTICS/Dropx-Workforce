@@ -55,6 +55,7 @@ a {
 
 /* Connect mobile web refinements */
 .dx-web-page .connect-shell{padding-top:0}
+.dx-form-actions{position:sticky;z-index:3;bottom:10px;display:grid;grid-template-columns:minmax(0,.72fr) minmax(0,1fr);gap:8px;margin-top:3px}.dx-form-actions .dx-save{position:static;margin:0;box-shadow:0 8px 20px #df2e3233}.dx-draft-save{height:48px;color:#b83235;background:#fff;border:1px solid #d9d2c9;border-radius:8px;font-weight:600;box-shadow:0 8px 18px #47392b12}
 .dx-header{top:0;height:76px}
 .dx-content{padding:18px 14px 36px}
 .dx-profile-form{gap:11px;padding-bottom:8px}

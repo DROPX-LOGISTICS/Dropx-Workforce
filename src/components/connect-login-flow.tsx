@@ -245,8 +245,14 @@ export function ConnectLoginFlow() {
               value={pin}
             />
           </label>
-          <button className="connect-primary" disabled={pending || pin.length !== 6} type="submit">
-            {pending ? "Signing in..." : "Sign in"}
+          <button
+            aria-busy={pending}
+            className={`connect-primary${pending ? " loading" : ""}`}
+            disabled={pending || pin.length !== 6}
+            type="submit"
+          >
+            {pending ? <span className="button-spinner" aria-hidden="true" /> : null}
+            <span>{pending ? "Signing in..." : "Sign in"}</span>
           </button>
           <button className="connect-text-button" disabled={pending} onClick={resetPin} type="button">Reset PIN</button>
           <button className="connect-text-button" onClick={() => { setStep("mobile"); setPin(""); setError(null); }} type="button">Change mobile number</button>

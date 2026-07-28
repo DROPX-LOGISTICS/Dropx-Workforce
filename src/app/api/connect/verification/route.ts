@@ -5,6 +5,7 @@ import { connectSessionCookieName, normalizeConnectMobile } from "@/lib/connect-
 import { matchNames } from "@/lib/name-match";
 import { isMissingVerificationTable } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { callVerificationProvider } from "@/lib/verification-api-audit";
 import { isWorkforceProfileType, workforceTable } from "@/lib/workforce-profiles";
 
 const IDSPAY_BASE_URL = "https://javabackend.idspay.in/api/v1/prod";
@@ -151,7 +152,12 @@ async function resolveAccount(accountId: string, profileType: string) {
   const accountCode = profileType === "employee"
     ? compact((row as { employee_code?: unknown }).employee_code)
     : compact((row as { dropx_id?: unknown }).dropx_id);
-  return { companyId: row.company_id as string, fullName: compact(row.full_name), accountCode };
+  return {
+    companyId: row.company_id as string,
+    fullName: compact(row.full_name),
+    accountCode,
+    actorLabel: `${countryCode}${mobile}`
+  };
 }
 
 async function idspayCredentials(companyId: string) {
@@ -183,16 +189,6 @@ async function idspayCredentials(companyId: string) {
     api_key: text(apiKey.data),
     token_id: text(tokenId.data)
   };
-}
-
-async function callIdspay(path: string, payload: Record<string, unknown>) {
-  const response = await fetch(`${IDSPAY_BASE_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  const body = await response.json().catch(() => ({}));
-  return { response, body };
 }
 
 function verifiedResponse(result: Record<string, unknown>) {
@@ -245,12 +241,31 @@ export async function POST(request: NextRequest) {
     const account = await resolveAccount(accountId, profileType);
     const credentials = await idspayCredentials(account.companyId);
     const registeredName = compact(payload.fullName) || account.fullName;
+    const userAgent = request.headers.get("user-agent")?.toLowerCase() ?? "";
+    const auditContext = {
+      accountCode: account.accountCode,
+      accountId,
+      actorLabel: account.actorLabel,
+      baseUrl: IDSPAY_BASE_URL,
+      companyId: account.companyId,
+      profileName: registeredName,
+      profileType,
+      providerCode: "idspay",
+      source: userAgent.includes("dart") || userAgent.includes("okhttp")
+        ? "dropx_one_android"
+        : "dropx_one_web",
+      verificationKind: kind
+    };
 
     if (kind === "pan") {
       const panNumber = text(payload.panNumber).toUpperCase();
       if (!panNumber) throw new Error("PAN number is required.");
       if (!/^[A-Z0-9]{10}$/.test(panNumber)) throw new Error("Invalid PAN.");
-      const { body } = await callIdspay("/pan/verification", { ...credentials, pan_number: panNumber });
+      const { body } = await callVerificationProvider({
+        ...auditContext,
+        endpoint: "/pan/verification",
+        payload: { ...credentials, pan_number: panNumber }
+      });
       const apiName = compact(findFirstString(body, ["full_name", "fullName", "name", "pan_name", "panName"]));
       const apiSuccess = body?.data?.success === true || body?.status?.type === "success";
       const nameMatch = apiSuccess ? matchNames(registeredName, apiName) : { status: "none" as const, percent: 0 };
@@ -282,7 +297,11 @@ export async function POST(request: NextRequest) {
       if (!pan || !aadhar) throw new Error("PAN and Aadhaar number are required.");
       if (!/^[A-Z0-9]{10}$/.test(pan)) throw new Error("Invalid PAN.");
       if (!/^\d{12}$/.test(aadhar)) throw new Error("Invalid Aadhaar number.");
-      const { body } = await callIdspay("/srv2/validation/pan-aadhaar-link", { ...credentials, pan, aadhar, aadhaar: aadhar });
+      const { body } = await callVerificationProvider({
+        ...auditContext,
+        endpoint: "/srv2/validation/pan-aadhaar-link",
+        payload: { ...credentials, pan, aadhar, aadhaar: aadhar }
+      });
       const code = Number(body?.result_code);
       const resultCode = text(
         body?.data?.code || body?.result?.code || body?.code
@@ -313,7 +332,11 @@ export async function POST(request: NextRequest) {
       const dob = idspayDob(payload.dateOfBirth);
       if (!dlNumber || !dob) throw new Error("DL number and date of birth are required.");
       if (!/^[A-Z0-9]{4,30}$/.test(dlNumber)) throw new Error("Invalid DL No.");
-      const { body } = await callIdspay("/srv2/validation/dl", { ...credentials, dlNumber, dob });
+      const { body } = await callVerificationProvider({
+        ...auditContext,
+        endpoint: "/srv2/validation/dl",
+        payload: { ...credentials, dlNumber, dob }
+      });
       const details = body?.data?.details_of_driving_licence ?? {};
       const apiName = compact(details?.name || findFirstString(body, ["name", "full_name", "fullName"]));
       const transportExpiry = normalizeDate(body?.data?.dl_validity?.transport?.to);
@@ -352,7 +375,11 @@ export async function POST(request: NextRequest) {
       const regNo = text(payload.vehicleRegNo).toUpperCase();
       if (!regNo) throw new Error("Vehicle registration number is required.");
       if (!/^[A-Z0-9]{4,30}$/.test(regNo)) throw new Error("Invalid vehicle number.");
-      const { body } = await callIdspay("/srv2/validation/rc", { ...credentials, reg_no: regNo });
+      const { body } = await callVerificationProvider({
+        ...auditContext,
+        endpoint: "/srv2/validation/rc",
+        payload: { ...credentials, reg_no: regNo }
+      });
       const data = body?.data ?? {};
       const verified = body?.status?.type === "success" || body?.success === true;
       const fuelType = compact(data?.type ?? data?.fuel_type ?? data?.fuelType);
@@ -375,7 +402,11 @@ export async function POST(request: NextRequest) {
       if (!creditorAccountId || !ifscCode) throw new Error("Bank account number and IFSC are required.");
       if (!/^[A-Z0-9]{4,30}$/.test(creditorAccountId.toUpperCase())) throw new Error("Invalid bank account number.");
       if (!/^[A-Z0-9]{11}$/.test(ifscCode)) throw new Error("Invalid IFSC.");
-      const { body } = await callIdspay("/idfc/beneficiary", { ...credentials, creditorAccountId, ifscCode });
+      const { body } = await callVerificationProvider({
+        ...auditContext,
+        endpoint: "/idfc/beneficiary",
+        payload: { ...credentials, creditorAccountId, ifscCode }
+      });
       const resource = body?.data?.beneValidationResp?.resourceData ?? {};
       const verified = text(body?.data?.beneValidationResp?.metaData?.status).toUpperCase() === "SUCCESS";
       const result = {
@@ -391,7 +422,11 @@ export async function POST(request: NextRequest) {
       const uan = text(payload.pfUan ?? payload.uan);
       if (!uan) throw new Error("PF UAN is required.");
       if (!/^\d{12}$/.test(uan)) throw new Error("Invalid PF UAN.");
-      const { body } = await callIdspay("/srv3/uan-direct", { ...credentials, uan });
+      const { body } = await callVerificationProvider({
+        ...auditContext,
+        endpoint: "/srv3/uan-direct",
+        payload: { ...credentials, uan }
+      });
       const apiName = uanName(body);
       const apiSuccess = body?.status?.type === "success" || text(body?.message).toLowerCase() === "success";
       const nameMatch = apiSuccess ? matchNames(registeredName, apiName) : { status: "none" as const, percent: 0 };

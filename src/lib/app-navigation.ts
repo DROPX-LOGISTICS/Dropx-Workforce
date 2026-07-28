@@ -78,7 +78,8 @@ export const navItems: NavItem[] = [
     label: "Reports",
     icon: "R",
     children: [
-      { code: "attendance_reports", label: "Attendance", href: "/attendance" }
+      { code: "attendance_reports", label: "Attendance", href: "/attendance" },
+      { code: "verification_api_reports", label: "Verification API", href: "/reports/verification-api" }
     ]
   },
   { code: "trash", label: "Trash", href: "/trash", icon: "T" },

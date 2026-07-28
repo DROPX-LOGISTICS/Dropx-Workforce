@@ -1,0 +1,164 @@
+import { supabaseAdmin } from "@/lib/supabase-admin";
+
+type AuditContext = {
+  accountCode?: string | null;
+  accountId?: string | null;
+  actorLabel?: string | null;
+  actorUserId?: string | null;
+  companyId: string;
+  profileName?: string | null;
+  profileType?: string | null;
+  source: string;
+  verificationKind: string;
+};
+
+type ProviderCall = AuditContext & {
+  baseUrl: string;
+  endpoint: string;
+  payload: Record<string, unknown>;
+  providerCode: string;
+};
+
+const credentialKeys = new Set([
+  "api_id",
+  "api_key",
+  "token_id",
+  "authorization",
+  "access_token",
+  "secret",
+  "password"
+]);
+
+function text(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function sanitize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitize);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !credentialKeys.has(key.toLowerCase()))
+      .map(([key, child]) => [key, sanitize(child)])
+  );
+}
+
+function firstValue(value: unknown, keys: string[]): string {
+  if (!value || typeof value !== "object") return "";
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    const direct = record[key];
+    if (typeof direct === "string" || typeof direct === "number" || typeof direct === "boolean") {
+      const found = text(direct);
+      if (found) return found;
+    }
+  }
+  for (const child of Object.values(record)) {
+    if (child && typeof child === "object") {
+      const found = firstValue(child, keys);
+      if (found) return found;
+    }
+  }
+  return "";
+}
+
+function providerSucceeded(response: Response, body: unknown) {
+  if (!response.ok) return false;
+  const statusType = firstValue(body, ["type", "status"]).toLowerCase();
+  if (statusType === "failed" || statusType === "failure" || statusType === "error") return false;
+  return true;
+}
+
+function responseRecord(value: unknown) {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function resultCode(value: unknown) {
+  const root = responseRecord(value);
+  const data = responseRecord(root.data);
+  const result = responseRecord(root.result);
+  const status = responseRecord(root.status);
+  return text(root.result_code || data.code || result.code || root.code || status.code);
+}
+
+function resultMessage(value: unknown) {
+  const root = responseRecord(value);
+  const data = responseRecord(root.data);
+  const result = responseRecord(root.result);
+  const status = responseRecord(root.status);
+  return text(data.message || result.message || root.message || root.error || status.message);
+}
+
+async function writeAudit(
+  input: AuditContext & {
+    durationMs: number;
+    endpoint: string;
+    httpStatus: number | null;
+    isSuccess: boolean;
+    providerCode: string;
+    requestData: unknown;
+    responseData: unknown;
+  }
+) {
+  if (!supabaseAdmin) return;
+  const responseData = input.responseData && typeof input.responseData === "object"
+    ? input.responseData
+    : { value: input.responseData };
+  const { error } = await supabaseAdmin.from("verification_api_audit_logs").insert({
+    company_id: input.companyId,
+    provider_code: input.providerCode,
+    verification_kind: input.verificationKind,
+    endpoint: input.endpoint,
+    source: input.source,
+    profile_type: input.profileType || null,
+    account_id: input.accountId || null,
+    account_code: input.accountCode || null,
+    profile_name: input.profileName || null,
+    actor_user_id: input.actorUserId || null,
+    actor_label: input.actorLabel || null,
+    request_data: sanitize(input.requestData),
+    response_data: sanitize(responseData),
+    http_status: input.httpStatus,
+    is_success: input.isSuccess,
+    result_code: resultCode(responseData),
+    result_message: resultMessage(responseData),
+    duration_ms: input.durationMs
+  });
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (!message.includes("verification_api_audit_logs")) {
+      console.error("Unable to write verification API audit log:", error.message);
+    }
+  }
+}
+
+export async function callVerificationProvider(input: ProviderCall) {
+  const startedAt = Date.now();
+  try {
+    const response = await fetch(`${input.baseUrl}${input.endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input.payload)
+    });
+    const body = await response.json().catch(() => ({}));
+    await writeAudit({
+      ...input,
+      durationMs: Date.now() - startedAt,
+      httpStatus: response.status,
+      isSuccess: providerSucceeded(response, body),
+      requestData: input.payload,
+      responseData: body
+    });
+    return { response, body };
+  } catch (error) {
+    await writeAudit({
+      ...input,
+      durationMs: Date.now() - startedAt,
+      httpStatus: null,
+      isSuccess: false,
+      requestData: input.payload,
+      responseData: { error: error instanceof Error ? error.message : "Provider request failed." }
+    });
+    throw error;
+  }
+}

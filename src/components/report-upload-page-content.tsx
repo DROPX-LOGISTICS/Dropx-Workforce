@@ -207,13 +207,20 @@ export async function ReportUploadPageContent({
   const coverageByKey = new Map(coverageRows.map((row) => [`${row.source_type}|${row.parent_station_code}`, row]));
   const stationBatch = (sourceType: string, stationCode: string) => batches.find((batch) =>
     batch.source_type === sourceType
-    && batchMatchesDate(batch, date)
+    && createdDateInIndia(batch.created_at) === date
     && (batch.station_code ?? "").split(",").map((code) => code.trim()).includes(stationCode));
   const stationCoverage = expectedShipmentStations.map((station) => {
     const statusFor = (sourceType: string) => {
       const coverage = coverageByKey.get(`${sourceType}|${station.code}`);
       if (coverage) return { status: "Uploaded", count: coverage.shipment_count, uploadedAt: coverage.last_uploaded_at };
       const batch = stationBatch(sourceType, station.code);
+      if (batch && ["completed", "success", "succeeded"].includes(batch.status.toLowerCase())) {
+        return {
+          status: "Uploaded",
+          count: batch.imported_row_count || batch.row_count,
+          uploadedAt: batch.created_at
+        };
+      }
       if (batch && ["processing", "failed"].includes(batch.status.toLowerCase())) {
         return { status: batch.status, count: 0, uploadedAt: batch.created_at };
       }
@@ -240,9 +247,7 @@ export async function ReportUploadPageContent({
     if (batch) latestBySource.set(report.source_code, batch);
   });
   const today = todayInIndia();
-  const selectedReportMaster = reports.find((report) => report.source_code === selectedReport);
-  const latestShipmentDate = addDays(today, selectedReportMaster?.date_default_offset ?? 0);
-  const latestShipmentHref = `/imports?shipment=1&date=${latestShipmentDate}${selectedReport ? `&report=${encodeURIComponent(selectedReport)}` : ""}`;
+  const latestShipmentHref = `/imports?shipment=1&date=${today}${selectedReport ? `&report=${encodeURIComponent(selectedReport)}` : ""}`;
   const coverageGaps = reports.flatMap((report) => {
     if (report.frequency === "adhoc" || report.frequency === "monthly") return [];
     const expectedPeriods: { dueDate: string; reportDate: string }[] = [];

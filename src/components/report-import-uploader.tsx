@@ -141,7 +141,7 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
             else nextUrl.searchParams.delete("report");
             if (next && ["delivered_shipment_detail", "inbound_shipment_detail"].includes(next.parser_type)) {
               nextUrl.searchParams.set("shipment", "1");
-              nextUrl.searchParams.set("date", nextReportDate);
+              nextUrl.searchParams.set("date", indiaDate());
               router.replace(`${nextUrl.pathname}?${nextUrl.searchParams.toString()}`);
             } else {
               nextUrl.searchParams.delete("shipment");

@@ -27,6 +27,7 @@ type AuditRow = {
   profile_type: string | null;
   account_code: string | null;
   profile_name: string | null;
+  actor_user_id: string | null;
   actor_label: string | null;
   request_data: unknown;
   response_data: unknown;
@@ -91,6 +92,17 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function performerLabel(value: string | null, source: string) {
+  const label = clean(value ?? "");
+  if (!source.startsWith("dropx_one")) return label || "-";
+  if (!/^\d+$/.test(label)) return label || "-";
+  let digits = label;
+  if (digits.startsWith("9191") && digits.length === 14) digits = digits.slice(2);
+  if (digits.startsWith("91") && digits.length === 12) return `+91 ${digits.slice(2)}`;
+  if (digits.length === 10) return `+91 ${digits}`;
+  return label || "-";
+}
+
 function paginationHref(searchParams: SearchParams, page: number) {
   const params = new URLSearchParams();
   Object.entries(searchParams).forEach(([key, value]) => {
@@ -125,6 +137,7 @@ export default async function VerificationApiReportPage({
   const search = clean(searchParams.search).replace(/[,%()]/g, " ");
 
   let rows: AuditRow[] = [];
+  let actorEmails = new Map<string, string>();
   let total = 0;
   let error: string | null = null;
 
@@ -134,7 +147,7 @@ export default async function VerificationApiReportPage({
     let query = supabaseAdmin
       .from("verification_api_audit_logs")
       .select(
-        "id, provider_code, verification_kind, endpoint, source, profile_type, account_code, profile_name, actor_label, request_data, response_data, http_status, is_success, result_code, result_message, duration_ms, created_at",
+        "id, provider_code, verification_kind, endpoint, source, profile_type, account_code, profile_name, actor_user_id, actor_label, request_data, response_data, http_status, is_success, result_code, result_message, duration_ms, created_at",
         { count: "exact" }
       )
       .eq("company_id", companyId)
@@ -159,6 +172,21 @@ export default async function VerificationApiReportPage({
     } else {
       rows = (response.data ?? []) as AuditRow[];
       total = response.count ?? rows.length;
+      const actorUserIds = Array.from(new Set(rows.map((row) => row.actor_user_id).filter(Boolean))) as string[];
+      if (actorUserIds.length) {
+        const actors = await supabaseAdmin
+          .from("profiles")
+          .select("id, email")
+          .eq("company_id", companyId)
+          .in("id", actorUserIds);
+        if (!actors.error) {
+          actorEmails = new Map(
+            (actors.data ?? [])
+              .filter((actor) => actor.email)
+              .map((actor) => [actor.id as string, actor.email as string])
+          );
+        }
+      }
     }
   }
 
@@ -273,7 +301,10 @@ export default async function VerificationApiReportPage({
                     </small>
                   </td>
                   <td>
-                    <strong>{row.actor_label || "-"}</strong>
+                    <strong>{performerLabel(row.actor_label, row.source)}</strong>
+                    {row.actor_user_id && actorEmails.get(row.actor_user_id)
+                      ? <small>{actorEmails.get(row.actor_user_id)}</small>
+                      : null}
                   </td>
                   <td>{labelFor(sourceOptions, row.source)}</td>
                   <td>

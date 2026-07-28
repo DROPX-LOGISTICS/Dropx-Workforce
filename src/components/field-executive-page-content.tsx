@@ -236,8 +236,16 @@ function UploadDetail({ label, url }: { label: string; url?: string | null }) {
   );
 }
 
-function FieldExecutiveDetails({ executive }: { executive: ExecutiveRow }) {
+function FieldExecutiveDetails({
+  dashboardRules,
+  executive
+}: {
+  dashboardRules: { enabled: string[]; required: string[] };
+  executive: ExecutiveRow;
+}) {
   const location = firstRelation(executive.stations);
+  const enabled = new Set(dashboardRules.enabled);
+  const hasAny = (...keys: string[]) => keys.some((key) => enabled.has(key));
   return (
     <div className="executive-details">
       <section>
@@ -257,70 +265,70 @@ function FieldExecutiveDetails({ executive }: { executive: ExecutiveRow }) {
         <dl className="executive-detail-grid">
           <ExecutiveDetail label="Mobile" value={`+${executive.mobile_country_code ?? "91"} ${executive.mobile}`} />
           <ExecutiveDetail label="Email" value={executive.email} />
-          <ExecutiveDetail label="Gender" value={executive.gender} />
-          <ExecutiveDetail label="Date of birth" value={executive.date_of_birth} />
-          <ExecutiveDetail label="Father name" value={executive.father_name} />
-          <ExecutiveDetail label="Blood group" value={executive.blood_group} />
-          <ExecutiveDetail label="Handicapped" value={executive.is_handicapped} />
+          {enabled.has("gender") ? <ExecutiveDetail label="Gender" value={executive.gender} /> : null}
+          {enabled.has("date_of_birth") ? <ExecutiveDetail label="Date of birth" value={executive.date_of_birth} /> : null}
+          {enabled.has("father_name") ? <ExecutiveDetail label="Father name" value={executive.father_name} /> : null}
+          {enabled.has("blood_group") ? <ExecutiveDetail label="Blood group" value={executive.blood_group} /> : null}
+          {enabled.has("is_handicapped") ? <ExecutiveDetail label="Handicapped" value={executive.is_handicapped} /> : null}
         </dl>
       </section>
-      <section>
+      {hasAny("emergency_contact_number", "emergency_contact_name", "emergency_contact_relation") ? <section>
         <h3>Emergency contact</h3>
         <dl className="executive-detail-grid">
-          <ExecutiveDetail label="Contact number" value={executive.emergency_contact_number} />
-          <ExecutiveDetail label="Contact name" value={executive.emergency_contact_name} />
-          <ExecutiveDetail label="Relation" value={executive.emergency_contact_relation} />
+          {enabled.has("emergency_contact_number") ? <ExecutiveDetail label="Contact number" value={executive.emergency_contact_number} /> : null}
+          {enabled.has("emergency_contact_name") ? <ExecutiveDetail label="Contact name" value={executive.emergency_contact_name} /> : null}
+          {enabled.has("emergency_contact_relation") ? <ExecutiveDetail label="Relation" value={executive.emergency_contact_relation} /> : null}
         </dl>
-      </section>
-      <section>
+      </section> : null}
+      {hasAny("aadhaar_number", "pan_number", "eshram_uan", "address", "landmark", "state_code", "pincode") ? <section>
         <h3>Identity and address</h3>
         <dl className="executive-detail-grid">
-          <ExecutiveDetail label="Aadhaar number" value={executive.aadhaar_number} />
-          <ExecutiveDetail label="PAN number" value={executive.pan_number} />
-          <ExecutiveDetail label="eShram UAN" value={executive.eshram_uan} />
-          <ExecutiveDetail label="Address" value={executive.address} />
-          <ExecutiveDetail label="Landmark" value={executive.landmark} />
-          <ExecutiveDetail label="State" value={executive.state_code} />
-          <ExecutiveDetail label="Postal PIN" value={executive.postal_pin} />
+          {enabled.has("aadhaar_number") ? <ExecutiveDetail label="Aadhaar number" value={executive.aadhaar_number} /> : null}
+          {enabled.has("pan_number") ? <ExecutiveDetail label="PAN number" value={executive.pan_number} /> : null}
+          {enabled.has("eshram_uan") ? <ExecutiveDetail label="eShram UAN" value={executive.eshram_uan} /> : null}
+          {enabled.has("address") ? <ExecutiveDetail label="Address" value={executive.address} /> : null}
+          {enabled.has("landmark") ? <ExecutiveDetail label="Landmark" value={executive.landmark} /> : null}
+          {enabled.has("state_code") ? <ExecutiveDetail label="State" value={executive.state_code} /> : null}
+          {enabled.has("pincode") ? <ExecutiveDetail label="Postal PIN" value={executive.postal_pin} /> : null}
         </dl>
-      </section>
-      <section>
+      </section> : null}
+      {hasAny("bank_account_no", "ifsc") ? <section>
         <h3>Bank</h3>
         <dl className="executive-detail-grid">
-          <ExecutiveDetail label="Bank account number" value={executive.bank_account_no} />
-          <ExecutiveDetail label="IFSC" value={executive.ifsc_code} />
+          {enabled.has("bank_account_no") ? <ExecutiveDetail label="Bank account number" value={executive.bank_account_no} /> : null}
+          {enabled.has("ifsc") ? <ExecutiveDetail label="IFSC" value={executive.ifsc_code} /> : null}
         </dl>
-      </section>
-      <section>
+      </section> : null}
+      {hasAny("pf_uan", "pf_account_no", "esi_no") ? <section>
         <h3>Statutory</h3>
         <dl className="executive-detail-grid">
-          <ExecutiveDetail label="PF UAN" value={executive.pf_uan} />
-          <ExecutiveDetail label="PF Account No" value={executive.pf_account_no} />
-          <ExecutiveDetail label="ESI No" value={executive.esi_no} />
+          {enabled.has("pf_uan") ? <ExecutiveDetail label="PF UAN" value={executive.pf_uan} /> : null}
+          {enabled.has("pf_account_no") ? <ExecutiveDetail label="PF Account No" value={executive.pf_account_no} /> : null}
+          {enabled.has("esi_no") ? <ExecutiveDetail label="ESI No" value={executive.esi_no} /> : null}
         </dl>
-      </section>
-      <section>
+      </section> : null}
+      {hasAny("driving_license_no", "driving_license_exp_date", "vehicle_reg_no", "vehicle_reg_exp_date", "vehicle_insurance_exp_date", "vehicle_pollution_exp_date") ? <section>
         <h3>License and vehicle</h3>
         <dl className="executive-detail-grid">
-          <ExecutiveDetail label="Driving license number" value={executive.driving_license_no} />
-          <ExecutiveDetail label="Driving license expiry" value={executive.driving_license_exp_date} />
-          <ExecutiveDetail label="Vehicle registration number" value={executive.vehicle_reg_no} />
-          <ExecutiveDetail label="Vehicle registration expiry" value={executive.vehicle_reg_exp_date} />
-          <ExecutiveDetail label="Vehicle Insurance expiry" value={executive.vehicle_insurance_exp_date} />
-          <ExecutiveDetail label="Pollution expiry" value={executive.vehicle_pollution_exp_date} />
+          {enabled.has("driving_license_no") ? <ExecutiveDetail label="Driving license number" value={executive.driving_license_no} /> : null}
+          {enabled.has("driving_license_exp_date") ? <ExecutiveDetail label="Driving license expiry" value={executive.driving_license_exp_date} /> : null}
+          {enabled.has("vehicle_reg_no") ? <ExecutiveDetail label="Vehicle registration number" value={executive.vehicle_reg_no} /> : null}
+          {enabled.has("vehicle_reg_exp_date") ? <ExecutiveDetail label="Vehicle registration expiry" value={executive.vehicle_reg_exp_date} /> : null}
+          {enabled.has("vehicle_insurance_exp_date") ? <ExecutiveDetail label="Vehicle Insurance expiry" value={executive.vehicle_insurance_exp_date} /> : null}
+          {enabled.has("vehicle_pollution_exp_date") ? <ExecutiveDetail label="Pollution expiry" value={executive.vehicle_pollution_exp_date} /> : null}
         </dl>
-      </section>
-      <section>
+      </section> : null}
+      {hasAny("aadhaar_front", "aadhaar_back", "pan_upload", "dl_front", "dl_back", "profile_photo") ? <section>
         <h3>Uploads</h3>
         <dl className="executive-detail-grid">
-          <UploadDetail label="Aadhaar front" url={executive.upload_urls?.aadhaarFront} />
-          <UploadDetail label="Aadhaar back" url={executive.upload_urls?.aadhaarBack} />
-          <UploadDetail label="PAN upload" url={executive.upload_urls?.pan} />
-          <UploadDetail label="DL front" url={executive.upload_urls?.dlFront} />
-          <UploadDetail label="DL back" url={executive.upload_urls?.dlBack} />
-          <UploadDetail label="Profile photo" url={executive.upload_urls?.profilePhoto} />
+          {enabled.has("aadhaar_front") ? <UploadDetail label="Aadhaar front" url={executive.upload_urls?.aadhaarFront} /> : null}
+          {enabled.has("aadhaar_back") ? <UploadDetail label="Aadhaar back" url={executive.upload_urls?.aadhaarBack} /> : null}
+          {enabled.has("pan_upload") ? <UploadDetail label="PAN upload" url={executive.upload_urls?.pan} /> : null}
+          {enabled.has("dl_front") ? <UploadDetail label="DL front" url={executive.upload_urls?.dlFront} /> : null}
+          {enabled.has("dl_back") ? <UploadDetail label="DL back" url={executive.upload_urls?.dlBack} /> : null}
+          {enabled.has("profile_photo") ? <UploadDetail label="Profile photo" url={executive.upload_urls?.profilePhoto} /> : null}
         </dl>
-      </section>
+      </section> : null}
     </div>
   );
 }
@@ -342,11 +350,11 @@ function FieldExecutiveForm({
   mode: "create" | "edit";
   returnPath: FieldExecutiveRoute;
   submitLabel?: string;
-  dashboardRules?: { enabled: string[]; required: string[] };
+  dashboardRules: { enabled: string[]; required: string[] };
 }) {
   const workforceConfig = nonEmployeeConfigForRoute(returnPath);
-  const fieldEnabled = (key: string) => !dashboardRules || dashboardRules.enabled.includes(key);
-  const fieldRequired = (key: string) => Boolean(dashboardRules?.required.includes(key));
+  const fieldEnabled = (key: string) => dashboardRules.enabled.includes(key);
+  const fieldRequired = (key: string) => dashboardRules.required.includes(key);
   return (
     <form action={action} className="form-grid three">
       <input type="hidden" name="return_path" value={returnPath} />
@@ -826,7 +834,7 @@ export async function FieldExecutivePageContent({
               </div>
               <PendingLink className="icon-button" href={returnPath} scroll={false} aria-label={`Close ${entityLabel.toLowerCase()} details`}>x</PendingLink>
             </div>
-            <FieldExecutiveDetails executive={viewExecutive} />
+            <FieldExecutiveDetails dashboardRules={categoryRules.dashboard} executive={viewExecutive} />
           </section>
         </div>
       ) : null}
@@ -843,7 +851,7 @@ export async function FieldExecutivePageContent({
             </div>
             <FieldExecutiveForm
               action={updateFieldExecutive}
-              dashboardRules={designationOptions.find((option) => option.value === editExecutive.designation)?.dashboardRules}
+              dashboardRules={categoryRules.dashboard}
               designationOptions={designationOptions}
               executive={editExecutive}
               locationOptions={locationOptions}

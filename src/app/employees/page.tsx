@@ -169,9 +169,17 @@ function UploadDetail({ label, url }: { label: string; url?: string | null }) {
   );
 }
 
-function EmployeeDetails({ employee }: { employee: EmployeeRow }) {
+function EmployeeDetails({
+  dashboardRules,
+  employee
+}: {
+  dashboardRules: { enabled: string[]; required: string[] };
+  employee: EmployeeRow;
+}) {
   const location = firstRelation(employee.stations);
   const designation = firstRelation(employee.designations);
+  const enabled = new Set(dashboardRules.enabled);
+  const hasAny = (...keys: string[]) => keys.some((key) => enabled.has(key));
   return (
     <div className="executive-details">
       <section>
@@ -184,9 +192,6 @@ function EmployeeDetails({ employee }: { employee: EmployeeRow }) {
           <EmployeeDetail label="Location" value={location?.station_name || location?.station_code} />
           <EmployeeDetail label="Designation" value={designation?.name} />
           <EmployeeDetail label="Statutory" value={statutoryLabel(employee.statutory_applicability)} />
-          <EmployeeDetail label="PF UAN" value={employee.pf_uan} />
-          <EmployeeDetail label="PF Account No" value={employee.pf_account_no} />
-          <EmployeeDetail label="ESI No" value={employee.esi_no} />
           <EmployeeDetail label="Status" value={employeeStatus(employee)} />
         </dl>
       </section>
@@ -195,62 +200,70 @@ function EmployeeDetails({ employee }: { employee: EmployeeRow }) {
         <dl className="executive-detail-grid">
           <EmployeeDetail label="Mobile" value={`+${employee.mobile_country_code ?? "91"} ${employee.mobile}`} />
           <EmployeeDetail label="Email" value={employee.email} />
-          <EmployeeDetail label="Gender" value={employee.gender} />
-          <EmployeeDetail label="Date of birth" value={employee.date_of_birth} />
-          <EmployeeDetail label="Father name" value={employee.father_name} />
-          <EmployeeDetail label="Blood group" value={employee.blood_group} />
-          <EmployeeDetail label="Handicapped" value={employee.is_handicapped} />
+          {enabled.has("gender") ? <EmployeeDetail label="Gender" value={employee.gender} /> : null}
+          {enabled.has("date_of_birth") ? <EmployeeDetail label="Date of birth" value={employee.date_of_birth} /> : null}
+          {enabled.has("father_name") ? <EmployeeDetail label="Father name" value={employee.father_name} /> : null}
+          {enabled.has("blood_group") ? <EmployeeDetail label="Blood group" value={employee.blood_group} /> : null}
+          {enabled.has("is_handicapped") ? <EmployeeDetail label="Handicapped" value={employee.is_handicapped} /> : null}
         </dl>
       </section>
-      <section>
+      {hasAny("emergency_contact_number", "emergency_contact_name", "emergency_contact_relation") ? <section>
         <h3>Emergency contact</h3>
         <dl className="executive-detail-grid">
-          <EmployeeDetail label="Contact number" value={employee.emergency_contact_number} />
-          <EmployeeDetail label="Contact name" value={employee.emergency_contact_name} />
-          <EmployeeDetail label="Relation" value={employee.emergency_contact_relation} />
+          {enabled.has("emergency_contact_number") ? <EmployeeDetail label="Contact number" value={employee.emergency_contact_number} /> : null}
+          {enabled.has("emergency_contact_name") ? <EmployeeDetail label="Contact name" value={employee.emergency_contact_name} /> : null}
+          {enabled.has("emergency_contact_relation") ? <EmployeeDetail label="Relation" value={employee.emergency_contact_relation} /> : null}
         </dl>
-      </section>
-      <section>
+      </section> : null}
+      {hasAny("aadhaar_number", "pan_number", "eshram_uan", "address", "state_code", "pincode", "landmark") ? <section>
         <h3>Identity and address</h3>
         <dl className="executive-detail-grid">
-          <EmployeeDetail label="Aadhaar number" value={employee.aadhaar_number} />
-          <EmployeeDetail label="PAN number" value={employee.pan_number} />
-          <EmployeeDetail label="eShram UAN" value={employee.eshram_uan} />
-          <EmployeeDetail label="Address" value={employee.address} />
-          <EmployeeDetail label="State" value={employee.state_code} />
-          <EmployeeDetail label="Postal PIN" value={employee.pincode} />
-          <EmployeeDetail label="Landmark" value={employee.landmark} />
+          {enabled.has("aadhaar_number") ? <EmployeeDetail label="Aadhaar number" value={employee.aadhaar_number} /> : null}
+          {enabled.has("pan_number") ? <EmployeeDetail label="PAN number" value={employee.pan_number} /> : null}
+          {enabled.has("eshram_uan") ? <EmployeeDetail label="eShram UAN" value={employee.eshram_uan} /> : null}
+          {enabled.has("address") ? <EmployeeDetail label="Address" value={employee.address} /> : null}
+          {enabled.has("state_code") ? <EmployeeDetail label="State" value={employee.state_code} /> : null}
+          {enabled.has("pincode") ? <EmployeeDetail label="Postal PIN" value={employee.pincode} /> : null}
+          {enabled.has("landmark") ? <EmployeeDetail label="Landmark" value={employee.landmark} /> : null}
         </dl>
-      </section>
-      <section>
+      </section> : null}
+      {hasAny("pf_uan", "pf_account_no", "esi_no") ? <section>
+        <h3>Statutory</h3>
+        <dl className="executive-detail-grid">
+          {enabled.has("pf_uan") ? <EmployeeDetail label="PF UAN" value={employee.pf_uan} /> : null}
+          {enabled.has("pf_account_no") ? <EmployeeDetail label="PF Account No" value={employee.pf_account_no} /> : null}
+          {enabled.has("esi_no") ? <EmployeeDetail label="ESI No" value={employee.esi_no} /> : null}
+        </dl>
+      </section> : null}
+      {hasAny("driving_license_no", "driving_license_exp_date", "vehicle_reg_no", "vehicle_reg_exp_date", "vehicle_insurance_exp_date", "vehicle_pollution_exp_date") ? <section>
         <h3>License and vehicle</h3>
         <dl className="executive-detail-grid">
-          <EmployeeDetail label="Driving license number" value={employee.driving_license_no} />
-          <EmployeeDetail label="Driving license expiry" value={employee.driving_license_exp_date} />
-          <EmployeeDetail label="Vehicle registration number" value={employee.vehicle_reg_no} />
-          <EmployeeDetail label="Vehicle registration expiry" value={employee.vehicle_reg_exp_date} />
-          <EmployeeDetail label="Vehicle Insurance expiry" value={employee.vehicle_insurance_exp_date} />
-          <EmployeeDetail label="Pollution expiry" value={employee.vehicle_pollution_exp_date} />
+          {enabled.has("driving_license_no") ? <EmployeeDetail label="Driving license number" value={employee.driving_license_no} /> : null}
+          {enabled.has("driving_license_exp_date") ? <EmployeeDetail label="Driving license expiry" value={employee.driving_license_exp_date} /> : null}
+          {enabled.has("vehicle_reg_no") ? <EmployeeDetail label="Vehicle registration number" value={employee.vehicle_reg_no} /> : null}
+          {enabled.has("vehicle_reg_exp_date") ? <EmployeeDetail label="Vehicle registration expiry" value={employee.vehicle_reg_exp_date} /> : null}
+          {enabled.has("vehicle_insurance_exp_date") ? <EmployeeDetail label="Vehicle Insurance expiry" value={employee.vehicle_insurance_exp_date} /> : null}
+          {enabled.has("vehicle_pollution_exp_date") ? <EmployeeDetail label="Pollution expiry" value={employee.vehicle_pollution_exp_date} /> : null}
         </dl>
-      </section>
-      <section>
+      </section> : null}
+      {hasAny("bank_account_no", "ifsc") ? <section>
         <h3>Bank</h3>
         <dl className="executive-detail-grid">
-          <EmployeeDetail label="Bank account number" value={employee.bank_account_no} />
-          <EmployeeDetail label="IFSC" value={employee.ifsc} />
+          {enabled.has("bank_account_no") ? <EmployeeDetail label="Bank account number" value={employee.bank_account_no} /> : null}
+          {enabled.has("ifsc") ? <EmployeeDetail label="IFSC" value={employee.ifsc} /> : null}
         </dl>
-      </section>
-      <section>
+      </section> : null}
+      {hasAny("aadhaar_front", "aadhaar_back", "pan_upload", "dl_front", "dl_back", "profile_photo") ? <section>
         <h3>Uploads</h3>
         <dl className="executive-detail-grid">
-          <UploadDetail label="Aadhaar front" url={employee.upload_urls?.aadhaarFront} />
-          <UploadDetail label="Aadhaar back" url={employee.upload_urls?.aadhaarBack} />
-          <UploadDetail label="PAN upload" url={employee.upload_urls?.pan} />
-          <UploadDetail label="DL front" url={employee.upload_urls?.dlFront} />
-          <UploadDetail label="DL back" url={employee.upload_urls?.dlBack} />
-          <UploadDetail label="Profile photo" url={employee.upload_urls?.profilePhoto} />
+          {enabled.has("aadhaar_front") ? <UploadDetail label="Aadhaar front" url={employee.upload_urls?.aadhaarFront} /> : null}
+          {enabled.has("aadhaar_back") ? <UploadDetail label="Aadhaar back" url={employee.upload_urls?.aadhaarBack} /> : null}
+          {enabled.has("pan_upload") ? <UploadDetail label="PAN upload" url={employee.upload_urls?.pan} /> : null}
+          {enabled.has("dl_front") ? <UploadDetail label="DL front" url={employee.upload_urls?.dlFront} /> : null}
+          {enabled.has("dl_back") ? <UploadDetail label="DL back" url={employee.upload_urls?.dlBack} /> : null}
+          {enabled.has("profile_photo") ? <UploadDetail label="Profile photo" url={employee.upload_urls?.profilePhoto} /> : null}
         </dl>
-      </section>
+      </section> : null}
     </div>
   );
 }
@@ -451,7 +464,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
       {!error && pagePermission.canAdd ? (
         <section className="panel">
           <div className="panel-head"><h2>Add employee</h2></div>
-          <EmployeeForm action={createEmployee} designationOptions={designationOptions} locationOptions={locationOptions} />
+          <EmployeeForm action={createEmployee} dashboardRules={employeeCategoryRules.dashboard} designationOptions={designationOptions} locationOptions={locationOptions} />
         </section>
       ) : null}
 
@@ -529,7 +542,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
               </div>
               <PendingLink className="icon-button" href="/employees" scroll={false} aria-label="Close employee details">x</PendingLink>
             </div>
-            <EmployeeDetails employee={viewEmployee} />
+            <EmployeeDetails dashboardRules={employeeCategoryRules.dashboard} employee={viewEmployee} />
           </section>
         </div>
       ) : null}
@@ -544,7 +557,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
               </div>
               <PendingLink className="icon-button" href="/employees" scroll={false} aria-label="Close edit employee">x</PendingLink>
             </div>
-            <EmployeeForm action={updateEmployee} designationOptions={designationOptions} employee={editEmployee} locationOptions={locationOptions} mode="edit" />
+            <EmployeeForm action={updateEmployee} dashboardRules={employeeCategoryRules.dashboard} designationOptions={designationOptions} employee={editEmployee} locationOptions={locationOptions} mode="edit" />
             {editEmployee.profile_completion_status === "under_review" ? (
               <section className="profile-review-panel">
                 <div>

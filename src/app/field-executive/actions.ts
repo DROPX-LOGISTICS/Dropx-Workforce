@@ -92,12 +92,12 @@ function generatedDropxId(category: "field_executive" | "contractor" | "vendor" 
 }
 
 const fieldExecutiveDocumentFields = [
-  { formKey: "aadhaar_front_file", pathKey: "aadhaar_front_path", label: "Aadhaar front" },
-  { formKey: "aadhaar_back_file", pathKey: "aadhaar_back_path", label: "Aadhaar back" },
-  { formKey: "pan_upload_file", pathKey: "pan_upload_path", label: "PAN upload" },
-  { formKey: "dl_front_file", pathKey: "dl_front_path", label: "DL front" },
-  { formKey: "dl_back_file", pathKey: "dl_back_path", label: "DL back" },
-  { formKey: "profile_photo_file", pathKey: "profile_photo_path", label: "Profile photo" }
+  { ruleKey: "aadhaar_front", formKey: "aadhaar_front_file", pathKey: "aadhaar_front_path", label: "Aadhaar front" },
+  { ruleKey: "aadhaar_back", formKey: "aadhaar_back_file", pathKey: "aadhaar_back_path", label: "Aadhaar back" },
+  { ruleKey: "pan_upload", formKey: "pan_upload_file", pathKey: "pan_upload_path", label: "PAN upload" },
+  { ruleKey: "dl_front", formKey: "dl_front_file", pathKey: "dl_front_path", label: "DL front" },
+  { ruleKey: "dl_back", formKey: "dl_back_file", pathKey: "dl_back_path", label: "DL back" },
+  { ruleKey: "profile_photo", formKey: "profile_photo_file", pathKey: "profile_photo_path", label: "Profile photo" }
 ] as const;
 
 function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
@@ -380,6 +380,7 @@ export async function updateFieldExecutive(formData: FormData) {
       designationResult.data?.profile_field_rules,
       config.designationCategory
     )).dashboard;
+    const dashboardEnabled = new Set(dashboardRules.enabled);
     const profilePayloadKeys: Record<string, keyof typeof payload> = {
       gender: "gender",
       date_of_birth: "date_of_birth",
@@ -435,6 +436,7 @@ export async function updateFieldExecutive(formData: FormData) {
     const documentPayload: Record<string, string> = {};
     const existingPaths = existingResult.data as Record<string, string | null> | null;
     for (const field of fieldExecutiveDocumentFields) {
+      if (!dashboardEnabled.has(field.ruleKey)) continue;
       const uploaded = await uploadProfileDocument({
         companyId,
         documentKey: field.pathKey.replace("_path", ""),

@@ -17,6 +17,7 @@ type DesignationSelectOption = SearchableSelectOption & {
 
 type EmployeeFormProps = {
   action: (formData: FormData) => void;
+  dashboardRules: { enabled: string[]; required: string[] };
   designationOptions: DesignationSelectOption[];
   employee?: {
     id: string;
@@ -123,7 +124,7 @@ function StatutoryMultiSelect({
   );
 }
 
-export function EmployeeForm({ action, designationOptions, employee, locationOptions, mode = "create" }: EmployeeFormProps) {
+export function EmployeeForm({ action, dashboardRules, designationOptions, employee, locationOptions, mode = "create" }: EmployeeFormProps) {
   const [selectedLocationId, setSelectedLocationId] = useState(employee?.location_id ?? "");
   const [selectedDesignationId, setSelectedDesignationId] = useState(employee?.designation_id ?? "");
   const [selectedStatutory, setSelectedStatutory] = useState<string[]>(
@@ -145,9 +146,8 @@ export function EmployeeForm({ action, designationOptions, employee, locationOpt
     ]
     : filteredDesignationOptions;
   const designationDisabled = !selectedLocationId || !effectiveDesignationOptions.length;
-  const selectedRules = designationOptions.find((option) => option.value === selectedDesignationId)?.dashboardRules;
-  const fieldEnabled = (key: string) => !selectedRules || selectedRules.enabled.includes(key);
-  const fieldRequired = (key: string) => Boolean(selectedRules?.required.includes(key));
+  const fieldEnabled = (key: string) => dashboardRules.enabled.includes(key);
+  const fieldRequired = (key: string) => dashboardRules.required.includes(key);
   const hasPf = selectedStatutory.includes("pf");
   const hasEsi = selectedStatutory.includes("esi");
 

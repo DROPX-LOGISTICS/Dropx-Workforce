@@ -22,6 +22,7 @@ type SearchParams = {
 
 type AuditRow = {
   id: string;
+  account_id: string | null;
   provider_code: string;
   verification_kind: string;
   endpoint: string;
@@ -117,6 +118,14 @@ function performerLabel(value: string | null, source: string) {
   return label || "-";
 }
 
+function mobileLabel(countryCode: unknown, mobile: unknown) {
+  const code = String(countryCode ?? "").replace(/\D/g, "") || "91";
+  let number = String(mobile ?? "").replace(/\D/g, "");
+  if (!number) return "";
+  if (number.startsWith(code) && number.length > 10) number = number.slice(code.length);
+  return `+${code} ${number}`;
+}
+
 function paginationHref(searchParams: SearchParams, page: number) {
   const params = new URLSearchParams();
   Object.entries(searchParams).forEach(([key, value]) => {
@@ -153,6 +162,7 @@ export default async function VerificationApiReportPage({
 
   let rows: AuditRow[] = [];
   let actorEmails = new Map<string, string>();
+  let appActorMobiles = new Map<string, string>();
   let total = 0;
   let error: string | null = null;
 
@@ -162,7 +172,7 @@ export default async function VerificationApiReportPage({
     let query = supabaseAdmin
       .from("verification_api_audit_logs")
       .select(
-        "id, provider_code, verification_kind, endpoint, source, profile_type, account_code, profile_name, actor_user_id, actor_label, request_data, response_data, http_status, is_success, result_code, result_message, duration_ms, created_at",
+        "id, account_id, provider_code, verification_kind, endpoint, source, profile_type, account_code, profile_name, actor_user_id, actor_label, request_data, response_data, http_status, is_success, result_code, result_message, duration_ms, created_at",
         { count: "exact" }
       )
       .eq("company_id", companyId)
@@ -201,6 +211,33 @@ export default async function VerificationApiReportPage({
           );
         }
       }
+      const appProfileTables = [
+        ["employee", "employees"],
+        ["field_executive", "field_executives"],
+        ["contractor", "contractors"],
+        ["vendor", "vendors"],
+        ["worker", "workers"]
+      ] as const;
+      const appActorResults = await Promise.all(appProfileTables.map(async ([profileType, table]) => {
+        const ids = Array.from(new Set(
+          rows
+            .filter((row) => row.source.startsWith("dropx_one") && row.profile_type === profileType)
+            .map((row) => row.account_id)
+            .filter(Boolean)
+        )) as string[];
+        if (!ids.length) return [] as Array<[string, string]>;
+        const profiles = await supabaseAdmin!
+          .from(table)
+          .select("id, mobile, mobile_country_code")
+          .eq("company_id", companyId)
+          .in("id", ids);
+        if (profiles.error) return [] as Array<[string, string]>;
+        return (profiles.data ?? []).map((profile) => [
+          `${profileType}:${profile.id}`,
+          mobileLabel(profile.mobile_country_code, profile.mobile)
+        ] as [string, string]);
+      }));
+      appActorMobiles = new Map(appActorResults.flat());
     }
   }
 
@@ -292,7 +329,18 @@ export default async function VerificationApiReportPage({
                     </small>
                   </td>
                   <td>
-                    <strong>{performerLabel(row.actor_label, row.source)}</strong>
+                    {(() => {
+                      const performer = performerLabel(row.actor_label, row.source);
+                      const mobile = row.account_id && row.profile_type
+                        ? appActorMobiles.get(`${row.profile_type}:${row.account_id}`) ?? ""
+                        : "";
+                      return (
+                        <>
+                          <strong>{performer}</strong>
+                          {mobile && mobile !== performer ? <small>{mobile}</small> : null}
+                        </>
+                      );
+                    })()}
                     {row.actor_user_id && actorEmails.get(row.actor_user_id)
                       ? <small>{actorEmails.get(row.actor_user_id)}</small>
                       : null}

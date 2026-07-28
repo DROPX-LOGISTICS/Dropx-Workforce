@@ -5,6 +5,7 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type AuditRow = {
+  account_id: string | null;
   actor_label: string | null;
   actor_user_id: string | null;
   account_code: string | null;
@@ -74,6 +75,14 @@ function performerLabel(value: string | null, source: string) {
   return label || "-";
 }
 
+function mobileLabel(countryCode: unknown, mobile: unknown) {
+  const code = String(countryCode ?? "").replace(/\D/g, "") || "91";
+  let number = String(mobile ?? "").replace(/\D/g, "");
+  if (!number) return "";
+  if (number.startsWith(code) && number.length > 10) number = number.slice(code.length);
+  return `+${code} ${number}`;
+}
+
 function jsonValue(value: unknown) {
   if (value == null) return "";
   return JSON.stringify(value);
@@ -112,7 +121,7 @@ export async function GET(request: NextRequest) {
       let query = supabaseAdmin
         .from("verification_api_audit_logs")
         .select(
-          "provider_code, verification_kind, endpoint, source, profile_type, account_code, profile_name, actor_user_id, actor_label, request_data, response_data, http_status, is_success, result_code, result_message, duration_ms, created_at"
+          "account_id, provider_code, verification_kind, endpoint, source, profile_type, account_code, profile_name, actor_user_id, actor_label, request_data, response_data, http_status, is_success, result_code, result_message, duration_ms, created_at"
         )
         .eq("company_id", companyId)
         .order("created_at", { ascending: false });
@@ -150,6 +159,35 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    const appActorMobiles = new Map<string, string>();
+    const appProfileTables = [
+      ["employee", "employees"],
+      ["field_executive", "field_executives"],
+      ["contractor", "contractors"],
+      ["vendor", "vendors"],
+      ["worker", "workers"]
+    ] as const;
+    const appActorResults = await Promise.all(appProfileTables.map(async ([profileType, table]) => {
+      const ids = Array.from(new Set(
+        rows
+          .filter((row) => row.source.startsWith("dropx_one") && row.profile_type === profileType)
+          .map((row) => row.account_id)
+          .filter(Boolean)
+      )) as string[];
+      if (!ids.length) return [] as Array<[string, string]>;
+      const profiles = await supabaseAdmin!
+        .from(table)
+        .select("id, mobile, mobile_country_code")
+        .eq("company_id", companyId)
+        .in("id", ids);
+      if (profiles.error) throw new Error(profiles.error.message);
+      return (profiles.data ?? []).map((profile) => [
+        `${profileType}:${profile.id}`,
+        mobileLabel(profile.mobile_country_code, profile.mobile)
+      ] as [string, string]);
+    }));
+    appActorResults.flat().forEach(([key, value]) => appActorMobiles.set(key, value));
+
     const sheetRows = rows.map((row) => ({
       "Date and time": displayDate(row.created_at),
       "API": kindLabels[row.verification_kind] ?? row.verification_kind,
@@ -158,6 +196,9 @@ export async function GET(request: NextRequest) {
       "DropX ID": row.account_code ?? "",
       "Category": row.profile_type ? profileLabels[row.profile_type] ?? row.profile_type : "",
       "Performed by": performerLabel(row.actor_label, row.source),
+      "Performer mobile": row.account_id && row.profile_type
+        ? appActorMobiles.get(`${row.profile_type}:${row.account_id}`) ?? ""
+        : "",
       "Performer email": row.actor_user_id ? actorEmails.get(row.actor_user_id) ?? "" : "",
       "Platform": sourceLabels[row.source] ?? row.source,
       "Result": row.is_success ? "Success" : "Failed",
@@ -174,7 +215,7 @@ export async function GET(request: NextRequest) {
     const sheet = XLSX.utils.json_to_sheet(sheetRows);
     sheet["!cols"] = [
       { wch: 22 }, { wch: 20 }, { wch: 12 }, { wch: 28 }, { wch: 16 },
-      { wch: 24 }, { wch: 24 }, { wch: 30 }, { wch: 22 }, { wch: 12 },
+      { wch: 24 }, { wch: 24 }, { wch: 20 }, { wch: 30 }, { wch: 22 }, { wch: 12 },
       { wch: 12 }, { wch: 42 }, { wch: 16 }, { wch: 20 }, { wch: 28 },
       { wch: 55 }, { wch: 70 }
     ];

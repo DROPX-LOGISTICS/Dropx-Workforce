@@ -247,9 +247,9 @@ export default async function VerificationApiReportPage({
               <tr>
                 <th>Date and time</th>
                 <th>API</th>
-                <th>API for</th>
-                <th>User / account</th>
-                <th>Triggered from</th>
+                <th>Verification subject</th>
+                <th>Performed by</th>
+                <th>Platform</th>
                 <th>Result</th>
                 <th>Response</th>
                 <th>Time</th>
@@ -266,11 +266,14 @@ export default async function VerificationApiReportPage({
                   </td>
                   <td>
                     <strong>{row.profile_name || "-"}</strong>
-                    <small>{labelFor(profileOptions, row.profile_type ?? "")}</small>
+                    <small>
+                      {[row.account_code, labelFor(profileOptions, row.profile_type ?? "")]
+                        .filter(Boolean)
+                        .join(" · ") || "-"}
+                    </small>
                   </td>
                   <td>
-                    <strong>{row.account_code || "-"}</strong>
-                    <small>{row.actor_label || "-"}</small>
+                    <strong>{row.actor_label || "-"}</strong>
                   </td>
                   <td>{labelFor(sourceOptions, row.source)}</td>
                   <td>

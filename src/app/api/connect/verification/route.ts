@@ -156,7 +156,7 @@ async function resolveAccount(accountId: string, profileType: string) {
     companyId: row.company_id as string,
     fullName: compact(row.full_name),
     accountCode,
-    actorLabel: `${countryCode}${mobile}`
+    actorLabel: compact(row.full_name) || `${countryCode}${mobile}`
   };
 }
 

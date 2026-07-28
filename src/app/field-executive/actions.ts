@@ -409,10 +409,12 @@ export async function updateFieldExecutive(formData: FormData) {
       emergency_contact_number: "emergency_contact_number",
       emergency_contact_relation: "emergency_contact_relation"
     };
-    for (const key of dashboardRules.required) {
-      const payloadKey = profilePayloadKeys[key];
-      if (payloadKey && !String(payload[payloadKey] ?? "").trim()) {
-        throw new Error(`${key.replaceAll("_", " ")} is required.`);
+    if (config.profileType !== "field_executive" && config.profileType !== "contractor") {
+      for (const key of dashboardRules.required) {
+        const payloadKey = profilePayloadKeys[key];
+        if (payloadKey && !String(payload[payloadKey] ?? "").trim()) {
+          throw new Error(`${key.replaceAll("_", " ")} is required.`);
+        }
       }
     }
     const profilePayload = Object.fromEntries(

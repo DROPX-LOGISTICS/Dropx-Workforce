@@ -353,15 +353,17 @@ function FieldExecutiveForm({
   dashboardRules: { enabled: string[]; required: string[] };
 }) {
   const workforceConfig = nonEmployeeConfigForRoute(returnPath);
+  const optionalEditFields = mode === "edit" &&
+    (workforceConfig.profileType === "field_executive" || workforceConfig.profileType === "contractor");
   const fieldEnabled = (key: string) => dashboardRules.enabled.includes(key);
-  const fieldRequired = (key: string) => dashboardRules.required.includes(key);
+  const fieldRequired = (key: string) => !optionalEditFields && dashboardRules.required.includes(key);
   return (
     <form action={action} className="form-grid three">
       <input type="hidden" name="return_path" value={returnPath} />
       {executive ? <input type="hidden" name="id" value={executive.id} /> : null}
 
-      <label>Full name<input className="field" name="full_name" placeholder="Enter full name" required defaultValue={textValue(executive?.full_name)} /></label>
-      <label>Email<input className="field" name="email" placeholder="Enter email" required type="email" defaultValue={textValue(executive?.email)} /></label>
+      <label>Full name<input className="field" name="full_name" placeholder="Enter full name" required={!optionalEditFields} defaultValue={textValue(executive?.full_name)} /></label>
+      <label>Email<input className="field" name="email" placeholder="Enter email" required={!optionalEditFields} type="email" defaultValue={textValue(executive?.email)} /></label>
 
       <label>Country code
         <select className="select" name="mobile_country_code" defaultValue={executive?.mobile_country_code ?? "91"}>
@@ -370,8 +372,8 @@ function FieldExecutiveForm({
           ))}
         </select>
       </label>
-      <label>Mobile number<input className="field" inputMode="tel" maxLength={15} name="mobile" pattern="[0-9]{6,15}" placeholder="Enter mobile number" required defaultValue={textValue(executive?.mobile)} /></label>
-      <label>Date of join<input className="field" name="date_of_join" required type="date" defaultValue={textValue(executive?.date_of_join)} /></label>
+      <label>Mobile number<input className="field" inputMode="tel" maxLength={15} name="mobile" pattern="[0-9]{6,15}" placeholder="Enter mobile number" required={!optionalEditFields} defaultValue={textValue(executive?.mobile)} /></label>
+      <label>Date of join<input className="field" name="date_of_join" required={!optionalEditFields} type="date" defaultValue={textValue(executive?.date_of_join)} /></label>
       <ScopedDesignationFields
         designationName="designation"
         designationOptions={designationOptions}
@@ -379,6 +381,7 @@ function FieldExecutiveForm({
         initialLocationId={executive?.location_id}
         locationName="location_id"
         locationOptions={locationOptions}
+        required={!optionalEditFields}
       />
       <label hidden={!fieldEnabled("gender")}>Gender
         <SearchableSelect name="gender" options={genderOptions} defaultValue={executive?.gender} placeholder="Select gender" />
@@ -437,7 +440,7 @@ function FieldExecutiveForm({
 
       {mode === "edit" ? (
         <label>Status
-          <SearchableSelect name="is_active" options={statusOptions} defaultValue={executive?.is_active ? "true" : "false"} placeholder="Select status" required />
+          <SearchableSelect name="is_active" options={statusOptions} defaultValue={executive?.is_active ? "true" : "false"} placeholder="Select status" required={!optionalEditFields} />
         </label>
       ) : null}
 

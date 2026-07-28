@@ -265,43 +265,6 @@ export async function updateEmployee(formData: FormData) {
     const filteredExtraPayload = Object.fromEntries(
       Object.entries(extraPayload).filter(([key]) => dashboardEnabled.has(key))
     );
-    const requiredLabels: Record<string, string> = {
-      gender: "Gender",
-      date_of_birth: "Date of birth",
-      father_name: "Father name",
-      blood_group: "Blood group",
-      aadhaar_number: "Aadhaar number",
-      pan_number: "PAN number",
-      eshram_uan: "eShram UAN",
-      is_handicapped: "Handicapped",
-      address: "Address",
-      state_code: "State",
-      pincode: "Postal PIN",
-      landmark: "Landmark",
-      emergency_contact_name: "Emergency contact name",
-      emergency_contact_number: "Emergency contact number",
-      emergency_contact_relation: "Emergency relation",
-      bank_account_no: "Bank account number",
-      ifsc: "IFSC",
-      pf_uan: "PF UAN",
-      pf_account_no: "PF Account No",
-      esi_no: "ESI No"
-      ,
-      driving_license_no: "Driving license no",
-      driving_license_exp_date: "DL expiry date",
-      vehicle_reg_no: "Vehicle reg no",
-      vehicle_reg_exp_date: "Vehicle reg expiry",
-      vehicle_insurance_exp_date: "Vehicle Insurance expiry",
-      vehicle_pollution_exp_date: "Pollution expiry"
-    };
-    for (const key of dashboardRules.required) {
-      if ((key === "pf_uan" || key === "pf_account_no") && !statutoryApplicability.includes("pf")) continue;
-      if (key === "esi_no" && !statutoryApplicability.includes("esi")) continue;
-      if (key in extraPayload && !String(extraPayload[key as keyof typeof extraPayload] ?? "").trim()) {
-        throw new Error(`${requiredLabels[key] ?? key} is required.`);
-      }
-    }
-
     const existingResult = await supabaseAdmin
       .from("employees")
       .select("biometric_id, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path")

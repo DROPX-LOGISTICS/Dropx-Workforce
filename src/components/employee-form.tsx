@@ -147,7 +147,7 @@ export function EmployeeForm({ action, dashboardRules, designationOptions, emplo
     : filteredDesignationOptions;
   const designationDisabled = !selectedLocationId || !effectiveDesignationOptions.length;
   const fieldEnabled = (key: string) => dashboardRules.enabled.includes(key);
-  const fieldRequired = (key: string) => dashboardRules.required.includes(key);
+  const fieldRequired = (key: string) => !isEdit && dashboardRules.required.includes(key);
   const hasPf = selectedStatutory.includes("pf");
   const hasEsi = selectedStatutory.includes("esi");
 
@@ -249,7 +249,7 @@ export function EmployeeForm({ action, dashboardRules, designationOptions, emplo
       ) : null}
       {isEdit ? (
         <label>Status
-          <select className="select" defaultValue={employee?.is_active === false ? "false" : "true"} name="is_active" required>
+          <select className="select" defaultValue={employee?.is_active === false ? "false" : "true"} name="is_active">
             <option value="true">Active</option>
             <option value="false">Inactive</option>
           </select>

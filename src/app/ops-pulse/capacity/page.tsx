@@ -27,10 +27,6 @@ function fmt(value: number, digits = 0) {
   return value.toLocaleString("en-IN", { maximumFractionDigits: digits });
 }
 
-function shortDate(value: string | null) {
-  return value ? value.slice(8, 10) + "/" + value.slice(5, 7) : "—";
-}
-
 function scopeCodes(value: string | undefined, allowed: string[]) {
   if (!value) return allowed;
   if (value === "_none") return [];
@@ -44,25 +40,6 @@ function decisionTone(row: CapacityStationSnapshot) {
   if (row.decision.status === "monitor" || row.decision.status === "flex") return "warn";
   if (row.decision.status === "surplus") return "surplus";
   return "balanced";
-}
-
-function portfolioPosition(row: CapacityStationSnapshot) {
-  const gap = Math.max(-8, Math.min(8, row.modelledGap ?? 0));
-  const ratio = row.targetSpr ? row.spr / row.targetSpr : 1;
-  return {
-    left: `${Math.max(3, Math.min(97, 50 + gap / 8 * 45))}%`,
-    top: `${Math.max(5, Math.min(95, 78 - (ratio - 0.65) / 0.75 * 68))}%`,
-    size: Math.max(24, Math.min(44, 22 + Math.sqrt(Math.max(0, row.averageWorkload)) / 3))
-  };
-}
-
-function trendPath(values: number[], width: number, height: number, scaleMaximum?: number) {
-  const maximum = scaleMaximum ?? Math.max(1, ...values);
-  return values.map((value, index) => {
-    const x = values.length <= 1 ? width / 2 : index / (values.length - 1) * width;
-    const y = height - value / maximum * (height - 16) - 8;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
 }
 
 export default async function CapacityPage({ searchParams }: { searchParams?: SearchParams }) {
@@ -127,112 +104,67 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
     cluster: location.cluster || "",
     region: location.region || ""
   }));
-  const sourceFreshPct = snapshot.summary.stations ? Math.round(snapshot.summary.sourceReady / snapshot.summary.stations * 100) : 0;
-  const groundReadyPct = snapshot.summary.stations ? Math.round(snapshot.summary.groundReady / snapshot.summary.stations * 100) : 0;
-  const trend = snapshot.trend.slice(-14);
-  const trendMaximum = Math.max(1, ...trend.flatMap((row) => [row.workload, row.supportedWorkload]));
-  const workloadPath = trendPath(trend.map((row) => row.workload), 720, 180, trendMaximum);
-  const supportedPath = trendPath(trend.map((row) => row.supportedWorkload), 720, 180, trendMaximum);
+  const totalActiveIds = snapshot.stations.reduce((sum, row) => sum + row.latestSystemIds, 0);
+  const totalAverageWorkload = snapshot.stations.reduce((sum, row) => sum + row.averageWorkload, 0);
+  const totalRequiredIds = snapshot.stations.reduce((sum, row) => sum + (row.requiredIds ?? 0), 0);
   const error = [locationResult.error, ...snapshot.errors].filter(Boolean).join(" · ");
 
-  return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace capacity-control-tower">
-    <PageHead eyebrow="Workforce Planning" title="Capacity Control Tower" subtitle="One trusted view of readiness, workload, workforce position and required actions." />
+  return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace capacity-control-tower capacity-simple">
+    <PageHead eyebrow="Workforce Planning" title="Capacity" subtitle="Workload, available associates and the stations that need attention." />
     <div className="capacity-tabs-toolbar"><CapacityWorkspaceTabs active="overview" /><CapacityScopeFilter selectedCodes={selectedCodes} stations={scopeStations}/></div>
     <CapacityViewTabs active="operations" />
     {error ? <div className="message-panel error">{error}</div> : null}
 
-    <section className={`capacity-readiness-banner ${snapshot.summary.stale ? "warning" : "ready"}`}>
-      <div><span>As of</span><strong>{snapshot.scopeDataDate ? snapshot.scopeDataDate.split("-").reverse().join("/") : "No complete date"}</strong></div>
-      <div><span>Source coverage</span><strong>{snapshot.scopeCoverage}%</strong></div>
-      <div><span>Fresh stations</span><strong>{snapshot.summary.sourceReady}/{snapshot.summary.stations}</strong></div>
-      <div><span>Ground ready</span><strong>{snapshot.summary.groundReady}/{snapshot.summary.stations}</strong></div>
-      <p>{snapshot.summary.stale
-        ? `${snapshot.summary.stale} station${snapshot.summary.stale === 1 ? " has" : "s have"} stale or missing source data. Hiring remains evidence-gated.`
-        : "All selected stations have current workload data. Ground-matched stations can proceed to workforce review."}</p>
+    <section className={`capacity-simple-status ${snapshot.summary.stale ? "warning" : "ready"}`}>
+      <span className="capacity-simple-status-dot"/>
+      <strong>{snapshot.summary.stale ? `${snapshot.summary.stale} station${snapshot.summary.stale === 1 ? "" : "s"} need a data refresh` : "Workload data is current"}</strong>
+      <span>As of {snapshot.scopeDataDate ? snapshot.scopeDataDate.split("-").reverse().join("/") : "—"}</span>
+      <span>{snapshot.scopeCoverage}% coverage</span>
+      <a href={`/ops-pulse/capacity/daily?date=${reportingDate}${searchParams?.stations ? `&stations=${encodeURIComponent(searchParams.stations)}` : ""}`}>Update ground data</a>
     </section>
 
-    <section className="capacity-hero-grid">
-      <article><span>Action required</span><strong>{snapshot.summary.actionRequired}</strong><small>Across selected scope</small></article>
-      <article><span>Hiring candidates</span><strong>{snapshot.summary.hireCandidates}</strong><small>{snapshot.summary.permanentGap} sustained positions</small></article>
-      <article><span>Peak flex</span><strong>{snapshot.summary.peakFlex}</strong><small>Temporary resources at P90</small></article>
-      <article><span>Scope SPR</span><strong>{fmt(snapshot.summary.averageSpr, 1)}</strong><small>Canonical 14-day workload SPR</small></article>
-      <article><span>Data readiness</span><strong>{sourceFreshPct}%</strong><small>Ground evidence {groundReadyPct}%</small></article>
+    <section className="capacity-simple-kpis">
+      <article><span>Average daily workload</span><strong>{fmt(totalAverageWorkload)}</strong><small>Last 14 completed days</small></article>
+      <article><span>Active associates</span><strong>{fmt(totalActiveIds)}</strong><small>Latest system count</small></article>
+      <article><span>Average SPR</span><strong>{fmt(snapshot.summary.averageSpr, 1)}</strong><small>Workload per active associate</small></article>
+      <article><span>Required associates</span><strong>{fmt(totalRequiredIds)}</strong><small>At configured station targets</small></article>
     </section>
 
-    <section className="capacity-control-grid">
-      <article className="panel capacity-portfolio-panel">
-        <div className="panel-head"><div><h2>Capacity position</h2><p className="subtle">SPR versus modelled headcount gap. Bubble size represents workload.</p></div><div className="capacity-chart-legend"><span className="risk">Action</span><span className="warn">Monitor</span><span className="balanced">Balanced</span></div></div>
-        <div className="capacity-portfolio-chart">
-          <span className="axis-label y-high">High SPR</span><span className="axis-label y-low">Low SPR</span>
-          <span className="axis-label x-left">Surplus</span><span className="axis-label x-right">Shortage</span>
-          <i className="axis vertical"/><i className="axis horizontal"/>
-          {snapshot.stations.map((row) => {
-            const position = portfolioPosition(row);
-            return <a
-              aria-label={`${row.stationCode}: ${fmt(row.spr, 1)} SPR, ${row.modelledGap ?? 0} modelled gap`}
-              className={`capacity-portfolio-bubble ${decisionTone(row)}`}
-              href={`/ops-pulse/capacity/${row.stationCode}?from=${snapshot.from}&to=${reportingDate}`}
-              key={row.stationCode}
-              style={{ height: position.size, left: position.left, top: position.top, width: position.size }}
-              title={`${row.stationCode} · SPR ${fmt(row.spr, 1)} · gap ${row.modelledGap == null ? "—" : row.modelledGap}`}
-            >{row.stationCode}</a>;
-          })}
-        </div>
-      </article>
-
-      <article className="panel capacity-action-queue">
-        <div className="panel-head"><div><h2>Action queue</h2><p className="subtle">Highest-priority evidence and capacity actions.</p></div><a href="/ops-pulse/capacity/hiring">Full review →</a></div>
-        <div className="capacity-action-list">
-          {actionQueue.map((row) => <a href={`/ops-pulse/capacity/${row.stationCode}?from=${snapshot.from}&to=${reportingDate}`} key={row.stationCode}>
-            <span className={`capacity-action-code ${decisionTone(row)}`}>{row.stationCode}</span>
-            <span><strong>{row.dataState !== "ready" ? "Data refresh required" : row.decision.label}</strong><small>{row.action}</small></span>
-            <b>›</b>
-          </a>)}
-          {!actionQueue.length ? <p className="empty-cell">No current Capacity actions.</p> : null}
-        </div>
-      </article>
-    </section>
-
-    <section className="panel capacity-scope-trend">
-      <div className="panel-head"><div><h2>14-day operating trend</h2><p className="subtle">Actual workload versus the workload supportable at configured target SPR.</p></div><div className="capacity-chart-legend"><span className="workload">Workload</span><span className="required">Capacity at target</span></div></div>
-      <div className="capacity-trend-chart">
-        <svg preserveAspectRatio="none" role="img" viewBox="0 0 720 180">
-          <line x1="0" x2="720" y1="45" y2="45"/><line x1="0" x2="720" y1="90" y2="90"/><line x1="0" x2="720" y1="135" y2="135"/>
-          <polyline className="workload" fill="none" points={workloadPath}/>
-          <polyline className="required" fill="none" points={supportedPath}/>
-        </svg>
-        <div className="capacity-trend-dates">{trend.map((row, index) => <span key={row.date}>{index % 2 === 0 || index === trend.length - 1 ? shortDate(row.date) : ""}</span>)}</div>
+    <section className="panel capacity-simple-priorities">
+      <div className="panel-head"><div><h2>Priority stations</h2><p className="subtle">The stations to review first.</p></div><a href="/ops-pulse/capacity/hiring">Open hiring review →</a></div>
+      <div className="capacity-simple-priority-list">
+        {actionQueue.slice(0, 6).map((row) => <a href={`/ops-pulse/capacity/${row.stationCode}?from=${snapshot.from}&to=${reportingDate}`} key={row.stationCode}>
+          <span className={`capacity-action-code ${decisionTone(row)}`}>{row.stationCode}</span>
+          <span><strong>{row.stationName}</strong><small>{row.cluster || row.region || "—"}</small></span>
+          <span className="capacity-simple-priority-metric"><strong>{row.modelledGap == null ? "—" : `${row.modelledGap > 0 ? "+" : ""}${row.modelledGap}`}</strong><small>associate gap</small></span>
+          <span className={`capacity-decision ${decisionTone(row)}`}>{row.dataState !== "ready" ? "Refresh data" : row.groundReady ? row.decision.label : "Ground update"}</span>
+          <b>›</b>
+        </a>)}
+        {!actionQueue.length ? <p className="empty-cell">No stations require attention.</p> : null}
       </div>
     </section>
 
-    <section className="panel">
-      <div className="panel-head"><div><h2>Station evidence</h2><p className="subtle">Hiring is enabled only after the configured ground-match and sustained-shortage gates are met.</p></div><div className="capacity-panel-actions"><a className="button secondary compact" href={`/ops-pulse/capacity/daily?date=${reportingDate}${searchParams?.stations ? `&stations=${encodeURIComponent(searchParams.stations)}` : ""}`}>Update ground</a><a className="button secondary compact" href="/master/capacity">Capacity Master</a></div></div>
-      <div className="table-wrap"><table className="capacity-table capacity-control-table"><thead><tr>
+    <section className="panel capacity-simple-stations">
+      <div className="panel-head"><div><h2>All stations</h2><p className="subtle">{snapshot.summary.stations} stations · open a station for daily and associate detail.</p></div><a className="button secondary compact" href="/master/capacity">Capacity Master</a></div>
+      <div className="table-wrap"><table className="capacity-table capacity-simple-table"><thead><tr>
         <th><a href={sortHref("station")}>Station {sortMark("station")}</a></th>
-        <th><a href={sortHref("freshness")}>Data {sortMark("freshness")}</a></th>
-        <th><a href={sortHref("workload")}>14-day base {sortMark("workload")}</a></th>
-        <th>System IDs</th><th>Ground regular</th>
+        <th><a href={sortHref("workload")}>Avg workload {sortMark("workload")}</a></th>
+        <th>Active IDs</th>
         <th><a href={sortHref("spr")}>SPR {sortMark("spr")}</a></th>
         <th><a href={sortHref("required")}>Required {sortMark("required")}</a></th>
         <th><a href={sortHref("gap")}>Gap {sortMark("gap")}</a></th>
-        <th><a href={sortHref("confidence")}>Confidence {sortMark("confidence")}</a></th>
-        <th><a href={sortHref("decision")}>Decision {sortMark("decision")}</a></th>
-        <th>Action</th>
+        <th><a href={sortHref("decision")}>Status {sortMark("decision")}</a></th>
       </tr></thead><tbody>
         {stations.map((row) => <tr key={row.stationCode}>
           <td><a className="capacity-station-link" href={`/ops-pulse/capacity/${row.stationCode}?from=${snapshot.from}&to=${reportingDate}`}><strong>{row.stationCode}</strong><small>{row.stationName} · {row.cluster || row.region || "—"}</small></a></td>
-          <td><span className={`capacity-data-state ${row.dataState}`}>{row.dataState === "ready" ? "Current" : row.dataState === "stale" ? `${row.freshnessDays}d stale` : "Missing"}</span><small>{row.latestDate || "No source date"}</small></td>
-          <td><strong>{fmt(row.averageWorkload)}</strong><small>P90 {fmt(row.decision.peakWorkload)}</small></td>
-          <td><strong>{fmt(row.latestSystemIds)}</strong><small>Avg {fmt(row.averageSystemIds, 1)}</small></td>
-          <td>{row.groundRegular == null ? "—" : <><strong>{fmt(row.groundRegular)}</strong><small>{row.groundDate}</small></>}</td>
+          <td><strong>{fmt(row.averageWorkload)}</strong></td>
+          <td><strong>{fmt(row.latestSystemIds)}</strong></td>
           <td><strong className={row.maxSafeSpr && row.spr > row.maxSafeSpr ? "metric-bad-text" : ""}>{row.averageWorkload ? fmt(row.spr, 1) : "—"}</strong><small>{row.targetSpr ? `Target ${fmt(row.targetSpr, 1)}` : "Target pending"}</small></td>
           <td>{row.requiredIds ?? "—"}</td>
-          <td><strong className={(row.modelledGap ?? 0) > 0 ? "metric-bad-text" : (row.modelledGap ?? 0) < -1 ? "metric-warn-text" : "metric-good-text"}>{row.modelledGap == null ? "—" : `${row.modelledGap > 0 ? "+" : ""}${row.modelledGap}`}</strong><small>{row.groundRegular == null ? "Modelled" : "Ground based"}</small></td>
-          <td><span className={`capacity-confidence ${row.decision.confidence}`}>{row.decision.confidence}</span><small>{row.decision.matchedDays}/{row.decision.minimumMatchedDays} ground days</small></td>
-          <td><span className={`capacity-decision ${decisionTone(row)}`}>{row.dataState === "ready" ? row.decision.label : "Data required"}</span></td>
-          <td><span className="capacity-ai-action" title={row.action}>{row.action}</span></td>
+          <td><strong className={(row.modelledGap ?? 0) > 0 ? "metric-bad-text" : (row.modelledGap ?? 0) < -1 ? "metric-warn-text" : "metric-good-text"}>{row.modelledGap == null ? "—" : `${row.modelledGap > 0 ? "+" : ""}${row.modelledGap}`}</strong></td>
+          <td><span className={`capacity-decision ${decisionTone(row)}`}>{row.dataState !== "ready" ? "Refresh data" : row.groundReady ? row.decision.label : "Ground update"}</span></td>
         </tr>)}
-        {!stations.length ? <tr><td className="empty-cell" colSpan={11}>No permitted stations are selected.</td></tr> : null}
+        {!stations.length ? <tr><td className="empty-cell" colSpan={7}>No permitted stations are selected.</td></tr> : null}
       </tbody></table></div>
     </section>
   </div></AppShell>;

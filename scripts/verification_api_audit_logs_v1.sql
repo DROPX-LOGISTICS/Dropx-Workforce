@@ -40,4 +40,3 @@ on public.verification_api_audit_logs
 for all
 using (auth.role() = 'service_role')
 with check (auth.role() = 'service_role');
-

@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import { StatusPill } from "@/components/status-pill";
 import { VerificationApiLogDetails } from "@/components/verification-api-log-details";
+import { VerificationApiReportFilters } from "@/components/verification-api-report-filters";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -11,6 +12,7 @@ type SearchParams = {
   from?: string;
   kind?: string;
   page?: string;
+  per_page?: string;
   profile_type?: string;
   result?: string;
   search?: string;
@@ -38,8 +40,6 @@ type AuditRow = {
   duration_ms: number | null;
   created_at: string;
 };
-
-const pageSize = 50;
 
 const kindOptions = [
   ["", "All API types"],
@@ -74,6 +74,20 @@ function clean(value: string | undefined) {
 function safePage(value: string | undefined) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
+function safePageSize(value: string | undefined) {
+  const parsed = Number(value);
+  return [20, 50, 100].includes(parsed) ? parsed : 20;
+}
+
+function selectedValues(value: string | undefined, allowed: string[]) {
+  return Array.from(new Set(
+    clean(value)
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => allowed.includes(item))
+  ));
 }
 
 function safeDate(value: string | undefined) {
@@ -128,12 +142,13 @@ export default async function VerificationApiReportPage({
   const authorization = await requirePagePermission("verification_api_reports", "access");
   const companyId = requireCompanyId(authorization);
   const page = safePage(searchParams.page);
+  const pageSize = safePageSize(searchParams.per_page);
   const from = safeDate(searchParams.from);
   const to = safeDate(searchParams.to);
-  const kind = clean(searchParams.kind);
-  const source = clean(searchParams.source);
-  const profileType = clean(searchParams.profile_type);
-  const result = clean(searchParams.result);
+  const kinds = selectedValues(searchParams.kind, kindOptions.map(([value]) => value).filter(Boolean));
+  const sources = selectedValues(searchParams.source, sourceOptions.map(([value]) => value).filter(Boolean));
+  const profileTypes = selectedValues(searchParams.profile_type, profileOptions.map(([value]) => value).filter(Boolean));
+  const results = selectedValues(searchParams.result, ["success", "failed"]);
   const search = clean(searchParams.search).replace(/[,%()]/g, " ");
 
   let rows: AuditRow[] = [];
@@ -155,11 +170,10 @@ export default async function VerificationApiReportPage({
 
     if (from) query = query.gte("created_at", `${from}T00:00:00+05:30`);
     if (to) query = query.lte("created_at", `${to}T23:59:59.999+05:30`);
-    if (kind) query = query.eq("verification_kind", kind);
-    if (source) query = query.eq("source", source);
-    if (profileType) query = query.eq("profile_type", profileType);
-    if (result === "success") query = query.eq("is_success", true);
-    if (result === "failed") query = query.eq("is_success", false);
+    if (kinds.length) query = query.in("verification_kind", kinds);
+    if (sources.length) query = query.in("source", sources);
+    if (profileTypes.length) query = query.in("profile_type", profileTypes);
+    if (results.length === 1) query = query.eq("is_success", results[0] === "success");
     if (search) {
       query = query.or(
         `account_code.ilike.%${search}%,profile_name.ilike.%${search}%,actor_label.ilike.%${search}%,result_message.ilike.%${search}%`
@@ -220,39 +234,12 @@ export default async function VerificationApiReportPage({
       ) : null}
 
       <section className="panel">
-        <form action="/reports/verification-api" className="verification-api-report-filters" method="get">
-          <label>From<input className="field" defaultValue={from} name="from" type="date" /></label>
-          <label>To<input className="field" defaultValue={to} name="to" type="date" /></label>
-          <label>API type
-            <select className="field" defaultValue={kind} name="kind">
-              {kindOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </label>
-          <label>Source
-            <select className="field" defaultValue={source} name="source">
-              {sourceOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </label>
-          <label>Category
-            <select className="field" defaultValue={profileType} name="profile_type">
-              {profileOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </label>
-          <label>Result
-            <select className="field" defaultValue={result} name="result">
-              <option value="">All results</option>
-              <option value="success">Success</option>
-              <option value="failed">Failed</option>
-            </select>
-          </label>
-          <label className="verification-api-report-search">Search
-            <input className="field" defaultValue={searchParams.search ?? ""} name="search" placeholder="DropX ID, name, user, or message" />
-          </label>
-          <div className="verification-api-filter-actions">
-            <button className="button" type="submit">Apply filters</button>
-            <Link className="button secondary" href="/reports/verification-api">Clear</Link>
-          </div>
-        </form>
+        <VerificationApiReportFilters
+          kindOptions={kindOptions.filter(([value]) => value).map(([value, label]) => ({ value, label }))}
+          profileOptions={profileOptions.filter(([value]) => value).map(([value, label]) => ({ value, label }))}
+          resultOptions={[{ value: "success", label: "Success" }, { value: "failed", label: "Failed" }]}
+          sourceOptions={sourceOptions.filter(([value]) => value).map(([value, label]) => ({ value, label }))}
+        />
       </section>
 
       <section className="grid metrics verification-api-metrics">
@@ -266,7 +253,11 @@ export default async function VerificationApiReportPage({
         <div className="panel-head">
           <div>
             <h2>API trigger history</h2>
-            <p className="subtle">{total} matching records. Newest calls are shown first.</p>
+            <p className="subtle">
+              {total
+                ? `Showing ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, total)} of ${total} matching records.`
+                : "0 matching records."} Newest calls are shown first.
+            </p>
           </div>
         </div>
         <div className="table-wrap verification-api-report-table">
@@ -331,11 +322,15 @@ export default async function VerificationApiReportPage({
             </tbody>
           </table>
         </div>
-        {totalPages > 1 ? (
+        {total > 0 ? (
           <nav className="verification-api-pagination" aria-label="Verification API report pages">
-            {page > 1 ? <Link className="button secondary compact" href={paginationHref(searchParams, page - 1)}>Previous</Link> : <span />}
+            {page > 1
+              ? <Link className="button secondary compact" href={paginationHref(searchParams, page - 1)}>Previous</Link>
+              : <span className="button secondary compact disabled">Previous</span>}
             <span>Page {page} of {totalPages}</span>
-            {page < totalPages ? <Link className="button secondary compact" href={paginationHref(searchParams, page + 1)}>Next</Link> : <span />}
+            {page < totalPages
+              ? <Link className="button secondary compact" href={paginationHref(searchParams, page + 1)}>Next</Link>
+              : <span className="button secondary compact disabled">Next</span>}
           </nav>
         ) : null}
       </section>

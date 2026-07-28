@@ -14119,24 +14119,63 @@ td strong,
 }
 .verification-api-report-filters {
   display: grid;
-  grid-template-columns: repeat(6, minmax(130px, 1fr));
+  grid-template-columns: repeat(6, minmax(140px, 1fr));
   gap: 12px;
   padding: 16px;
 }
 
-.verification-api-report-filters label {
+.verification-api-report-filters > label,
+.verification-api-filter-field {
   display: grid;
   gap: 6px;
+  min-width: 0;
+}
+
+.verification-api-filter-field {
+  position: relative;
+}
+
+.verification-api-filter-field > span {
+  font-size: 14px;
+}
+
+.verification-api-filter-field .bulk-multi-filter-trigger {
+  width: 100%;
+  min-height: 42px;
+}
+
+.verification-api-filter-menu {
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  min-width: 250px;
+}
+
+.verification-api-filter-menu .multi-select-all {
+  border-top: 1px solid #edf0f3;
+  border-bottom: 1px solid #edf0f3;
 }
 
 .verification-api-report-search {
   grid-column: span 2;
 }
 
+.verification-api-page-size {
+  max-width: 180px;
+}
+
 .verification-api-filter-actions {
   display: flex;
   align-items: end;
+  justify-content: flex-end;
   gap: 8px;
+  grid-column: span 3;
+}
+
+.verification-api-export-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
 
 .verification-api-metrics {
@@ -14206,6 +14245,11 @@ td strong,
   justify-self: end;
 }
 
+.verification-api-pagination .disabled {
+  pointer-events: none;
+  opacity: 0.45;
+}
+
 @media (max-width: 1100px) {
   .verification-api-report-filters {
     grid-template-columns: repeat(3, minmax(140px, 1fr));
@@ -14213,6 +14257,10 @@ td strong,
 
   .verification-api-json-grid {
     grid-template-columns: 1fr;
+  }
+
+  .verification-api-filter-actions {
+    grid-column: span 2;
   }
 }
 
@@ -14224,6 +14272,19 @@ td strong,
 
   .verification-api-report-search {
     grid-column: auto;
+  }
+
+  .verification-api-page-size {
+    max-width: none;
+  }
+
+  .verification-api-filter-actions {
+    grid-column: auto;
+    justify-content: stretch;
+  }
+
+  .verification-api-filter-actions .button {
+    flex: 1;
   }
 
   .verification-api-detail-modal {

@@ -205,15 +205,21 @@ export async function ReportUploadPageContent({
     : { data: [] as ShipmentCoverageRow[], error: null };
   const coverageRows = (coverageResult.data ?? []) as ShipmentCoverageRow[];
   const coverageByKey = new Map(coverageRows.map((row) => [`${row.source_type}|${row.parent_station_code}`, row]));
-  const stationBatch = (sourceType: string, stationCode: string) => batches.find((batch) =>
-    batch.source_type === sourceType
-    && createdDateInIndia(batch.created_at) === date
-    && (batch.station_code ?? "").split(",").map((code) => code.trim()).includes(stationCode));
+  const stationBatch = (sourceType: string, stationCodes: string[]) => {
+    const expectedCodes = new Set(stationCodes.map((code) => code.trim().toUpperCase()).filter(Boolean));
+    return batches.find((batch) =>
+      batch.source_type === sourceType
+      && createdDateInIndia(batch.created_at) === date
+      && (batch.station_code ?? "")
+        .split(",")
+        .map((code) => code.trim().toUpperCase())
+        .some((code) => expectedCodes.has(code)));
+  };
   const stationCoverage = expectedShipmentStations.map((station) => {
     const statusFor = (sourceType: string) => {
       const coverage = coverageByKey.get(`${sourceType}|${station.code}`);
       if (coverage) return { status: "Uploaded", count: coverage.shipment_count, uploadedAt: coverage.last_uploaded_at };
-      const batch = stationBatch(sourceType, station.code);
+      const batch = stationBatch(sourceType, [station.code, ...station.childCodes]);
       if (batch && ["completed", "success", "succeeded"].includes(batch.status.toLowerCase())) {
         return {
           status: "Uploaded",

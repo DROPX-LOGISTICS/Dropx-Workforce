@@ -196,10 +196,12 @@ export async function GET(request: NextRequest) {
       "DropX ID": row.account_code ?? "",
       "Category": row.profile_type ? profileLabels[row.profile_type] ?? row.profile_type : "",
       "Performed by": performerLabel(row.actor_label, row.source),
-      "Performer mobile": row.account_id && row.profile_type
+      "Performer mobile": row.source.startsWith("dropx_one") && row.account_id && row.profile_type
         ? appActorMobiles.get(`${row.profile_type}:${row.account_id}`) ?? ""
         : "",
-      "Performer email": row.actor_user_id ? actorEmails.get(row.actor_user_id) ?? "" : "",
+      "Performer email": row.source === "dashboard" && row.actor_user_id
+        ? actorEmails.get(row.actor_user_id) ?? ""
+        : "",
       "Platform": sourceLabels[row.source] ?? row.source,
       "Result": row.is_success ? "Success" : "Failed",
       "HTTP status": row.http_status ?? "",

@@ -331,7 +331,7 @@ export default async function VerificationApiReportPage({
                   <td>
                     {(() => {
                       const performer = performerLabel(row.actor_label, row.source);
-                      const mobile = row.account_id && row.profile_type
+                      const mobile = row.source.startsWith("dropx_one") && row.account_id && row.profile_type
                         ? appActorMobiles.get(`${row.profile_type}:${row.account_id}`) ?? ""
                         : "";
                       return (
@@ -341,7 +341,7 @@ export default async function VerificationApiReportPage({
                         </>
                       );
                     })()}
-                    {row.actor_user_id && actorEmails.get(row.actor_user_id)
+                    {row.source === "dashboard" && row.actor_user_id && actorEmails.get(row.actor_user_id)
                       ? <small>{actorEmails.get(row.actor_user_id)}</small>
                       : null}
                   </td>

@@ -23,8 +23,8 @@ export type CapacityStationSnapshot = {
   maxSafeSpr: number | null;
   requiredIds: number | null;
   modelledGap: number | null;
-  latestRegularIds: number;
-  latestAdHocIds: number;
+  latestInternalDAs: number;
+  latestExternalDAs: number;
   latestAdHocRequests: number;
   decision: CapacityPlanningDecision;
   action: string;
@@ -36,8 +36,8 @@ export type CapacityTrendPoint = {
   systemIds: number;
   requiredIds: number;
   supportedWorkload: number;
-  regularIds: number;
-  adHocIds: number;
+  internalDAs: number;
+  externalDAs: number;
   sourceStations: number;
 };
 
@@ -51,7 +51,7 @@ export type CapacitySnapshot = {
   summary: {
     stations: number;
     sourceReady: number;
-    adHocIds: number;
+    externalDAs: number;
     stale: number;
     actionRequired: number;
     hireCandidates: number;
@@ -146,8 +146,8 @@ export async function loadCapacitySnapshot({
       maxSafeSpr: rule?.maxSafeSpr ?? null,
       requiredIds,
       modelledGap,
-      latestRegularIds: latestDay?.regular ?? 0,
-      latestAdHocIds: latestDay?.adHoc ?? 0,
+      latestInternalDAs: latestDay?.internalDAs ?? 0,
+      latestExternalDAs: latestDay?.externalDAs ?? 0,
       latestAdHocRequests: latestDay?.paymentRequests ?? 0,
       decision,
       action
@@ -180,8 +180,8 @@ export async function loadCapacitySnapshot({
         const day = station.decision.daily.find((entry) => entry.date === date);
         return sum + (day && station.targetSpr ? day.systemIds * station.targetSpr : 0);
       }, 0),
-      regularIds: days.reduce((sum, day) => sum + num(day?.regular), 0),
-      adHocIds: days.reduce((sum, day) => sum + num(day?.adHoc), 0),
+      internalDAs: days.reduce((sum, day) => sum + num(day?.internalDAs), 0),
+      externalDAs: days.reduce((sum, day) => sum + num(day?.externalDAs), 0),
       sourceStations: days.length,
     };
   });
@@ -201,7 +201,7 @@ export async function loadCapacitySnapshot({
     summary: {
       stations: stations.length,
       sourceReady: readyStations.length,
-      adHocIds: stations.reduce((sum, station) => sum + station.latestAdHocIds, 0),
+      externalDAs: stations.reduce((sum, station) => sum + station.latestExternalDAs, 0),
       stale: stations.filter((station) => station.dataState !== "ready").length,
       actionRequired: stations.filter((station) => actionStatuses.has(station.decision.status) || station.dataState !== "ready").length,
       hireCandidates: hireCandidates.length,

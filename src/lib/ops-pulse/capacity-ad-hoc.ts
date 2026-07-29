@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 export type CapacityAdHocUsage = {
   stationCode: string;
   workDate: string;
-  adHocIds: number;
+  externalDaCount: number;
   paymentRequests: number;
   trackingIds: string[];
 };
@@ -147,7 +147,7 @@ export async function loadApprovedCapacityAdHocUsage(companyId: string, from: st
   const rows = [...usage.values()].map((row): CapacityAdHocUsage => ({
     stationCode: row.stationCode,
     workDate: row.workDate,
-    adHocIds: row.trackingIds.size + row.anonymous.size,
+    externalDaCount: row.trackingIds.size + row.anonymous.size,
     paymentRequests: row.requestIds.size,
     trackingIds: [...row.trackingIds].sort()
   })).sort((left, right) => left.workDate.localeCompare(right.workDate) || left.stationCode.localeCompare(right.stationCode));

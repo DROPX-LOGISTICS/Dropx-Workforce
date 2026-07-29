@@ -34,14 +34,14 @@ function formatNumber(value: number, digits = 0) {
 }
 
 function capacityHelp() {
-  return "I’m DropX Ops AI. For Capacity, I can explain station SPR, regular versus approved ad-hoc IDs, headcount gaps, data freshness, peak flex and hiring evidence. Try “Why is GDRD under action?”, “Which stations need flex?” or “How many approved ad-hoc IDs were used?”";
+  return "I’m DropX Ops AI. For Capacity, I can explain station SPR, Amazon IDs used, internal versus approved external DA coverage, headcount gaps, data freshness, peak flex and hiring evidence. Try “Why is GDRD under action?”, “Which stations need flex?” or “How many external DAs covered active IDs?”";
 }
 
 function capacityLine(row: CapacityStationSnapshot) {
   const target = row.targetSpr == null ? "target not configured" : `target ${formatNumber(row.targetSpr, 1)}`;
   const gap = row.modelledGap == null ? "gap unavailable" : `${row.modelledGap > 0 ? "+" : ""}${row.modelledGap} payment-adjusted gap`;
   const freshness = row.latestDate ? `as of ${row.latestDate}` : "source date unavailable";
-  return `${row.stationCode}: SPR ${formatNumber(row.spr, 1)} (${target}), ${formatNumber(row.latestRegularIds)} regular + ${formatNumber(row.latestAdHocIds)} approved ad-hoc IDs, ${gap}, ${row.decision.label}; ${freshness}.`;
+  return `${row.stationCode}: SPR ${formatNumber(row.spr, 1)} (${target}), ${formatNumber(row.latestSystemIds)} Amazon IDs used—${formatNumber(row.latestInternalDAs)} internal DAs and ${formatNumber(row.latestExternalDAs)} approved external DAs—${gap}, ${row.decision.label}; ${freshness}.`;
 }
 
 function capacityAnswer(question: string, rows: CapacityStationSnapshot[], from: string, to: string) {
@@ -56,7 +56,7 @@ function capacityAnswer(question: string, rows: CapacityStationSnapshot[], from:
       : `All ${rows.length} permitted Capacity stations have current source data. ${scopeNote}`;
   }
   if (/ground|matched|update ready/.test(q)) {
-    return `Manual ground updates are no longer used. Capacity classifies regular IDs as road IDs minus final-approved ad-hoc DA payment records. ${scopeNote}`;
+    return `Manual ground updates are no longer used. Amazon IDs remain the unchanged total; final-approved external DA payments classify which of those same IDs were operated by external DAs. Internal DA coverage equals Amazon IDs used minus external DAs. ${scopeNote}`;
   }
   if (/hire|hiring|permanent gap/.test(q)) {
     const candidates = rows.filter((row) => row.decision.status === "hire_candidate");

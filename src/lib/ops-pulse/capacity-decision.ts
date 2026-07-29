@@ -29,10 +29,10 @@ export type CapacityPlanningDay = {
   systemIds: number;
   workload: number;
   inbound: number;
-  regular: number;
-  adHoc: number;
+  internalDAs: number;
+  externalDAs: number;
   paymentRequests: number;
-  adHocMismatch: number;
+  externalDaMismatch: number;
   required: number | null;
   spr: number;
   source: string;
@@ -49,8 +49,8 @@ export type CapacityPlanningDecision = {
   latestSystemIds: number;
   baseWorkload: number;
   peakWorkload: number;
-  regularCapacity: number;
-  regularCapacitySource: "payment_adjusted" | "system" | "none";
+  internalCapacity: number;
+  internalCapacitySource: "payment_adjusted" | "system" | "none";
   permanentRequired: number | null;
   permanentGap: number | null;
   peakRequired: number | null;
@@ -100,7 +100,7 @@ function blockGap(days: CapacityPlanningDay[], rule: CapacityRule | undefined) {
   const operational = days.filter((day) => day.workload > 0 && day.systemIds > 0);
   if (!rule || operational.length < 3) return null;
   const required = requiredFor(trimmedAverage(operational.map((day) => day.workload)), rule);
-  return required == null ? null : required - median(operational.map((day) => day.regular));
+  return required == null ? null : required - median(operational.map((day) => day.internalDAs));
 }
 
 export function buildCapacityPlanningDecision({
@@ -124,19 +124,22 @@ export function buildCapacityPlanningDecision({
     const row = rowByDate.get(date)!;
     const approvedAdHoc = adHocByDate.get(date);
     const systemIds = num(row.active_ids);
-    const approvedCount = num(approvedAdHoc?.adHocIds);
-    const adHoc = Math.min(systemIds, approvedCount);
-    const regular = Math.max(0, systemIds - adHoc);
+    const approvedCount = num(approvedAdHoc?.externalDaCount);
+    // Amazon's road-ID total is authoritative and never increases here.
+    // Approved external DAs classify who operated those same IDs; they are not
+    // additional IDs or additional capacity.
+    const externalDAs = Math.min(systemIds, approvedCount);
+    const internalDAs = Math.max(0, systemIds - externalDAs);
     const workload = num(row.delivered);
     return {
       date,
       systemIds,
       workload,
       inbound: num(row.inbound),
-      regular,
-      adHoc,
+      internalDAs,
+      externalDAs,
       paymentRequests: num(approvedAdHoc?.paymentRequests),
-      adHocMismatch: Math.max(0, approvedCount - systemIds),
+      externalDaMismatch: Math.max(0, approvedCount - systemIds),
       required: requiredFor(workload, rule),
       spr: num(row.active_ids) ? workload / num(row.active_ids) : 0,
       source: row.volume_source || "No source",
@@ -146,22 +149,22 @@ export function buildCapacityPlanningDecision({
 
   const recentAlertStart = daily.at(-7)?.date ?? daily[0]?.date ?? "";
   daily.forEach((day, index) => {
-    if (day.adHocMismatch > 0) {
+    if (day.externalDaMismatch > 0) {
       day.alerts.push({
         id: `${stationCode}-${day.date}-ad-hoc-mismatch`,
         stationCode,
         date: day.date,
         type: "ad_hoc_mismatch",
         severity: "warning",
-        title: "Approved ad-hoc count exceeds road IDs",
-        detail: `${day.adHoc + day.adHocMismatch} approved ad-hoc IDs versus ${day.systemIds} road IDs on ${day.date}.`,
+        title: "External DA count exceeds Amazon IDs",
+        detail: `${day.externalDAs + day.externalDaMismatch} approved external DAs versus ${day.systemIds} Amazon IDs used on ${day.date}.`,
         changePercent: null
       });
     }
     if (index < 2 || day.date < recentAlertStart) return;
     const prior = daily.slice(Math.max(0, index - 7), index);
-    const priorHeadcount = median(prior.map((item) => item.regular).filter((value) => value > 0));
-    const currentHeadcount = day.regular;
+    const priorHeadcount = median(prior.map((item) => item.internalDAs).filter((value) => value > 0));
+    const currentHeadcount = day.internalDAs;
     if (priorHeadcount > 0 && currentHeadcount < priorHeadcount) {
       const drop = (priorHeadcount - currentHeadcount) / priorHeadcount * 100;
       if (drop >= settings.associateDropPercent) {
@@ -171,8 +174,8 @@ export function buildCapacityPlanningDecision({
           date: day.date,
           type: "associate_drop",
           severity: drop >= settings.associateDropPercent * 1.5 ? "critical" : "warning",
-          title: `Associate strength dropped ${Math.round(drop)}%`,
-          detail: `${Math.round(priorHeadcount)} baseline to ${Math.round(currentHeadcount)} on ${day.date}.`,
+          title: `Internal DA coverage dropped ${Math.round(drop)}%`,
+          detail: `${Math.round(priorHeadcount)} internal DAs at baseline versus ${Math.round(currentHeadcount)} on ${day.date}.`,
           changePercent: -drop
         });
       }
@@ -200,21 +203,21 @@ export function buildCapacityPlanningDecision({
   const operationalDays = daily.filter((day) => day.workload > 0 && day.systemIds > 0);
   const sourceDays = operationalDays.length;
   const classifiedDays = operationalDays.length;
-  const adHocDays = operationalDays.filter((day) => day.adHoc > 0).length;
+  const adHocDays = operationalDays.filter((day) => day.externalDAs > 0).length;
   const workloads = operationalDays.map((day) => day.workload);
   const baseWorkload = trimmedAverage(workloads);
   const peakWorkload = percentile(workloads, 0.9);
-  const adjustedRegular = operationalDays.map((day) => day.regular);
+  const adjustedInternal = operationalDays.map((day) => day.internalDAs);
   const systemIds = operationalDays.map((day) => day.systemIds);
-  const regularCapacity = adjustedRegular.length ? median(adjustedRegular) : median(systemIds);
-  const regularCapacitySource = adHocUsage.some((row) => row.stationCode === stationCode && row.workDate >= (dates[0] ?? "") && row.workDate <= (dates.at(-1) ?? ""))
+  const internalCapacity = adjustedInternal.length ? median(adjustedInternal) : median(systemIds);
+  const internalCapacitySource = adHocUsage.some((row) => row.stationCode === stationCode && row.workDate >= (dates[0] ?? "") && row.workDate <= (dates.at(-1) ?? ""))
     ? "payment_adjusted"
     : systemIds.length ? "system" : "none";
   const permanentRequired = requiredFor(baseWorkload, rule);
   const peakRequired = requiredFor(peakWorkload, rule);
-  const permanentGap = permanentRequired == null ? null : permanentRequired - regularCapacity;
+  const permanentGap = permanentRequired == null ? null : permanentRequired - internalCapacity;
   const peakFlex = permanentRequired == null || peakRequired == null ? 0 : Math.max(0, peakRequired - permanentRequired);
-  const shortageDays = operationalDays.filter((day) => day.required != null && day.required > day.regular).length;
+  const shortageDays = operationalDays.filter((day) => day.required != null && day.required > day.internalDAs).length;
   const previousBlock = daily.slice(-14, -7);
   const recentBlock = daily.slice(-7);
   const previousGap = blockGap(previousBlock, rule);
@@ -253,7 +256,7 @@ export function buildCapacityPlanningDecision({
     : status === "surplus" ? "Review redeployment or attrition replacement before adding capacity."
     : status === "unconfigured" ? "Configure SPR, baseline and alert thresholds in Capacity Master."
     : status === "no_data" ? "No completed workload is available for a workforce decision."
-    : "Regular capacity is aligned to the stable 14-day requirement.";
+    : "Internal DA coverage is aligned to the stable 14-day requirement.";
 
   return {
     stationCode,
@@ -265,8 +268,8 @@ export function buildCapacityPlanningDecision({
     latestSystemIds: latest?.systemIds ?? 0,
     baseWorkload,
     peakWorkload,
-    regularCapacity,
-    regularCapacitySource,
+    internalCapacity,
+    internalCapacitySource,
     permanentRequired,
     permanentGap,
     peakRequired,

@@ -5,8 +5,8 @@ import { createContext, useContext } from "react";
 export type CapacityAiFact = {
   stationCode: string;
   systemIds: number;
-  regularIds: number | null;
-  adHocIds: number | null;
+  internalDAs: number | null;
+  externalDAs: number | null;
   averageDelivered: number;
   averageInbound: number;
   spr: number;

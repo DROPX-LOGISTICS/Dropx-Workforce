@@ -123,7 +123,7 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
 
     <section className="capacity-simple-kpis">
       <article><span>Average daily workload</span><strong>{fmt(totalAverageWorkload)}</strong><small>Last 14 completed days</small></article>
-      <article><span>Active associates</span><strong>{fmt(totalActiveIds)}</strong><small>{fmt(snapshot.summary.adHocIds)} approved ad-hoc</small></article>
+      <article><span>Amazon IDs used</span><strong>{fmt(totalActiveIds)}</strong><small>{fmt(snapshot.summary.externalDAs)} operated by external DAs</small></article>
       <article><span>Average SPR</span><strong>{fmt(snapshot.summary.averageSpr, 1)}</strong><small>Workload per active associate</small></article>
       <article><span>Required associates</span><strong>{fmt(totalRequiredIds)}</strong><small>At configured station targets</small></article>
     </section>
@@ -147,7 +147,7 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
       <div className="table-wrap"><table className="capacity-table capacity-simple-table"><thead><tr>
         <th><a href={sortHref("station")}>Station {sortMark("station")}</a></th>
         <th><a href={sortHref("workload")}>Avg workload {sortMark("workload")}</a></th>
-        <th>Regular / Ad-hoc</th>
+        <th>DA mix</th>
         <th><a href={sortHref("spr")}>SPR {sortMark("spr")}</a></th>
         <th><a href={sortHref("required")}>Required {sortMark("required")}</a></th>
         <th><a href={sortHref("gap")}>Gap {sortMark("gap")}</a></th>
@@ -156,7 +156,7 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
         {stations.map((row) => <tr key={row.stationCode}>
           <td><a className="capacity-station-link" href={`/ops-pulse/capacity/${row.stationCode}?from=${snapshot.from}&to=${reportingDate}`}><strong>{row.stationCode}</strong><small>{row.stationName} · {row.cluster || row.region || "—"}</small></a></td>
           <td><strong>{fmt(row.averageWorkload)}</strong></td>
-          <td><strong>{fmt(row.latestRegularIds)} / {fmt(row.latestAdHocIds)}</strong><small>{fmt(row.latestSystemIds)} total IDs</small></td>
+          <td><strong>{fmt(row.latestInternalDAs)} internal / {fmt(row.latestExternalDAs)} external</strong><small>{fmt(row.latestSystemIds)} Amazon IDs used</small></td>
           <td><strong className={row.maxSafeSpr && row.spr > row.maxSafeSpr ? "metric-bad-text" : ""}>{row.averageWorkload ? fmt(row.spr, 1) : "—"}</strong><small>{row.targetSpr ? `Target ${fmt(row.targetSpr, 1)}` : "Target pending"}</small></td>
           <td>{row.requiredIds ?? "—"}</td>
           <td><strong className={(row.modelledGap ?? 0) > 0 ? "metric-bad-text" : (row.modelledGap ?? 0) < -1 ? "metric-warn-text" : "metric-good-text"}>{row.modelledGap == null ? "—" : `${row.modelledGap > 0 ? "+" : ""}${row.modelledGap}`}</strong></td>

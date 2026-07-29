@@ -39,6 +39,23 @@ export type CapacityPincode = {
   average_cubic_cm3: number | string | null;
 };
 
+export type CapacityAssociateDeliveredDay = {
+  work_date: string;
+  delivered: number | string;
+  volumetric: number | string;
+  small: number | string;
+  unclassified: number | string;
+};
+
+export type CapacityAssociatePincode = {
+  postal_code: string;
+  delivered: number | string;
+  active_days: number | string;
+  volumetric: number | string;
+  small: number | string;
+  unclassified: number | string;
+};
+
 export type ShipmentCountAssociateDay = {
   client: string;
   station_code: string;
@@ -438,4 +455,48 @@ export async function loadCapacityPincodes(companyId: string, stationCode: strin
     p_to: to
   });
   return { data: (result.data ?? []) as CapacityPincode[], error: result.error };
+}
+
+export async function loadCapacityAssociateDeliveredDaily(
+  companyId: string,
+  stationCode: string,
+  associateId: string,
+  associateName: string,
+  from: string,
+  to: string
+) {
+  if (!supabaseAdmin || !stationCode || !associateId) {
+    return { data: [] as CapacityAssociateDeliveredDay[], error: null };
+  }
+  const result = await supabaseAdmin.rpc("capacity_associate_delivered_daily", {
+    p_company_id: companyId,
+    p_station_code: stationCode,
+    p_associate_id: associateId,
+    p_associate_name: associateName,
+    p_from: from,
+    p_to: to
+  });
+  return { data: (result.data ?? []) as CapacityAssociateDeliveredDay[], error: result.error };
+}
+
+export async function loadCapacityAssociatePincodes(
+  companyId: string,
+  stationCode: string,
+  associateId: string,
+  associateName: string,
+  from: string,
+  to: string
+) {
+  if (!supabaseAdmin || !stationCode || !associateId) {
+    return { data: [] as CapacityAssociatePincode[], error: null };
+  }
+  const result = await supabaseAdmin.rpc("capacity_associate_pincode_summary", {
+    p_company_id: companyId,
+    p_station_code: stationCode,
+    p_associate_id: associateId,
+    p_associate_name: associateName,
+    p_from: from,
+    p_to: to
+  });
+  return { data: (result.data ?? []) as CapacityAssociatePincode[], error: result.error };
 }

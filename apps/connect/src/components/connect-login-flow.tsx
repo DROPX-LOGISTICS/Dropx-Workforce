@@ -13,6 +13,8 @@ const defaultKeyName = "dropx_connect_default_account";
 const biometricKey = "dropx_connect_biometric";
 const credentialKey = "dropx_connect_passkey_id";
 const accountKey = (account: AppAccount) => `${account.profileType}:${account.companyId}:${account.id}`;
+const accountIdentity = (account?: AppAccount | null) =>
+  [account?.reference, account?.biometricId].filter(Boolean).join(" | ");
 const active = (account?: AppAccount | null) => account?.status?.toLowerCase() === "active";
 const defaultPageAccess = ["dashboard", "attendance", "settings"];
 const allowed = (account: AppAccount | null, page: "dashboard" | "attendance" | "settings") =>
@@ -240,7 +242,7 @@ export function ConnectLoginFlow() {
       <span />
       <button aria-label="Notifications" onClick={() => setNotice("No new notifications.")}><Bell /></button>
       <button className="avatar" onClick={() => { setProfileMenu((v) => !v); setDrawer(false); }}>{avatar ? <img alt="" src={avatar} /> : <b>{(account?.name || "U")[0]}</b>}</button>
-      {profileMenu ? <aside className="dx-profile-pop"><strong>{account?.name || account?.reference}</strong><small>{account?.reference}</small><button onClick={() => open("profile")}><UserRound />My Profile</button><button onClick={logout}><LogOut />Sign out</button></aside> : null}
+      {profileMenu ? <aside className="dx-profile-pop"><strong>{account?.name || account?.reference}</strong>{accountIdentity(account) ? <small>{accountIdentity(account)}</small> : null}<button onClick={() => open("profile")}><UserRound />My Profile</button><button onClick={logout}><LogOut />Sign out</button></aside> : null}
     </header> : null}
     {drawer && account ? <><button aria-label="Close menu" className="dx-scrim" onClick={() => setDrawer(false)} /><aside className="dx-drawer">
       <div><Image alt="DropX" height={44} src="/dropx-logo.png" width={126} /><button aria-label="Switch accounts" onClick={() => open("accounts")}><SwitchCamera /></button><button aria-label="Close" onClick={() => setDrawer(false)}><X /></button></div>

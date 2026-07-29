@@ -11,7 +11,8 @@ import { SubmitButton } from "@/components/submit-button";
 
 const appPageOptions = [
   { value: "dashboard", label: "Dashboard" },
-  { value: "attendance", label: "Attendance" }
+  { value: "attendance", label: "Attendance" },
+  { value: "leave", label: "Leave" }
 ] as const;
 
 export type WorkforceCategoryInitial = {
@@ -164,7 +165,7 @@ export function WorkforceCategoryForm({
   submitLabel: string;
 }) {
   const rules = normalizeCategoryProfileFieldRules(initial?.profile_field_rules);
-  const selectedPages = (initial?.app_page_access ?? ["dashboard", "attendance"])
+  const selectedPages = (initial?.app_page_access ?? ["dashboard", "attendance", "leave"])
     .filter((page) => appPageOptions.some((option) => option.value === page));
 
   return (

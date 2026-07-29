@@ -94,7 +94,7 @@ async function signedProfilePhotoUrl(path?: string | null) {
   return result.data?.signedUrl ?? "";
 }
 
-const defaultPageAccess = ["dashboard", "attendance", "settings"];
+const defaultPageAccess = ["dashboard", "attendance", "leave", "settings"];
 
 function categoryCodeForProfile(profileType: ConnectAccount["profileType"]) {
   if (profileType === "employee") return "employees";

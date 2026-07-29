@@ -1,14 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { Bell, CheckCheck, ChevronRight, Fingerprint, Gauge, LogOut, Menu, Settings, SwitchCamera, UserRound, UsersRound, X } from "lucide-react";
+import { Bell, CalendarDays, CheckCheck, ChevronRight, Fingerprint, Gauge, LogOut, Menu, Settings, SwitchCamera, UserRound, UsersRound, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { ConnectAttendance } from "./connect-attendance";
 import { ConnectDashboard } from "./connect-dashboard";
+import { ConnectLeave } from "./connect-leave";
 import { AppAccount, ConnectProfileApp } from "./connect-profile-app";
 import { countryCodeOptions } from "@/lib/country-codes";
 
-type Step = "mobile" | "pin" | "otp" | "createPin" | "unlock" | "accounts" | "dashboard" | "profile" | "attendance" | "settings";
+type Step = "mobile" | "pin" | "otp" | "createPin" | "unlock" | "accounts" | "dashboard" | "profile" | "attendance" | "leave" | "settings";
 type ConnectNotification = {
   id: string;
   title: string;
@@ -24,14 +25,15 @@ const accountKey = (account: AppAccount) => `${account.profileType}:${account.co
 const accountIdentity = (account?: AppAccount | null) =>
   [account?.reference, account?.biometricId].filter(Boolean).join(" | ");
 const active = (account?: AppAccount | null) => account?.status?.toLowerCase() === "active";
-const defaultPageAccess = ["dashboard", "attendance", "settings"];
-const allowed = (account: AppAccount | null, page: "dashboard" | "attendance" | "settings") =>
+const defaultPageAccess = ["dashboard", "attendance", "leave", "settings"];
+const allowed = (account: AppAccount | null, page: "dashboard" | "attendance" | "leave" | "settings") =>
   page === "settings" || (account?.pageAccess ?? defaultPageAccess).includes(page);
 
 function landingPage(account: AppAccount): Step {
   if (!active(account)) return "profile";
   if (allowed(account, "dashboard")) return "dashboard";
   if (allowed(account, "attendance")) return "attendance";
+  if (allowed(account, "leave")) return "leave";
   return "profile";
 }
 
@@ -183,7 +185,7 @@ export function ConnectLoginFlow() {
       }
     }
     const destination = notification.route as Step | null | undefined;
-    if (destination && ["dashboard", "profile", "attendance", "settings"].includes(destination)) {
+    if (destination && ["dashboard", "profile", "attendance", "leave", "settings"].includes(destination)) {
       setNotificationMenu(false);
       open(destination);
     }
@@ -281,6 +283,7 @@ export function ConnectLoginFlow() {
     }
     if (next === "dashboard" && !allowed(account, "dashboard")) return;
     if (next === "attendance" && !allowed(account, "attendance")) return;
+    if (next === "leave" && !allowed(account, "leave")) return;
     setStep(next);
   }
 
@@ -296,7 +299,7 @@ export function ConnectLoginFlow() {
     setStep(refreshed ? landingPage(refreshed) : "accounts");
   }
 
-  const loggedIn = ["accounts","dashboard","profile","attendance","settings"].includes(step);
+  const loggedIn = ["accounts","dashboard","profile","attendance","leave","settings"].includes(step);
   if (checking) return <div className="dx-auth"><Loader text="" /></div>;
 
   return <div className={`dx-app ${loggedIn ? "logged-in" : ""}`}>
@@ -323,6 +326,7 @@ export function ConnectLoginFlow() {
         {allowed(account, "dashboard") ? <button onClick={() => open("dashboard")}><Gauge />Dashboard<ChevronRight /></button> : null}
         <button onClick={() => open("profile")}><UserRound />My Profile<ChevronRight /></button>
         {allowed(account, "attendance") ? <button onClick={() => open("attendance")}><Fingerprint />Attendance<ChevronRight /></button> : null}
+        {allowed(account, "leave") ? <button onClick={() => open("leave")}><CalendarDays />Leave<ChevronRight /></button> : null}
         <button onClick={() => open("settings")}><Settings />Settings<ChevronRight /></button>
       </nav>
       <button className="signout" onClick={logout}><LogOut />Sign out</button>
@@ -343,6 +347,7 @@ export function ConnectLoginFlow() {
       {step === "dashboard" && account ? <ConnectDashboard account={account} onAttendance={() => open("attendance")} onProfile={() => open("profile")} /> : null}
       {step === "profile" && account ? <ConnectProfileApp account={account} onPhoto={(url) => setAvatar(url)} onSubmitted={profileSubmitted} /> : null}
       {step === "attendance" && account ? <ConnectAttendance account={account} /> : null}
+      {step === "leave" && account ? <ConnectLeave /> : null}
       {step === "settings" ? <section className="dx-settings"><h1>Settings</h1><label>Default account<select disabled={pending} value={defaultKey} onChange={(e) => saveDefaultAccount(e.target.value)}><option value="">Select default account</option>{accounts.map((row) => <option key={accountKey(row)} value={accountKey(row)}>{row.companyName} - {row.reference || row.name}</option>)}</select></label><label className="toggle"><span><strong>Enable biometric login</strong><small>Use Face ID or device authentication when available.</small></span><input defaultChecked={localStorage.getItem(biometricKey) === "true"} onChange={(e) => enrollBiometric(e.target.checked)} type="checkbox" /></label><button onClick={resetPin}>Change PIN</button></section> : null}
     </main>}
   </div>;

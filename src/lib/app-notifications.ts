@@ -23,16 +23,16 @@ export const appNotificationDefaults: Record<AppNotificationEvent, {
   titleTemplate: string;
 }> = {
   attendance_punch_in: {
-    label: "Punch In",
+    label: "Punch",
     route: "attendance",
-    titleTemplate: "Punch In recorded",
-    bodyTemplate: "Your Punch In was recorded at {time} on {date}."
+    titleTemplate: "Punch Captured",
+    bodyTemplate: "Your punch was captured at {time} on {date}."
   },
   attendance_punch_out: {
-    label: "Punch Out",
+    label: "Punch",
     route: "attendance",
-    titleTemplate: "Punch Out recorded",
-    bodyTemplate: "Your Punch Out was recorded at {time}. Work duration: {work_duration}."
+    titleTemplate: "Punch Captured",
+    bodyTemplate: "Your punch was captured at {time} on {date}."
   },
   profile_submitted: {
     label: "Profile submitted",
@@ -174,7 +174,7 @@ export async function createAttendancePunchNotification({
   const defaults = attendanceNotificationDefaults[eventCode];
   const ruleResult = await supabaseAdmin
     .from("mob_app_notification_rules")
-    .select("enabled, title_template, body_template")
+    .select("enabled")
     .eq("company_id", companyId)
     .eq("event_code", eventCode)
     .maybeSingle();
@@ -193,14 +193,8 @@ export async function createAttendancePunchNotification({
     time: formatTime(punchTime),
     work_duration: formatDuration(workMinutes)
   };
-  const title = applyVariables(
-    String(ruleResult.data?.title_template ?? defaults.titleTemplate),
-    variables
-  );
-  const body = applyVariables(
-    String(ruleResult.data?.body_template ?? defaults.bodyTemplate),
-    variables
-  );
+  const title = applyVariables(defaults.titleTemplate, variables);
+  const body = applyVariables(defaults.bodyTemplate, variables);
 
   const notificationResult = await supabaseAdmin
     .from("mob_app_notifications")

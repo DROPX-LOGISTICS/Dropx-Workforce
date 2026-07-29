@@ -68,7 +68,22 @@ export default async function AppNotificationSettingsPage({
         <section className="panel app-notification-settings">
           <form action={saveAppNotificationSettings}>
             <div className="app-notification-checklist">
-              {appNotificationEvents.map((eventCode) => (
+              <label>
+                <span>Punch</span>
+                <input
+                  defaultChecked={
+                    settings.enabled.attendance_punch_in &&
+                    settings.enabled.attendance_punch_out
+                  }
+                  disabled={!permission.canEdit && !permission.canAdd}
+                  name="attendance_punch"
+                  type="checkbox"
+                />
+              </label>
+              {appNotificationEvents.filter(
+                (eventCode) => eventCode !== "attendance_punch_in" &&
+                  eventCode !== "attendance_punch_out"
+              ).map((eventCode) => (
                 <label key={eventCode}>
                   <span>{appNotificationDefaults[eventCode].label}</span>
                   <input

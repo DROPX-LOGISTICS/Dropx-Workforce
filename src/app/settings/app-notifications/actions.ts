@@ -40,7 +40,11 @@ export async function saveAppNotificationSettings(formData: FormData) {
     return {
       body_template: String(current?.body_template ?? defaults.bodyTemplate),
       company_id: authorization.companyId,
-      enabled: formData.get(eventCode) === "on",
+      enabled: formData.get(
+        eventCode === "attendance_punch_in" || eventCode === "attendance_punch_out"
+          ? "attendance_punch"
+          : eventCode
+      ) === "on",
       event_code: eventCode,
       route: defaults.route,
       title_template: String(current?.title_template ?? defaults.titleTemplate),

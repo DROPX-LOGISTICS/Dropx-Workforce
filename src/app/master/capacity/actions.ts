@@ -16,13 +16,13 @@ export async function upsertCapacityRule(formData: FormData) {
   const maxSafeSpr = Number(formData.get("max_safe_spr"));
   const bufferPercent = Number(formData.get("buffer_percent"));
   const recentDays = Number(formData.get("recent_days"));
-  const minimumMatchedDays = Number(formData.get("minimum_matched_days"));
+  const minimumSourceDays = Number(formData.get("minimum_source_days"));
   const associateDropPercent = Number(formData.get("associate_drop_percent"));
   const volumeSpikePercent = Number(formData.get("volume_spike_percent"));
   const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const eligible = locationResult.locations.some((location) => location.station_code === stationCode && isAmazonEdspXptLocation(location));
   const invalid = !stationCode || targetSpr <= 0 || maxSafeSpr <= 0 || bufferPercent < 0
-    || recentDays < 14 || recentDays > 31 || minimumMatchedDays < 1 || minimumMatchedDays > recentDays
+    || recentDays < 14 || recentDays > 31 || minimumSourceDays < 1 || minimumSourceDays > recentDays
     || associateDropPercent < 1 || associateDropPercent > 100 || volumeSpikePercent < 1 || volumeSpikePercent > 300;
   const error = locationResult.error
     ? locationResult.error
@@ -31,7 +31,7 @@ export async function upsertCapacityRule(formData: FormData) {
       : invalid
         ? "Enter valid positive planning values."
         : await saveCapacityRule(companyId, {
-          stationCode, targetSpr, maxSafeSpr, bufferPercent, recentDays, minimumMatchedDays,
+          stationCode, targetSpr, maxSafeSpr, bufferPercent, recentDays, minimumSourceDays,
           associateDropPercent, volumeSpikePercent, isActive: true
         });
   revalidatePath("/master/capacity");
@@ -55,11 +55,11 @@ export async function bulkInitializeCapacityRules(formData: FormData) {
   const maxSafeSpr = Number(formData.get("max_safe_spr"));
   const bufferPercent = Number(formData.get("buffer_percent"));
   const recentDays = Number(formData.get("recent_days"));
-  const minimumMatchedDays = Number(formData.get("minimum_matched_days"));
+  const minimumSourceDays = Number(formData.get("minimum_source_days"));
   const associateDropPercent = Number(formData.get("associate_drop_percent"));
   const volumeSpikePercent = Number(formData.get("volume_spike_percent"));
   if (targetSpr <= 0 || maxSafeSpr <= 0 || bufferPercent < 0
-    || recentDays < 14 || recentDays > 31 || minimumMatchedDays < 1 || minimumMatchedDays > recentDays
+    || recentDays < 14 || recentDays > 31 || minimumSourceDays < 1 || minimumSourceDays > recentDays
     || associateDropPercent < 1 || associateDropPercent > 100 || volumeSpikePercent < 1 || volumeSpikePercent > 300) {
     redirect("/master/capacity?error=Enter+valid+bulk+planning+values.");
   }
@@ -70,7 +70,7 @@ export async function bulkInitializeCapacityRules(formData: FormData) {
   const eligibleLocations = locationResult.locations.filter(isAmazonEdspXptLocation);
   const errors = (await Promise.all(eligibleLocations.map((location) => saveCapacityRule(companyId, {
     stationCode: location.station_code, targetSpr, maxSafeSpr, bufferPercent, recentDays,
-    minimumMatchedDays, associateDropPercent, volumeSpikePercent, isActive: true
+    minimumSourceDays, associateDropPercent, volumeSpikePercent, isActive: true
   })))).filter(Boolean);
   revalidatePath("/master/capacity");
   revalidatePath("/ops-pulse/capacity");

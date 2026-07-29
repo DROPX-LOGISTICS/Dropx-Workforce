@@ -20,7 +20,7 @@ const groupDefinitions = [
   { key: "leads", label: "Leads", codes: ["leads_dashboard", "leads_all", "leads_followups", "leads_interviews", "leads_reports", "leads_ads", "leads_sop"], hiddenCodes: ["leads"] },
   { key: "fleet", label: "Fleet", codes: ["fleet_action_center", "fleet_vehicle_view", "fleet_date_view", "fleet_station_view", "fleet_tracking", "fleet_fuel_log", "fleet_live_gps", "fleet_maintenance", "fleet_reports"], hiddenCodes: ["fleet"] },
   { key: "ops_pulse", label: "OpsPulse", codes: ["daily_submission", "cod", "cod_executive_reconciliation", "cod_submission", "cod_validation", "cod_reports", "cod_portal_checks"], hiddenCodes: ["ops_pulse"] },
-  { key: "capacity", label: "Capacity", codes: ["cps_overview", "cps_daily", "cps_monthly", "cps_cost_breakup", "cps_stations", "cps_shipments", "cps_associates", "cps_reports", "cps_inputs", "cps_unmapped", "capacity_historical_edit"], hiddenCodes: ["cps"] },
+  { key: "capacity", label: "Capacity", codes: ["cps_overview", "cps_daily", "cps_monthly", "cps_cost_breakup", "cps_stations", "cps_shipments", "cps_associates", "cps_reports", "cps_inputs", "cps_unmapped"], hiddenCodes: ["cps"] },
   { key: "payments", label: "Payments", codes: ["expense_requests", "payment_requests", "payment_approvals", "payment_process", "payment_reports"], hiddenCodes: ["payments"] },
   { key: "reports", label: "Reports", codes: ["attendance_reports", "verification_api_reports"], hiddenCodes: ["reports"] },
   { key: "onboard", label: "People", codes: ["delivery_associates", "employees", "contractors", "vendors", "workers"] },

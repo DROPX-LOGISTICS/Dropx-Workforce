@@ -7,6 +7,8 @@ export type CapacityRule = {
   maxSafeSpr: number;
   bufferPercent: number;
   recentDays: number;
+  minimumSourceDays?: number;
+  /** Backward-compatible read for rules saved before the system-only model. */
   minimumMatchedDays?: number;
   associateDropPercent?: number;
   volumeSpikePercent?: number;
@@ -15,7 +17,7 @@ export type CapacityRule = {
 
 export const CAPACITY_PLANNING_DEFAULTS = {
   baselineDays: 14,
-  minimumMatchedDays: 7,
+  minimumSourceDays: 7,
   associateDropPercent: 20,
   volumeSpikePercent: 30
 } as const;
@@ -23,7 +25,7 @@ export const CAPACITY_PLANNING_DEFAULTS = {
 export function capacityPlanningSettings(rule: CapacityRule | undefined) {
   return {
     baselineDays: Math.max(CAPACITY_PLANNING_DEFAULTS.baselineDays, Number(rule?.recentDays) || CAPACITY_PLANNING_DEFAULTS.baselineDays),
-    minimumMatchedDays: Math.max(1, Number(rule?.minimumMatchedDays) || CAPACITY_PLANNING_DEFAULTS.minimumMatchedDays),
+    minimumSourceDays: Math.max(1, Number(rule?.minimumSourceDays ?? rule?.minimumMatchedDays) || CAPACITY_PLANNING_DEFAULTS.minimumSourceDays),
     associateDropPercent: Math.max(1, Number(rule?.associateDropPercent) || CAPACITY_PLANNING_DEFAULTS.associateDropPercent),
     volumeSpikePercent: Math.max(1, Number(rule?.volumeSpikePercent) || CAPACITY_PLANNING_DEFAULTS.volumeSpikePercent)
   };

@@ -1,7 +1,7 @@
 import type { CodLocationRow } from "@/lib/ops-pulse/cod";
+import { loadApprovedCapacityAdHocUsage } from "@/lib/ops-pulse/capacity-ad-hoc";
 import { loadCapacityRules } from "@/lib/ops-pulse/capacity";
 import { buildCapacityPlanningDecision, type CapacityPlanningDecision } from "@/lib/ops-pulse/capacity-decision";
-import { loadCapacityGroundUpdates } from "@/lib/ops-pulse/capacity-ground";
 import { loadCapacityStationDays } from "@/lib/ops-pulse/capacity-shipments";
 
 export type CapacityDataState = "ready" | "stale" | "missing";
@@ -23,10 +23,9 @@ export type CapacityStationSnapshot = {
   maxSafeSpr: number | null;
   requiredIds: number | null;
   modelledGap: number | null;
-  groundRegular: number | null;
-  groundExternal: number | null;
-  groundDate: string | null;
-  groundReady: boolean;
+  latestRegularIds: number;
+  latestAdHocIds: number;
+  latestAdHocRequests: number;
   decision: CapacityPlanningDecision;
   action: string;
 };
@@ -37,9 +36,9 @@ export type CapacityTrendPoint = {
   systemIds: number;
   requiredIds: number;
   supportedWorkload: number;
-  groundRegular: number;
+  regularIds: number;
+  adHocIds: number;
   sourceStations: number;
-  groundStations: number;
 };
 
 export type CapacitySnapshot = {
@@ -52,7 +51,7 @@ export type CapacitySnapshot = {
   summary: {
     stations: number;
     sourceReady: number;
-    groundReady: number;
+    adHocIds: number;
     stale: number;
     actionRequired: number;
     hireCandidates: number;
@@ -95,10 +94,10 @@ export async function loadCapacitySnapshot({
 }): Promise<CapacitySnapshot> {
   const codes = locations.map((location) => location.station_code);
   const from = dateShift(reportingDate, -(Math.max(14, baselineDays) - 1));
-  const [ruleResult, stationResult, groundResult] = await Promise.all([
+  const [ruleResult, stationResult, adHocResult] = await Promise.all([
     loadCapacityRules(companyId),
     loadCapacityStationDays(companyId, codes, from, reportingDate),
-    loadCapacityGroundUpdates(companyId, from, reportingDate)
+    loadApprovedCapacityAdHocUsage(companyId, from, reportingDate)
   ]);
   const rules = new Map(ruleResult.rows.map((rule) => [rule.stationCode, rule]));
   const stationRows = stationResult.data ?? [];
@@ -110,7 +109,7 @@ export async function loadCapacitySnapshot({
     const decision = buildCapacityPlanningDecision({
       stationCode,
       rows,
-      groundUpdates: groundResult.rows,
+      adHocUsage: adHocResult.rows,
       rule
     });
     const activeDays = decision.daily.filter((day) => day.workload > 0);
@@ -122,17 +121,9 @@ export async function loadCapacitySnapshot({
     const latestDate = decision.latestDate;
     const freshnessDays = latestDate ? dateDistance(latestDate, reportingDate) : null;
     const dataState: CapacityDataState = freshnessDays == null ? "missing" : freshnessDays <= 1 ? "ready" : "stale";
-    const latestGround = [...groundResult.rows]
-      .filter((row) => row.stationCode === stationCode && row.workDate <= reportingDate)
-      .sort((a, b) => b.workDate.localeCompare(a.workDate) || b.updatedAt.localeCompare(a.updatedAt))[0];
-    const groundRegular = latestGround
-      ? num(latestGround.regularBike) + num(latestGround.regularVan)
-      : null;
-    const groundExternal = latestGround
-      ? num(latestGround.adHocBike) + num(latestGround.adHocVan)
-      : null;
+    const latestDay = decision.daily.at(-1);
     const requiredIds = decision.permanentRequired;
-    const modelledGap = requiredIds == null ? null : requiredIds - (latestGround ? groundRegular ?? 0 : decision.latestSystemIds);
+    const modelledGap = decision.permanentGap;
     const action = dataState === "missing"
       ? "No completed workload is available. Resolve the source before taking a capacity decision."
       : dataState === "stale"
@@ -155,10 +146,9 @@ export async function loadCapacitySnapshot({
       maxSafeSpr: rule?.maxSafeSpr ?? null,
       requiredIds,
       modelledGap,
-      groundRegular,
-      groundExternal,
-      groundDate: latestGround?.workDate ?? null,
-      groundReady: decision.matchedDays >= decision.minimumMatchedDays,
+      latestRegularIds: latestDay?.regular ?? 0,
+      latestAdHocIds: latestDay?.adHoc ?? 0,
+      latestAdHocRequests: latestDay?.paymentRequests ?? 0,
       decision,
       action
     };
@@ -190,16 +180,16 @@ export async function loadCapacitySnapshot({
         const day = station.decision.daily.find((entry) => entry.date === date);
         return sum + (day && station.targetSpr ? day.systemIds * station.targetSpr : 0);
       }, 0),
-      groundRegular: days.reduce((sum, day) => sum + num(day?.regular), 0),
+      regularIds: days.reduce((sum, day) => sum + num(day?.regular), 0),
+      adHocIds: days.reduce((sum, day) => sum + num(day?.adHoc), 0),
       sourceStations: days.length,
-      groundStations: days.filter((day) => day?.matched).length
     };
   });
 
   const readyStations = stations.filter((station) => station.dataState === "ready");
   const totalWorkload = readyStations.reduce((sum, station) => sum + station.averageWorkload, 0);
   const totalIds = readyStations.reduce((sum, station) => sum + station.averageSystemIds, 0);
-  const actionStatuses = new Set(["hire_candidate", "flex", "monitor", "temporary_surge", "ground_required"]);
+  const actionStatuses = new Set(["hire_candidate", "flex", "monitor", "temporary_surge"]);
   const hireCandidates = stations.filter((station) => station.decision.status === "hire_candidate");
   return {
     reportingDate,
@@ -211,7 +201,7 @@ export async function loadCapacitySnapshot({
     summary: {
       stations: stations.length,
       sourceReady: readyStations.length,
-      groundReady: stations.filter((station) => station.groundReady).length,
+      adHocIds: stations.reduce((sum, station) => sum + station.latestAdHocIds, 0),
       stale: stations.filter((station) => station.dataState !== "ready").length,
       actionRequired: stations.filter((station) => actionStatuses.has(station.decision.status) || station.dataState !== "ready").length,
       hireCandidates: hireCandidates.length,
@@ -222,7 +212,7 @@ export async function loadCapacitySnapshot({
     errors: [
       ruleResult.error,
       stationResult.error?.message,
-      groundResult.error
+      adHocResult.error
     ].filter((value): value is string => Boolean(value))
   };
 }

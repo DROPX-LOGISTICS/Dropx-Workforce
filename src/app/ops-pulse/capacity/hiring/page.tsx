@@ -6,9 +6,9 @@ import { CapacityWorkspaceTabs } from "@/components/capacity-workspace-tabs";
 import { PageHead } from "@/components/page-head";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { loadApprovedCapacityAdHocUsage } from "@/lib/ops-pulse/capacity-ad-hoc";
 import { loadCapacityRules } from "@/lib/ops-pulse/capacity";
 import { buildCapacityPlanningDecision, type CapacityPlanningDecision } from "@/lib/ops-pulse/capacity-decision";
-import { loadCapacityGroundUpdates } from "@/lib/ops-pulse/capacity-ground";
 import { loadCapacityAssociateDays, loadCapacityStationDays } from "@/lib/ops-pulse/capacity-shipments";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { isAmazonEdspXptLocation } from "@/lib/ops-pulse/operating-context";
@@ -54,8 +54,8 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
   const selectedStationCode = codes.includes(String(searchParams?.station ?? "").toUpperCase()) ? String(searchParams?.station).toUpperCase() : null;
   const detailFrom = validDate(searchParams?.from) ? String(searchParams?.from) : dateShift(reportingDate, -13);
   const detailTo = validDate(searchParams?.to) ? String(searchParams?.to) : reportingDate;
-  const groundFrom = detailFrom < baselineFrom ? detailFrom : baselineFrom;
-  const sort = ["station", "base", "regular", "gap", "flex", "matched", "confidence", "decision"].includes(String(searchParams?.sort)) ? String(searchParams?.sort) : "decision";
+  const sourceFrom = detailFrom < baselineFrom ? detailFrom : baselineFrom;
+  const sort = ["station", "base", "regular", "gap", "flex", "classified", "confidence", "decision"].includes(String(searchParams?.sort)) ? String(searchParams?.sort) : "decision";
   const dir = searchParams?.dir === "asc" ? "asc" : "desc";
 
   const [ruleResult, baselineResult, associateResult, reviewResult] = await Promise.all([
@@ -64,16 +64,16 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
     selectedStationCode
       ? loadCapacityAssociateDays(companyId, [selectedStationCode], detailFrom, detailTo)
       : Promise.resolve({ data: [], error: null }),
-    loadCapacityGroundUpdates(companyId, groundFrom, reportingDate)
+    loadApprovedCapacityAdHocUsage(companyId, sourceFrom, reportingDate)
   ]);
   const rules = new Map(ruleResult.rows.map((rule) => [rule.stationCode, rule]));
   const baselineRows = baselineResult.data ?? [];
-  const allReviews = reviewResult.rows;
+  const approvedAdHoc = reviewResult.rows;
   const views: CapacityView[] = locations.map((location) => ({
     ...buildCapacityPlanningDecision({
       stationCode: location.station_code,
       rows: baselineRows,
-      groundUpdates: allReviews,
+      adHocUsage: approvedAdHoc,
       rule: rules.get(location.station_code)
     }),
     stationName: location.station_name || location.city || location.station_code
@@ -85,9 +85,9 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
     if (sort === "regular") return row.regularCapacity;
     if (sort === "gap") return row.permanentGap ?? -999;
     if (sort === "flex") return row.peakFlex;
-    if (sort === "matched") return row.matchedDays;
+    if (sort === "classified") return row.classifiedDays;
     if (sort === "confidence") return { low: 0, medium: 1, high: 2 }[row.confidence];
-    return { hire_candidate: 9, ground_required: 8, temporary_surge: 7, monitor: 6, flex: 5, surplus: 4, balanced: 3, unconfigured: 2, no_data: 1 }[row.status];
+    return { hire_candidate: 9, temporary_surge: 7, monitor: 6, flex: 5, surplus: 4, balanced: 3, unconfigured: 2, no_data: 1 }[row.status];
   };
   views.sort((left, right) => {
     const a = sortValue(left);
@@ -116,8 +116,8 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
   const aiFacts: CapacityAiFact[] = views.map((row) => ({
     stationCode: row.stationCode,
     systemIds: row.latestSystemIds,
-    regularIds: row.regularCapacitySource === "ground" ? row.regularCapacity : null,
-    adHocIds: null,
+    regularIds: row.regularCapacity,
+    adHocIds: row.daily.at(-1)?.adHoc ?? 0,
     averageDelivered: Number(row.baseWorkload.toFixed(1)),
     averageInbound: 0,
     spr: row.regularCapacity ? Number((row.baseWorkload / row.regularCapacity).toFixed(1)) : 0,
@@ -126,7 +126,7 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
     requiredIds: row.permanentRequired,
     gap: row.permanentGap,
     status: row.status,
-    matchedDays: row.matchedDays,
+    sourceDays: row.classifiedDays,
     baselineDays: row.baselineDays,
     peakFlex: row.peakFlex,
     confidence: row.confidence,
@@ -137,7 +137,7 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
   const permanentPositions = hireCandidates.reduce((sum, row) => sum + Math.max(0, Math.ceil(row.permanentGap ?? 0)), 0);
   const flexPositions = views.reduce((sum, row) => sum + row.peakFlex, 0);
   const observationCount = views.filter((row) => row.status === "monitor" || row.status === "temporary_surge").length;
-  const groundReady = views.filter((row) => row.matchedDays >= row.minimumMatchedDays).length;
+  const latestAdHocIds = views.reduce((sum, row) => sum + (row.daily.at(-1)?.adHoc ?? 0), 0);
   const selectedAssociateRows = associateResult.data ?? [];
   const associateIds = [...new Set(selectedAssociateRows.map((row) => row.associate_id).filter(Boolean))];
   const associateDetail = associateIds.map((associateId) => {
@@ -152,50 +152,50 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
   const error = locationResult.error || ruleResult.error || baselineResult.error?.message || associateResult.error?.message || reviewResult.error;
 
   return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">
-    <PageHead eyebrow="Workforce Planning" title="Capacity" subtitle="Evidence-based permanent hiring, peak flex and ground-confirmed capacity." />
+    <PageHead eyebrow="Workforce Planning" title="Capacity" subtitle="Evidence-based permanent hiring with approved ad-hoc payments separated from regular capacity." />
     <div className="capacity-tabs-toolbar"><CapacityWorkspaceTabs active="overview" /><CapacityScopeFilter selectedCodes={codes} stations={scopeStations}/></div>
     <CapacityViewTabs active="hiring" />
-    <div className="capacity-basis-strip"><strong>Planning cycle</strong><span>Day 0 ground update → Day 1 final workload match → 14-day hiring review · isolated peaks never trigger permanent hiring</span></div>
+    <div className="capacity-basis-strip"><strong>Planning cycle</strong><span>Daily road IDs − approved ad-hoc DA payments = regular capacity · 14-day review · isolated peaks never trigger permanent hiring</span></div>
     {error ? <div className="message-panel error">{error}</div> : null}
 
     <section className="performance-summary-grid capacity-decision-summary">
       <article><span>Hire candidates</span><strong>{hireCandidates.length}</strong><small>{permanentPositions} sustained positions</small></article>
       <article><span>Peak flex</span><strong>{flexPositions}</strong><small>Temporary resources across scope</small></article>
       <article><span>Under observation</span><strong>{observationCount}</strong><small>Not cleared for hiring</small></article>
-      <article><span>Active alerts</span><strong>{alerts.length}</strong><small>DA drops, spikes and missing ground</small></article>
-      <article><span>Ground ready</span><strong>{groundReady}/{views.length}</strong><small>Minimum matched-day gate met</small></article>
+      <article><span>Active alerts</span><strong>{alerts.length}</strong><small>DA drops, spikes and payment mismatches</small></article>
+      <article><span>Approved ad-hoc</span><strong>{latestAdHocIds}</strong><small>Latest completed day</small></article>
     </section>
 
     {alerts.length ? <section className="panel capacity-alert-center" id="capacity-alerts"><div className="panel-head"><div><span className="eyebrow">Capacity alerts</span><h2>Recent exceptions</h2><p className="subtle">Select an alert to open the station evidence and affected date.</p></div><span className="status-pill warn">{alerts.length} active</span></div><div className="capacity-alert-list">
-      {alerts.slice(0, 12).map((alert) => <a className={`capacity-alert-item ${alert.severity}`} href={`/ops-pulse/capacity/hiring?station=${alert.stationCode}&from=${dateShift(alert.date, -6)}&to=${alert.date}&alert=${encodeURIComponent(alert.id)}${searchParams?.stations ? `&stations=${encodeURIComponent(searchParams.stations)}` : ""}#station-detail`} key={alert.id}><span>{alert.type === "associate_drop" ? "DA" : alert.type === "volume_spike" ? "VOL" : "DATA"}</span><div><strong>{alert.stationCode} · {alert.title}</strong><small>{alert.detail}</small></div><time>{alert.date.split("-").reverse().join("/")}</time><b>View ›</b></a>)}
+      {alerts.slice(0, 12).map((alert) => <a className={`capacity-alert-item ${alert.severity}`} href={`/ops-pulse/capacity/hiring?station=${alert.stationCode}&from=${dateShift(alert.date, -6)}&to=${alert.date}&alert=${encodeURIComponent(alert.id)}${searchParams?.stations ? `&stations=${encodeURIComponent(searchParams.stations)}` : ""}#station-detail`} key={alert.id}><span>{alert.type === "associate_drop" ? "DA" : alert.type === "volume_spike" ? "VOL" : "PAY"}</span><div><strong>{alert.stationCode} · {alert.title}</strong><small>{alert.detail}</small></div><time>{alert.date.split("-").reverse().join("/")}</time><b>View ›</b></a>)}
     </div></section> : null}
 
-    <CapacityAiActionProvider defaults={aiDefaults} facts={aiFacts}><section className="panel"><div className="panel-head"><div><h2>Station hiring plan</h2><p className="subtle">Summary uses stable workload and ground-confirmed regular capacity. Open a station for daily evidence.</p></div><div className="capacity-panel-actions"><a className="button secondary compact" href="/ops-pulse/capacity/daily">Update ground data</a><a className="button secondary compact" href="/master/capacity">Capacity Master</a></div></div>
+    <CapacityAiActionProvider defaults={aiDefaults} facts={aiFacts}><section className="panel"><div className="panel-head"><div><h2>Station hiring plan</h2><p className="subtle">Regular capacity is road IDs after deducting approved ad-hoc DA payments. Open a station for daily evidence.</p></div><div className="capacity-panel-actions"><a className="button secondary compact" href="/master/capacity">Capacity Master</a></div></div>
       <div className="table-wrap"><table className="capacity-table capacity-decision-table"><thead><tr>
         <th><a href={sortHref("station")}>Station {sortMark("station")}</a></th>
         <th><a href={sortHref("base")}>14-day base {sortMark("base")}</a></th>
         <th><a href={sortHref("regular")}>Regular capacity {sortMark("regular")}</a></th>
         <th><a href={sortHref("gap")}>Permanent gap {sortMark("gap")}</a></th>
         <th><a href={sortHref("flex")}>Peak flex {sortMark("flex")}</a></th>
-        <th><a href={sortHref("matched")}>Matched {sortMark("matched")}</a></th>
+        <th><a href={sortHref("classified")}>Source days {sortMark("classified")}</a></th>
         <th><a href={sortHref("confidence")}>Confidence {sortMark("confidence")}</a></th>
         <th><a href={sortHref("decision")}>Decision {sortMark("decision")}</a></th>
         <th>Action</th>
       </tr></thead><tbody>
-        {views.map((row) => <tr key={row.stationCode}><td><a className="capacity-station-link" href={`/ops-pulse/capacity/hiring?station=${row.stationCode}&from=${detailFrom}&to=${detailTo}${searchParams?.stations ? `&stations=${encodeURIComponent(searchParams.stations)}` : ""}#station-detail`}><strong>{row.stationCode}</strong><small>{row.stationName}</small></a></td><td><strong>{fmt(row.baseWorkload)}</strong><small>{row.sourceDays}/{row.baselineDays} completed days</small></td><td><strong>{fmt(row.regularCapacity, 1)}</strong><small>{row.regularCapacitySource === "ground" ? "Ground median" : row.regularCapacitySource === "system" ? "System fallback" : "No source"}</small></td><td><strong className={(row.permanentGap ?? 0) > 0 ? "metric-bad-text" : "metric-good-text"}>{row.permanentGap == null ? "—" : row.permanentGap > 0 ? `+${fmt(row.permanentGap, 1)}` : fmt(row.permanentGap, 1)}</strong><small>{row.permanentRequired == null ? "Master pending" : `${row.permanentRequired} required`}</small></td><td>{row.peakFlex ? `+${row.peakFlex}` : "—"}<small>{row.peakRequired ? `${row.peakRequired} at P90` : ""}</small></td><td><strong>{row.matchedDays}/{row.minimumMatchedDays}</strong><small>Ground + final workload</small></td><td><span className={`capacity-confidence ${row.confidence}`}>{row.confidence}</span></td><td><span className={`capacity-decision ${decisionClass(row.status)}`}>{row.label}</span></td><td><CapacityAiAction stationCode={row.stationCode}/></td></tr>)}
+        {views.map((row) => <tr key={row.stationCode}><td><a className="capacity-station-link" href={`/ops-pulse/capacity/hiring?station=${row.stationCode}&from=${detailFrom}&to=${detailTo}${searchParams?.stations ? `&stations=${encodeURIComponent(searchParams.stations)}` : ""}#station-detail`}><strong>{row.stationCode}</strong><small>{row.stationName}</small></a></td><td><strong>{fmt(row.baseWorkload)}</strong><small>{row.sourceDays}/{row.baselineDays} completed days</small></td><td><strong>{fmt(row.regularCapacity, 1)}</strong><small>{row.regularCapacitySource === "payment_adjusted" ? "Payment-adjusted median" : row.regularCapacitySource === "system" ? "System IDs" : "No source"}</small></td><td><strong className={(row.permanentGap ?? 0) > 0 ? "metric-bad-text" : "metric-good-text"}>{row.permanentGap == null ? "—" : row.permanentGap > 0 ? `+${fmt(row.permanentGap, 1)}` : fmt(row.permanentGap, 1)}</strong><small>{row.permanentRequired == null ? "Master pending" : `${row.permanentRequired} required`}</small></td><td>{row.peakFlex ? `+${row.peakFlex}` : "—"}<small>{row.peakRequired ? `${row.peakRequired} at P90` : ""}</small></td><td><strong>{row.classifiedDays}/{row.baselineDays}</strong><small>{row.adHocDays} with approved ad-hoc</small></td><td><span className={`capacity-confidence ${row.confidence}`}>{row.confidence}</span></td><td><span className={`capacity-decision ${decisionClass(row.status)}`}>{row.label}</span></td><td><CapacityAiAction stationCode={row.stationCode}/></td></tr>)}
         {!views.length ? <tr><td className="empty-cell" colSpan={9}>No permitted stations are available.</td></tr> : null}
       </tbody></table></div>
     </section></CapacityAiActionProvider>
 
     {selectedStation ? <section className="panel capacity-detail" id="station-detail">
-      <div className="panel-head"><div><span className="eyebrow">Hiring evidence</span><h2>{selectedStation.stationCode} · {selectedStation.stationName}</h2><p className="subtle">{selectedStation.sourceDays} completed days · {selectedStation.matchedDays} ground-matched · {selectedStation.shortageDays} shortage days</p></div><a className="button secondary compact" href={`/ops-pulse/capacity/hiring${searchParams?.stations ? `?stations=${encodeURIComponent(searchParams.stations)}` : ""}`}>Close</a></div>
+      <div className="panel-head"><div><span className="eyebrow">Hiring evidence</span><h2>{selectedStation.stationCode} · {selectedStation.stationName}</h2><p className="subtle">{selectedStation.sourceDays} completed days · {selectedStation.adHocDays} days with approved ad-hoc DAs · {selectedStation.shortageDays} shortage days</p></div><a className="button secondary compact" href={`/ops-pulse/capacity/hiring${searchParams?.stations ? `?stations=${encodeURIComponent(searchParams.stations)}` : ""}`}>Close</a></div>
       {selectedAlert ? <div className={`capacity-selected-alert ${selectedAlert.severity}`}><strong>{selectedAlert.title}</strong><span>{selectedAlert.detail}</span></div> : null}
       <div className="capacity-action-line"><strong>{selectedStation.label}</strong><span>{selectedStation.action}</span></div>
-      <section className="capacity-detail-kpis"><article><span>Stable workload</span><strong>{fmt(selectedStation.baseWorkload)}</strong><small>Trimmed {selectedStation.baselineDays}-day average</small></article><article><span>Ground regular</span><strong>{fmt(selectedStation.regularCapacity, 1)}</strong><small>{selectedStation.regularCapacitySource} source</small></article><article><span>Permanent requirement</span><strong>{selectedStation.permanentRequired ?? "—"}</strong><small>{selectedStation.sustainedShortage ? "Both review cycles short" : "Not sustained across both cycles"}</small></article><article><span>Peak flex</span><strong>{selectedStation.peakFlex}</strong><small>P90 workload {fmt(selectedStation.peakWorkload)}</small></article></section>
+      <section className="capacity-detail-kpis"><article><span>Stable workload</span><strong>{fmt(selectedStation.baseWorkload)}</strong><small>Trimmed {selectedStation.baselineDays}-day average</small></article><article><span>Regular capacity</span><strong>{fmt(selectedStation.regularCapacity, 1)}</strong><small>Road IDs minus approved ad-hoc</small></article><article><span>Permanent requirement</span><strong>{selectedStation.permanentRequired ?? "—"}</strong><small>{selectedStation.sustainedShortage ? "Both review cycles short" : "Not sustained across both cycles"}</small></article><article><span>Peak flex</span><strong>{selectedStation.peakFlex}</strong><small>P90 workload {fmt(selectedStation.peakWorkload)}</small></article></section>
       <form className="capacity-detail-filter" method="get"><input type="hidden" name="station" value={selectedStation.stationCode}/><input type="hidden" name="stations" value={searchParams?.stations ?? ""}/><label>From<input type="date" name="from" defaultValue={detailFrom}/></label><label>To<input type="date" name="to" defaultValue={detailTo}/></label><button className="button compact" type="submit">Apply</button></form>
-      {selectedDaily.length ? <div className="capacity-detail-grid"><div className="capacity-trend" aria-label="Daily workload trend">{selectedDaily.map((day) => <div className="capacity-trend-column" key={day.date} title={`${day.date}: ${fmt(day.workload)} workload, ${day.systemIds} system IDs`}><span>{fmt(day.workload)}</span><i className={day.alerts.length ? "risk" : ""} style={{ height: `${Math.max(4, day.workload / maxDailyWorkload * 100)}%` }}/><small>{day.date.slice(8)}</small></div>)}</div><div className="table-wrap"><table className="capacity-daily-table capacity-evidence-table"><thead><tr><th>Date</th><th>System IDs</th><th>Ground regular</th><th>Ad hoc</th><th>Workload</th><th>Required</th><th>Gap</th><th>SPR</th><th>Alert</th></tr></thead><tbody>{selectedDaily.map((day) => {
-        const gap = day.required != null && day.regular != null ? day.required - day.regular : null;
-        return <tr className={day.alerts.length ? "capacity-alert-day" : ""} key={day.date}><td>{day.date.split("-").reverse().join("/")}</td><td>{day.systemIds}</td><td>{day.regular ?? "—"}</td><td>{day.adHoc ?? "—"}</td><td>{fmt(day.workload)}</td><td>{day.required ?? "—"}</td><td className={(gap ?? 0) > 0 ? "metric-bad-text" : ""}>{gap == null ? "—" : gap > 0 ? `+${gap}` : gap}</td><td>{fmt(day.spr, 1)}</td><td>{day.alerts.length ? day.alerts.map((alert) => alert.type === "associate_drop" ? "DA drop" : alert.type === "volume_spike" ? "Volume spike" : "Ground missing").join(", ") : "—"}</td></tr>;
+      {selectedDaily.length ? <div className="capacity-detail-grid"><div className="capacity-trend" aria-label="Daily workload trend">{selectedDaily.map((day) => <div className="capacity-trend-column" key={day.date} title={`${day.date}: ${fmt(day.workload)} workload, ${day.systemIds} system IDs`}><span>{fmt(day.workload)}</span><i className={day.alerts.length ? "risk" : ""} style={{ height: `${Math.max(4, day.workload / maxDailyWorkload * 100)}%` }}/><small>{day.date.slice(8)}</small></div>)}</div><div className="table-wrap"><table className="capacity-daily-table capacity-evidence-table"><thead><tr><th>Date</th><th>Total IDs</th><th>Regular IDs</th><th>Ad-hoc IDs</th><th>Approved requests</th><th>Workload</th><th>Required</th><th>Gap</th><th>SPR</th><th>Alert</th></tr></thead><tbody>{selectedDaily.map((day) => {
+        const gap = day.required != null ? day.required - day.regular : null;
+        return <tr className={day.alerts.length ? "capacity-alert-day" : ""} key={day.date}><td>{day.date.split("-").reverse().join("/")}</td><td>{day.systemIds}</td><td>{day.regular}</td><td>{day.adHoc}</td><td>{day.paymentRequests || "—"}</td><td>{fmt(day.workload)}</td><td>{day.required ?? "—"}</td><td className={(gap ?? 0) > 0 ? "metric-bad-text" : ""}>{gap == null ? "—" : gap > 0 ? `+${gap}` : gap}</td><td>{fmt(day.spr, 1)}</td><td>{day.alerts.length ? day.alerts.map((alert) => alert.type === "associate_drop" ? "DA drop" : alert.type === "volume_spike" ? "Volume spike" : "Payment mismatch").join(", ") : "—"}</td></tr>;
       })}</tbody></table></div></div> : <div className="empty-state">No completed workload is available in this range.</div>}
       {associateDetail.length ? <div className="capacity-associate-section"><div className="capacity-section-title"><div><h3>Associate workload detail</h3><p>Supporting evidence for the selected review period.</p></div><span>{associateDetail.length} associates</span></div><div className="table-wrap"><table className="capacity-daily-table"><thead><tr><th>Associate ID</th><th>Active days</th><th>Total workload</th><th>Average/day</th><th>Peak</th></tr></thead><tbody>{associateDetail.map((associate) => <tr key={associate.associateId}><td><a href={`/ops-pulse/capacity/associates/${encodeURIComponent(associate.associateId)}?station=${selectedStation.stationCode}&from=${detailFrom}&to=${detailTo}`}><strong>{associate.associateId}</strong></a></td><td>{associate.days}</td><td>{fmt(associate.workload)}</td><td>{fmt(associate.average, 1)}</td><td>{fmt(associate.peak)}</td></tr>)}</tbody></table></div></div> : null}
     </section> : null}

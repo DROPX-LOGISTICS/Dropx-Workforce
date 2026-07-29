@@ -12459,28 +12459,6 @@ td strong,
   color: #fff;
 }
 
-.capacity-ground-date-filter {
-  align-items: end;
-  display: flex;
-  gap: 7px;
-}
-
-.capacity-ground-date-filter label {
-  color: #64748b;
-  display: grid;
-  font-size: 9px;
-  font-weight: 800;
-  gap: 3px;
-  text-transform: uppercase;
-}
-
-.capacity-ground-date-filter input {
-  border: 1px solid #dbe2ea;
-  border-radius: 8px;
-  font: inherit;
-  padding: 8px 9px;
-}
-
 .capacity-panel-actions {
   display: flex;
   gap: 7px;
@@ -13623,8 +13601,7 @@ td strong,
 }
 
 .capacity-period-filter label,
-.capacity-review-date label,
-.capacity-ground-review-form label {
+.capacity-review-date label {
   color: #64748b;
   display: grid;
   font-size: 10px;
@@ -13634,9 +13611,7 @@ td strong,
 
 .capacity-period-filter input,
 .capacity-period-filter select,
-.capacity-review-date select,
-.capacity-ground-review-form input,
-.capacity-ground-review-form textarea {
+.capacity-review-date select {
   border: 1px solid #dbe2ea;
   border-radius: 8px;
   font: inherit;
@@ -13668,23 +13643,6 @@ td strong,
   .capacity-associate-filter .button {
     grid-column: 1 / -1;
   }
-}
-
-.capacity-ground-review-form {
-  align-items: end;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: 140px repeat(4, minmax(110px, 1fr));
-  padding: 0 18px 18px;
-}
-
-.capacity-ground-review-form .wide {
-  grid-column: 1 / -2;
-}
-
-.capacity-ground-review-form textarea {
-  min-height: 60px;
-  resize: vertical;
 }
 
 .capacity-system-count {
@@ -13987,13 +13945,8 @@ td strong,
     grid-template-columns: 1fr;
   }
 
-  .capacity-ground-review-form,
   .capacity-area-grid {
     grid-template-columns: 1fr;
-  }
-
-  .capacity-ground-review-form .wide {
-    grid-column: auto;
   }
 }
 
@@ -14011,10 +13964,6 @@ td strong,
   .capacity-daily-toolbar {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .capacity-ground-date-filter {
-    justify-content: flex-end;
   }
 
   .capacity-tabs-toolbar > .capacity-scope-filter {

@@ -1,13 +1,13 @@
 import type { CapacityRule } from "@/lib/ops-pulse/capacity";
 import { capacityPlanningSettings } from "@/lib/ops-pulse/capacity";
-import type { CapacityGroundUpdate } from "@/lib/ops-pulse/capacity-ground";
+import type { CapacityAdHocUsage } from "@/lib/ops-pulse/capacity-ad-hoc";
 import type { CapacityStationDay } from "@/lib/ops-pulse/capacity-shipments";
 
 export type CapacityPlanningAlert = {
   id: string;
   stationCode: string;
   date: string;
-  type: "associate_drop" | "volume_spike" | "ground_missing";
+  type: "associate_drop" | "volume_spike" | "ad_hoc_mismatch";
   severity: "critical" | "warning";
   title: string;
   detail: string;
@@ -19,7 +19,6 @@ export type CapacityDecisionStatus =
   | "flex"
   | "monitor"
   | "temporary_surge"
-  | "ground_required"
   | "balanced"
   | "surplus"
   | "unconfigured"
@@ -30,10 +29,10 @@ export type CapacityPlanningDay = {
   systemIds: number;
   workload: number;
   inbound: number;
-  regular: number | null;
-  adHoc: number | null;
-  classified: number | null;
-  matched: boolean;
+  regular: number;
+  adHoc: number;
+  paymentRequests: number;
+  adHocMismatch: number;
   required: number | null;
   spr: number;
   source: string;
@@ -44,14 +43,14 @@ export type CapacityPlanningDecision = {
   stationCode: string;
   baselineDays: number;
   sourceDays: number;
-  matchedDays: number;
-  minimumMatchedDays: number;
+  classifiedDays: number;
+  adHocDays: number;
   latestDate: string | null;
   latestSystemIds: number;
   baseWorkload: number;
   peakWorkload: number;
   regularCapacity: number;
-  regularCapacitySource: "ground" | "system" | "none";
+  regularCapacitySource: "payment_adjusted" | "system" | "none";
   permanentRequired: number | null;
   permanentGap: number | null;
   peakRequired: number | null;
@@ -92,64 +91,52 @@ function trimmedAverage(values: number[]) {
   return trimmed.reduce((sum, value) => sum + value, 0) / trimmed.length;
 }
 
-function regularCount(update: CapacityGroundUpdate | undefined) {
-  return update ? num(update.regularBike) + num(update.regularVan) : 0;
-}
-
-function adHocCount(update: CapacityGroundUpdate | undefined) {
-  return update ? num(update.adHocBike) + num(update.adHocVan) : 0;
-}
-
 function requiredFor(workload: number, rule: CapacityRule | undefined) {
   if (!rule || !workload || !rule.targetSpr) return null;
   return Math.ceil(workload / rule.targetSpr * (1 + rule.bufferPercent / 100));
 }
 
 function blockGap(days: CapacityPlanningDay[], rule: CapacityRule | undefined) {
-  const matched = days.filter((day) => day.matched && day.regular != null);
-  if (!rule || matched.length < 3) return null;
-  const required = requiredFor(trimmedAverage(days.map((day) => day.workload).filter((value) => value > 0)), rule);
-  return required == null ? null : required - median(matched.map((day) => day.regular ?? 0));
+  const operational = days.filter((day) => day.workload > 0 && day.systemIds > 0);
+  if (!rule || operational.length < 3) return null;
+  const required = requiredFor(trimmedAverage(operational.map((day) => day.workload)), rule);
+  return required == null ? null : required - median(operational.map((day) => day.regular));
 }
 
 export function buildCapacityPlanningDecision({
   stationCode,
   rows,
-  groundUpdates,
+  adHocUsage,
   rule
 }: {
   stationCode: string;
   rows: CapacityStationDay[];
-  groundUpdates: CapacityGroundUpdate[];
+  adHocUsage: CapacityAdHocUsage[];
   rule: CapacityRule | undefined;
 }): CapacityPlanningDecision {
   const settings = capacityPlanningSettings(rule);
-  const groundByDate = new Map<string, CapacityGroundUpdate>();
-  groundUpdates.filter((row) => row.stationCode === stationCode).forEach((row) => {
-    const current = groundByDate.get(row.workDate);
-    if (!current || row.updatedAt > current.updatedAt) groundByDate.set(row.workDate, row);
-  });
+  const adHocByDate = new Map<string, CapacityAdHocUsage>();
+  adHocUsage.filter((row) => row.stationCode === stationCode).forEach((row) => adHocByDate.set(row.workDate, row));
   const rowByDate = new Map<string, CapacityStationDay>();
   rows.filter((row) => row.station_code === stationCode).forEach((row) => rowByDate.set(row.work_date, row));
   const dates = [...rowByDate.keys()].sort().slice(-settings.baselineDays);
   const daily: CapacityPlanningDay[] = dates.map((date) => {
     const row = rowByDate.get(date)!;
-    const ground = groundByDate.get(date);
-    // A saved zero is an explicit ground confirmation (for example, no operation);
-    // absence of a saved row is the only "not updated" state.
-    const classified = ground ? num(ground.classifiedIds) : null;
-    const regular = classified != null ? regularCount(ground) : null;
-    const adHoc = classified != null ? adHocCount(ground) : null;
+    const approvedAdHoc = adHocByDate.get(date);
+    const systemIds = num(row.active_ids);
+    const approvedCount = num(approvedAdHoc?.adHocIds);
+    const adHoc = Math.min(systemIds, approvedCount);
+    const regular = Math.max(0, systemIds - adHoc);
     const workload = num(row.delivered);
     return {
       date,
-      systemIds: num(row.active_ids),
+      systemIds,
       workload,
       inbound: num(row.inbound),
       regular,
       adHoc,
-      classified,
-      matched: classified != null,
+      paymentRequests: num(approvedAdHoc?.paymentRequests),
+      adHocMismatch: Math.max(0, approvedCount - systemIds),
       required: requiredFor(workload, rule),
       spr: num(row.active_ids) ? workload / num(row.active_ids) : 0,
       source: row.volume_source || "No source",
@@ -159,10 +146,22 @@ export function buildCapacityPlanningDecision({
 
   const recentAlertStart = daily.at(-7)?.date ?? daily[0]?.date ?? "";
   daily.forEach((day, index) => {
+    if (day.adHocMismatch > 0) {
+      day.alerts.push({
+        id: `${stationCode}-${day.date}-ad-hoc-mismatch`,
+        stationCode,
+        date: day.date,
+        type: "ad_hoc_mismatch",
+        severity: "warning",
+        title: "Approved ad-hoc count exceeds road IDs",
+        detail: `${day.adHoc + day.adHocMismatch} approved ad-hoc IDs versus ${day.systemIds} road IDs on ${day.date}.`,
+        changePercent: null
+      });
+    }
     if (index < 2 || day.date < recentAlertStart) return;
     const prior = daily.slice(Math.max(0, index - 7), index);
-    const priorHeadcount = median(prior.map((item) => item.classified ?? item.systemIds).filter((value) => value > 0));
-    const currentHeadcount = day.classified ?? day.systemIds;
+    const priorHeadcount = median(prior.map((item) => item.regular).filter((value) => value > 0));
+    const currentHeadcount = day.regular;
     if (priorHeadcount > 0 && currentHeadcount < priorHeadcount) {
       const drop = (priorHeadcount - currentHeadcount) / priorHeadcount * 100;
       if (drop >= settings.associateDropPercent) {
@@ -197,42 +196,33 @@ export function buildCapacityPlanningDecision({
   });
 
   const latest = daily.at(-1);
-  if (latest && !latest.matched) {
-    latest.alerts.push({
-      id: `${stationCode}-${latest.date}-ground-missing`,
-      stationCode,
-      date: latest.date,
-      type: "ground_missing",
-      severity: "warning",
-      title: "Ground update not matched",
-      detail: `Final workload exists for ${latest.date}, but on-ground staffing is missing.`,
-      changePercent: null
-    });
-  }
 
-  const sourceDays = daily.length;
-  const matched = daily.filter((day) => day.matched && day.regular != null);
-  const matchedDays = matched.length;
-  const workloads = daily.map((day) => day.workload).filter((value) => value > 0);
+  const operationalDays = daily.filter((day) => day.workload > 0 && day.systemIds > 0);
+  const sourceDays = operationalDays.length;
+  const classifiedDays = operationalDays.length;
+  const adHocDays = operationalDays.filter((day) => day.adHoc > 0).length;
+  const workloads = operationalDays.map((day) => day.workload);
   const baseWorkload = trimmedAverage(workloads);
   const peakWorkload = percentile(workloads, 0.9);
-  const groundRegular = matched.map((day) => day.regular ?? 0);
-  const systemIds = daily.map((day) => day.systemIds).filter((value) => value > 0);
-  const regularCapacity = groundRegular.length ? median(groundRegular) : median(systemIds);
-  const regularCapacitySource = groundRegular.length ? "ground" : systemIds.length ? "system" : "none";
+  const adjustedRegular = operationalDays.map((day) => day.regular);
+  const systemIds = operationalDays.map((day) => day.systemIds);
+  const regularCapacity = adjustedRegular.length ? median(adjustedRegular) : median(systemIds);
+  const regularCapacitySource = adHocUsage.some((row) => row.stationCode === stationCode && row.workDate >= (dates[0] ?? "") && row.workDate <= (dates.at(-1) ?? ""))
+    ? "payment_adjusted"
+    : systemIds.length ? "system" : "none";
   const permanentRequired = requiredFor(baseWorkload, rule);
   const peakRequired = requiredFor(peakWorkload, rule);
   const permanentGap = permanentRequired == null ? null : permanentRequired - regularCapacity;
   const peakFlex = permanentRequired == null || peakRequired == null ? 0 : Math.max(0, peakRequired - permanentRequired);
-  const shortageDays = matched.filter((day) => day.required != null && day.regular != null && day.required > day.regular).length;
+  const shortageDays = operationalDays.filter((day) => day.required != null && day.required > day.regular).length;
   const previousBlock = daily.slice(-14, -7);
   const recentBlock = daily.slice(-7);
   const previousGap = blockGap(previousBlock, rule);
   const recentGap = blockGap(recentBlock, rule);
   const sustainedShortage = previousGap != null && recentGap != null && previousGap > 0 && recentGap > 0 && shortageDays >= 7;
-  const confidence = sourceDays >= Math.ceil(settings.baselineDays * 0.8) && matchedDays >= settings.minimumMatchedDays
+  const confidence = sourceDays >= Math.ceil(settings.baselineDays * 0.8)
     ? "high"
-    : sourceDays >= settings.minimumMatchedDays && matchedDays >= Math.ceil(settings.minimumMatchedDays / 2)
+    : sourceDays >= settings.minimumSourceDays
       ? "medium"
       : "low";
   const alerts = daily.flatMap((day) => day.alerts).sort((a, b) => b.date.localeCompare(a.date) || a.type.localeCompare(b.type));
@@ -241,7 +231,6 @@ export function buildCapacityPlanningDecision({
   let status: CapacityDecisionStatus;
   if (!sourceDays || !baseWorkload) status = "no_data";
   else if (!rule) status = "unconfigured";
-  else if (matchedDays < settings.minimumMatchedDays) status = "ground_required";
   else if ((permanentGap ?? 0) > 0 && sustainedShortage) status = "hire_candidate";
   else if ((permanentGap ?? 0) > 0 && hasRecentSpike) status = "temporary_surge";
   else if ((permanentGap ?? 0) > 0) status = "monitor";
@@ -253,7 +242,6 @@ export function buildCapacityPlanningDecision({
     : status === "flex" ? `Peak flex +${peakFlex}`
     : status === "monitor" ? "Monitor"
     : status === "temporary_surge" ? "Temporary surge"
-    : status === "ground_required" ? "Ground update required"
     : status === "surplus" ? `Rebalance ${Math.abs(Math.floor(permanentGap ?? 0))}`
     : status === "unconfigured" ? "Configure master"
     : status === "no_data" ? "No data"
@@ -262,7 +250,6 @@ export function buildCapacityPlanningDecision({
     : status === "flex" ? `Keep base staffing; arrange ${peakFlex} flex resource${peakFlex === 1 ? "" : "s"} for peak days.`
     : status === "monitor" ? "Shortage is not sustained across both reviews; monitor before hiring."
     : status === "temporary_surge" ? "Recent spike may be temporary; use flex cover and review the next completed days."
-    : status === "ground_required" ? `Only ${matchedDays}/${settings.minimumMatchedDays} required days are ground-matched; complete updates before hiring.`
     : status === "surplus" ? "Review redeployment or attrition replacement before adding capacity."
     : status === "unconfigured" ? "Configure SPR, baseline and alert thresholds in Capacity Master."
     : status === "no_data" ? "No completed workload is available for a workforce decision."
@@ -272,8 +259,8 @@ export function buildCapacityPlanningDecision({
     stationCode,
     baselineDays: settings.baselineDays,
     sourceDays,
-    matchedDays,
-    minimumMatchedDays: settings.minimumMatchedDays,
+    classifiedDays,
+    adHocDays,
     latestDate: latest?.date ?? null,
     latestSystemIds: latest?.systemIds ?? 0,
     baseWorkload,

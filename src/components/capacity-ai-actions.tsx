@@ -15,7 +15,7 @@ export type CapacityAiFact = {
   requiredIds: number | null;
   gap: number | null;
   status: string;
-  matchedDays?: number;
+  sourceDays?: number;
   baselineDays?: number;
   peakFlex?: number;
   confidence?: string;

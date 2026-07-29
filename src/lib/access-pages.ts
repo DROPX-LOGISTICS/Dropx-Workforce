@@ -48,7 +48,6 @@ export const accessPages = [
   { code: "cps_reports", name: "CPS Reports", sort_order: 81 },
   { code: "cps_inputs", name: "CPS Inputs", sort_order: 82 },
   { code: "cps_unmapped", name: "CPS Unmapped IDs", sort_order: 83 },
-  { code: "capacity_historical_edit", name: "Historical Ground Update", sort_order: 84 },
   { code: "report_upload", name: "Report Upload", sort_order: 80 },
   { code: "earnings", name: "Earnings Review", sort_order: 90 },
   { code: "exceptions", name: "Exceptions", sort_order: 100 },

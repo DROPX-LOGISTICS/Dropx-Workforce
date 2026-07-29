@@ -22,7 +22,6 @@ const opsPageCodes = new Set([
   "cps_reports",
   "cps_inputs",
   "cps_unmapped",
-  "capacity_historical_edit",
   "master_locations",
   "master_providers",
   "master_models",

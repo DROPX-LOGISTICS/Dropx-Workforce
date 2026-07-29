@@ -34,14 +34,14 @@ function formatNumber(value: number, digits = 0) {
 }
 
 function capacityHelp() {
-  return "I’m DropX Ops AI. For Capacity, I can explain station SPR, headcount gaps, data freshness, ground-update readiness, peak flex and hiring evidence. Try “Why is GDRD under action?”, “Which stations need flex?” or “Is the ground data ready?”";
+  return "I’m DropX Ops AI. For Capacity, I can explain station SPR, regular versus approved ad-hoc IDs, headcount gaps, data freshness, peak flex and hiring evidence. Try “Why is GDRD under action?”, “Which stations need flex?” or “How many approved ad-hoc IDs were used?”";
 }
 
 function capacityLine(row: CapacityStationSnapshot) {
   const target = row.targetSpr == null ? "target not configured" : `target ${formatNumber(row.targetSpr, 1)}`;
-  const gap = row.modelledGap == null ? "gap unavailable" : `${row.modelledGap > 0 ? "+" : ""}${row.modelledGap} ${row.groundRegular == null ? "modelled" : "ground-based"} gap`;
+  const gap = row.modelledGap == null ? "gap unavailable" : `${row.modelledGap > 0 ? "+" : ""}${row.modelledGap} payment-adjusted gap`;
   const freshness = row.latestDate ? `as of ${row.latestDate}` : "source date unavailable";
-  return `${row.stationCode}: SPR ${formatNumber(row.spr, 1)} (${target}), ${gap}, ${row.decision.label}; ${freshness}.`;
+  return `${row.stationCode}: SPR ${formatNumber(row.spr, 1)} (${target}), ${formatNumber(row.latestRegularIds)} regular + ${formatNumber(row.latestAdHocIds)} approved ad-hoc IDs, ${gap}, ${row.decision.label}; ${freshness}.`;
 }
 
 function capacityAnswer(question: string, rows: CapacityStationSnapshot[], from: string, to: string) {
@@ -56,10 +56,7 @@ function capacityAnswer(question: string, rows: CapacityStationSnapshot[], from:
       : `All ${rows.length} permitted Capacity stations have current source data. ${scopeNote}`;
   }
   if (/ground|matched|update ready/.test(q)) {
-    const pending = rows.filter((row) => !row.groundReady);
-    return pending.length
-      ? `${pending.length}/${rows.length} stations are not ground-ready:\n${pending.slice(0, 15).map((row) => `${row.stationCode}: ${row.decision.matchedDays}/${row.decision.minimumMatchedDays} required matched days.`).join("\n")}`
-      : `All ${rows.length} stations meet their configured ground-match gate.`;
+    return `Manual ground updates are no longer used. Capacity classifies regular IDs as road IDs minus final-approved ad-hoc DA payment records. ${scopeNote}`;
   }
   if (/hire|hiring|permanent gap/.test(q)) {
     const candidates = rows.filter((row) => row.decision.status === "hire_candidate");
@@ -74,7 +71,7 @@ function capacityAnswer(question: string, rows: CapacityStationSnapshot[], from:
       : `No peak-flex requirement is calculated for the selected Capacity scope. ${scopeNote}`;
   }
   if (/why|explain|action|decision/.test(q)) {
-    return `${rows.slice(0, 12).map((row) => `${capacityLine(row)} ${row.action} Evidence: ${row.decision.sourceDays} source days, ${row.decision.matchedDays}/${row.decision.minimumMatchedDays} ground-matched days, ${row.decision.confidence} confidence.`).join("\n")}\n${scopeNote}`;
+    return `${rows.slice(0, 12).map((row) => `${capacityLine(row)} ${row.action} Evidence: ${row.decision.sourceDays}/${row.decision.baselineDays} source days, ${row.decision.adHocDays} ad-hoc days, ${row.decision.confidence} confidence.`).join("\n")}\n${scopeNote}`;
   }
   if (/\bspr\b|capacity|headcount|workforce|require/.test(q)) {
     return `${rows.slice(0, 15).map(capacityLine).join("\n")}\n${scopeNote}`;
@@ -127,7 +124,7 @@ export async function POST(request: Request) {
   const ids = locations.map((row) => row.id);
   if (!codes.length) return Response.json({ error: "No permitted stations are available." }, { status: 403 });
   const pageContext = String(body.context ?? "");
-  const capacityIntent = /capacity|\bspr\b|headcount|workforce|hiring|ground update|peak flex/i.test(question)
+  const capacityIntent = /capacity|\bspr\b|headcount|workforce|hiring|ground update|ad.?hoc|peak flex/i.test(question)
     || pageContext.includes("/ops-pulse/capacity");
   if (capacityIntent) {
     const capacityPermitted = locationResult.locations.filter(isAmazonEdspXptLocation);

@@ -35,7 +35,7 @@ function scopeCodes(value: string | undefined, allowed: string[]) {
 }
 
 function decisionTone(row: CapacityStationSnapshot) {
-  if (row.dataState !== "ready" || row.decision.status === "ground_required" || row.decision.status === "unconfigured") return "unconfigured";
+  if (row.dataState !== "ready" || row.decision.status === "unconfigured") return "unconfigured";
   if (row.decision.status === "hire_candidate" || row.decision.status === "temporary_surge") return "risk";
   if (row.decision.status === "monitor" || row.decision.status === "flex") return "warn";
   if (row.decision.status === "surplus") return "surplus";
@@ -57,7 +57,6 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
   const priority: Record<string, number> = {
     hire_candidate: 8,
     temporary_surge: 7,
-    ground_required: 6,
     monitor: 5,
     flex: 4,
     unconfigured: 3,
@@ -120,12 +119,11 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
       <strong>{snapshot.summary.stale ? `${snapshot.summary.stale} station${snapshot.summary.stale === 1 ? "" : "s"} need a data refresh` : "Workload data is current"}</strong>
       <span>As of {snapshot.scopeDataDate ? snapshot.scopeDataDate.split("-").reverse().join("/") : "—"}</span>
       <span>{snapshot.scopeCoverage}% coverage</span>
-      <a href={`/ops-pulse/capacity/daily?date=${reportingDate}${searchParams?.stations ? `&stations=${encodeURIComponent(searchParams.stations)}` : ""}`}>Update ground data</a>
     </section>
 
     <section className="capacity-simple-kpis">
       <article><span>Average daily workload</span><strong>{fmt(totalAverageWorkload)}</strong><small>Last 14 completed days</small></article>
-      <article><span>Active associates</span><strong>{fmt(totalActiveIds)}</strong><small>Latest system count</small></article>
+      <article><span>Active associates</span><strong>{fmt(totalActiveIds)}</strong><small>{fmt(snapshot.summary.adHocIds)} approved ad-hoc</small></article>
       <article><span>Average SPR</span><strong>{fmt(snapshot.summary.averageSpr, 1)}</strong><small>Workload per active associate</small></article>
       <article><span>Required associates</span><strong>{fmt(totalRequiredIds)}</strong><small>At configured station targets</small></article>
     </section>
@@ -137,7 +135,7 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
           <span className={`capacity-action-code ${decisionTone(row)}`}>{row.stationCode}</span>
           <span><strong>{row.stationName}</strong><small>{row.cluster || row.region || "—"}</small></span>
           <span className="capacity-simple-priority-metric"><strong>{row.modelledGap == null ? "—" : `${row.modelledGap > 0 ? "+" : ""}${row.modelledGap}`}</strong><small>associate gap</small></span>
-          <span className={`capacity-decision ${decisionTone(row)}`}>{row.dataState !== "ready" ? "Refresh data" : row.groundReady ? row.decision.label : "Ground update"}</span>
+          <span className={`capacity-decision ${decisionTone(row)}`}>{row.dataState !== "ready" ? "Refresh data" : row.decision.label}</span>
           <b>›</b>
         </a>)}
         {!actionQueue.length ? <p className="empty-cell">No stations require attention.</p> : null}
@@ -149,7 +147,7 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
       <div className="table-wrap"><table className="capacity-table capacity-simple-table"><thead><tr>
         <th><a href={sortHref("station")}>Station {sortMark("station")}</a></th>
         <th><a href={sortHref("workload")}>Avg workload {sortMark("workload")}</a></th>
-        <th>Active IDs</th>
+        <th>Regular / Ad-hoc</th>
         <th><a href={sortHref("spr")}>SPR {sortMark("spr")}</a></th>
         <th><a href={sortHref("required")}>Required {sortMark("required")}</a></th>
         <th><a href={sortHref("gap")}>Gap {sortMark("gap")}</a></th>
@@ -158,11 +156,11 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
         {stations.map((row) => <tr key={row.stationCode}>
           <td><a className="capacity-station-link" href={`/ops-pulse/capacity/${row.stationCode}?from=${snapshot.from}&to=${reportingDate}`}><strong>{row.stationCode}</strong><small>{row.stationName} · {row.cluster || row.region || "—"}</small></a></td>
           <td><strong>{fmt(row.averageWorkload)}</strong></td>
-          <td><strong>{fmt(row.latestSystemIds)}</strong></td>
+          <td><strong>{fmt(row.latestRegularIds)} / {fmt(row.latestAdHocIds)}</strong><small>{fmt(row.latestSystemIds)} total IDs</small></td>
           <td><strong className={row.maxSafeSpr && row.spr > row.maxSafeSpr ? "metric-bad-text" : ""}>{row.averageWorkload ? fmt(row.spr, 1) : "—"}</strong><small>{row.targetSpr ? `Target ${fmt(row.targetSpr, 1)}` : "Target pending"}</small></td>
           <td>{row.requiredIds ?? "—"}</td>
           <td><strong className={(row.modelledGap ?? 0) > 0 ? "metric-bad-text" : (row.modelledGap ?? 0) < -1 ? "metric-warn-text" : "metric-good-text"}>{row.modelledGap == null ? "—" : `${row.modelledGap > 0 ? "+" : ""}${row.modelledGap}`}</strong></td>
-          <td><span className={`capacity-decision ${decisionTone(row)}`}>{row.dataState !== "ready" ? "Refresh data" : row.groundReady ? row.decision.label : "Ground update"}</span></td>
+          <td><span className={`capacity-decision ${decisionTone(row)}`}>{row.dataState !== "ready" ? "Refresh data" : row.decision.label}</span></td>
         </tr>)}
         {!stations.length ? <tr><td className="empty-cell" colSpan={7}>No permitted stations are selected.</td></tr> : null}
       </tbody></table></div>

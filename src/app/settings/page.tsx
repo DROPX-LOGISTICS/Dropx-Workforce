@@ -191,6 +191,15 @@ export default async function SettingsPage() {
               <p className="subtle">Email templates for business document expiry and future workflow reminders.</p>
             </div>
           </PendingLink>
+          <PendingLink className="settings-tile actionable" href="/settings/app-notifications">
+            <div>
+              <h3>App Notification</h3>
+              <p className="subtle">Choose which automatic events notify DropX One users.</p>
+            </div>
+            <span className="settings-tile-actions">
+              <span className="button secondary compact">Configure</span>
+            </span>
+          </PendingLink>
           {canManageAmazonConnectors ? (
             <PendingLink className="settings-tile actionable" href="/settings/amazon">
               <div>

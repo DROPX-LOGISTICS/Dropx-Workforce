@@ -2,13 +2,8 @@ import { AppShell } from "@/components/app-shell";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import {
-  attendanceNotificationDefaults,
-  attendanceNotificationEvents,
-  type AttendanceNotificationEvent
-} from "@/lib/app-notifications";
 import { workforceProfileTypes, workforceTable, type WorkforceProfileType } from "@/lib/workforce-profiles";
-import { savePunchNotificationSettings, sendAppNotification } from "./actions";
+import { sendAppNotification } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -60,53 +55,15 @@ async function loadHistory(companyId: string) {
   return result.error ? [] : result.data ?? [];
 }
 
-async function loadPunchRules(companyId: string) {
-  const defaults = Object.fromEntries(attendanceNotificationEvents.map((eventCode) => [
-    eventCode,
-    {
-      body_template: attendanceNotificationDefaults[eventCode].bodyTemplate,
-      enabled: true,
-      event_code: eventCode,
-      title_template: attendanceNotificationDefaults[eventCode].titleTemplate
-    }
-  ])) as Record<AttendanceNotificationEvent, {
-    body_template: string;
-    enabled: boolean;
-    event_code: AttendanceNotificationEvent;
-    title_template: string;
-  }>;
-  if (!supabaseAdmin) return defaults;
-
-  const result = await supabaseAdmin
-    .from("mob_app_notification_rules")
-    .select("event_code, enabled, title_template, body_template")
-    .eq("company_id", companyId)
-    .in("event_code", attendanceNotificationEvents);
-  if (result.error) return defaults;
-  for (const row of result.data ?? []) {
-    const eventCode = row.event_code as AttendanceNotificationEvent;
-    if (attendanceNotificationEvents.includes(eventCode)) {
-      defaults[eventCode] = {
-        body_template: String(row.body_template),
-        enabled: row.enabled !== false,
-        event_code: eventCode,
-        title_template: String(row.title_template)
-      };
-    }
-  }
-  return defaults;
-}
-
 export default async function AppNotificationsPage({
   searchParams
 }: {
-  searchParams?: { sent?: string; saved?: string; error?: string };
+  searchParams?: { sent?: string; error?: string };
 }) {
   const authorization = await requirePagePermission("notifications_app", "access");
   const companyId = requireCompanyId(authorization);
   const recipients = await loadRecipients(companyId);
   const history = await loadHistory(companyId);
-  const punchRules = await loadPunchRules(companyId);
   const recipientByKey = new Map(recipients.map((row) => [`${row.profileType}:${row.id}`, row]));
 
   return (
@@ -118,39 +75,7 @@ export default async function AppNotificationsPage({
           <span>Send an in-app message to an individual DropX One account.</span>
         </header>
         {searchParams?.sent === "1" ? <div className="success-banner">Notification sent.</div> : null}
-        {searchParams?.saved === "1" ? <div className="success-banner">Punch notification settings saved.</div> : null}
         {searchParams?.error ? <div className="error-banner">{searchParams.error}</div> : null}
-        <section className="app-notification-composer app-notification-rules">
-          <div>
-            <h2>Attendance triggers</h2>
-            <p>Send notifications automatically when a biometric punch is recorded.</p>
-          </div>
-          <form action={savePunchNotificationSettings}>
-            {attendanceNotificationEvents.map((eventCode) => {
-              const rule = punchRules[eventCode];
-              const label = eventCode === "attendance_punch_in" ? "Punch In" : "Punch Out";
-              return <fieldset key={eventCode}>
-                <legend>{label}</legend>
-                <label className="notification-rule-toggle">
-                  <input defaultChecked={rule.enabled} name={`${eventCode}_enabled`} type="checkbox" />
-                  Enable automatic {label} notification
-                </label>
-                <label>
-                  Title
-                  <input defaultValue={rule.title_template} maxLength={120} name={`${eventCode}_title`} required />
-                </label>
-                <label>
-                  Message
-                  <textarea defaultValue={rule.body_template} maxLength={1000} name={`${eventCode}_body`} required rows={3} />
-                </label>
-              </fieldset>;
-            })}
-            <p className="notification-rule-variables">
-              Available variables: <code>{"{time}"}</code> <code>{"{date}"}</code> <code>{"{work_duration}"}</code> <code>{"{punch_count}"}</code>
-            </p>
-            <button type="submit">Save trigger settings</button>
-          </form>
-        </section>
         <section className="app-notification-composer">
           <div>
             <h2>New notification</h2>

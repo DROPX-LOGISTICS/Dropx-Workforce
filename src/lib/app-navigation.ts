@@ -128,6 +128,7 @@ export const navItems: NavItem[] = [
       { code: "app_settings", label: "General", href: "/settings" },
       { code: "app_settings", label: "DropX ID Generation", href: "/settings/dropx-id-generation?type=dropx_id" },
       { code: "app_settings", label: "Biometric ID Generation", href: "/settings/dropx-id-generation?type=biometric_id" },
+      { code: "app_settings", label: "App Notification", href: "/settings/app-notifications" },
       { code: "app_settings", label: "Verification APIs", href: "/settings/verification-apis" },
       { code: "app_settings", label: "Biometric Config", href: "/settings/biometric" },
       { code: "app_settings", label: "Biometric Monitor", href: "/biometric" },

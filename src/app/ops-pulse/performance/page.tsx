@@ -173,7 +173,10 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
   const view = searchParams?.view === "sls" ? "sls" : "daily";
   const defaultDailyDate = dateShift(today(), -1);
   const selectedDate = validDate(searchParams?.date, validDate(searchParams?.to, defaultDailyDate));
-  const trendFrom = dateShift(selectedDate, -6);
+  const selectedDailyWeek = amazonWeekNumber(selectedDate);
+  const selectedDailyWeekRange = weekDates(Number(selectedDate.slice(0, 4)), selectedDailyWeek);
+  const trendFrom = selectedDailyWeekRange.start;
+  const trendTo = selectedDailyWeekRange.end < defaultDailyDate ? selectedDailyWeekRange.end : defaultDailyDate;
   const metricQuery = !supabaseAdmin || !selectedCodes.length
     ? null
     : view === "daily"
@@ -183,7 +186,7 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
         .in("station_code", selectedCodes)
         .eq("source_type", "daily_edsp_metrics")
         .gte("report_date", trendFrom)
-        .lte("report_date", selectedDate)
+        .lte("report_date", trendTo)
         .order("created_at", { ascending: false })
         .limit(3000)
       : supabaseAdmin.from("report_metric_facts")
@@ -328,7 +331,7 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
   dailyCandidates.forEach((row) => {
     const date = reportDay(row);
     const code = stationCode(row.station_code);
-    if (!date || date < trendFrom || date > selectedDate) return;
+    if (!date || date < trendFrom || date > trendTo) return;
     const key = `${code}|${date}`;
     if (!historyByStationDate.has(key)) historyByStationDate.set(key, row);
   });
@@ -381,7 +384,7 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
             {missingDsrStations ? <section className="performance-data-warning"><div><strong>DSR/PSR source value is zero for {missingDsrStations} station{missingDsrStations === 1 ? "" : "s"}.</strong><span>The dashboard is preserving the uploaded report value. Upload a corrected Daily EDSP report containing the metric; the system will not manufacture a replacement percentage.</span></div><a href="https://dashboard.dropxlogistics.com/imports">Open report imports</a></section> : null}
             {missingStationCodes.length && dailyRows.length ? <section className="performance-coverage-gap"><div><span>Missing stations</span><strong>{missingStationCodes.join(", ")}</strong></div><small>Selected stations absent from this source report.</small></section> : null}
             {trendStationCode ? <section className="panel performance-daily-trend" id="daily-trend">
-              <div className="panel-head"><div><h2>7-day station trend</h2><p className="subtle">{trendStationCode} · {trendStationLocation?.station_name || trendStationLocation?.city || trendStationCode} · through {selectedDate.split("-").reverse().join("/")}</p></div><form className="performance-trend-station-form"><input type="hidden" name="view" value="daily"/><input type="hidden" name="date" value={selectedDate}/>{selectedCodes.length !== permittedCodes.length ? <input type="hidden" name="stations" value={selectedCodes.join(",")}/> : null}<label>Station<select name="trend" defaultValue={trendStationCode}>{selectedCodes.map((code) => <option key={code} value={code}>{code} · {locationByCode.get(code)?.station_name || locationByCode.get(code)?.city || code}</option>)}</select></label><button>View trend</button></form></div>
+              <div className="panel-head"><div><h2>Amazon Week {selectedDailyWeek} station trend</h2><p className="subtle">{trendStationCode} · {trendStationLocation?.station_name || trendStationLocation?.city || trendStationCode} · {selectedDailyWeekRange.start.split("-").reverse().join("/")}–{selectedDailyWeekRange.end.split("-").reverse().join("/")}</p></div><form className="performance-trend-station-form"><input type="hidden" name="view" value="daily"/><input type="hidden" name="date" value={selectedDate}/>{selectedCodes.length !== permittedCodes.length ? <input type="hidden" name="stations" value={selectedCodes.join(",")}/> : null}<label>Station<select name="trend" defaultValue={trendStationCode}>{selectedCodes.map((code) => <option key={code} value={code}>{code} · {locationByCode.get(code)?.station_name || locationByCode.get(code)?.city || code}</option>)}</select></label><button>View trend</button></form></div>
               {trendStationRows.length ? <div className="performance-trend-grid">{trendMetrics.map((metric) => {
                 const points = trendStationRows.map((row) => metricValues(row)[metric.index] ?? 0);
                 const first = points[0] ?? 0;
@@ -390,7 +393,7 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
                 const improving = metric.direction === "higher" ? delta > .0005 : delta < -.0005;
                 const declining = metric.direction === "higher" ? delta < -.0005 : delta > .0005;
                 return <article key={metric.metricKey}><header><span>{metric.short}</span><strong>{percent(latest)}</strong><i className={improving ? "up" : declining ? "down" : "flat"}>{improving ? "↑ Improving" : declining ? "↓ Declining" : "— Stable"} · {delta >= 0 ? "+" : ""}{(delta * 100).toFixed(1)} pp</i></header><svg preserveAspectRatio="none" viewBox="0 0 240 62"><polyline fill="none" points={trendPath(points)}/></svg><footer>{trendStationRows.map((row) => <span key={`${metric.metricKey}-${row.report_date}`} title={`${row.report_date}: ${percent(metricValues(row)[metric.index] ?? 0)}`}>{String(row.report_date).slice(8)}</span>)}</footer><small>Target {targetLabel(metric.target, metric.direction)}</small></article>;
-              })}</div> : <div className="empty-state">No Daily EDSP history is available for this station in the previous seven days.</div>}
+              })}</div> : <div className="empty-state">No Daily EDSP history is available for this station in Amazon Week {selectedDailyWeek}.</div>}
             </section> : null}
             {actionRows.length ? <section className="panel performance-action-queue"><div className="panel-head"><div><h2>Action queue</h2><p className="subtle">Highest target misses for {selectedDate.split("-").reverse().join("/")}.</p></div><strong>{actionRows.length} priorities</strong></div><div className="table-wrap"><table><thead><tr><th>Station</th><th>City</th><th>Missed targets</th><th>DSR</th><th></th></tr></thead><tbody>{actionRows.map((row) => {
               const code = stationCode(row.station_code);

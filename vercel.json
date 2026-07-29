@@ -14,6 +14,10 @@
       "schedule": "30 5 * * *"
     },
     {
+      "path": "/api/cron/verification-api-retention",
+      "schedule": "0 6 * * *"
+    },
+    {
       "path": "/api/cron/ops-pulse-portal-checks",
       "schedule": "* * * * *"
     },

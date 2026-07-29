@@ -24,6 +24,13 @@ create table if not exists public.mob_app_notifications (
     check (push_status in ('not_configured', 'pending', 'sent', 'failed'))
 );
 
+alter table public.mob_app_notifications
+  add column if not exists source_key text;
+
+create unique index if not exists mob_app_notifications_source_unique
+  on public.mob_app_notifications
+  (company_id, event_code, source_key, recipient_account_id);
+
 create index if not exists mob_app_notifications_recipient_idx
   on public.mob_app_notifications
   (company_id, recipient_profile_type, recipient_account_id, created_at desc)
@@ -59,8 +66,29 @@ create unique index if not exists mob_app_device_tokens_push_token_unique
   on public.mob_app_device_tokens (push_token)
   where push_token is not null;
 
+create table if not exists public.mob_app_notification_rules (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null,
+  event_code text not null,
+  enabled boolean not null default true,
+  title_template text not null,
+  body_template text not null,
+  route text not null default 'attendance',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint mob_app_notification_rules_event_check
+    check (event_code in ('attendance_punch_in', 'attendance_punch_out')),
+  constraint mob_app_notification_rules_title_check
+    check (length(trim(title_template)) between 1 and 120),
+  constraint mob_app_notification_rules_body_check
+    check (length(trim(body_template)) between 1 and 1000),
+  constraint mob_app_notification_rules_company_event_unique
+    unique (company_id, event_code)
+);
+
 alter table public.mob_app_notifications enable row level security;
 alter table public.mob_app_device_tokens enable row level security;
+alter table public.mob_app_notification_rules enable row level security;
 
 do $$
 begin
@@ -85,6 +113,19 @@ begin
   ) then
     create policy "service_role_mob_app_device_tokens_all"
       on public.mob_app_device_tokens
+      for all
+      using (auth.role() = 'service_role')
+      with check (auth.role() = 'service_role');
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'mob_app_notification_rules'
+      and policyname = 'service_role_mob_app_notification_rules_all'
+  ) then
+    create policy "service_role_mob_app_notification_rules_all"
+      on public.mob_app_notification_rules
       for all
       using (auth.role() = 'service_role')
       with check (auth.role() = 'service_role');

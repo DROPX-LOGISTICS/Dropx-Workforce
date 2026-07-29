@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { createAttendancePunchNotification } from "@/lib/app-notifications";
 import { istDate, punchLabel, rebuildAttendanceDay } from "@/lib/biometric/attendance";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
@@ -446,12 +447,17 @@ export async function POST(request: NextRequest) {
     const punchDate = istDate(punchTime);
     const existingPunches = await supabaseAdmin
       .from("attendance_punches")
-      .select("id")
+      .select("id, punch_time")
       .eq("company_id", device.company_id)
       .eq("enrolment_id", canonicalEnrolmentId)
       .eq("punch_date", punchDate)
-      .eq("calculated", true);
+      .eq("calculated", true)
+      .order("punch_time", { ascending: true });
     if (existingPunches.error) throw new Error(existingPunches.error.message);
+    const punchTimestamp = punchTime.getTime();
+    const alreadyStored = (existingPunches.data ?? []).some((row) =>
+      new Date(row.punch_time).getTime() === punchTimestamp
+    );
     const nextOrder = (existingPunches.data?.length ?? 0) + 1;
 
     const punchResult = await supabaseAdmin
@@ -494,6 +500,26 @@ export async function POST(request: NextRequest) {
     }
 
     await rebuildAttendanceDay(device.company_id, canonicalEnrolmentId, punchDate);
+
+    const profileType = enrolment.profile_type ??
+      (enrolment.worker_type === "employee" ? "employee" : "field_executive");
+    const recipientAccountId = enrolment.account_id ??
+      (profileType === "employee" ? enrolment.employee_id : enrolment.field_executive_id);
+    if (!alreadyStored && recipientAccountId) {
+      const firstPunchTime = existingPunches.data?.[0]?.punch_time
+        ? new Date(existingPunches.data[0].punch_time)
+        : punchTime;
+      await createAttendancePunchNotification({
+        accountId: recipientAccountId,
+        companyId: device.company_id,
+        firstPunchTime,
+        profileType,
+        punchDate,
+        punchId: String(punchResult.data.id),
+        punchOrder: nextOrder,
+        punchTime
+      });
+    }
 
     return Response.json({
       ok: true,

@@ -41,6 +41,7 @@ export function VerificationApiReportFilters({
   }, [searchParams]);
 
   useEffect(() => {
+    if (search.trim() === (searchParams.get("search") ?? "")) return;
     const timer = window.setTimeout(() => {
       updateParams(router, pathname, searchParams, { search: search.trim(), page: "" });
     }, 400);

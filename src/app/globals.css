@@ -14245,6 +14245,10 @@ td strong,
   justify-self: end;
 }
 
+.verification-api-pagination > :first-child {
+  justify-self: start;
+}
+
 .verification-api-pagination .disabled {
   pointer-events: none;
   opacity: 0.45;

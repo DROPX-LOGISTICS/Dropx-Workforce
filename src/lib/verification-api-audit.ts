@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type AuditContext = {
@@ -17,6 +18,14 @@ type ProviderCall = AuditContext & {
   endpoint: string;
   payload: Record<string, unknown>;
   providerCode: string;
+};
+
+type CacheClaim = {
+  action: "cached" | "claimed" | "processing";
+  http_status: number | null;
+  is_success: boolean | null;
+  log_id: string;
+  response_data: unknown;
 };
 
 const credentialKeys = new Set([
@@ -41,6 +50,43 @@ function sanitize(value: unknown): unknown {
       .filter(([key]) => !credentialKeys.has(key.toLowerCase()))
       .map(([key, child]) => [key, sanitize(child)])
   );
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+function inputHash(input: ProviderCall, requestData: unknown) {
+  return createHash("sha256")
+    .update([
+      input.companyId,
+      input.providerCode.toLowerCase(),
+      input.verificationKind.toLowerCase(),
+      input.endpoint,
+      canonicalJson(requestData)
+    ].join("|"))
+    .digest("hex");
+}
+
+function responseFromCache(status: number | null, body: unknown) {
+  const responseStatus = status && status >= 200 && status <= 599 ? status : 200;
+  return new Response(JSON.stringify(body ?? {}), {
+    status: responseStatus,
+    headers: { "Content-Type": "application/json" }
+  });
+}
+
+function isCacheMigrationMissing(message: string) {
+  const value = message.toLowerCase();
+  return value.includes("claim_verification_api_request") &&
+    (value.includes("does not exist") || value.includes("schema cache"));
 }
 
 function firstValue(value: unknown, keys: string[]): string {
@@ -89,6 +135,61 @@ function resultMessage(value: unknown) {
   return text(data.message || result.message || root.message || root.error || status.message);
 }
 
+async function claimProviderCall(input: ProviderCall, requestData: unknown, hash: string) {
+  if (!supabaseAdmin) return null;
+  const { data, error } = await supabaseAdmin.rpc("claim_verification_api_request", {
+    p_account_code: input.accountCode || null,
+    p_account_id: input.accountId || null,
+    p_actor_label: input.actorLabel || null,
+    p_actor_user_id: input.actorUserId || null,
+    p_company_id: input.companyId,
+    p_endpoint: input.endpoint,
+    p_input_hash: hash,
+    p_profile_name: input.profileName || null,
+    p_profile_type: input.profileType || null,
+    p_provider_code: input.providerCode,
+    p_request_data: requestData,
+    p_source: input.source,
+    p_verification_kind: input.verificationKind
+  });
+  if (error) {
+    if (isCacheMigrationMissing(error.message)) return null;
+    throw new Error(`Unable to check verification cache: ${error.message}`);
+  }
+  const claim = Array.isArray(data) ? data[0] : data;
+  return claim ? claim as CacheClaim : null;
+}
+
+async function completeProviderCall(
+  logId: string,
+  response: Response | null,
+  body: unknown,
+  durationMs: number,
+  cacheForHours: number
+) {
+  if (!supabaseAdmin) return;
+  const responseData = body && typeof body === "object" ? body : { value: body };
+  const completedAt = new Date();
+  const cacheExpiresAt = new Date(completedAt.getTime() + cacheForHours * 60 * 60 * 1000);
+  const { error } = await supabaseAdmin
+    .from("verification_api_audit_logs")
+    .update({
+      cache_expires_at: cacheExpiresAt.toISOString(),
+      completed_at: completedAt.toISOString(),
+      duration_ms: durationMs,
+      http_status: response?.status ?? null,
+      is_success: response ? providerSucceeded(response, body) : false,
+      request_status: "completed",
+      response_data: sanitize(responseData),
+      result_code: resultCode(responseData),
+      result_message: resultMessage(responseData)
+    })
+    .eq("id", logId);
+  if (error) {
+    console.error("Unable to complete verification audit:", error.message);
+  }
+}
+
 async function writeAudit(
   input: AuditContext & {
     durationMs: number;
@@ -133,6 +234,17 @@ async function writeAudit(
 }
 
 export async function callVerificationProvider(input: ProviderCall) {
+  const requestData = sanitize(input.payload);
+  const hash = inputHash(input, requestData);
+  const claim = await claimProviderCall(input, requestData, hash);
+  if (claim?.action === "cached") {
+    const response = responseFromCache(claim.http_status, claim.response_data);
+    return { response, body: claim.response_data };
+  }
+  if (claim?.action === "processing") {
+    throw new Error("This verification is already in progress.");
+  }
+
   const startedAt = Date.now();
   try {
     const response = await fetch(`${input.baseUrl}${input.endpoint}`, {
@@ -141,24 +253,34 @@ export async function callVerificationProvider(input: ProviderCall) {
       body: JSON.stringify(input.payload)
     });
     const body = await response.json().catch(() => ({}));
-    await writeAudit({
-      ...input,
-      durationMs: Date.now() - startedAt,
-      httpStatus: response.status,
-      isSuccess: providerSucceeded(response, body),
-      requestData: input.payload,
-      responseData: body
-    });
+    if (claim?.log_id) {
+      await completeProviderCall(claim.log_id, response, body, Date.now() - startedAt, 24);
+    } else {
+      await writeAudit({
+        ...input,
+        durationMs: Date.now() - startedAt,
+        httpStatus: response.status,
+        isSuccess: providerSucceeded(response, body),
+        requestData: input.payload,
+        responseData: body
+      });
+    }
     return { response, body };
   } catch (error) {
-    await writeAudit({
-      ...input,
-      durationMs: Date.now() - startedAt,
-      httpStatus: null,
-      isSuccess: false,
-      requestData: input.payload,
-      responseData: { error: error instanceof Error ? error.message : "Provider request failed." }
-    });
+    const errorBody = { error: error instanceof Error ? error.message : "Provider request failed." };
+    if (claim?.log_id) {
+      // A short cache prevents rapid retries after a connection-level failure.
+      await completeProviderCall(claim.log_id, null, errorBody, Date.now() - startedAt, 5 / 60);
+    } else {
+      await writeAudit({
+        ...input,
+        durationMs: Date.now() - startedAt,
+        httpStatus: null,
+        isSuccess: false,
+        requestData: input.payload,
+        responseData: errorBody
+      });
+    }
     throw error;
   }
 }

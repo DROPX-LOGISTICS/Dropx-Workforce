@@ -23,7 +23,11 @@ security definer
 set search_path = public
 set statement_timeout = '15s'
 as $$
-  with size_rule as (
+  with requested_identity as (
+    select
+      nullif(regexp_replace(upper(coalesce(p_associate_name, '')), '[^A-Z0-9]+', '', 'g'), '') full_name,
+      nullif(regexp_replace(upper(split_part(coalesce(p_associate_name, ''), '/', 1)), '[^A-Z0-9]+', '', 'g'), '') base_name
+  ), size_rule as (
     select
       (description::jsonb ->> 'maxLengthCm')::numeric max_length_cm,
       (description::jsonb ->> 'maxWidthCm')::numeric max_width_cm,
@@ -54,16 +58,14 @@ as $$
       end size_class
     from public.delivered_shipment_facts facts
     cross join size_rule rule
+    cross join requested_identity identity
     where facts.company_id = p_company_id
       and facts.station_code = upper(trim(p_station_code))
       and facts.work_date between p_from and p_to
       and (
         upper(trim(facts.driver_id)) = upper(trim(p_associate_id))
-        or (
-          nullif(regexp_replace(upper(coalesce(p_associate_name, '')), '[^A-Z0-9]+', '', 'g'), '') is not null
-          and regexp_replace(upper(coalesce(facts.driver_name, '')), '[^A-Z0-9]+', '', 'g')
-            = regexp_replace(upper(coalesce(p_associate_name, '')), '[^A-Z0-9]+', '', 'g')
-        )
+        or regexp_replace(upper(coalesce(facts.driver_name, '')), '[^A-Z0-9]+', '', 'g')
+          in (identity.full_name, identity.base_name)
       )
   )
   select matched.work_date,
@@ -98,7 +100,11 @@ security definer
 set search_path = public
 set statement_timeout = '15s'
 as $$
-  with size_rule as (
+  with requested_identity as (
+    select
+      nullif(regexp_replace(upper(coalesce(p_associate_name, '')), '[^A-Z0-9]+', '', 'g'), '') full_name,
+      nullif(regexp_replace(upper(split_part(coalesce(p_associate_name, ''), '/', 1)), '[^A-Z0-9]+', '', 'g'), '') base_name
+  ), size_rule as (
     select
       (description::jsonb ->> 'maxLengthCm')::numeric max_length_cm,
       (description::jsonb ->> 'maxWidthCm')::numeric max_width_cm,
@@ -129,17 +135,15 @@ as $$
       end size_class
     from public.delivered_shipment_facts facts
     cross join size_rule rule
+    cross join requested_identity identity
     where facts.company_id = p_company_id
       and facts.station_code = upper(trim(p_station_code))
       and facts.work_date between p_from and p_to
       and nullif(trim(facts.postal_code), '') is not null
       and (
         upper(trim(facts.driver_id)) = upper(trim(p_associate_id))
-        or (
-          nullif(regexp_replace(upper(coalesce(p_associate_name, '')), '[^A-Z0-9]+', '', 'g'), '') is not null
-          and regexp_replace(upper(coalesce(facts.driver_name, '')), '[^A-Z0-9]+', '', 'g')
-            = regexp_replace(upper(coalesce(p_associate_name, '')), '[^A-Z0-9]+', '', 'g')
-        )
+        or regexp_replace(upper(coalesce(facts.driver_name, '')), '[^A-Z0-9]+', '', 'g')
+          in (identity.full_name, identity.base_name)
       )
   )
   select matched.postal_code,

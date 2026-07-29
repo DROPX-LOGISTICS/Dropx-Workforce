@@ -1,5 +1,6 @@
 import "server-only";
 
+import { deliverNotificationPush } from "./firebase-push";
 import { supabaseAdmin } from "./supabase-admin";
 import { isWorkforceProfileType } from "./workforce-profiles";
 
@@ -47,24 +48,41 @@ export async function createProfileSubmittedNotification({
   }
   if (ruleResult.data?.enabled === false) return;
 
+  const title = String(ruleResult.data?.title_template ?? eventDefaults.title);
+  const body = String(ruleResult.data?.body_template ?? eventDefaults.body);
+  const route = String(ruleResult.data?.route ?? eventDefaults.route);
   const result = await supabaseAdmin
     .from("mob_app_notifications")
     .upsert({
-      body: String(ruleResult.data?.body_template ?? eventDefaults.body),
+      body,
       company_id: companyId,
       data: {},
       event_code: eventCode,
       push_status: "not_configured",
       recipient_account_id: accountId,
       recipient_profile_type: profileType,
-      route: String(ruleResult.data?.route ?? eventDefaults.route),
+      route,
       source_key: sourceKey,
-      title: String(ruleResult.data?.title_template ?? eventDefaults.title)
+      title
     }, {
       ignoreDuplicates: true,
       onConflict: "company_id,event_code,source_key,recipient_account_id"
-    });
+    })
+    .select("id");
   if (result.error && !isMissingNotificationSchema(result.error)) {
     console.error("Unable to create app notification:", result.error.message);
+  }
+  const notificationId = result.data?.[0]?.id;
+  if (notificationId) {
+    await deliverNotificationPush({
+      id: notificationId,
+      companyId,
+      profileType,
+      accountId,
+      title,
+      body,
+      route,
+      data: {}
+    });
   }
 }

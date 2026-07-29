@@ -2,12 +2,17 @@
 
 import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
+import { deliverNotificationPush } from "@/lib/firebase-push";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { isWorkforceProfileType, workforceTable } from "@/lib/workforce-profiles";
 
 export async function sendAppNotification(formData: FormData) {
   const authorization = await requirePagePermission("notifications_app", "add");
   if (!supabaseAdmin) redirect("/notifications/app?error=Supabase%20is%20not%20configured");
+  if (!authorization.companyId) {
+    redirect("/notifications/app?error=Select%20a%20company%20before%20sending");
+  }
+  const companyId = authorization.companyId;
 
   const profileType = String(formData.get("profileType") ?? "").trim();
   const accountId = String(formData.get("accountId") ?? "").trim();
@@ -25,7 +30,7 @@ export async function sendAppNotification(formData: FormData) {
   const recipient = await supabaseAdmin
     .from(workforceTable(profileType))
     .select("id")
-    .eq("company_id", authorization.companyId)
+    .eq("company_id", companyId)
     .eq("id", accountId)
     .maybeSingle();
   if (recipient.error || !recipient.data) {
@@ -33,7 +38,7 @@ export async function sendAppNotification(formData: FormData) {
   }
 
   const result = await supabaseAdmin.from("mob_app_notifications").insert({
-    company_id: authorization.companyId,
+    company_id: companyId,
     recipient_profile_type: profileType,
     recipient_account_id: accountId,
     event_code: "manual",
@@ -42,12 +47,22 @@ export async function sendAppNotification(formData: FormData) {
     route: route || null,
     created_by: authorization.userId,
     push_status: "not_configured"
-  });
+  }).select("id").single();
   if (result.error) {
     const message = result.error.message.toLowerCase().includes("mob_app_notifications")
       ? "Run scripts/mob_app_notifications_v1.sql in Supabase first"
       : result.error.message;
     redirect(`/notifications/app?error=${encodeURIComponent(message)}`);
   }
+  await deliverNotificationPush({
+    id: result.data.id,
+    companyId,
+    profileType,
+    accountId,
+    title,
+    body,
+    route: route || null,
+    data: {}
+  });
   redirect("/notifications/app?sent=1");
 }

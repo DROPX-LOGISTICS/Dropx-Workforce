@@ -1,6 +1,7 @@
 import "server-only";
 
 import { formatDuration, formatTime } from "@/lib/biometric/attendance";
+import { deliverNotificationPush } from "@/lib/firebase-push";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { isWorkforceProfileType } from "@/lib/workforce-profiles";
 
@@ -141,10 +142,24 @@ export async function createAppNotification({
     }, {
       ignoreDuplicates: true,
       onConflict: "company_id,event_code,source_key,recipient_account_id"
-    });
+    })
+    .select("id");
 
   if (notificationResult.error && !isMissingNotificationSchema(notificationResult.error)) {
     console.error("Unable to create app notification:", notificationResult.error.message);
+  }
+  const notificationId = notificationResult.data?.[0]?.id;
+  if (notificationId) {
+    await deliverNotificationPush({
+      id: notificationId,
+      companyId,
+      profileType,
+      accountId,
+      title,
+      body,
+      route: String(ruleResult.data?.route ?? defaults.route),
+      data
+    });
   }
 }
 
@@ -196,19 +211,20 @@ export async function createAttendancePunchNotification({
   const title = applyVariables(defaults.titleTemplate, variables);
   const body = applyVariables(defaults.bodyTemplate, variables);
 
+  const notificationData = {
+    punchDate,
+    punchId,
+    punchOrder,
+    punchTime: punchTime.toISOString(),
+    punchType: punchOrder === 1 ? "in" : "out",
+    workDuration: variables.work_duration
+  };
   const notificationResult = await supabaseAdmin
     .from("mob_app_notifications")
     .upsert({
       body,
       company_id: companyId,
-      data: {
-        punchDate,
-        punchId,
-        punchOrder,
-        punchTime: punchTime.toISOString(),
-        punchType: punchOrder === 1 ? "in" : "out",
-        workDuration: variables.work_duration
-      },
+      data: notificationData,
       event_code: eventCode,
       push_status: "not_configured",
       recipient_account_id: accountId,
@@ -219,9 +235,23 @@ export async function createAttendancePunchNotification({
     }, {
       ignoreDuplicates: true,
       onConflict: "company_id,event_code,source_key,recipient_account_id"
-    });
+    })
+    .select("id");
 
   if (notificationResult.error && !isMissingNotificationSchema(notificationResult.error)) {
     console.error("Unable to create attendance notification:", notificationResult.error.message);
+  }
+  const notificationId = notificationResult.data?.[0]?.id;
+  if (notificationId) {
+    await deliverNotificationPush({
+      id: notificationId,
+      companyId,
+      profileType,
+      accountId,
+      title,
+      body,
+      route: "attendance",
+      data: notificationData
+    });
   }
 }

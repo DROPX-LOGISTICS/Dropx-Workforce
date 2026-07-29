@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectSessionCookieName, normalizeConnectMobile } from "@/lib/connect-auth";
 import { loadAttendanceReportRows } from "@/lib/biometric/attendance";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { createAppNotification } from "@/lib/app-notifications";
 import { isWorkforceProfileType, type WorkforceProfileType, workforceTable } from "@/lib/workforce-profiles";
 
 function monthRange(month: string | null) {
@@ -285,6 +286,19 @@ export async function POST(request: NextRequest) {
           .select("id, status")
           .single();
     if (saveResult.error) throw new Error(saveResult.error.message);
+    await createAppNotification({
+      accountId: worker.profileId,
+      companyId: worker.companyId,
+      data: {
+        attendanceDate,
+        regularizationRequestId: saveResult.data.id,
+        status: saveResult.data.status
+      },
+      eventCode: "attendance_regularization_submitted",
+      profileType: worker.profileType,
+      sourceKey: `${saveResult.data.id}:${payload.updated_at}`,
+      variables: { date: attendanceDate.split("-").reverse().join("/") }
+    });
     return NextResponse.json({ ok: true, request: saveResult.data });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to submit regularization request.";

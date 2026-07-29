@@ -11,6 +11,7 @@ import { saveProfileVerifications } from "../../../../src/lib/profile-verificati
 import { supabaseAdmin } from "../../../../src/lib/supabase-admin";
 import { loadWorkforceCategoryRules } from "../../../../src/lib/workforce-category-rules";
 import { assertMinimumProfileAge } from "../../../../src/lib/profile-age";
+import { createProfileSubmittedNotification } from "../../../../src/lib/app-notifications";
 
 type EmployeeProfileRow = {
   id: string;
@@ -432,6 +433,12 @@ export async function POST(request: Request) {
     if (obsoleteDraftPaths.length) {
       await supabaseAdmin.storage.from("employee-profile-documents").remove(obsoleteDraftPaths);
     }
+    await createProfileSubmittedNotification({
+      accountId: account.id,
+      companyId: account.companyId,
+      profileType: "employee",
+      sourceKey: `${account.id}:${new Date().toISOString()}`
+    });
     return NextResponse.json({ ok: true, profile: await serializeEmployee(employee), notice: "Profile saved successfully." });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to save profile." }, { status: 400 });

@@ -1,8 +1,9 @@
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import {
-  attendanceNotificationEvents,
-  type AttendanceNotificationEvent
+  appNotificationDefaults,
+  appNotificationEvents,
+  type AppNotificationEvent
 } from "@/lib/app-notifications";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
@@ -11,15 +12,10 @@ import { saveAppNotificationSettings } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-const notificationLabels: Record<AttendanceNotificationEvent, string> = {
-  attendance_punch_in: "Punch In",
-  attendance_punch_out: "Punch Out"
-};
-
 async function loadSettings(companyId: string) {
   const enabled = Object.fromEntries(
-    attendanceNotificationEvents.map((eventCode) => [eventCode, true])
-  ) as Record<AttendanceNotificationEvent, boolean>;
+    appNotificationEvents.map((eventCode) => [eventCode, true])
+  ) as Record<AppNotificationEvent, boolean>;
   if (!supabaseAdmin) {
     return { enabled, error: "Supabase service role key is not configured." };
   }
@@ -28,12 +24,12 @@ async function loadSettings(companyId: string) {
     .from("mob_app_notification_rules")
     .select("event_code, enabled")
     .eq("company_id", companyId)
-    .in("event_code", attendanceNotificationEvents);
+    .in("event_code", appNotificationEvents);
   if (result.error) return { enabled, error: result.error.message };
 
   for (const row of result.data ?? []) {
-    const eventCode = row.event_code as AttendanceNotificationEvent;
-    if (attendanceNotificationEvents.includes(eventCode)) {
+    const eventCode = row.event_code as AppNotificationEvent;
+    if (appNotificationEvents.includes(eventCode)) {
       enabled[eventCode] = row.enabled !== false;
     }
   }
@@ -72,9 +68,9 @@ export default async function AppNotificationSettingsPage({
         <section className="panel app-notification-settings">
           <form action={saveAppNotificationSettings}>
             <div className="app-notification-checklist">
-              {attendanceNotificationEvents.map((eventCode) => (
+              {appNotificationEvents.map((eventCode) => (
                 <label key={eventCode}>
-                  <span>{notificationLabels[eventCode]}</span>
+                  <span>{appNotificationDefaults[eventCode].label}</span>
                   <input
                     defaultChecked={settings.enabled[eventCode]}
                     disabled={!permission.canEdit && !permission.canAdd}

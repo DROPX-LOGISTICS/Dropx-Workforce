@@ -14,6 +14,7 @@ import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
 import { saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { createAppNotification } from "@/lib/app-notifications";
 import { loadWorkforceCategoryRules } from "@/lib/workforce-category-rules";
 import { sendEmployeeOnboardingWhatsApp } from "@/lib/whatsapp";
 
@@ -369,19 +370,20 @@ export async function reviewEmployeeProfile(formData: FormData) {
       throw new Error("Only profiles under review can be approved or returned.");
     }
 
+    const reviewedAt = new Date().toISOString();
     const update = action === "approve"
       ? {
           profile_completion_status: "active",
           profile_return_remarks: null,
           profile_returned_at: null,
-          profile_completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          profile_completed_at: reviewedAt,
+          updated_at: reviewedAt
         }
       : {
           profile_completion_status: "returned",
           profile_return_remarks: remarks,
-          profile_returned_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          profile_returned_at: reviewedAt,
+          updated_at: reviewedAt
         };
     const result = await supabaseAdmin
       .from("employees")
@@ -389,6 +391,15 @@ export async function reviewEmployeeProfile(formData: FormData) {
       .eq("id", id)
       .eq("company_id", companyId);
     if (result.error) throw new Error(result.error.message);
+    await createAppNotification({
+      accountId: id,
+      companyId,
+      data: action === "return" ? { remarks } : {},
+      eventCode: action === "approve" ? "profile_approved" : "profile_returned",
+      profileType: "employee",
+      sourceKey: `${id}:${action}:${reviewedAt}`,
+      variables: { remarks }
+    });
 
     revalidatePath("/employees");
     employeesRedirect({ notice: action === "approve" ? "Employee profile approved." : "Employee profile returned for correction." });

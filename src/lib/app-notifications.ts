@@ -7,18 +7,62 @@ import { isWorkforceProfileType } from "@/lib/workforce-profiles";
 export const attendanceNotificationEvents = ["attendance_punch_in", "attendance_punch_out"] as const;
 export type AttendanceNotificationEvent = typeof attendanceNotificationEvents[number];
 
-export const attendanceNotificationDefaults: Record<AttendanceNotificationEvent, {
+export const appNotificationEvents = [
+  ...attendanceNotificationEvents,
+  "profile_submitted",
+  "profile_approved",
+  "profile_returned",
+  "attendance_regularization_submitted"
+] as const;
+export type AppNotificationEvent = typeof appNotificationEvents[number];
+
+export const appNotificationDefaults: Record<AppNotificationEvent, {
   bodyTemplate: string;
+  label: string;
+  route: "attendance" | "profile";
   titleTemplate: string;
 }> = {
   attendance_punch_in: {
+    label: "Punch In",
+    route: "attendance",
     titleTemplate: "Punch In recorded",
     bodyTemplate: "Your Punch In was recorded at {time} on {date}."
   },
   attendance_punch_out: {
+    label: "Punch Out",
+    route: "attendance",
     titleTemplate: "Punch Out recorded",
     bodyTemplate: "Your Punch Out was recorded at {time}. Work duration: {work_duration}."
+  },
+  profile_submitted: {
+    label: "Profile submitted",
+    route: "profile",
+    titleTemplate: "Profile submitted",
+    bodyTemplate: "Your profile has been submitted successfully."
+  },
+  profile_approved: {
+    label: "Profile approved",
+    route: "profile",
+    titleTemplate: "Profile approved",
+    bodyTemplate: "Your profile has been approved and activated."
+  },
+  profile_returned: {
+    label: "Profile returned",
+    route: "profile",
+    titleTemplate: "Profile returned",
+    bodyTemplate: "Your profile has been returned for correction. {remarks}"
+  },
+  attendance_regularization_submitted: {
+    label: "Regularization submitted",
+    route: "attendance",
+    titleTemplate: "Regularization submitted",
+    bodyTemplate: "Your attendance regularization request for {date} has been submitted."
   }
+};
+
+export const attendanceNotificationDefaults = {
+  attendance_punch_in: appNotificationDefaults.attendance_punch_in,
+  attendance_punch_out: appNotificationDefaults.attendance_punch_out
 };
 
 function isMissingNotificationSchema(error: { code?: string; message?: string } | null | undefined) {
@@ -39,6 +83,69 @@ function applyVariables(template: string, variables: Record<string, string>) {
     (message, [key, value]) => message.replaceAll(`{${key}}`, value),
     template
   );
+}
+
+export async function createAppNotification({
+  accountId,
+  companyId,
+  data = {},
+  eventCode,
+  profileType,
+  sourceKey,
+  variables = {}
+}: {
+  accountId: string;
+  companyId: string;
+  data?: Record<string, unknown>;
+  eventCode: AppNotificationEvent;
+  profileType: string;
+  sourceKey: string;
+  variables?: Record<string, string>;
+}) {
+  if (!supabaseAdmin || !isWorkforceProfileType(profileType)) return;
+
+  const defaults = appNotificationDefaults[eventCode];
+  const ruleResult = await supabaseAdmin
+    .from("mob_app_notification_rules")
+    .select("enabled, title_template, body_template, route")
+    .eq("company_id", companyId)
+    .eq("event_code", eventCode)
+    .maybeSingle();
+
+  if (ruleResult.error && !isMissingNotificationSchema(ruleResult.error)) {
+    console.error("Unable to load app notification rule:", ruleResult.error.message);
+  }
+  if (ruleResult.data?.enabled === false) return;
+
+  const title = applyVariables(
+    String(ruleResult.data?.title_template ?? defaults.titleTemplate),
+    variables
+  );
+  const body = applyVariables(
+    String(ruleResult.data?.body_template ?? defaults.bodyTemplate),
+    variables
+  ).replace(/\s+/g, " ").trim();
+  const notificationResult = await supabaseAdmin
+    .from("mob_app_notifications")
+    .upsert({
+      body,
+      company_id: companyId,
+      data,
+      event_code: eventCode,
+      push_status: "not_configured",
+      recipient_account_id: accountId,
+      recipient_profile_type: profileType,
+      route: String(ruleResult.data?.route ?? defaults.route),
+      source_key: sourceKey,
+      title
+    }, {
+      ignoreDuplicates: true,
+      onConflict: "company_id,event_code,source_key,recipient_account_id"
+    });
+
+  if (notificationResult.error && !isMissingNotificationSchema(notificationResult.error)) {
+    console.error("Unable to create app notification:", notificationResult.error.message);
+  }
 }
 
 export async function createAttendancePunchNotification({

@@ -76,8 +76,6 @@ create table if not exists public.mob_app_notification_rules (
   route text not null default 'attendance',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint mob_app_notification_rules_event_check
-    check (event_code in ('attendance_punch_in', 'attendance_punch_out')),
   constraint mob_app_notification_rules_title_check
     check (length(trim(title_template)) between 1 and 120),
   constraint mob_app_notification_rules_body_check
@@ -85,6 +83,20 @@ create table if not exists public.mob_app_notification_rules (
   constraint mob_app_notification_rules_company_event_unique
     unique (company_id, event_code)
 );
+
+alter table public.mob_app_notification_rules
+  drop constraint if exists mob_app_notification_rules_event_check;
+
+alter table public.mob_app_notification_rules
+  add constraint mob_app_notification_rules_event_check
+  check (event_code in (
+    'attendance_punch_in',
+    'attendance_punch_out',
+    'profile_submitted',
+    'profile_approved',
+    'profile_returned',
+    'attendance_regularization_submitted'
+  ));
 
 alter table public.mob_app_notifications enable row level security;
 alter table public.mob_app_device_tokens enable row level security;

@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
-  attendanceNotificationDefaults,
-  attendanceNotificationEvents
+  appNotificationDefaults,
+  appNotificationEvents
 } from "@/lib/app-notifications";
 import { requirePagePermission } from "@/lib/authorization";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -23,7 +23,7 @@ export async function saveAppNotificationSettings(formData: FormData) {
     .from("mob_app_notification_rules")
     .select("event_code, title_template, body_template")
     .eq("company_id", authorization.companyId)
-    .in("event_code", attendanceNotificationEvents);
+    .in("event_code", appNotificationEvents);
   if (existing.error) {
     const message = existing.error.message.toLowerCase().includes("mob_app_notification")
       ? "Run scripts/mob_app_notifications_v1.sql in Supabase first"
@@ -34,15 +34,15 @@ export async function saveAppNotificationSettings(formData: FormData) {
   const existingByEvent = new Map(
     (existing.data ?? []).map((row) => [String(row.event_code), row])
   );
-  const rows = attendanceNotificationEvents.map((eventCode) => {
+  const rows = appNotificationEvents.map((eventCode) => {
     const current = existingByEvent.get(eventCode);
-    const defaults = attendanceNotificationDefaults[eventCode];
+    const defaults = appNotificationDefaults[eventCode];
     return {
       body_template: String(current?.body_template ?? defaults.bodyTemplate),
       company_id: authorization.companyId,
       enabled: formData.get(eventCode) === "on",
       event_code: eventCode,
-      route: "attendance",
+      route: defaults.route,
       title_template: String(current?.title_template ?? defaults.titleTemplate),
       updated_at: new Date().toISOString()
     };

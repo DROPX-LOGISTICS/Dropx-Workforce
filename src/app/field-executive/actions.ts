@@ -14,6 +14,7 @@ import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
 import { saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { createAppNotification } from "@/lib/app-notifications";
 import { loadWorkforceCategoryRules } from "@/lib/workforce-category-rules";
 import { sendFieldExecutiveOnboardingWhatsApp } from "@/lib/whatsapp";
 import {
@@ -538,18 +539,19 @@ export async function reviewFieldExecutiveProfile(formData: FormData) {
       throw new Error("Only profiles under review can be approved or returned.");
     }
 
+    const reviewedAt = new Date().toISOString();
     const update = action === "approve"
       ? {
           onboarding_status: "active",
           profile_return_remarks: null,
           profile_returned_at: null,
-          updated_at: new Date().toISOString()
+          updated_at: reviewedAt
         }
       : {
           onboarding_status: "returned",
           profile_return_remarks: remarks,
-          profile_returned_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          profile_returned_at: reviewedAt,
+          updated_at: reviewedAt
         };
     const result = await supabaseAdmin
       .from(table)
@@ -557,6 +559,16 @@ export async function reviewFieldExecutiveProfile(formData: FormData) {
       .eq("id", id)
       .eq("company_id", companyId);
     if (result.error) throw new Error(result.error.message);
+    const profileType = nonEmployeeConfigForRoute(returnPath).profileType;
+    await createAppNotification({
+      accountId: id,
+      companyId,
+      data: action === "return" ? { remarks } : {},
+      eventCode: action === "approve" ? "profile_approved" : "profile_returned",
+      profileType,
+      sourceKey: `${id}:${action}:${reviewedAt}`,
+      variables: { remarks }
+    });
 
     revalidatePath(returnPath);
     fieldExecutiveRedirect({

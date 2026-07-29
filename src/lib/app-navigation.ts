@@ -90,7 +90,7 @@ export const navItems: NavItem[] = [
     children: [
       { code: "notifications_whatsapp", label: "WhatsApp", href: "/notifications/whatsapp" },
       { code: "notifications_history", label: "History", href: "/notifications/history" },
-      { code: "notifications_app", label: "App Notifications" }
+      { code: "notifications_app", label: "App Notifications", href: "/notifications/app" }
     ]
   },
   {

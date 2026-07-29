@@ -14124,6 +14124,192 @@ td strong,
   padding: 16px;
 }
 
+.app-notifications-page {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.app-notifications-page > header p {
+  margin: 0;
+  color: #e8580c;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.app-notifications-page > header h1 {
+  margin: 2px 0 3px;
+  font-size: 28px;
+}
+
+.app-notifications-page > header span,
+.app-notification-composer > div p,
+.app-notification-history > div > span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.app-notification-composer,
+.app-notification-history {
+  background: #fff;
+  border: 1px solid #e1e5eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px #1018280a;
+}
+
+.app-notification-composer > div,
+.app-notification-history > div:first-child {
+  padding: 16px 18px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.app-notification-composer h2,
+.app-notification-history h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.app-notification-composer p {
+  margin: 3px 0 0;
+}
+
+.app-notification-composer form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 18px;
+}
+
+.app-notification-composer label {
+  display: grid;
+  gap: 6px;
+  color: #526174;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.app-notification-composer .wide {
+  grid-column: 1 / -1;
+}
+
+.app-notification-composer input,
+.app-notification-composer select,
+.app-notification-composer textarea {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #d8dee8;
+  border-radius: 7px;
+  background: #fff;
+  color: #182230;
+  font: inherit;
+  text-transform: none;
+}
+
+.app-notification-composer textarea {
+  resize: vertical;
+}
+
+.app-notification-composer button {
+  grid-column: 1 / -1;
+  justify-self: end;
+  padding: 11px 18px;
+  border: 0;
+  border-radius: 7px;
+  background: #e6372f;
+  color: #fff;
+  font-weight: 700;
+}
+
+.app-notification-history .table-scroll {
+  overflow: auto;
+}
+
+.app-notification-history table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.app-notification-history th,
+.app-notification-history td {
+  padding: 11px 14px;
+  border-bottom: 1px solid #e8ebef;
+  text-align: left;
+  vertical-align: top;
+}
+
+.app-notification-history th {
+  color: #5d6978;
+  background: #f8fafc;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.app-notification-history td strong,
+.app-notification-history td small {
+  display: block;
+}
+
+.app-notification-history td small {
+  margin-top: 3px;
+  color: #667085;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.status-pill.read {
+  color: #176b45;
+  background: #e8f7ef;
+}
+
+.status-pill.unread {
+  color: #9a4b00;
+  background: #fff1d6;
+}
+
+.status-pill.neutral {
+  color: #475467;
+  background: #eef2f6;
+}
+
+.success-banner,
+.error-banner {
+  padding: 11px 14px;
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+.success-banner {
+  color: #126c47;
+  background: #eaf8f1;
+  border: 1px solid #bae7d1;
+}
+
+.error-banner {
+  color: #a32832;
+  background: #fff0f1;
+  border: 1px solid #f2c6ca;
+}
+
+@media (max-width: 760px) {
+  .app-notification-composer form {
+    grid-template-columns: 1fr;
+  }
+
+  .app-notification-composer .wide,
+  .app-notification-composer button {
+    grid-column: auto;
+  }
+}
+
 .verification-api-report-filters > label,
 .verification-api-filter-field {
   display: grid;

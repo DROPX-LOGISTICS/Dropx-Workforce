@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Bell, ChevronRight, Fingerprint, Gauge, LogOut, Menu, Settings, SwitchCamera, UserRound, UsersRound, X } from "lucide-react";
+import { Bell, CheckCheck, ChevronRight, Fingerprint, Gauge, LogOut, Menu, Settings, SwitchCamera, UserRound, UsersRound, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { ConnectAttendance } from "./connect-attendance";
 import { ConnectDashboard } from "./connect-dashboard";
@@ -9,6 +9,14 @@ import { AppAccount, ConnectProfileApp } from "./connect-profile-app";
 import { countryCodeOptions } from "@/lib/country-codes";
 
 type Step = "mobile" | "pin" | "otp" | "createPin" | "unlock" | "accounts" | "dashboard" | "profile" | "attendance" | "settings";
+type ConnectNotification = {
+  id: string;
+  title: string;
+  body: string;
+  route?: string | null;
+  created_at: string;
+  read_at?: string | null;
+};
 const defaultKeyName = "dropx_connect_default_account";
 const biometricKey = "dropx_connect_biometric";
 const credentialKey = "dropx_connect_passkey_id";
@@ -44,6 +52,10 @@ export function ConnectLoginFlow() {
   const [defaultKey, setDefaultKey] = useState("");
   const [drawer, setDrawer] = useState(false);
   const [profileMenu, setProfileMenu] = useState(false);
+  const [notificationMenu, setNotificationMenu] = useState(false);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notifications, setNotifications] = useState<ConnectNotification[]>([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -80,6 +92,12 @@ export function ConnectLoginFlow() {
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, [account, step]);
+  useEffect(() => {
+    setNotificationMenu(false);
+    setNotifications([]);
+    setUnreadNotifications(0);
+    if (account) void loadNotifications(false);
+  }, [account?.id, account?.profileType]);
 
   async function call(path: string, body: object) {
     setPending(true); setError(""); setNotice("");
@@ -122,7 +140,53 @@ export function ConnectLoginFlow() {
   async function logout() {
     await fetch("/api/connect/auth/session", { method: "DELETE" });
     setCountryCode("91"); setMobile(""); setPin(""); setConfirmPin(""); setOtp("");
-    setAccounts([]); setLockedAccounts([]); setAccount(null); setAvatar(""); setDrawer(false); setProfileMenu(false); setStep("mobile"); setNotice("Logged out."); setError("");
+    setAccounts([]); setLockedAccounts([]); setAccount(null); setAvatar(""); setDrawer(false); setProfileMenu(false); setNotificationMenu(false); setNotifications([]); setUnreadNotifications(0); setStep("mobile"); setNotice("Logged out."); setError("");
+  }
+  async function loadNotifications(showPanel = true) {
+    if (!account) return;
+    if (showPanel) {
+      setNotificationMenu((current) => !current);
+      setProfileMenu(false);
+      if (notificationMenu) return;
+    }
+    setNotificationLoading(true);
+    try {
+      const query = new URLSearchParams({ accountId: account.id, profileType: account.profileType });
+      const response = await fetch(`/api/connect/notifications?${query}`, { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Unable to load notifications.");
+      setNotifications(payload.notifications ?? []);
+      setUnreadNotifications(Number(payload.unreadCount ?? 0));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to load notifications.");
+    } finally {
+      setNotificationLoading(false);
+    }
+  }
+  async function readNotification(notification: ConnectNotification) {
+    if (!account) return;
+    if (!notification.read_at) {
+      const response = await fetch("/api/connect/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: account.id,
+          profileType: account.profileType,
+          notificationId: notification.id
+        })
+      });
+      if (response.ok) {
+        setNotifications((rows) => rows.map((row) => row.id === notification.id
+          ? { ...row, read_at: new Date().toISOString() }
+          : row));
+        setUnreadNotifications((count) => Math.max(0, count - 1));
+      }
+    }
+    const destination = notification.route as Step | null | undefined;
+    if (destination && ["dashboard", "profile", "attendance", "settings"].includes(destination)) {
+      setNotificationMenu(false);
+      open(destination);
+    }
   }
   async function saveDefaultAccount(nextKey: string) {
     setPending(true); setError(""); setNotice("");
@@ -240,8 +304,17 @@ export function ConnectLoginFlow() {
       <button aria-label="Menu" className={!account ? "dx-menu-unavailable" : ""} disabled={!account} onClick={() => { setDrawer(true); setProfileMenu(false); }}><Menu /></button>
       <Image alt="DropX" height={42} priority src="/dropx-logo.png" width={120} />
       <span />
-      <button aria-label="Notifications" onClick={() => setNotice("No new notifications.")}><Bell /></button>
-      <button className="avatar" onClick={() => { setProfileMenu((v) => !v); setDrawer(false); }}>{avatar ? <img alt="" src={avatar} /> : <b>{(account?.name || "U")[0]}</b>}</button>
+      <button aria-label="Notifications" className="dx-notification-trigger" disabled={!account} onClick={() => void loadNotifications()}><Bell />{unreadNotifications ? <b>{unreadNotifications > 99 ? "99+" : unreadNotifications}</b> : null}</button>
+      <button className="avatar" onClick={() => { setProfileMenu((v) => !v); setNotificationMenu(false); setDrawer(false); }}>{avatar ? <img alt="" src={avatar} /> : <b>{(account?.name || "U")[0]}</b>}</button>
+      {notificationMenu ? <aside className="dx-notification-pop">
+        <header><strong>Notifications</strong>{unreadNotifications ? <small>{unreadNotifications} unread</small> : null}</header>
+        {notificationLoading ? <div className="dx-notification-empty"><span className="mini-spin" /></div> : notifications.length ? <div className="dx-notification-list">
+          {notifications.map((item) => <button className={item.read_at ? "read" : "unread"} key={item.id} onClick={() => void readNotification(item)}>
+            <i>{item.read_at ? <CheckCheck /> : <Bell />}</i>
+            <span><strong>{item.title}</strong><em>{item.body}</em><small>{new Date(item.created_at).toLocaleString("en-IN")}</small></span>
+          </button>)}
+        </div> : <div className="dx-notification-empty"><Bell /><span>No notifications</span></div>}
+      </aside> : null}
       {profileMenu ? <aside className="dx-profile-pop"><strong>{account?.name || account?.reference}</strong>{accountIdentity(account) ? <small>{accountIdentity(account)}</small> : null}<button onClick={() => open("profile")}><UserRound />My Profile</button><button onClick={logout}><LogOut />Sign out</button></aside> : null}
     </header> : null}
     {drawer && account ? <><button aria-label="Close menu" className="dx-scrim" onClick={() => setDrawer(false)} /><aside className="dx-drawer">

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { webhookCompanyId } from "@/lib/webhook-company";
+import { sendWorkforceApplicantWhatsApp } from "@/lib/workforce-applicant-whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -196,8 +198,10 @@ async function saveLead(value: LeadgenValue, graphVersion: string, accessToken: 
       lead_created_at: details.created_time ? new Date(details.created_time).toISOString() : (value.created_time ? new Date(value.created_time * 1000).toISOString() : now),
       updated_at: now
     }, { onConflict: "company_id,meta_lead_id" })
-    .select("id");
+    .select("id,company_id,full_name,phone,station_code,job_code,wa_new_sent_at")
+    .single();
   if (saved.error) throw new Error(saved.error.message);
+  if (!saved.data.wa_new_sent_at) waitUntil(sendWorkforceApplicantWhatsApp(saved.data));
 
   if (ad.leadAdId) {
     const count = await supabaseAdmin

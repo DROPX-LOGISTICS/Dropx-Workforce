@@ -114,6 +114,7 @@ export const navItems: NavItem[] = [
       { code: "master_payment_banks", label: "Payment Banks", href: "/master/payment-banks" },
       { code: "master_payment_heads", label: "Payment Heads", href: "/master/payment-heads" },
       { code: "designations", label: "Workforce Categories", href: "/master/workforce-categories" },
+      { code: "designations", label: "Workforce WhatsApp", href: "/master/workforce-whatsapp" },
       { code: "designations", label: "Designations", href: "/master/designations" },
       { code: "biometric_devices", label: "Device Master", href: "/master/biometric-devices" },
       { code: "master_documents", label: "Documents", href: "/master/documents" },

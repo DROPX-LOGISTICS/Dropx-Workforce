@@ -285,6 +285,10 @@ const whatsappNotificationEvents: Record<string, { label: string; templateLabel:
   onboarding_otp_verification: {
     label: "Onboarding OTP verification notification saved.",
     templateLabel: "OTP verification"
+  },
+  workforce_application_received: {
+    label: "Workforce applicant notification saved.",
+    templateLabel: "workforce applicant"
   }
 };
 

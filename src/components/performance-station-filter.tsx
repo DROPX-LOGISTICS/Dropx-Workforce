@@ -6,13 +6,12 @@ import { useRouter } from "next/navigation";
 type StationOption = { code: string; name: string };
 
 export function PerformanceStationFilter({
-  stations, selectedCodes, view, from, to, week
+  stations, selectedCodes, view, date, week
 }: {
   stations: StationOption[];
   selectedCodes: string[];
   view: "daily" | "sls";
-  from: string;
-  to: string;
+  date: string;
   week: number;
 }) {
   const router = useRouter();
@@ -29,8 +28,7 @@ export function PerformanceStationFilter({
     if (!selected.length) return;
     const params = new URLSearchParams({ view });
     if (view === "daily") {
-      params.set("from", from);
-      params.set("to", to);
+      params.set("date", date);
     } else {
       params.set("week", String(week));
     }

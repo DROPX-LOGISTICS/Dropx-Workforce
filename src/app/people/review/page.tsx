@@ -214,12 +214,6 @@ export default async function PeopleReviewPage({
     return true;
   });
   const selected = profiles.find((profile) => reviewKey(profile.profileType, profile.id) === searchParams?.review) ?? null;
-  const counts = {
-    total: profiles.length,
-    identity: profiles.filter((profile) => profile.issues.some((item) => ["pan", "pan_aadhaar"].includes(item.kind))).length,
-    dl: profiles.filter((profile) => profile.issues.some((item) => item.kind === "dl")).length,
-    statutory: profiles.filter((profile) => profile.issues.some((item) => item.kind === "pf_uan")).length
-  };
 
   return (
     <AppShell active="Profile Review" pageCode="people_review">
@@ -236,29 +230,6 @@ export default async function PeopleReviewPage({
           <p>{searchParams?.error || error}</p>
         </div>
       ) : null}
-
-      <div className="grid metrics people-review-metrics">
-        <div className="card metric">
-          <div className="metric-label">Awaiting review</div>
-          <div className="metric-value">{counts.total}</div>
-          <div className="metric-foot">Across all People categories</div>
-        </div>
-        <div className="card metric">
-          <div className="metric-label">PAN / Aadhaar</div>
-          <div className="metric-value">{counts.identity}</div>
-          <div className="metric-foot">Identity exceptions</div>
-        </div>
-        <div className="card metric">
-          <div className="metric-label">Driving licence</div>
-          <div className="metric-value">{counts.dl}</div>
-          <div className="metric-foot">DL name review</div>
-        </div>
-        <div className="card metric">
-          <div className="metric-label">PF UAN</div>
-          <div className="metric-value">{counts.statutory}</div>
-          <div className="metric-foot">Statutory identity review</div>
-        </div>
-      </div>
 
       <section className="card people-review-listing">
         <div className="panel-head people-review-listing-head">

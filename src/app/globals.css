@@ -14633,11 +14633,6 @@ td strong,
     max-height: calc(100vh - 24px);
   }
 }
-.people-review-metrics {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 14px;
-}
-
 .people-review-listing {
   overflow: hidden;
   border: 1px solid #e4e7ec;
@@ -14917,10 +14912,6 @@ td strong,
 }
 
 @media (max-width: 920px) {
-  .people-review-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .people-review-listing-head,
   .people-review-filters {
     align-items: stretch;
@@ -14942,7 +14933,6 @@ td strong,
 }
 
 @media (max-width: 620px) {
-  .people-review-metrics,
   .profile-review-options {
     grid-template-columns: 1fr;
   }

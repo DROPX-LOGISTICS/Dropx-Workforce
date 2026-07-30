@@ -3,7 +3,6 @@ import type { OperatingMode } from "@/lib/ops-pulse/operating-context";
 
 const commonStart: NavItem[] = [
   { code: "ops_pulse", label: "Command Center", href: "/", icon: "#" },
-  { code: "daily_submission", label: "Daily Operations", href: "/daily-submission", icon: "D" },
   { code: "cod_reports", label: "Performance", href: "/performance", icon: "P" },
   { code: "cps_associates", label: "Capacity", href: "/capacity", icon: "A" }
 ];

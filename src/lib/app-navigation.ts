@@ -66,6 +66,9 @@ export const navItems: NavItem[] = [
     label: "Payments",
     icon: "P",
     children: [
+      { code: "expense_requests", label: "Expense Request", href: "/payments/expense-request" },
+      { code: "payment_requests", label: "Payment Requests", href: "/payments/requests" },
+      { code: "payment_approvals", label: "Approvals", href: "/payments/approvals" },
       { code: "payment_process", label: "Process", href: "/payments/process" },
       { code: "payment_reports", label: "Report", href: "/payments/report" }
     ]

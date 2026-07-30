@@ -174,7 +174,7 @@ export async function loadPaymentNotificationSnapshot(authorization: Authorizati
     ? requests.filter((request) => request.requested_by === authorization.userId)
     : [];
 
-  if (accessSurface === "ops" && hasPermission(authorization, "expense_requests", "access")) {
+  if (hasPermission(authorization, "expense_requests", "access")) {
     badges.expense_requests = ownRequests
       .filter(isExpenseRequest)
       .filter((request) => isReturnedOrRejected(request) || needsPaymentDetails(request))
@@ -189,7 +189,7 @@ export async function loadPaymentNotificationSnapshot(authorization: Authorizati
     );
   }
 
-  if (accessSurface === "ops" && hasPermission(authorization, "payment_requests", "access")) {
+  if (hasPermission(authorization, "payment_requests", "access")) {
     badges.payment_requests = ownRequests
       .filter((request) => !isExpenseRequest(request))
       .filter(isReturnedOrRejected)
@@ -204,7 +204,7 @@ export async function loadPaymentNotificationSnapshot(authorization: Authorizati
     );
   }
 
-  if (accessSurface === "ops" && hasPermission(authorization, "payment_approvals", "access")) {
+  if (hasPermission(authorization, "payment_approvals", "access")) {
     const eligibleApprovalIds = await getPaymentApprovalEligibility(
       authorization.companyId,
       authorization,

@@ -61,10 +61,6 @@ export async function middleware(request: NextRequest) {
   const isDashboardHost = host === "dashboard.dropxlogistics.com";
 
   const opsAppUrl = process.env.OPS_APP_URL?.trim();
-  if (isDashboardHost && isMovedOpsPaymentPath(path)) {
-    return NextResponse.redirect(new URL(path + request.nextUrl.search, opsAppUrl || "https://ops.dropxlogistics.com"));
-  }
-
   if (isDashboardHost && opsAppUrl && (path === "/ops-pulse" || path.startsWith("/ops-pulse/"))) {
     return NextResponse.redirect(new URL(cleanOpsPath(path) + request.nextUrl.search, opsAppUrl));
   }

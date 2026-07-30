@@ -35,6 +35,9 @@ const opsPageCodes = new Set([
 
 const sharedPageCodes = new Set([
   "imports",
+  "expense_requests",
+  "payment_requests",
+  "payment_approvals",
   "master_locations",
   "master_providers",
   "master_models",

@@ -42,6 +42,14 @@ const groupedParentPermissions: Record<string, string[]> = {
   payments: ["expense_requests", "payment_requests", "payment_approvals", "payment_process", "payment_reports"]
 };
 
+const peopleProfilePageCodes = [
+  "delivery_associates",
+  "employees",
+  "contractors",
+  "vendors",
+  "workers"
+];
+
 function normalizeEmail(value: string | null | undefined) {
   return String(value ?? "").trim().toLowerCase();
 }
@@ -68,6 +76,24 @@ function inheritGroupedParentPermissions(permissions: Record<string, PagePermiss
       canEdit: inherited.canEdit
     };
   }
+}
+
+function inheritPeopleReviewPermissions(permissions: Record<string, PagePermission>) {
+  const inherited = peopleProfilePageCodes.reduce<PagePermission>((acc, code) => {
+    const permission = permissions[code] ?? noPermission;
+    return {
+      canView: acc.canView || permission.canView || permission.canAdd || permission.canEdit,
+      canAdd: false,
+      canEdit: acc.canEdit || permission.canEdit
+    };
+  }, { ...noPermission });
+  const configured = permissions.people_review ?? noPermission;
+
+  permissions.people_review = {
+    canView: configured.canView || configured.canAdd || configured.canEdit || inherited.canView,
+    canAdd: configured.canAdd,
+    canEdit: configured.canEdit || inherited.canEdit
+  };
 }
 
 async function ensureMissingCurrentAccessPages(companyId: string) {
@@ -248,6 +274,7 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
     }
   }
 
+  inheritPeopleReviewPermissions(permissions);
   inheritGroupedParentPermissions(permissions);
 
   if (isMasterOwner) {

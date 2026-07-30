@@ -1,4 +1,4 @@
-import type { NavItem } from "@/lib/app-navigation";
+import { fleetNavItem, type NavItem } from "@/lib/app-navigation";
 import type { OperatingMode } from "@/lib/ops-pulse/operating-context";
 
 const commonStart: NavItem[] = [
@@ -105,7 +105,7 @@ function modelOperations(mode: OperatingMode): NavItem {
 
 export function opsNavItemsForMode(mode: OperatingMode): NavItem[] {
   const start = mode === "amazon_now" ? commonStart.filter((item) => item.label !== "Capacity") : commonStart;
-  return [...start, modelOperations(mode), payments, cps, reports, ...administration];
+  return [...start, modelOperations(mode), payments, cps, fleetNavItem, reports, ...administration];
 }
 
 export function normalizeOpsClient(value: string | null | undefined) {

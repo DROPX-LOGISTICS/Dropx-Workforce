@@ -59,6 +59,7 @@ export async function middleware(request: NextRequest) {
   const isPlatformAdminHost = host === "admin-panel.dropxlogistics.com";
   const isOpsHost = host === "ops.dropxlogistics.com";
   const isDashboardHost = host === "dashboard.dropxlogistics.com";
+  const isSharedOpsPath = path === "/fleet" || path.startsWith("/fleet/");
 
   const opsAppUrl = process.env.OPS_APP_URL?.trim();
   if (isDashboardHost && opsAppUrl && (path === "/ops-pulse" || path.startsWith("/ops-pulse/"))) {
@@ -80,6 +81,7 @@ export async function middleware(request: NextRequest) {
     path !== "/login" &&
     !isCleanOpsPath(path) &&
     !isMovedOpsPaymentPath(path) &&
+    !isSharedOpsPath &&
     !path.startsWith("/cps") &&
     !path.startsWith("/master/") &&
     !path.startsWith("/users") &&

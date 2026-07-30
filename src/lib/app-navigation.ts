@@ -8,6 +8,23 @@ export type NavItem = {
   label: string;
 };
 
+export const fleetNavItem: NavItem = {
+  code: "fleet",
+  label: "Fleet",
+  icon: "F",
+  children: [
+    { code: "fleet_action_center", label: "Action Center", href: "/fleet?tab=action-center" },
+    { code: "fleet_vehicle_view", label: "Vehicles", href: "/fleet?tab=vehicle-view" },
+    { code: "fleet_date_view", label: "Documents", href: "/fleet?tab=date-view" },
+    { code: "fleet_station_view", label: "Station View", href: "/fleet?tab=station-view" },
+    { code: "fleet_tracking", label: "Tracking", href: "/fleet?tab=tracking" },
+    { code: "fleet_fuel_log", label: "Fuel Log", href: "/fleet?tab=fuel-log" },
+    { code: "fleet_live_gps", label: "Live GPS", href: "/fleet?tab=live-gps" },
+    { code: "fleet_maintenance", label: "Maintenance", href: "/fleet?tab=maintenance" },
+    { code: "fleet_reports", label: "Report", href: "/fleet?tab=report" }
+  ]
+};
+
 export const navItems: NavItem[] = [
   { code: "dashboard", label: "Command Center", href: "/dashboard", icon: "#" },
   {
@@ -39,22 +56,7 @@ export const navItems: NavItem[] = [
   },
   { code: "cod_reports", label: "Executive ID Onboarding", href: "/executive-id-onboarding", icon: "ID" },
   { code: "provider_mapping", label: "ID Mapping", href: "/provider-mapping", icon: "<>" },
-  {
-    code: "fleet",
-    label: "Fleet",
-    icon: "F",
-    children: [
-      { code: "fleet_action_center", label: "Action Center", href: "/fleet?tab=action-center" },
-      { code: "fleet_vehicle_view", label: "Vehicles", href: "/fleet?tab=vehicle-view" },
-      { code: "fleet_date_view", label: "Documents", href: "/fleet?tab=date-view" },
-      { code: "fleet_station_view", label: "Station View", href: "/fleet?tab=station-view" },
-      { code: "fleet_tracking", label: "Tracking", href: "/fleet?tab=tracking" },
-      { code: "fleet_fuel_log", label: "Fuel Log", href: "/fleet?tab=fuel-log" },
-      { code: "fleet_live_gps", label: "Live GPS", href: "/fleet?tab=live-gps" },
-      { code: "fleet_maintenance", label: "Maintenance", href: "/fleet?tab=maintenance" },
-      { code: "fleet_reports", label: "Report", href: "/fleet?tab=report" }
-    ]
-  },
+  fleetNavItem,
   { code: "mapping", label: "Mapping", href: "/mapping", icon: "<>" },
   { code: "rate_cards", label: "Rate Cards", href: "/rate-cards", icon: "Rs" },
   { code: "imports", label: "Report Imports", href: "/imports", icon: "^" },

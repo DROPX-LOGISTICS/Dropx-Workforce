@@ -560,24 +560,43 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
             <EmployeeForm action={updateEmployee} dashboardRules={employeeCategoryRules.dashboard} designationOptions={designationOptions} employee={editEmployee} locationOptions={locationOptions} mode="edit" />
             {editEmployee.profile_completion_status === "under_review" ? (
               <section className="profile-review-panel">
-                <div>
-                  <h3>Profile review</h3>
-                  <p>Approve this profile or return it to the employee with correction remarks.</p>
+                <div className="profile-review-head">
+                  <div>
+                    <span className="profile-review-eyebrow">Profile decision</span>
+                    <h3>Review employee profile</h3>
+                    <p>Approve the submitted details or return the profile with clear correction remarks.</p>
+                  </div>
                 </div>
-                <form action={reviewEmployeeProfile} className="profile-review-approve">
-                  <input name="id" type="hidden" value={editEmployee.id} />
-                  <input name="review_action" type="hidden" value="approve" />
-                  <SubmitButton pendingText="Approving...">Approve profile</SubmitButton>
-                </form>
-                <form action={reviewEmployeeProfile} className="profile-review-return">
-                  <input name="id" type="hidden" value={editEmployee.id} />
-                  <input name="review_action" type="hidden" value="return" />
-                  <label>
-                    <span>Return remarks</span>
-                    <textarea name="return_remarks" placeholder="Explain what must be corrected" required rows={3} />
-                  </label>
-                  <SubmitButton pendingText="Returning...">Return profile</SubmitButton>
-                </form>
+                <div className="profile-review-options">
+                  <div className="profile-review-option profile-review-option-approve">
+                    <div>
+                      <h4>Approve profile</h4>
+                      <p>Confirm the information and activate this profile.</p>
+                    </div>
+                    <form action={reviewEmployeeProfile} className="profile-review-approve">
+                      <input name="id" type="hidden" value={editEmployee.id} />
+                      <input name="review_action" type="hidden" value="approve" />
+                      <SubmitButton className="button profile-review-approve-button" pendingText="Approving...">Approve profile</SubmitButton>
+                    </form>
+                  </div>
+                  <div className="profile-review-option profile-review-option-return">
+                    <div>
+                      <h4>Return for correction</h4>
+                      <p>The employee will see these remarks before resubmitting.</p>
+                    </div>
+                    <form action={reviewEmployeeProfile} className="profile-review-return">
+                      <input name="id" type="hidden" value={editEmployee.id} />
+                      <input name="review_action" type="hidden" value="return" />
+                      <label>
+                        <span>Return remarks <strong aria-hidden="true">*</strong></span>
+                        <textarea className="field" name="return_remarks" placeholder="Describe what needs to be corrected" required rows={3} />
+                      </label>
+                      <div className="profile-review-return-actions">
+                        <SubmitButton className="button profile-review-return-button" pendingText="Returning...">Return profile</SubmitButton>
+                      </div>
+                    </form>
+                  </div>
+                </div>
               </section>
             ) : null}
           </section>

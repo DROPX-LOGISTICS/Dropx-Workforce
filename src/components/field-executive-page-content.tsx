@@ -863,26 +863,45 @@ export async function FieldExecutivePageContent({
             />
             {editExecutive.onboarding_status === "under_review" ? (
               <section className="profile-review-panel">
-                <div>
-                  <h3>Profile review</h3>
-                  <p>Approve this profile or return it for correction.</p>
+                <div className="profile-review-head">
+                  <div>
+                    <span className="profile-review-eyebrow">Profile decision</span>
+                    <h3>{`Review ${entityLabel.toLowerCase()} profile`}</h3>
+                    <p>Approve the submitted details or return the profile with clear correction remarks.</p>
+                  </div>
                 </div>
-                <form action={reviewFieldExecutiveProfile} className="profile-review-approve">
-                  <input name="id" type="hidden" value={editExecutive.id} />
-                  <input name="return_path" type="hidden" value={returnPath} />
-                  <input name="review_action" type="hidden" value="approve" />
-                  <SubmitButton pendingText="Approving...">Approve profile</SubmitButton>
-                </form>
-                <form action={reviewFieldExecutiveProfile} className="profile-review-return">
-                  <input name="id" type="hidden" value={editExecutive.id} />
-                  <input name="return_path" type="hidden" value={returnPath} />
-                  <input name="review_action" type="hidden" value="return" />
-                  <label>
-                    <span>Return remarks</span>
-                    <textarea name="return_remarks" placeholder="Explain what must be corrected" required rows={3} />
-                  </label>
-                  <SubmitButton pendingText="Returning...">Return profile</SubmitButton>
-                </form>
+                <div className="profile-review-options">
+                  <div className="profile-review-option profile-review-option-approve">
+                    <div>
+                      <h4>Approve profile</h4>
+                      <p>Confirm the information and activate this profile.</p>
+                    </div>
+                    <form action={reviewFieldExecutiveProfile} className="profile-review-approve">
+                      <input name="id" type="hidden" value={editExecutive.id} />
+                      <input name="return_path" type="hidden" value={returnPath} />
+                      <input name="review_action" type="hidden" value="approve" />
+                      <SubmitButton className="button profile-review-approve-button" pendingText="Approving...">Approve profile</SubmitButton>
+                    </form>
+                  </div>
+                  <div className="profile-review-option profile-review-option-return">
+                    <div>
+                      <h4>Return for correction</h4>
+                      <p>The profile holder will see these remarks before resubmitting.</p>
+                    </div>
+                    <form action={reviewFieldExecutiveProfile} className="profile-review-return">
+                      <input name="id" type="hidden" value={editExecutive.id} />
+                      <input name="return_path" type="hidden" value={returnPath} />
+                      <input name="review_action" type="hidden" value="return" />
+                      <label>
+                        <span>Return remarks <strong aria-hidden="true">*</strong></span>
+                        <textarea className="field" name="return_remarks" placeholder="Describe what needs to be corrected" required rows={3} />
+                      </label>
+                      <div className="profile-review-return-actions">
+                        <SubmitButton className="button profile-review-return-button" pendingText="Returning...">Return profile</SubmitButton>
+                      </div>
+                    </form>
+                  </div>
+                </div>
               </section>
             ) : null}
           </section>

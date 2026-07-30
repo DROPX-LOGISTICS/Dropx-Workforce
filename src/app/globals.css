@@ -14640,11 +14640,14 @@ td strong,
 
 .people-review-listing {
   overflow: hidden;
+  border: 1px solid #e4e7ec;
+  background: #ffffff;
 }
 
 .people-review-listing-head {
   align-items: flex-end;
   gap: 18px;
+  background: #ffffff;
 }
 
 .people-review-filters {
@@ -14694,10 +14697,41 @@ td strong,
 
 .people-review-table {
   min-width: 980px;
+  border-collapse: collapse;
+  background: #ffffff;
 }
 
+.people-review-listing .table-wrap {
+  border: 0;
+  border-top: 1px solid #e4e7ec;
+  border-radius: 0;
+  background: #ffffff;
+}
+
+.people-review-table th,
 .people-review-table td {
+  border-right: 1px solid #e4e7ec;
+  border-bottom: 1px solid #e4e7ec;
   vertical-align: middle;
+  background: #ffffff;
+}
+
+.people-review-table th {
+  border-bottom-color: #d0d5dd;
+  background: #f8fafc;
+}
+
+.people-review-table th:last-child,
+.people-review-table td:last-child {
+  border-right: 0;
+}
+
+.people-review-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.people-review-table tbody tr:hover td {
+  background: #fcfcfd;
 }
 
 .people-review-person {

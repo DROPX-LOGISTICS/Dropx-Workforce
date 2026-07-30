@@ -42,6 +42,7 @@ type DesignationRow = {
   location_ids?: string[];
   model_ids?: string[] | null;
   onboarding_categories: string[];
+  app_page_access?: string[] | null;
   profile_field_rules?: unknown;
   is_active: boolean;
 };
@@ -84,7 +85,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
   }
 
   const [designationsResult, providersResult, locationsResult, modelsResult, categoriesResult] = await Promise.all([
-    supabaseAdmin.from("designations").select("id, code, name, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, is_active").eq("company_id", companyId).order("code"),
+    supabaseAdmin.from("designations").select("id, code, name, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("providers").select("id, code, name, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("stations").select("id, station_code, station_name, hide_from_location_list").eq("company_id", companyId).eq("is_active", true).order("station_code"),
     supabaseAdmin.from("location_models").select("id, provider_id, code, name, is_active, providers (code, name)").eq("company_id", companyId).eq("is_active", true).order("code"),
@@ -109,6 +110,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
       location_ids: Array.isArray((row as { location_ids?: unknown }).location_ids) ? (row as { location_ids: string[] }).location_ids : [],
       model_ids: Array.isArray((row as { model_ids?: unknown }).model_ids) ? (row as { model_ids: string[] }).model_ids : [],
       onboarding_categories: Array.isArray((row as { onboarding_categories?: unknown }).onboarding_categories) ? (row as { onboarding_categories: string[] }).onboarding_categories : ["employees"],
+      app_page_access: ["dashboard", "attendance", "leave"],
       profile_field_rules: {}
     }));
     designationError = fallbackError;
@@ -264,6 +266,7 @@ export default async function DesignationsPage({
                   <th>Designation</th>
                   <th>Categories</th>
                   <th>Models</th>
+                  <th>App pages</th>
                   <th>Status</th>
                   {pagePermission.canEdit ? <th>Action</th> : null}
                 </tr>
@@ -292,12 +295,21 @@ export default async function DesignationsPage({
                           </div>
                         ) : <span className="subtle">-</span>}
                       </td>
+                      <td>
+                        {(designation.app_page_access ?? ["dashboard", "attendance", "leave"]).length ? (
+                          <div className="mini-chip-list">
+                            {(designation.app_page_access ?? ["dashboard", "attendance", "leave"]).map((page) => (
+                              <span className="mini-tag" key={page}>{page.replace(/_/g, " ")}</span>
+                            ))}
+                          </div>
+                        ) : <span className="subtle">No pages</span>}
+                      </td>
                       <td><StatusPill status={designation.is_active ? "Active" : "Inactive"} /></td>
                       {pagePermission.canEdit ? <td><PendingLink className="button secondary compact" href={`/master/designations?edit=${designation.id}`} scroll={false}>Edit</PendingLink></td> : null}
                     </tr>
                   );
                 }) : (
-                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 6 : 5}>No designations found.</td></tr>
+                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 7 : 6}>No designations found.</td></tr>
                 )}
               </tbody>
             </table>

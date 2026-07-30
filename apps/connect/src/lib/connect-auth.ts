@@ -36,6 +36,7 @@ type AccountRow = {
   biometric_id?: string | null;
   profile_photo_path?: string | null;
   role?: string | null;
+  designation_id?: string | null;
   status?: string | null;
   profile_type: "user" | WorkforceProfileType;
 };
@@ -46,6 +47,7 @@ type EmployeeAccountRow = {
   full_name: string | null;
   email?: string | null;
   employee_code?: string | null;
+  designation_id?: string | null;
   biometric_id?: string | null;
   profile_photo_path?: string | null;
   profile_completion_status?: string | null;
@@ -55,6 +57,15 @@ type EmployeeAccountRow = {
 type MatchResult<T> = {
   data: T[] | null;
   error: { message?: string } | null;
+};
+
+type DesignationAccessRow = {
+  id: string;
+  company_id: string;
+  code: string;
+  name: string;
+  onboarding_categories: string[] | null;
+  app_page_access?: string[] | null;
 };
 
 export const connectSessionCookieName = "dropx_connect_session";
@@ -105,6 +116,16 @@ function categoryCodeForProfile(profileType: ConnectAccount["profileType"]) {
   return "";
 }
 
+function designationLookupKey(companyId: string, categoryCode: string, value: string) {
+  return `${companyId}:${categoryCode}:${value.trim().toLowerCase()}`;
+}
+
+function intersectPageAccess(categoryPages: string[], designationPages?: string[] | null) {
+  if (!designationPages) return categoryPages;
+  const allowedByDesignation = new Set(designationPages.map((page) => page.trim().toLowerCase()));
+  return categoryPages.filter((page) => allowedByDesignation.has(page.trim().toLowerCase()));
+}
+
 export async function findConnectAccounts(countryCode: string, mobile: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const localMobile = mobile.startsWith(countryCode) ? mobile.slice(countryCode.length) : mobile;
@@ -119,7 +140,7 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
     .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`);
   let employeesResult: MatchResult<EmployeeAccountRow> = await supabaseAdmin
     .from("employees")
-    .select("id, company_id, full_name, email, employee_code, biometric_id, profile_completion_status, profile_photo_path, is_active, mobile_country_code")
+    .select("id, company_id, full_name, email, employee_code, biometric_id, designation_id, profile_completion_status, profile_photo_path, is_active, mobile_country_code")
     .eq("is_active", true)
     .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
     .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`);
@@ -159,7 +180,7 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
         .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`),
       supabaseAdmin
         .from("employees")
-        .select("id, company_id, full_name, email, employee_code, biometric_id, is_active")
+        .select("id, company_id, full_name, email, employee_code, biometric_id, designation_id, is_active")
         .eq("is_active", true)
         .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`)
     ]);
@@ -177,6 +198,7 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
     email: employee.email,
     employee_id: employee.employee_code,
     biometric_id: employee.biometric_id ?? null,
+    designation_id: employee.designation_id ?? null,
     role: "Employee",
     status: employee.profile_completion_status === "active"
       ? "Active"
@@ -246,6 +268,55 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       pageAccessByCategory.set(`${category.company_id}:${category.code}`, pages);
     }
   }
+  const designationResult = companyIds.length
+    ? await supabaseAdmin
+      .from("designations")
+      .select("id, company_id, code, name, onboarding_categories, app_page_access")
+      .in("company_id", companyIds)
+      .eq("is_active", true)
+    : { data: [], error: null };
+  let designationRows: DesignationAccessRow[] = (designationResult.data ?? []) as DesignationAccessRow[];
+  let designationAccessAvailable = true;
+  if (isMissingColumnError(designationResult.error)) {
+    designationAccessAvailable = false;
+    const fallbackResult = companyIds.length
+      ? await supabaseAdmin
+        .from("designations")
+        .select("id, company_id, code, name, onboarding_categories")
+        .in("company_id", companyIds)
+        .eq("is_active", true)
+      : { data: [], error: null };
+    if (fallbackResult.error && !isMissingColumnError(fallbackResult.error)) {
+      throw new Error(fallbackResult.error.message);
+    }
+    designationRows = (fallbackResult.data ?? []).map((designation) => ({
+      ...designation,
+      app_page_access: null
+    })) as DesignationAccessRow[];
+  } else if (designationResult.error) {
+    throw new Error(designationResult.error.message);
+  }
+  const pageAccessByDesignationId = new Map<string, string[] | null>();
+  const pageAccessByDesignationKey = new Map<string, string[] | null>();
+  for (const designation of designationRows) {
+    const pages = designationAccessAvailable && Array.isArray((designation as { app_page_access?: unknown }).app_page_access)
+      ? (designation as { app_page_access: unknown[] }).app_page_access.map(String)
+      : null;
+    pageAccessByDesignationId.set(String(designation.id), pages);
+    const categories = Array.isArray(designation.onboarding_categories)
+      ? designation.onboarding_categories.map(String)
+      : [];
+    for (const category of categories) {
+      pageAccessByDesignationKey.set(
+        designationLookupKey(String(designation.company_id), category, String(designation.name)),
+        pages
+      );
+      pageAccessByDesignationKey.set(
+        designationLookupKey(String(designation.company_id), category, String(designation.code)),
+        pages
+      );
+    }
+  }
   const preferenceResult = await supabaseAdmin
     .from("mob_app_user_preferences")
     .select("default_company_id, default_profile_type, default_account_id")
@@ -261,7 +332,16 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
 
   return Promise.all(accounts
     .filter((account) => companyNameById.has(account.company_id))
-    .map(async (account): Promise<ConnectAccount> => ({
+    .map(async (account): Promise<ConnectAccount> => {
+      const categoryCode = categoryCodeForProfile(account.profile_type);
+      const categoryPages = pageAccessByCategory.get(`${account.company_id}:${categoryCode}`) ?? defaultPageAccess;
+      const designationPages = account.designation_id
+        ? pageAccessByDesignationId.get(account.designation_id)
+        : account.role
+          ? pageAccessByDesignationKey.get(designationLookupKey(account.company_id, categoryCode, account.role))
+          : undefined;
+
+      return {
       id: account.id,
       companyId: account.company_id,
       profileType: account.profile_type,
@@ -274,14 +354,15 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       profilePhotoUrl: await signedProfilePhotoUrl(account.profile_photo_path),
       pageAccess: account.profile_type === "user"
         ? defaultPageAccess
-        : pageAccessByCategory.get(`${account.company_id}:${categoryCodeForProfile(account.profile_type)}`) ?? defaultPageAccess,
+        : intersectPageAccess(categoryPages, designationPages),
       isDefault: account.profile_type !== "user" &&
         defaultPreference?.default_company_id === account.company_id &&
         defaultPreference?.default_profile_type === account.profile_type &&
         defaultPreference?.default_account_id === account.id,
       companyName: companyNameById.get(account.company_id) ?? "Company",
       label: accountLabel(account, companyNameById)
-    })));
+      };
+    }));
 }
 
 export function createSecretHash(value: string) {

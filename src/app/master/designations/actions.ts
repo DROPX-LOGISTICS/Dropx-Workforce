@@ -39,6 +39,9 @@ function friendlyError(error: unknown, fallback: string) {
   if (message.toLowerCase().includes("model_ids")) {
     return "Designation model setup is pending. Run scripts/designations_model_scope_v1.sql in Supabase SQL Editor, then try again.";
   }
+  if (message.toLowerCase().includes("app_page_access")) {
+    return "Designation app-page setup is pending. Run scripts/designation_app_pages_v1.sql in Supabase SQL Editor, then try again.";
+  }
   return message;
 }
 
@@ -64,6 +67,14 @@ function onboardingCategories(formData: FormData) {
   return categories;
 }
 
+function appPageAccess(formData: FormData) {
+  return Array.from(new Set(
+    formData.getAll("app_page_access")
+      .map((value) => String(value ?? "").trim().toLowerCase())
+      .filter((value) => ["dashboard", "attendance", "leave"].includes(value))
+  ));
+}
+
 export async function createDesignation(formData: FormData) {
   const authorization = await requirePagePermission("designations", "add");
   const companyId = requireCompanyId(authorization);
@@ -79,6 +90,7 @@ export async function createDesignation(formData: FormData) {
       model_ids: modelIds(formData),
       location_ids: [],
       onboarding_categories: onboardingCategories(formData),
+      app_page_access: appPageAccess(formData),
       is_active: true
     }, companyId));
     if (error) throw new Error(error.message);
@@ -111,6 +123,7 @@ export async function updateDesignation(formData: FormData) {
         model_ids: modelIds(formData),
         location_ids: [],
         onboarding_categories: onboardingCategories(formData),
+        app_page_access: appPageAccess(formData),
         is_active: status,
         updated_at: new Date().toISOString()
       })

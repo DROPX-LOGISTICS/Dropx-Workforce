@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
+import {
+  AppPageAccessSelect,
+  appPageOptions,
+  defaultAppPageAccess
+} from "@/components/app-page-access-select";
 import { SubmitButton } from "@/components/submit-button";
 import { normalizeDesignationCategories, type DesignationCategory } from "@/lib/designation-categories";
 import {
@@ -31,6 +36,7 @@ type DesignationInitial = {
   provider_ids: string[];
   model_ids?: string[] | null;
   onboarding_categories?: string[] | null;
+  app_page_access?: string[] | null;
   profile_field_rules?: unknown;
   is_active: boolean;
 };
@@ -330,6 +336,8 @@ export function DesignationForm({
   const [selectedCategories, setSelectedCategories] = useState<DesignationCategory[]>(
     normalizeDesignationCategories(initial?.onboarding_categories)
   );
+  const selectedPages = (initial?.app_page_access ?? defaultAppPageAccess)
+    .filter((page) => appPageOptions.some((option) => option.value === page));
 
   return (
     <form action={action} className="designation-form">
@@ -367,6 +375,13 @@ export function DesignationForm({
           </label>
         ) : null}
       </div>
+      <section className="workforce-category-page-access">
+        <div>
+          <strong>DropX One page access</strong>
+          <p className="subtle">A page is available only when enabled for both this designation and its workforce category. My Profile and Settings are always available.</p>
+        </div>
+        <AppPageAccessSelect initialPages={selectedPages} />
+      </section>
       {!selectedCategories.length ? (
         <div className="designation-field-rule-empty">Select one or more workforce categories.</div>
       ) : null}

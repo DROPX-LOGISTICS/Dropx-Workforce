@@ -19,14 +19,18 @@ const actions: Array<{ key: PermissionAction; label: string }> = [
 const groupDefinitions = [
   { key: "leads", label: "Leads", codes: ["leads_dashboard", "leads_all", "leads_followups", "leads_interviews", "leads_reports", "leads_ads", "leads_sop"], hiddenCodes: ["leads"] },
   { key: "fleet", label: "Fleet", codes: ["fleet_action_center", "fleet_vehicle_view", "fleet_date_view", "fleet_station_view", "fleet_tracking", "fleet_fuel_log", "fleet_live_gps", "fleet_maintenance", "fleet_reports"], hiddenCodes: ["fleet"] },
-  { key: "ops_pulse", label: "OpsPulse", codes: ["daily_submission", "cod", "cod_executive_reconciliation", "cod_submission", "cod_validation", "cod_reports", "cod_portal_checks"], hiddenCodes: ["ops_pulse"] },
-  { key: "capacity", label: "Capacity", codes: ["cps_overview", "cps_daily", "cps_monthly", "cps_cost_breakup", "cps_stations", "cps_shipments", "cps_associates", "cps_reports", "cps_inputs", "cps_unmapped"], hiddenCodes: ["cps"] },
+  { key: "operations", label: "Operations", codes: ["daily_submission", "cod_executive_reconciliation", "cod_submission", "cod_validation", "cod_reports", "cod_portal_checks"], hiddenCodes: ["cod"] },
+  { key: "cps", label: "CPS", codes: ["cps_overview", "cps_daily", "cps_monthly", "cps_cost_breakup", "cps_stations", "cps_shipments", "cps_associates", "cps_reports", "cps_inputs", "cps_unmapped"], hiddenCodes: ["cps"] },
   { key: "payments", label: "Payments", codes: ["expense_requests", "payment_requests", "payment_approvals", "payment_process", "payment_reports"], hiddenCodes: ["payments"] },
   { key: "reports", label: "Reports", codes: ["attendance_reports", "verification_api_reports"], hiddenCodes: ["reports"] },
   { key: "onboard", label: "People", codes: ["delivery_associates", "employees", "contractors", "vendors", "workers", "people_review"] },
   { key: "master_data", label: "Master Data", codes: ["master_locations", "master_providers", "master_models", "payment_methods", "master_payment_banks", "master_payment_heads", "designations", "biometric_devices", "cod_master", "master_documents"] },
   { key: "settings", label: "Settings", codes: ["app_settings", "ai_connector", "amazon_connector", "developer_mode"] }
 ];
+
+// OpsPulse is the application surface, not a configurable menu group. Its
+// runtime access is derived from the feature permissions assigned to the role.
+const globallyHiddenCodes = new Set(["ops_pulse"]);
 
 function emptyPermissionState(pages: PermissionPage[]) {
   return Object.fromEntries(pages.map((page) => [page.id, { view: false, add: false, edit: false }])) as Record<string, Record<PermissionAction, boolean>>;
@@ -59,7 +63,7 @@ export function PermissionMatrix({
     hiddenPages: (definition.hiddenCodes ?? []).flatMap((code) => pages.filter((page) => page.code === code))
   })).filter((group) => group.pages.length), [pages]);
   const groupedPageIds = useMemo(() => new Set(groups.flatMap((group) => [...group.pages, ...group.hiddenPages].map((page) => page.id))), [groups]);
-  const standalonePages = useMemo(() => pages.filter((page) => !groupedPageIds.has(page.id)), [pages, groupedPageIds]);
+  const standalonePages = useMemo(() => pages.filter((page) => !groupedPageIds.has(page.id) && !globallyHiddenCodes.has(page.code)), [pages, groupedPageIds]);
   const term = search.trim().toLowerCase();
   const visibleGroups = groups.map((group) => {
     const groupMatches = group.label.toLowerCase().includes(term);
@@ -144,7 +148,7 @@ export function PermissionMatrix({
     <>
       <div className="permission-toolbar">
         <input className="field" onChange={(event) => setSearch(event.target.value)} placeholder="Search page" value={search} />
-        <span className="subtle">{filteredPages.length} of {pages.length} pages</span>
+        <span className="subtle">{term ? `${filteredPages.length} matches` : `${filteredPages.length} permissions`}</span>
       </div>
       <div className="table-wrap">
         <table className="permission-table">

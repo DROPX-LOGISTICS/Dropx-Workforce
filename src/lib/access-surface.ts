@@ -30,7 +30,17 @@ const opsPageCodes = new Set([
   "master_models",
   "cod_master",
   "imports",
-  "users"
+  "users",
+  "fleet",
+  "fleet_action_center",
+  "fleet_vehicle_view",
+  "fleet_date_view",
+  "fleet_station_view",
+  "fleet_tracking",
+  "fleet_fuel_log",
+  "fleet_live_gps",
+  "fleet_maintenance",
+  "fleet_reports"
 ]);
 
 const sharedPageCodes = new Set([
@@ -41,7 +51,17 @@ const sharedPageCodes = new Set([
   "master_locations",
   "master_providers",
   "master_models",
-  "users"
+  "users",
+  "fleet",
+  "fleet_action_center",
+  "fleet_vehicle_view",
+  "fleet_date_view",
+  "fleet_station_view",
+  "fleet_tracking",
+  "fleet_fuel_log",
+  "fleet_live_gps",
+  "fleet_maintenance",
+  "fleet_reports"
 ]);
 
 export function currentAccessSurface(): AccessSurface {

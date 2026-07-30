@@ -33,7 +33,8 @@ export const navItems: NavItem[] = [
       { code: "employees", label: "Employees", href: "/employees" },
       { code: "contractors", label: "Independent Contractor", href: "/contractors" },
       { code: "vendors", label: "Vendors", href: "/vendors" },
-      { code: "workers", label: "Workers", href: "/workers" }
+      { code: "workers", label: "Workers", href: "/workers" },
+      { code: "people_review", label: "Profile Review", href: "/people/review" }
     ]
   },
   { code: "cod_reports", label: "Executive ID Onboarding", href: "/executive-id-onboarding", icon: "ID" },

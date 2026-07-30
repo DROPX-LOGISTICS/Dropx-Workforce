@@ -23,7 +23,7 @@ const groupDefinitions = [
   { key: "capacity", label: "Capacity", codes: ["cps_overview", "cps_daily", "cps_monthly", "cps_cost_breakup", "cps_stations", "cps_shipments", "cps_associates", "cps_reports", "cps_inputs", "cps_unmapped"], hiddenCodes: ["cps"] },
   { key: "payments", label: "Payments", codes: ["expense_requests", "payment_requests", "payment_approvals", "payment_process", "payment_reports"], hiddenCodes: ["payments"] },
   { key: "reports", label: "Reports", codes: ["attendance_reports", "verification_api_reports"], hiddenCodes: ["reports"] },
-  { key: "onboard", label: "People", codes: ["delivery_associates", "employees", "contractors", "vendors", "workers"] },
+  { key: "onboard", label: "People", codes: ["delivery_associates", "employees", "contractors", "vendors", "workers", "people_review"] },
   { key: "master_data", label: "Master Data", codes: ["master_locations", "master_providers", "master_models", "payment_methods", "master_payment_banks", "master_payment_heads", "designations", "biometric_devices", "cod_master", "master_documents"] },
   { key: "settings", label: "Settings", codes: ["app_settings", "ai_connector", "amazon_connector", "developer_mode"] }
 ];

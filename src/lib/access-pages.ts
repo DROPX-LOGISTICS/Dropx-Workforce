@@ -15,6 +15,7 @@ export const accessPages = [
   { code: "contractors", name: "Independent Contractor", sort_order: 22 },
   { code: "vendors", name: "Vendors", sort_order: 23 },
   { code: "workers", name: "Workers", sort_order: 24 },
+  { code: "people_review", name: "Profile Review", sort_order: 25 },
   { code: "provider_mapping", name: "ID Mapping", sort_order: 40 },
   { code: "fleet", name: "Fleet", sort_order: 45 },
   { code: "fleet_action_center", name: "Action Center", sort_order: 46 },

@@ -14633,3 +14633,291 @@ td strong,
     max-height: calc(100vh - 24px);
   }
 }
+.people-review-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.people-review-listing {
+  overflow: hidden;
+}
+
+.people-review-listing-head {
+  align-items: flex-end;
+  gap: 18px;
+}
+
+.people-review-filters {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.people-review-filters label {
+  display: grid;
+  gap: 5px;
+  color: #667085;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.people-review-filters .field,
+.people-review-filters .select {
+  height: 36px;
+}
+
+.people-review-search {
+  min-width: 230px;
+}
+
+.people-review-search-field {
+  position: relative;
+  display: block;
+}
+
+.people-review-search-field svg {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 10px;
+  color: #98a2b3;
+  transform: translateY(-50%);
+}
+
+.people-review-search-field .field {
+  width: 100%;
+  padding-left: 32px;
+}
+
+.people-review-table {
+  min-width: 980px;
+}
+
+.people-review-table td {
+  vertical-align: middle;
+}
+
+.people-review-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.people-review-person > span:last-child {
+  display: grid;
+  gap: 3px;
+}
+
+.people-review-person small,
+.people-review-subline {
+  display: block;
+  color: #667085;
+  font-size: 11px;
+}
+
+.people-review-avatar,
+.people-review-issue-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+  background: #fff7ed;
+}
+
+.people-review-avatar {
+  width: 36px;
+  height: 36px;
+}
+
+.people-review-chips {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  max-width: 360px;
+}
+
+.people-review-chip {
+  padding: 4px 7px;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  border-radius: 999px;
+  background: #fffbeb;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.people-review-chip.muted {
+  color: #667085;
+  border-color: #e4e7ec;
+  background: #f9fafb;
+}
+
+.people-review-table .empty-cell {
+  padding: 42px 16px;
+}
+
+.people-review-table .empty-cell svg,
+.people-review-table .empty-cell strong,
+.people-review-table .empty-cell span {
+  display: block;
+  margin: 0 auto 6px;
+}
+
+.people-review-modal {
+  width: min(920px, calc(100vw - 32px));
+}
+
+.people-review-modal-head {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  background: #fff;
+}
+
+.people-review-modal-body {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.people-review-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.people-review-section-head h3,
+.people-review-section-head p {
+  margin: 0;
+}
+
+.people-review-section-head h3 {
+  font-size: 16px;
+}
+
+.people-review-section-head p {
+  margin-top: 4px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.people-review-issues {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.people-review-issue,
+.people-review-missing-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fffaf5;
+}
+
+.people-review-issue-icon {
+  width: 36px;
+  height: 36px;
+}
+
+.people-review-issue > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.people-review-field-label {
+  color: #667085;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.people-review-issue strong {
+  overflow-wrap: anywhere;
+  color: #101828;
+  font-size: 14px;
+}
+
+.people-review-issue p,
+.people-review-missing-reason p {
+  margin: 0;
+  color: #667085;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.people-review-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  padding-top: 5px;
+  color: #92400e !important;
+  border-top: 1px solid #fde7c7;
+}
+
+.people-review-reason svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.people-review-missing-reason {
+  grid-column: 1 / -1;
+  color: #92400e;
+}
+
+.people-review-decision {
+  margin: 0;
+}
+
+@media (max-width: 920px) {
+  .people-review-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .people-review-listing-head,
+  .people-review-filters {
+    align-items: stretch;
+  }
+
+  .people-review-listing-head {
+    flex-direction: column;
+  }
+
+  .people-review-filters > label,
+  .people-review-search {
+    min-width: min(100%, 220px);
+    flex: 1 1 180px;
+  }
+
+  .people-review-issues {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .people-review-metrics,
+  .profile-review-options {
+    grid-template-columns: 1fr;
+  }
+
+  .people-review-modal {
+    width: 100%;
+  }
+
+  .people-review-modal-body {
+    padding: 14px;
+  }
+}

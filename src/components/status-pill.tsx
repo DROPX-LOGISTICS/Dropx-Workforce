@@ -1,6 +1,8 @@
 export function StatusPill({ status }: { status: string }) {
   const lower = status.toLowerCase();
-  const tone = lower.includes("inactive")
+  const tone = lower.includes("returned")
+    ? "returned"
+    : lower.includes("inactive")
     || lower.includes("disabled")
     || lower.includes("suspended")
     ? "bad"
@@ -20,7 +22,6 @@ export function StatusPill({ status }: { status: string }) {
       || lower.includes("docs")
       || lower.includes("review")
       || lower.includes("waiting")
-      || lower.includes("returned")
       || lower.includes("medium")
       ? "warn"
       : lower.includes("failed")

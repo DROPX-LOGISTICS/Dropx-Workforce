@@ -4925,6 +4925,11 @@ h3 {
   color: #b42318;
 }
 
+.status-pill.returned {
+  background: #f2e9ff;
+  color: #6941c6;
+}
+
 .table-wrap {
   border-color: #e4e7ec;
   border-radius: 8px;

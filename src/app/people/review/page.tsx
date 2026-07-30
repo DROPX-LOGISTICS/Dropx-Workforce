@@ -37,7 +37,7 @@ type ReviewProfile = {
   designation: string;
   updatedAt: string | null;
   values: Record<string, string>;
-  attachmentPaths: Array<{ label: string; path: string }>;
+  attachmentPaths: Array<{ field: string; label: string; path: string }>;
   issues: ReviewIssue[];
 };
 
@@ -100,14 +100,6 @@ function verificationValue(profile: ReviewProfile, kind: string) {
 
 function reviewKey(profileType: WorkforceProfileType, id: string) {
   return `${profileType}:${id}`;
-}
-
-async function signedDocumentUrl(path: string) {
-  if (!supabaseAdmin || !path) return "";
-  const result = await supabaseAdmin.storage
-    .from("employee-profile-documents")
-    .createSignedUrl(path, 60 * 60);
-  return result.data?.signedUrl ?? "";
 }
 
 async function loadReviewProfiles(
@@ -187,7 +179,7 @@ async function loadReviewProfiles(
           vehicle_reg_no: text(raw.vehicle_reg_no)
         },
         attachmentPaths: attachmentFields
-          .map((field) => ({ label: field.label, path: text(raw[field.key]) }))
+          .map((field) => ({ field: field.key, label: field.label, path: text(raw[field.key]) }))
           .filter((file) => Boolean(file.path)),
         issues: issuesByProfile.get(reviewKey(profileType, id)) ?? []
       });
@@ -236,12 +228,7 @@ export default async function PeopleReviewPage({
     return true;
   });
   const selected = profiles.find((profile) => reviewKey(profile.profileType, profile.id) === searchParams?.review) ?? null;
-  const selectedAttachments = selected
-    ? await Promise.all(selected.attachmentPaths.map(async (file) => ({
-        ...file,
-        url: await signedDocumentUrl(file.path)
-      })))
-    : [];
+  const selectedAttachments = selected?.attachmentPaths ?? [];
 
   return (
     <AppShell active="Profile Review" pageCode="people_review">
@@ -426,14 +413,15 @@ export default async function PeopleReviewPage({
                           <strong>{file.label}</strong>
                           <span>Uploaded</span>
                         </div>
-                        {file.url ? (
-                          <a className="button secondary compact" href={file.url} rel="noreferrer" target="_blank">
-                            <Eye aria-hidden="true" size={15} />
-                            View
-                          </a>
-                        ) : (
-                          <span className="people-review-file-unavailable">Unavailable</span>
-                        )}
+                        <a
+                          className="button secondary compact"
+                          href={`/api/people/profile-file?profile_type=${encodeURIComponent(selected.profileType)}&id=${encodeURIComponent(selected.id)}&field=${encodeURIComponent(file.field)}`}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          <Eye aria-hidden="true" size={15} />
+                          View
+                        </a>
                       </article>
                     ))}
                   </div>

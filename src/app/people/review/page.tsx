@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, BadgeCheck, Fingerprint, Search, ShieldAlert, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BadgeCheck, Eye, FileText, Fingerprint, Search, ShieldAlert, UserRound } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import { PendingLink } from "@/components/pending-link";
@@ -37,6 +37,7 @@ type ReviewProfile = {
   designation: string;
   updatedAt: string | null;
   values: Record<string, string>;
+  attachmentPaths: Array<{ label: string; path: string }>;
   issues: ReviewIssue[];
 };
 
@@ -66,6 +67,15 @@ const issueValueKeys: Record<string, string[]> = {
   vehicle: ["vehicle_reg_no"]
 };
 
+const attachmentFields = [
+  { key: "aadhaar_front_path", label: "Aadhaar front" },
+  { key: "aadhaar_back_path", label: "Aadhaar back" },
+  { key: "pan_upload_path", label: "PAN upload" },
+  { key: "dl_front_path", label: "DL front" },
+  { key: "dl_back_path", label: "DL back" },
+  { key: "profile_photo_path", label: "Profile photo" }
+] as const;
+
 function text(value: unknown) {
   return String(value ?? "").trim();
 }
@@ -92,6 +102,14 @@ function reviewKey(profileType: WorkforceProfileType, id: string) {
   return `${profileType}:${id}`;
 }
 
+async function signedDocumentUrl(path: string) {
+  if (!supabaseAdmin || !path) return "";
+  const result = await supabaseAdmin.storage
+    .from("employee-profile-documents")
+    .createSignedUrl(path, 60 * 60);
+  return result.data?.signedUrl ?? "";
+}
+
 async function loadReviewProfiles(
   companyId: string,
   locationScopeIds: string[],
@@ -102,8 +120,9 @@ async function loadReviewProfiles(
   }
   const admin = supabaseAdmin;
 
-  const employeeSelect = "id, employee_code, biometric_id, full_name, location_id, pan_number, aadhaar_number, driving_license_no, pf_uan, bank_account_no, ifsc, vehicle_reg_no, updated_at, stations (station_code, station_name), designations (name)";
-  const nonEmployeeSelect = "id, dropx_id, biometric_id, full_name, location_id, designation, pan_number, aadhaar_number, driving_license_no, pf_uan, bank_account_no, ifsc_code, vehicle_reg_no, updated_at, stations (station_code, station_name)";
+  const attachmentColumns = attachmentFields.map((field) => field.key).join(", ");
+  const employeeSelect = `id, employee_code, biometric_id, full_name, location_id, pan_number, aadhaar_number, driving_license_no, pf_uan, bank_account_no, ifsc, vehicle_reg_no, updated_at, ${attachmentColumns}, stations (station_code, station_name), designations (name)`;
+  const nonEmployeeSelect = `id, dropx_id, biometric_id, full_name, location_id, designation, pan_number, aadhaar_number, driving_license_no, pf_uan, bank_account_no, ifsc_code, vehicle_reg_no, updated_at, ${attachmentColumns}, stations (station_code, station_name)`;
   const nonEmployeeTypes = workforceProfileTypes.filter((profileType) => profileType !== "employee");
   const profileQueries = [
     admin
@@ -139,7 +158,7 @@ async function loadReviewProfiles(
   const profiles: ReviewProfile[] = [];
   profileResults.forEach((result, index) => {
     const profileType = workforceProfileTypes[index];
-    for (const raw of (result.data ?? []) as Array<Record<string, unknown>>) {
+    for (const raw of (result.data ?? []) as unknown as Array<Record<string, unknown>>) {
       const locationId = text(raw.location_id) || null;
       if (!hasAllLocationAccess && (!locationId || !locationScopeIds.includes(locationId))) continue;
       const station = firstRelation(raw.stations as { station_code?: string } | Array<{ station_code?: string }> | null);
@@ -167,6 +186,9 @@ async function loadReviewProfiles(
           ifsc: text(raw.ifsc ?? raw.ifsc_code),
           vehicle_reg_no: text(raw.vehicle_reg_no)
         },
+        attachmentPaths: attachmentFields
+          .map((field) => ({ label: field.label, path: text(raw[field.key]) }))
+          .filter((file) => Boolean(file.path)),
         issues: issuesByProfile.get(reviewKey(profileType, id)) ?? []
       });
     }
@@ -214,6 +236,12 @@ export default async function PeopleReviewPage({
     return true;
   });
   const selected = profiles.find((profile) => reviewKey(profile.profileType, profile.id) === searchParams?.review) ?? null;
+  const selectedAttachments = selected
+    ? await Promise.all(selected.attachmentPaths.map(async (file) => ({
+        ...file,
+        url: await signedDocumentUrl(file.path)
+      })))
+    : [];
 
   return (
     <AppShell active="Profile Review" pageCode="people_review">
@@ -377,6 +405,41 @@ export default async function PeopleReviewPage({
                     </div>
                   )}
                 </div>
+              </section>
+
+              <section className="people-review-attachments">
+                <div className="people-review-section-head">
+                  <div>
+                    <h3>Attached files</h3>
+                    <p>Open the documents submitted with this profile.</p>
+                  </div>
+                  <span className="people-review-file-count">{selectedAttachments.length} files</span>
+                </div>
+                {selectedAttachments.length ? (
+                  <div className="people-review-file-grid">
+                    {selectedAttachments.map((file) => (
+                      <article className="people-review-file" key={`${file.label}:${file.path}`}>
+                        <span className="people-review-file-icon">
+                          <FileText aria-hidden="true" size={18} />
+                        </span>
+                        <div>
+                          <strong>{file.label}</strong>
+                          <span>Uploaded</span>
+                        </div>
+                        {file.url ? (
+                          <a className="button secondary compact" href={file.url} rel="noreferrer" target="_blank">
+                            <Eye aria-hidden="true" size={15} />
+                            View
+                          </a>
+                        ) : (
+                          <span className="people-review-file-unavailable">Unavailable</span>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="people-review-no-files">No files are attached to this profile.</p>
+                )}
               </section>
 
               {permission.canEdit ? (

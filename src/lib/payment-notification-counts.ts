@@ -1,4 +1,5 @@
 import { hasPermission, isCompanyOwner, type AuthorizationContext } from "@/lib/authorization";
+import { currentAccessSurface } from "@/lib/access-surface";
 import { getPaymentApprovalEligibility } from "@/lib/payment-approval-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
@@ -128,6 +129,7 @@ function addItem(items: PaymentNotificationItem[], key: string, label: string, d
 export async function loadPaymentNotificationSnapshot(authorization: AuthorizationContext): Promise<PaymentNotificationSnapshot> {
   if (!authorization.companyId) return emptyPaymentNotificationSnapshot();
 
+  const accessSurface = currentAccessSurface();
   const badges = { ...EMPTY_BADGES };
   const items: PaymentNotificationItem[] = [];
   const canSeePayments = hasPermission(authorization, "payments", "access");
@@ -172,7 +174,7 @@ export async function loadPaymentNotificationSnapshot(authorization: Authorizati
     ? requests.filter((request) => request.requested_by === authorization.userId)
     : [];
 
-  if (hasPermission(authorization, "expense_requests", "access")) {
+  if (accessSurface === "ops" && hasPermission(authorization, "expense_requests", "access")) {
     badges.expense_requests = ownRequests
       .filter(isExpenseRequest)
       .filter((request) => isReturnedOrRejected(request) || needsPaymentDetails(request))
@@ -187,7 +189,7 @@ export async function loadPaymentNotificationSnapshot(authorization: Authorizati
     );
   }
 
-  if (hasPermission(authorization, "payment_requests", "access")) {
+  if (accessSurface === "ops" && hasPermission(authorization, "payment_requests", "access")) {
     badges.payment_requests = ownRequests
       .filter((request) => !isExpenseRequest(request))
       .filter(isReturnedOrRejected)
@@ -202,7 +204,7 @@ export async function loadPaymentNotificationSnapshot(authorization: Authorizati
     );
   }
 
-  if (hasPermission(authorization, "payment_approvals", "access")) {
+  if (accessSurface === "ops" && hasPermission(authorization, "payment_approvals", "access")) {
     const eligibleApprovalIds = await getPaymentApprovalEligibility(
       authorization.companyId,
       authorization,
@@ -228,7 +230,7 @@ export async function loadPaymentNotificationSnapshot(authorization: Authorizati
     );
   }
 
-  if (hasPermission(authorization, "payment_process", "access")) {
+  if (accessSurface === "dashboard" && hasPermission(authorization, "payment_process", "access")) {
     badges.payment_process = requests
       .filter((request) => canProcessPayment(request, authorization))
       .filter(isReadyForPaymentProcess)

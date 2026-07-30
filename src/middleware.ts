@@ -7,6 +7,11 @@ const COOKIE_CHUNK_SIZE = 3000;
 const MAX_COOKIE_CHUNKS = 8;
 const ENCODED_COOKIE_PREFIX = "b64-";
 const CLEAN_OPS_ROOTS = ["/daily-submission", "/performance", "/capacity", "/cod", "/reports", "/client", "/access"];
+const MOVED_OPS_PAYMENT_PATHS = [
+  "/payments/expense-request",
+  "/payments/requests",
+  "/payments/approvals"
+];
 
 function cleanOpsPath(path: string) {
   if (path === "/ops-pulse") return "/";
@@ -15,6 +20,10 @@ function cleanOpsPath(path: string) {
 
 function isCleanOpsPath(path: string) {
   return path === "/" || CLEAN_OPS_ROOTS.some((root) => path === root || path.startsWith(`${root}/`));
+}
+
+function isMovedOpsPaymentPath(path: string) {
+  return MOVED_OPS_PAYMENT_PATHS.some((root) => path === root || path.startsWith(`${root}/`));
 }
 
 function isAssetPath(path: string) {
@@ -52,6 +61,10 @@ export async function middleware(request: NextRequest) {
   const isDashboardHost = host === "dashboard.dropxlogistics.com";
 
   const opsAppUrl = process.env.OPS_APP_URL?.trim();
+  if (isDashboardHost && isMovedOpsPaymentPath(path)) {
+    return NextResponse.redirect(new URL(path + request.nextUrl.search, opsAppUrl || "https://ops.dropxlogistics.com"));
+  }
+
   if (isDashboardHost && opsAppUrl && (path === "/ops-pulse" || path.startsWith("/ops-pulse/"))) {
     return NextResponse.redirect(new URL(cleanOpsPath(path) + request.nextUrl.search, opsAppUrl));
   }
@@ -62,10 +75,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
+  if (isOpsHost && path.startsWith("/payments/") && !isMovedOpsPaymentPath(path)) {
+    return NextResponse.redirect(new URL(path + request.nextUrl.search, "https://dashboard.dropxlogistics.com"));
+  }
+
   if (
     isOpsHost &&
     path !== "/login" &&
     !isCleanOpsPath(path) &&
+    !isMovedOpsPaymentPath(path) &&
     !path.startsWith("/cps") &&
     !path.startsWith("/master/") &&
     !path.startsWith("/users") &&

@@ -178,6 +178,7 @@ async function loadBulkWhatsAppData(companyId: string) {
         source: "Dashboard User",
         name: profile.full_name || profile.email || "User",
         mobile: normalizeMobile(profile.mobile),
+        country_code: "91",
         email: profile.email ?? "",
         dropx_id: "",
         location: scopedLocations.map((location) => location.station_code).join(", "),

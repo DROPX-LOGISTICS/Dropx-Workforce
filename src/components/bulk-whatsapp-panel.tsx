@@ -97,6 +97,15 @@ function uniqueOptions(values: string[]) {
     .sort((left, right) => left.localeCompare(right));
 }
 
+function displayMobile(mobile: string, countryCode?: string) {
+  const digits = mobile.replace(/\D/g, "");
+  const code = String(countryCode || "91").replace(/\D/g, "") || "91";
+  const localNumber = digits.startsWith(code) && digits.length > 10
+    ? digits.slice(code.length)
+    : digits;
+  return `+${code} ${localNumber}`;
+}
+
 function replaceVariables(text: string | undefined, component: "header" | "body", mappings: Record<string, MappingRule>) {
   return (text || "").replace(/\{\{(\d+)\}\}/g, (_, position: string) => {
     const rule = mappings[`${component}.${position}`];
@@ -700,7 +709,6 @@ export function BulkWhatsAppPanel({
                     <th>Mobile</th>
                     <th>Source</th>
                     <th>Location</th>
-                    <th>Role / designation</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -714,13 +722,15 @@ export function BulkWhatsAppPanel({
                           {[contact.dropx_id, contact.email].filter(Boolean).join(" · ") || "-"}
                         </span>
                       </td>
-                      <td>{contact.mobile}</td>
-                      <td>{contact.source}</td>
+                      <td>{displayMobile(contact.mobile, contact.country_code)}</td>
+                      <td>
+                        <strong>{contact.source}</strong><br />
+                        <span className="subtle">{contact.designation || contact.role || "-"}</span>
+                      </td>
                       <td>{contact.location || "-"}</td>
-                      <td>{contact.designation || contact.role || "-"}</td>
                       <td>{contact.status}</td>
                     </tr>
-                  )) : <tr><td className="empty-cell" colSpan={7}>No contacts found.</td></tr>}
+                  )) : <tr><td className="empty-cell" colSpan={6}>No contacts found.</td></tr>}
                 </tbody>
               </table>
             </div>

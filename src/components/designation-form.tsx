@@ -84,7 +84,7 @@ function OnboardingRoleMultiSelect({ options, selectedValues }: { options: Onboa
     <div className="multi-select" ref={rootRef}>
       {selected.map((id) => <input key={id} name="onboarding_role_ids" type="hidden" value={id} />)}
       <button className={`multi-select-trigger ${open ? "open" : ""}`} onClick={() => setOpen((value) => !value)} type="button">
-        <span className="multi-select-summary">{labels.length ? labels.map((role) => role.name).join(", ") : "All dashboard roles"}</span>
+        <span className="multi-select-summary">{labels.length ? labels.map((role) => role.name).join(", ") : "Owner only"}</span>
         <ChevronDown aria-hidden="true" className="multi-select-chevron" size={16} strokeWidth={2.4} />
       </button>
       {open ? (
@@ -457,7 +457,7 @@ export function DesignationForm({
       <section className="workforce-category-page-access">
         <div>
           <strong>Onboarding Access</strong>
-          <p className="subtle">Only users with the selected roles can onboard this designation. Leave empty for all roles. Owner always has access.</p>
+          <p className="subtle">Only users with the selected roles can onboard this designation. If no role is selected, only Owner or Master Owner can onboard it.</p>
         </div>
         <OnboardingRoleMultiSelect options={roles} selectedValues={initial?.onboarding_role_ids ?? []} />
       </section>

@@ -12,7 +12,7 @@ export function canOnboardDesignation(
   const allowedRoleIds = Array.isArray(designation.onboarding_role_ids)
     ? designation.onboarding_role_ids.filter(Boolean)
     : [];
-  return allowedRoleIds.length === 0 || Boolean(authorization.roleId && allowedRoleIds.includes(authorization.roleId));
+  return Boolean(authorization.roleId && allowedRoleIds.includes(authorization.roleId));
 }
 
 export function requireDesignationOnboardingAccess(

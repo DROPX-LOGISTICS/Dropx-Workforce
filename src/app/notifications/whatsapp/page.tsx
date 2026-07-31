@@ -21,9 +21,16 @@ type ProfileRow = {
   full_name: string | null;
   email: string | null;
   mobile: string | null;
+  mobile_country_code?: string | null;
+  role_id: string | null;
   role: string | null;
   location_scope_ids: string[] | null;
   is_active: boolean;
+};
+
+type UserRoleRow = {
+  id: string;
+  name: string;
 };
 
 type FieldExecutiveRow = {
@@ -144,10 +151,11 @@ async function loadBulkWhatsAppData(companyId: string) {
   if (!supabaseAdmin) return { ...defaults, error: "Supabase service role key is not configured." };
 
   const workforceLocationSelect = "stations (station_code, providers (name), location_models (code, name))";
-  const [settings, templates, profiles, senderProfiles, campaignProfiles, employees, fieldExecutives, contractors, vendors, workers, locations, campaigns] = await Promise.all([
+  const [settings, templates, profiles, userRoles, senderProfiles, campaignProfiles, employees, fieldExecutives, contractors, vendors, workers, locations, campaigns] = await Promise.all([
     supabaseAdmin.from("whatsapp_settings").select("is_enabled").eq("company_id", companyId).eq("id", true).maybeSingle(),
     supabaseAdmin.from("whatsapp_template_cache").select("template_id, whatsapp_profile_id, name, language, category, status, components").eq("company_id", companyId).order("name"),
-    supabaseAdmin.from("profiles").select("id, full_name, email, mobile, role, location_scope_ids, is_active").eq("company_id", companyId).order("full_name"),
+    supabaseAdmin.from("profiles").select("id, full_name, email, mobile, mobile_country_code, role_id, role, location_scope_ids, is_active").eq("company_id", companyId).order("full_name"),
+    supabaseAdmin.from("user_roles").select("id, name").eq("company_id", companyId),
     supabaseAdmin.from("whatsapp_profiles").select("id, profile_name, phone_number_id, default_country_code, is_default, is_active").eq("company_id", companyId).eq("is_active", true).order("profile_name"),
     supabaseAdmin.from("whatsapp_profiles").select("id, profile_name").eq("company_id", companyId),
     supabaseAdmin.from("employees").select(`id, employee_code, full_name, email, mobile, mobile_country_code, profile_completion_status, is_active, ${workforceLocationSelect}, designations (name)`).eq("company_id", companyId).order("full_name"),
@@ -165,27 +173,29 @@ async function loadBulkWhatsAppData(companyId: string) {
   ]);
 
   const campaignSetupMissing = campaigns.error?.message?.includes("whatsapp_campaigns") || campaigns.error?.message?.includes("whatsapp_campaign_recipients");
-  const error = settings.error?.message || templates.error?.message || profiles.error?.message || senderProfiles.error?.message || campaignProfiles.error?.message ||
+  const error = settings.error?.message || templates.error?.message || profiles.error?.message || userRoles.error?.message || senderProfiles.error?.message || campaignProfiles.error?.message ||
     employees.error?.message || fieldExecutives.error?.message || contractors.error?.message || vendors.error?.message || workers.error?.message || locations.error?.message || null;
   const locationsById = new Map(((locations.data ?? []) as LocationRow[]).map((location) => [location.id, location]));
+  const roleNameById = new Map(((userRoles.data ?? []) as UserRoleRow[]).map((role) => [role.id, role.name]));
   const profileNameById = new Map(((campaignProfiles.data ?? []) as Array<{ id: string; profile_name: string }>).map((profile) => [profile.id, profile.profile_name]));
   const userContacts = ((profiles.data ?? []) as ProfileRow[])
     .filter((profile) => normalizeMobile(profile.mobile))
     .map((profile) => {
       const scopedLocations = (profile.location_scope_ids ?? []).map((id) => locationsById.get(id)).filter(Boolean) as LocationRow[];
+      const assignedRole = (profile.role_id ? roleNameById.get(profile.role_id) : null) || profile.role || "User";
       return {
         id: `profile:${profile.id}`,
         source: "Dashboard User",
         name: profile.full_name || profile.email || "User",
         mobile: normalizeMobile(profile.mobile),
-        country_code: "91",
+        country_code: normalizeMobile(profile.mobile_country_code) || "91",
         email: profile.email ?? "",
         dropx_id: "",
         location: scopedLocations.map((location) => location.station_code).join(", "),
         provider: scopedLocations.flatMap((location) => relationList(location.providers).map((provider) => provider.name ?? "")).filter(Boolean).join(", "),
         model: scopedLocations.flatMap((location) => relationList(location.location_models).map((model) => model.code || model.name || "")).filter(Boolean).join(", "),
-        role: profile.role ?? "User",
-        designation: profile.role ?? "User",
+        role: assignedRole,
+        designation: assignedRole,
         status: profile.is_active ? "Active" : "Inactive"
       };
     });

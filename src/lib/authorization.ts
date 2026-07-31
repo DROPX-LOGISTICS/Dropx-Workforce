@@ -349,6 +349,7 @@ export function hasPermission(
   pageCode: string,
   action: PermissionAction
 ) {
+  if (isCompanyOwner(authorization)) return true;
   const permission = authorization.permissions[pageCode] ?? noPermission;
   if (action === "access") return permission.canView || permission.canAdd || permission.canEdit;
   if (action === "add") return permission.canAdd;

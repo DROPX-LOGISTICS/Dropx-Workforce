@@ -3,8 +3,8 @@ insert into public.app_pages (company_id, code, name, sort_order, is_active, cre
 select companies.id, definitions.code, definitions.name, definitions.sort_order, true, now(), now()
 from public.companies companies
 cross join (values
-  ('service_network', 'Service Network', 84.1::numeric),
-  ('service_network_master', 'Service Network Master', 84.2::numeric)
+  ('service_network', 'Service Network', 92),
+  ('service_network_master', 'Service Network Master', 93)
 ) as definitions(code, name, sort_order)
 where not exists (
   select 1 from public.app_pages pages

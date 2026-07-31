@@ -8,7 +8,7 @@ import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
 import { dynamicWorkforceTable, isCustomWorkforceCategoryCode, normalizeWorkforceCategoryCode } from "@/lib/dynamic-workforce";
 import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
-import { uploadProfileDocument } from "@/lib/profile-document-storage";
+import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
 import { normalizeCategoryProfileFieldRules } from "@/lib/profile-field-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
@@ -209,4 +209,116 @@ export async function createDynamicWorkforceProfile(formData: FormData) {
     }));
   }
   redirect(categoryPath(code, { notice: "Profile added successfully." }));
+}
+
+export async function updateDynamicWorkforceProfile(formData: FormData) {
+  const code = normalizeWorkforceCategoryCode(formData.get("category_code"));
+  if (!isCustomWorkforceCategoryCode(code)) redirect("/people/all");
+  const authorization = await getAuthorization();
+  if (!authorization) redirect("/login");
+  if (!canManagePeople(authorization, "edit")) redirect("/unauthorized?page=onboard&action=edit");
+  const companyId = requireCompanyId(authorization);
+  const id = required(formData.get("id"), "Profile");
+
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    const table = dynamicWorkforceTable(code);
+    const [categoryResult, existingResult] = await Promise.all([
+      supabaseAdmin
+        .from("workforce_categories")
+        .select("statutory_enabled, profile_field_rules")
+        .eq("company_id", companyId)
+        .eq("code", code)
+        .eq("is_active", true)
+        .maybeSingle(),
+      supabaseAdmin
+        .from(table)
+        .select("*")
+        .eq("company_id", companyId)
+        .eq("id", id)
+        .maybeSingle()
+    ]);
+    if (categoryResult.error) throw new Error(categoryResult.error.message);
+    if (!categoryResult.data) throw new Error("Workforce category was not found.");
+    if (existingResult.error) throw new Error(existingResult.error.message);
+    if (!existingResult.data) throw new Error("Profile was not found.");
+    const existing = existingResult.data as Record<string, unknown>;
+    const currentLocationId = String(existing.location_id ?? "");
+    if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(currentLocationId)) {
+      throw new Error("You do not have access to this profile.");
+    }
+
+    const locationId = optional(formData.get("location_id")) ?? currentLocationId;
+    if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
+      throw new Error("You do not have access to the selected location.");
+    }
+    const designation = optional(formData.get("designation")) ?? String(existing.designation ?? "");
+    const [locationResult, designationResult] = await Promise.all([
+      supabaseAdmin.from("stations").select("id").eq("company_id", companyId).eq("id", locationId).eq("is_active", true).maybeSingle(),
+      supabaseAdmin.from("designations").select("onboarding_categories").eq("company_id", companyId).eq("name", designation).eq("is_active", true).maybeSingle()
+    ]);
+    if (locationResult.error) throw new Error(locationResult.error.message);
+    if (!locationResult.data) throw new Error("Selected location is unavailable.");
+    if (designationResult.error) throw new Error(designationResult.error.message);
+    if (!designationResult.data || !((designationResult.data.onboarding_categories ?? []) as string[]).includes(code)) {
+      throw new Error("Selected designation is unavailable for this category.");
+    }
+
+    const rules = normalizeCategoryProfileFieldRules(categoryResult.data.profile_field_rules).dashboard;
+    const enabled = new Set(rules.enabled);
+    const profileValues = directProfilePayload(formData) as Record<string, unknown>;
+    const ruleColumns: Record<string, string> = { pincode: "postal_pin", ifsc: "ifsc_code" };
+    const enabledProfilePayload = Object.fromEntries(
+      rules.enabled
+        .map((key) => ruleColumns[key] ?? key)
+        .filter((column) => column in profileValues)
+        .map((column) => [column, profileValues[column]])
+    );
+    const payload: Record<string, unknown> = {
+      full_name: optional(formData.get("full_name")) ?? existing.full_name,
+      mobile_country_code: cleanCountryCode(formData.get("mobile_country_code")) || existing.mobile_country_code,
+      mobile: String(formData.get("mobile") ?? existing.mobile ?? "").replace(/\D/g, ""),
+      email: String(formData.get("email") ?? existing.email ?? "").trim().toLowerCase(),
+      date_of_join: optional(formData.get("date_of_join")) ?? existing.date_of_join,
+      location_id: locationId,
+      designation,
+      ...enabledProfilePayload,
+      is_active: String(formData.get("is_active") ?? existing.is_active) === "true",
+      updated_at: new Date().toISOString()
+    };
+    if (categoryResult.data.statutory_enabled) {
+      const statutory = formData.getAll("statutory_applicability").map(String).filter(Boolean);
+      payload.statutory_applicability = statutory.length ? statutory : ["not_applicable"];
+    }
+
+    for (const field of documentFields) {
+      if (!enabled.has(field.ruleKey)) continue;
+      const uploaded = await uploadProfileDocument({
+        companyId,
+        documentKey: field.pathKey.replace("_path", ""),
+        fileValue: formData.get(field.formKey),
+        ownerId: id,
+        ownerType: "contractor"
+      });
+      if (!uploaded) continue;
+      await moveProfileDocumentToTrash({
+        companyId,
+        documentLabel: field.label,
+        ownerId: id,
+        ownerType: "contractor",
+        replacedBy: authorization.userId,
+        storagePath: String(existing[field.pathKey] ?? "") || null
+      });
+      payload[field.pathKey] = uploaded.storagePath;
+    }
+
+    const updateResult = await supabaseAdmin.from(table).update(payload).eq("id", id).eq("company_id", companyId);
+    if (updateResult.error) throw new Error(updateResult.error.message);
+    revalidatePath(`/people/category/${code}`);
+    revalidatePath("/people/all");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to update profile.";
+    redirect(categoryPath(code, { edit: id, error: message }));
+  }
+  redirect(categoryPath(code, { notice: "Profile updated successfully." }));
 }

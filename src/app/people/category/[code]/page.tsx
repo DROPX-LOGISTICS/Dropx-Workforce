@@ -190,9 +190,11 @@ export default async function DynamicWorkforceCategoryPage({
           <form action={createDynamicWorkforceProfile} className="form-grid three field-executive-add-form">
             <input name="category_code" type="hidden" value={code} />
             <label>Full name<input className="field" defaultValue={searchParams?.full_name ?? ""} name="full_name" placeholder="Enter full name" required /></label>
-            <label>Mobile number
-              <div className="phone-input-row">
-                <SearchableSelect name="mobile_country_code" options={countryOptions} placeholder="Code" required value={searchParams?.mobile_country_code ?? "91"} />
+            <label className="field-executive-mobile-group">Mobile number
+              <div className="field-executive-mobile-row">
+                <div className="field-executive-country-code">
+                  <SearchableSelect name="mobile_country_code" options={countryOptions} placeholder="+91" required value={searchParams?.mobile_country_code ?? "91"} />
+                </div>
                 <input className="field" defaultValue={searchParams?.mobile ?? ""} inputMode="numeric" name="mobile" placeholder="Enter mobile number" required />
               </div>
             </label>

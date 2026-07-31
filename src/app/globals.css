@@ -2794,6 +2794,10 @@ h3 {
   min-height: 34px;
 }
 
+.dynamic-workforce-submit-slot {
+  grid-column: 3;
+}
+
 .field-executive-mobile-row {
   display: grid;
   grid-template-columns: minmax(136px, 150px) minmax(0, 1fr);
@@ -5064,6 +5068,10 @@ tbody tr:hover td {
   .span-2,
   .span-3 {
     grid-column: span 1;
+  }
+
+  .dynamic-workforce-submit-slot {
+    grid-column: 1;
   }
 
   .employee-id-field,

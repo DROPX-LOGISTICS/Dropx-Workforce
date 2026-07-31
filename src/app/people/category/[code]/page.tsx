@@ -216,7 +216,7 @@ export default async function DynamicWorkforceCategoryPage({
                 <label className="check-option"><input name="statutory_applicability" type="checkbox" value="esi" /> ESI</label>
               </fieldset>
             ) : null}
-            <div className="form-actions align-right">
+            <div className="form-actions align-right field-executive-submit-slot dynamic-workforce-submit-slot">
               <SubmitButton disabled={Boolean(provisionResult.error) || !locationOptions.length || !designationOptions.length} disabledText={provisionResult.error ? "Database setup required" : !locationOptions.length ? "Add location first" : "Add designation first"}>
                 Add profile
               </SubmitButton>

@@ -7,6 +7,7 @@ import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { extractWhatsAppTemplateVariables, type WhatsAppTemplateComponent } from "@/lib/whatsapp-template";
+import { workforceOnboardingEventCode } from "@/lib/whatsapp-onboarding";
 
 function clean(value: FormDataEntryValue | null) {
   const text = String(value ?? "").trim();
@@ -292,13 +293,30 @@ const whatsappNotificationEvents: Record<string, { label: string; templateLabel:
   }
 };
 
+async function resolveWhatsAppNotificationEvent(companyId: string, eventCode: string) {
+  const staticEvent = whatsappNotificationEvents[eventCode];
+  if (staticEvent) return staticEvent;
+  if (!supabaseAdmin) return null;
+  const categories = await supabaseAdmin
+    .from("workforce_categories")
+    .select("code, name")
+    .eq("company_id", companyId)
+    .eq("is_active", true);
+  if (categories.error) throw new Error(categories.error.message);
+  const category = (categories.data ?? []).find((item) => workforceOnboardingEventCode(item.code) === eventCode);
+  return category ? {
+    label: `${category.name} onboarding notification saved.`,
+    templateLabel: `${category.name.toLowerCase()} onboarding`
+  } : null;
+}
+
 export async function saveWhatsAppNotificationConfig(formData: FormData) {
   const authorization = await requirePagePermission("app_settings", "edit");
   const companyId = requireCompanyId(authorization);
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
     const eventCode = required(formData.get("event_code"), "Notification item");
-    const eventConfig = whatsappNotificationEvents[eventCode];
+    const eventConfig = await resolveWhatsAppNotificationEvent(companyId, eventCode);
     if (!eventConfig) throw new Error("Unsupported WhatsApp notification item.");
     const isEnabled = formData.get("is_enabled") === "on";
     const templateId = clean(formData.get("template_id"));

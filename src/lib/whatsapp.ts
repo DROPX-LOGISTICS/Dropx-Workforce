@@ -1,13 +1,16 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { extractWhatsAppTemplateVariables, type WhatsAppTemplateComponent } from "@/lib/whatsapp-template";
+import { workforceOnboardingEventCode } from "@/lib/whatsapp-onboarding";
 
 type OnboardingMessageData = {
   companyId: string;
   workerId: string;
-  workerType: "employee" | "field_executive";
+  workerType: "employee" | "field_executive" | "contractor" | "vendor" | "worker";
+  workforceCategoryCode: string;
   fullName: string;
   mobile: string;
   dropxId: string;
+  biometricId: string;
   dateOfJoin: string;
   locationCode: string;
   locationName: string;
@@ -20,15 +23,10 @@ type FieldExecutiveOnboardingMessageData = Omit<OnboardingMessageData, "workerId
   fieldExecutiveId: string;
 };
 
-type EmployeeOnboardingMessageData = Omit<OnboardingMessageData, "workerId" | "workerType" | "registrationToken"> & {
+type EmployeeOnboardingMessageData = Omit<OnboardingMessageData, "workerId" | "workerType" | "workforceCategoryCode" | "registrationToken"> & {
   employeeId: string;
   registrationToken?: string;
 };
-
-const onboardingEventByWorkerType = {
-  employee: "employee_onboarding",
-  field_executive: "field_executive_onboarding"
-} as const;
 
 function mappedValue(source: string, data: Record<string, string>) {
   return data[source] ?? "";
@@ -160,7 +158,7 @@ async function syncAutoTriggerToInbox({
 
 async function sendOnboardingWhatsApp(data: OnboardingMessageData) {
   if (!supabaseAdmin) return;
-  const eventCode = onboardingEventByWorkerType[data.workerType];
+  const eventCode = workforceOnboardingEventCode(data.workforceCategoryCode);
   let recipient = data.mobile;
   let templateName: string | null = null;
   let campaignId: string | null = null;
@@ -214,6 +212,7 @@ async function sendOnboardingWhatsApp(data: OnboardingMessageData) {
       full_name: data.fullName,
       mobile: data.mobile,
       dropx_id: data.dropxId,
+      biometric_id: data.biometricId,
       date_of_join: data.dateOfJoin,
       location_code: data.locationCode,
       location_name: data.locationName,
@@ -403,7 +402,10 @@ export async function sendFieldExecutiveOnboardingWhatsApp(data: FieldExecutiveO
   await sendOnboardingWhatsApp({
     ...data,
     workerId: data.fieldExecutiveId,
-    workerType: "field_executive"
+    workerType: data.workforceCategoryCode === "contractors" ? "contractor"
+      : data.workforceCategoryCode === "vendors" ? "vendor"
+        : data.workforceCategoryCode === "workers" ? "worker"
+          : "field_executive"
   });
 }
 
@@ -412,6 +414,7 @@ export async function sendEmployeeOnboardingWhatsApp(data: EmployeeOnboardingMes
     ...data,
     registrationToken: data.registrationToken ?? "",
     workerId: data.employeeId,
-    workerType: "employee"
+    workerType: "employee",
+    workforceCategoryCode: "employees"
   });
 }

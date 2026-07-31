@@ -305,13 +305,15 @@ export async function createFieldExecutive(formData: FormData) {
 
     const stationRelation = executive.stations as unknown as { station_code?: string; station_name?: string | null; providers?: { name?: string } | Array<{ name?: string }> | null } | null;
     const providerRelation = Array.isArray(stationRelation?.providers) ? stationRelation?.providers[0] : stationRelation?.providers;
-    if (!whatsappMigrationMissing && config.profileType === "field_executive") {
+    if (!whatsappMigrationMissing) {
       waitUntil(sendFieldExecutiveOnboardingWhatsApp({
         companyId,
         fieldExecutiveId: executive.id,
         fullName,
         mobile: `${mobileCountryCode}${mobile}`,
         dropxId,
+        biometricId: biometricId ?? "",
+        workforceCategoryCode: config.designationCategory,
         dateOfJoin,
         locationCode: stationRelation?.station_code ?? "",
         locationName: stationRelation?.station_name ?? "",

@@ -3,11 +3,12 @@ import { AppShell } from "@/components/app-shell";
 import { MetaChannelProfilesPanel, type MetaChannelProfile } from "@/components/meta-channel-profiles-panel";
 import { MetaMessagingSettingsPanel } from "@/components/meta-messaging-settings-panel";
 import { PageHead } from "@/components/page-head";
-import { WhatsAppSettingsPanel } from "@/components/whatsapp-settings-panel";
+import { WhatsAppSettingsPanel, type NotificationConfig, type WhatsAppOnboardingTarget } from "@/components/whatsapp-settings-panel";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import type { WhatsAppTemplateComponent } from "@/lib/whatsapp-template";
+import { workforceOnboardingEventCode } from "@/lib/whatsapp-onboarding";
 
 export const dynamic = "force-dynamic";
 
@@ -84,24 +85,42 @@ async function loadMetaMessagingSettings(companyId: string) {
 }
 
 async function loadWhatsAppSettings(companyId: string) {
+  const emptyConfig: NotificationConfig = { is_enabled: false, template_id: null, whatsapp_profile_id: null, variable_mappings: {} };
   const defaults = {
     general: { is_enabled: false, webhook_verify_token: null as string | null },
     profiles: [] as Array<{ id: string; profile_name: string; business_account_id: string | null; phone_number_id: string; graph_api_version: string; default_country_code: string; chat_enabled: boolean; greeting_enabled: boolean; greeting_message: string | null; is_active: boolean; is_default: boolean; token_configured: boolean; token_mask: string; usage_count: number }>,
-    employeeConfig: { is_enabled: false, template_id: null as string | null, whatsapp_profile_id: null as string | null, variable_mappings: {} as Record<string, string> },
-    config: { is_enabled: false, template_id: null as string | null, whatsapp_profile_id: null as string | null, variable_mappings: {} as Record<string, string> },
-    vendorConfig: { is_enabled: false, template_id: null as string | null, whatsapp_profile_id: null as string | null, variable_mappings: {} as Record<string, string> },
+    onboardingTargets: [] as WhatsAppOnboardingTarget[],
     otpConfig: { is_enabled: false, template_id: null as string | null, whatsapp_profile_id: null as string | null, variable_mappings: {} as Record<string, string> },
     templates: [] as Array<{ template_id: string; whatsapp_profile_id: string | null; name: string; language: string; category: string | null; status: string; components: WhatsAppTemplateComponent[] }>
   };
   if (!supabaseAdmin) return { ...defaults, error: "Supabase service role key is not configured." };
   const admin = supabaseAdmin;
 
-  const [settings, profiles, configs, templates] = await Promise.all([
+  const [settings, profiles, categories, templates] = await Promise.all([
     admin.from("whatsapp_settings").select("is_enabled, webhook_verify_token").eq("company_id", companyId).eq("id", true).maybeSingle(),
     admin.from("whatsapp_profiles").select("id, profile_name, business_account_id, phone_number_id, graph_api_version, default_country_code, chat_enabled, greeting_enabled, greeting_message, is_active, is_default, token_secret_id").eq("company_id", companyId).order("profile_name"),
-    admin.from("whatsapp_notification_configs").select("event_code, is_enabled, template_id, whatsapp_profile_id, variable_mappings").eq("company_id", companyId).in("event_code", ["employee_onboarding", "field_executive_onboarding", "vendor_onboarding", "onboarding_otp_verification"]),
+    admin.from("workforce_categories").select("code, name").eq("company_id", companyId).eq("is_active", true).order("sort_order").order("name"),
     admin.from("whatsapp_template_cache").select("template_id, whatsapp_profile_id, name, language, category, status, components").eq("company_id", companyId).order("name")
   ]);
+  const fallbackCategories = [
+    { code: "employees", name: "Employees" },
+    { code: "field_executives", name: "Field Executives" },
+    { code: "contractors", name: "Independent Contractors" },
+    { code: "vendors", name: "Vendors" },
+    { code: "workers", name: "Workers" }
+  ];
+  const categoryRows = categories.error ? fallbackCategories : (categories.data ?? []);
+  const onboardingCategories = categoryRows.map((category) => ({
+    categoryCode: category.code,
+    code: workforceOnboardingEventCode(category.code),
+    label: category.name
+  }));
+  const eventCodes = [...onboardingCategories.map((category) => category.code), "onboarding_otp_verification"];
+  const configs = await admin
+    .from("whatsapp_notification_configs")
+    .select("event_code, is_enabled, template_id, whatsapp_profile_id, variable_mappings")
+    .eq("company_id", companyId)
+    .in("event_code", eventCodes);
   const error = settings.error?.message || profiles.error?.message || configs.error?.message || templates.error?.message || null;
   const profileRows = await Promise.all(((profiles.data ?? []) as Array<{ id: string; profile_name: string; business_account_id: string | null; phone_number_id: string; graph_api_version: string; default_country_code: string; chat_enabled: boolean; greeting_enabled: boolean; greeting_message: string | null; is_active: boolean; is_default: boolean; token_secret_id: string | null }>).map(async (profile) => {
     const tokenMask = profile.token_secret_id ? "********************************" : "";
@@ -127,9 +146,10 @@ async function loadWhatsAppSettings(companyId: string) {
   return {
     general: settings.data ?? defaults.general,
     profiles: profileRows,
-    employeeConfig: configByEvent.get("employee_onboarding") ?? defaults.employeeConfig,
-    config: configByEvent.get("field_executive_onboarding") ?? defaults.config,
-    vendorConfig: configByEvent.get("vendor_onboarding") ?? defaults.vendorConfig,
+    onboardingTargets: onboardingCategories.map((category) => ({
+      ...category,
+      config: configByEvent.get(category.code) ?? emptyConfig
+    })),
     otpConfig: configByEvent.get("onboarding_otp_verification") ?? defaults.otpConfig,
     templates: (templates.data ?? []) as typeof defaults.templates,
     error
@@ -298,9 +318,7 @@ export default async function MetaMessagingSettingsPage({
         <WhatsAppSettingsPanel
           canEdit={permission.canEdit || permission.canAdd}
           commonWebhookMode
-          config={whatsAppData.config}
-          employeeConfig={whatsAppData.employeeConfig}
-          vendorConfig={whatsAppData.vendorConfig}
+          onboardingTargets={whatsAppData.onboardingTargets}
           otpConfig={whatsAppData.otpConfig}
           detailMode
           flash={whatsAppFlash}

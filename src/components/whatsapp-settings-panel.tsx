@@ -46,6 +46,13 @@ export type NotificationConfig = {
   variable_mappings: Record<string, string>;
 };
 
+export type WhatsAppOnboardingTarget = {
+  categoryCode: string;
+  code: string;
+  label: string;
+  config: NotificationConfig;
+};
+
 const emptyNotificationConfig: NotificationConfig = {
   is_enabled: false,
   template_id: null,
@@ -57,6 +64,7 @@ const dataOptions = [
   { value: "full_name", label: "Full name" },
   { value: "mobile", label: "Mobile number" },
   { value: "dropx_id", label: "DropX ID" },
+  { value: "biometric_id", label: "Biometric ID" },
   { value: "date_of_join", label: "Date of join" },
   { value: "location_code", label: "Location code" },
   { value: "location_name", label: "Location name" },
@@ -69,9 +77,7 @@ const dataOptions = [
 
 export function WhatsAppSettingsPanel({
   canEdit,
-  config,
-  employeeConfig = emptyNotificationConfig,
-  vendorConfig = emptyNotificationConfig,
+  onboardingTargets,
   otpConfig = emptyNotificationConfig,
   flash,
   general,
@@ -82,9 +88,7 @@ export function WhatsAppSettingsPanel({
   detailMode = false
 }: {
   canEdit: boolean;
-  config: NotificationConfig;
-  employeeConfig?: NotificationConfig;
-  vendorConfig?: NotificationConfig;
+  onboardingTargets: WhatsAppOnboardingTarget[];
   otpConfig?: NotificationConfig;
   flash: { error: string | null; notice: string | null };
   general: GeneralSettings;
@@ -94,6 +98,8 @@ export function WhatsAppSettingsPanel({
   commonWebhookMode?: boolean;
   detailMode?: boolean;
 }) {
+  const defaultOnboardingTarget = onboardingTargets.find((target) => target.categoryCode === "field_executives") ?? onboardingTargets[0];
+  const defaultOnboardingConfig = defaultOnboardingTarget?.config ?? emptyNotificationConfig;
   const flashTarget = flash.error && (
     flash.error.includes("template") ||
     flash.error.includes("variable") ||
@@ -101,18 +107,18 @@ export function WhatsAppSettingsPanel({
     flash.error.includes("approved")
   ) ? "field_executive_onboarding" : flash.error ? "whatsapp_general" : null;
   const [whatsAppEnabled, setWhatsAppEnabled] = useState(general.is_enabled);
-  const [onboardingEnabled, setOnboardingEnabled] = useState(config.is_enabled);
+  const [onboardingEnabled, setOnboardingEnabled] = useState(defaultOnboardingConfig.is_enabled);
   const [configuring, setConfiguring] = useState<string | null>(flashTarget);
-  const [onboardingTarget, setOnboardingTarget] = useState("field_executive_onboarding");
+  const [onboardingTarget, setOnboardingTarget] = useState(defaultOnboardingTarget?.code ?? "");
   const [editingProfile, setEditingProfile] = useState<WhatsAppProfile | null>(null);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [settingsProfile, setSettingsProfile] = useState<WhatsAppProfile | null>(null);
   const [chatEnabled, setChatEnabled] = useState(false);
   const [greetingEnabled, setGreetingEnabled] = useState(false);
-  const [templateId, setTemplateId] = useState(config.template_id ?? "");
-  const [notificationProfileId, setNotificationProfileId] = useState(config.whatsapp_profile_id ?? profiles.find((profile) => profile.is_default)?.id ?? "");
-  const [mappings, setMappings] = useState<Record<string, string>>(config.variable_mappings ?? {});
-  const [otpExpiryMinutes, setOtpExpiryMinutes] = useState(config.variable_mappings?.__otp_expiry_minutes ?? "10");
+  const [templateId, setTemplateId] = useState(defaultOnboardingConfig.template_id ?? "");
+  const [notificationProfileId, setNotificationProfileId] = useState(defaultOnboardingConfig.whatsapp_profile_id ?? profiles.find((profile) => profile.is_default)?.id ?? "");
+  const [mappings, setMappings] = useState<Record<string, string>>(defaultOnboardingConfig.variable_mappings ?? {});
+  const [otpExpiryMinutes, setOtpExpiryMinutes] = useState(defaultOnboardingConfig.variable_mappings?.__otp_expiry_minutes ?? "10");
   const [profileTokenInput, setProfileTokenInput] = useState("");
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const selectedTemplate = templates.find((template) => template.template_id === templateId && template.whatsapp_profile_id === notificationProfileId) ?? null;
@@ -155,9 +161,7 @@ export function WhatsAppSettingsPanel({
     helper: `${profile.phone_number_id} - ${profile.default_country_code}`
   }));
   const notificationConfigByCode: Record<string, NotificationConfig> = {
-    employee_onboarding: employeeConfig,
-    field_executive_onboarding: config,
-    vendor_onboarding: vendorConfig,
+    ...Object.fromEntries(onboardingTargets.map((target) => [target.code, target.config])),
     onboarding_otp_verification: otpConfig
   };
   const templateLabel = (notificationConfig: NotificationConfig) => {
@@ -169,7 +173,7 @@ export function WhatsAppSettingsPanel({
   };
   const openNotificationConfig = (code: string) => {
     const nextConfig = notificationConfigByCode[code] ?? emptyNotificationConfig;
-    if (code === "employee_onboarding" || code === "field_executive_onboarding" || code === "vendor_onboarding") {
+    if (onboardingTargets.some((target) => target.code === code)) {
       setOnboardingTarget(code);
     }
     setOnboardingEnabled(nextConfig.is_enabled);
@@ -180,12 +184,8 @@ export function WhatsAppSettingsPanel({
     setConfiguring(code);
   };
   const openOnboardingGroup = () => {
-    const firstConfigured = [
-      ["employee_onboarding", employeeConfig],
-      ["field_executive_onboarding", config],
-      ["vendor_onboarding", vendorConfig]
-    ].find(([, item]) => (item as NotificationConfig).is_enabled)?.[0] as string | undefined;
-    openNotificationConfig(firstConfigured ?? "field_executive_onboarding");
+    const firstConfigured = onboardingTargets.find((target) => target.config.is_enabled)?.code;
+    openNotificationConfig(firstConfigured ?? defaultOnboardingTarget?.code ?? "");
     setConfiguring("onboarding_group");
   };
   const switchOnboardingTarget = (code: string) => {
@@ -197,11 +197,6 @@ export function WhatsAppSettingsPanel({
     setMappings(nextConfig.variable_mappings ?? {});
     setOtpExpiryMinutes(nextConfig.variable_mappings?.__otp_expiry_minutes ?? "10");
   };
-  const onboardingTargets = [
-    { code: "employee_onboarding", label: "Employees", config: employeeConfig },
-    { code: "field_executive_onboarding", label: "Field executives", config },
-    { code: "vendor_onboarding", label: "Vendors", config: vendorConfig }
-  ];
   const onboardingEnabledCount = onboardingTargets.filter((target) => target.config.is_enabled).length;
   const notificationRows = [
     {

@@ -162,6 +162,7 @@ export async function createEmployee(formData: FormData) {
       fullName,
       mobile,
       dropxId: employeeCode,
+      biometricId: biometricId ?? "",
       dateOfJoin,
       locationCode: locationResult.data.station_code ?? "",
       locationName: locationResult.data.station_name ?? "",

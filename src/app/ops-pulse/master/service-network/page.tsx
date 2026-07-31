@@ -9,7 +9,7 @@ import { removeServiceNetworkMaster, saveServiceNetworkMaster } from "./actions"
 
 export const dynamic = "force-dynamic";
 export default async function ServiceNetworkMasterPage({ searchParams }: { searchParams?: { station?: string; notice?: string; error?: string } }) {
-  const authorization = await requirePagePermission("cod_master", "access");
+  const authorization = await requirePagePermission("service_network_master", "access");
   const companyId = requireCompanyId(authorization);
   const [locationsResult, rulesResult] = await Promise.all([loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess), loadServiceNetworkRules(companyId)]);
   const locations = locationsResult.locations.filter(location => ["amazon", "flipkart"].includes(inferFormTypeFromLocation(location)));
@@ -17,7 +17,7 @@ export default async function ServiceNetworkMasterPage({ searchParams }: { searc
   const location = locations.find(row => row.station_code === stationCode) ?? locations[0];
   const rule = rulesResult.rows.find(row => row.stationCode === location?.station_code);
   const permission = authorization.permissions.cod_master;
-  return <AppShell active="Service Network Master" pageCode="cod_master"><div className="ops-command-center capacity-workspace">
+  return <AppShell active="Service Network Master" pageCode="service_network_master"><div className="ops-command-center capacity-workspace">
     <PageHead eyebrow="Ops Masters" title="Service Network Master" subtitle="Maintain jurisdiction, approved pincodes, service radius and bike/van planning productivity without hardcoding." action={<a className="button secondary compact" href="/ops-pulse/service-network">Open Service Network</a>}/>
     {searchParams?.error || locationsResult.error || rulesResult.error ? <div className="message-panel error">{searchParams?.error || locationsResult.error || rulesResult.error}</div> : null}{searchParams?.notice ? <div className="message-panel success">{searchParams.notice}</div> : null}
     <section className="panel"><div className="panel-head"><div><h2>Station rule</h2><p className="subtle">Rules are effective-dated and restricted to the stations within your permitted jurisdiction.</p></div><form method="get"><label>Station<select name="station" defaultValue={location?.station_code}>{locations.map(row => <option key={row.id} value={row.station_code}>{row.station_code} · {row.station_name || row.city} · {locationModelName(row)}</option>)}</select></label><button className="button secondary compact">View</button></form></div>

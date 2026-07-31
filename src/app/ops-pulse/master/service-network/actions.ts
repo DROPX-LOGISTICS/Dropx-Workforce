@@ -11,7 +11,7 @@ function positive(value: FormDataEntryValue | null, label: string) { const numbe
 function finish(params: { station?: string; notice?: string; error?: string }): never { const query = new URLSearchParams(Object.entries(params).filter(([,v]) => v).map(([k,v]) => [k, String(v)])); redirect(`/ops-pulse/master/service-network?${query}`); }
 
 export async function saveServiceNetworkMaster(formData: FormData) {
-  const authorization = await requirePagePermission("cod_master", "edit");
+  const authorization = await requirePagePermission("service_network_master", "edit");
   const companyId = requireCompanyId(authorization);
   const stationCode = clean(formData.get("station_code")).toUpperCase();
   try {
@@ -37,7 +37,7 @@ export async function saveServiceNetworkMaster(formData: FormData) {
 }
 
 export async function removeServiceNetworkMaster(formData: FormData) {
-  const authorization = await requirePagePermission("cod_master", "edit");
+  const authorization = await requirePagePermission("service_network_master", "edit");
   const companyId = requireCompanyId(authorization);
   const id = clean(formData.get("id")), stationCode = clean(formData.get("station_code"));
   const error = id ? await deleteServiceNetworkRule(companyId, id) : "Rule ID is missing.";

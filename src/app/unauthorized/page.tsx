@@ -1,16 +1,23 @@
-import { LogOut } from "lucide-react";
+import { Headphones, LogOut, ShieldX } from "lucide-react";
 import { signOut } from "@/app/login/actions";
 import { SubmitButton } from "@/components/submit-button";
 
-export default function UnauthorizedPage() {
+const pageNames: Record<string, string> = {
+  service_network: "Service Network",
+  service_network_master: "Service Network Master"
+};
+
+export default function UnauthorizedPage({ searchParams }: { searchParams?: { page?: string } }) {
+  const requestedPage = pageNames[String(searchParams?.page ?? "")] ?? "this page";
   return (
     <main className="login-page">
       <section className="login-panel">
         <img className="login-logo" src="/dropx-logo.png" alt="DropX" />
         <div className="login-copy">
-          <span className="eyebrow">Access restricted</span>
-          <h1>Permission required</h1>
-          <p>Your assigned role does not allow this page or action.</p>
+          <span className="eyebrow"><ShieldX size={15} aria-hidden="true" /> Access not provided</span>
+          <h1>You don&apos;t have access to {requestedPage}.</h1>
+          <p>Your assigned role or location scope does not include this area. No other dashboard has been opened.</p>
+          <div className="message-panel warning"><Headphones size={16} aria-hidden="true" /><span>Contact HR or DropX Operations Support to request access. Share the page name and your station or jurisdiction.</span></div>
         </div>
         <form action={signOut}>
           <SubmitButton className="button secondary" pendingText="Signing out">

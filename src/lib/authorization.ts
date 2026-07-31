@@ -54,6 +54,8 @@ const groupedParentPermissions: Record<string, string[]> = {
     "cps_reports",
     "cps_inputs",
     "cps_unmapped",
+    "service_network",
+    "service_network_master",
     "expense_requests",
     "payment_requests",
     "payment_approvals",
@@ -136,7 +138,7 @@ function inheritPeopleReviewPermissions(permissions: Record<string, PagePermissi
 }
 
 async function ensureMissingCurrentAccessPages(companyId: string) {
-  const requiredCodes = ["people_review", "payments", "expense_requests", "payment_requests", "payment_approvals", "payment_process", "payment_reports", "master_payment_banks", "master_payment_heads", "payment_settings", "imports", "ops_pulse", "daily_submission", "cod", "cod_executive_reconciliation", "cod_submission", "cod_validation", "cod_reports", "cod_portal_checks", "cod_master", "biometric_devices", "reports", "attendance_reports", "verification_api_reports", "ai_connector", "amazon_connector", "developer_mode", "cps", "cps_overview", "cps_daily", "cps_monthly", "cps_cost_breakup", "cps_stations", "cps_shipments", "cps_associates", "cps_reports", "cps_inputs", "cps_unmapped"];
+  const requiredCodes = ["people_review", "payments", "expense_requests", "payment_requests", "payment_approvals", "payment_process", "payment_reports", "master_payment_banks", "master_payment_heads", "payment_settings", "imports", "ops_pulse", "daily_submission", "cod", "cod_executive_reconciliation", "cod_submission", "cod_validation", "cod_reports", "cod_portal_checks", "cod_master", "biometric_devices", "reports", "attendance_reports", "verification_api_reports", "ai_connector", "amazon_connector", "developer_mode", "cps", "cps_overview", "cps_daily", "cps_monthly", "cps_cost_breakup", "cps_stations", "cps_shipments", "cps_associates", "cps_reports", "cps_inputs", "cps_unmapped", "service_network", "service_network_master"];
   const { data, error } = await supabaseAdmin!
     .from("app_pages")
     .select("code")

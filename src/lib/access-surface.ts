@@ -22,6 +22,8 @@ const opsPageCodes = new Set([
   "cps_reports",
   "cps_inputs",
   "cps_unmapped",
+  "service_network",
+  "service_network_master",
   "expense_requests",
   "payment_requests",
   "payment_approvals",

@@ -1,0 +1,28 @@
+import { AppShell } from "@/components/app-shell";
+import { PageHead } from "@/components/page-head";
+import { SubmitButton } from "@/components/submit-button";
+import { requirePagePermission } from "@/lib/authorization";
+import { requireCompanyId } from "@/lib/company-scope";
+import { inferFormTypeFromLocation, loadCodLocations, locationModelName } from "@/lib/ops-pulse/cod";
+import { loadServiceNetworkRules } from "@/lib/ops-pulse/service-network";
+import { removeServiceNetworkMaster, saveServiceNetworkMaster } from "./actions";
+
+export const dynamic = "force-dynamic";
+export default async function ServiceNetworkMasterPage({ searchParams }: { searchParams?: { station?: string; notice?: string; error?: string } }) {
+  const authorization = await requirePagePermission("cod_master", "access");
+  const companyId = requireCompanyId(authorization);
+  const [locationsResult, rulesResult] = await Promise.all([loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess), loadServiceNetworkRules(companyId)]);
+  const locations = locationsResult.locations.filter(location => ["amazon", "flipkart"].includes(inferFormTypeFromLocation(location)));
+  const stationCode = String(searchParams?.station ?? locations[0]?.station_code ?? "").toUpperCase();
+  const location = locations.find(row => row.station_code === stationCode) ?? locations[0];
+  const rule = rulesResult.rows.find(row => row.stationCode === location?.station_code);
+  const permission = authorization.permissions.cod_master;
+  return <AppShell active="Service Network Master" pageCode="cod_master"><div className="ops-command-center capacity-workspace">
+    <PageHead eyebrow="Ops Masters" title="Service Network Master" subtitle="Maintain jurisdiction, approved pincodes, service radius and bike/van planning productivity without hardcoding." action={<a className="button secondary compact" href="/ops-pulse/service-network">Open Service Network</a>}/>
+    {searchParams?.error || locationsResult.error || rulesResult.error ? <div className="message-panel error">{searchParams?.error || locationsResult.error || rulesResult.error}</div> : null}{searchParams?.notice ? <div className="message-panel success">{searchParams.notice}</div> : null}
+    <section className="panel"><div className="panel-head"><div><h2>Station rule</h2><p className="subtle">Rules are effective-dated and restricted to the stations within your permitted jurisdiction.</p></div><form method="get"><label>Station<select name="station" defaultValue={location?.station_code}>{locations.map(row => <option key={row.id} value={row.station_code}>{row.station_code} · {row.station_name || row.city} · {locationModelName(row)}</option>)}</select></label><button className="button secondary compact">View</button></form></div>
+      {location ? <form action={saveServiceNetworkMaster} className="panel-body"><input type="hidden" name="station_code" value={location.station_code}/><div className="form-grid"><label>Jurisdiction owner<input className="field" name="jurisdiction_owner" defaultValue={rule?.jurisdictionOwner || location.cluster_manager || location.aom || ""} placeholder="Manager or team"/></label><label>Service radius (km)<input className="field" type="number" step="0.1" min="0.1" name="service_radius_km" defaultValue={rule?.serviceRadiusKm ?? ""} required/></label><label>Bike planning SPR<input className="field" type="number" step="0.1" min="0.1" name="bike_spr" defaultValue={rule?.bikeSpr ?? ""} required/></label><label>Van planning SPR<input className="field" type="number" step="0.1" min="0.1" name="van_spr" defaultValue={rule?.vanSpr ?? ""} required/></label><label>Capacity buffer %<input className="field" type="number" step="0.1" min="0" name="buffer_percent" defaultValue={rule?.bufferPercent ?? 10}/></label><label>Effective from<input className="field" type="date" name="effective_from" defaultValue={rule?.effectiveFrom ?? new Date().toISOString().slice(0,10)} required/></label><label>Effective to<input className="field" type="date" name="effective_to" defaultValue={rule?.effectiveTo ?? ""}/></label><label className="full-span">Approved service pincodes<textarea className="field" name="pincodes" defaultValue={(rule?.pincodeOwnership ?? []).join(", ")} placeholder="524101, 524121, 524123" rows={3}/><small className="field-hint">Use the approved jurisdiction list. KML layer pincodes are also read automatically for map comparison.</small></label></div><label className="toggle-field"><input type="checkbox" name="is_active" defaultChecked={rule?.isActive ?? true}/><span>Active for planning</span></label>{permission.canEdit ? <div className="form-actions"><SubmitButton>Save rule</SubmitButton>{rule?.id ? <button className="button danger" formAction={removeServiceNetworkMaster} name="id" value={rule.id}>Delete rule</button> : null}</div> : null}</form> : <div className="empty-cell">No eligible stations are available.</div>}
+    </section>
+    <section className="panel"><div className="panel-head"><div><h2>Planning logic</h2><p className="subtle">Transparent and independently editable for every station.</p></div></div><div className="panel-body compact-summary-grid"><div><span className="subtle">Bike requirement</span><strong>Small ÷ Bike SPR + buffer</strong></div><div><span className="subtle">Van requirement</span><strong>Volumetric ÷ Van SPR + buffer</strong></div><div><span className="subtle">Actual IDs</span><strong>Shipment-active IDs</strong></div><div><span className="subtle">Actual vehicle mix</span><strong>DA designation mapping required</strong></div></div></section>
+  </div></AppShell>;
+}

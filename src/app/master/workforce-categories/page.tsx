@@ -3,11 +3,12 @@ import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
+import { SubmitButton } from "@/components/submit-button";
 import { WorkforceCategoryForm, type WorkforceCategoryInitial } from "@/components/workforce-category-form";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { createWorkforceCategory, updateWorkforceCategory } from "./actions";
+import { createWorkforceCategory, deleteWorkforceCategory, updateWorkforceCategory } from "./actions";
 
 function loadFlash() {
   const raw = cookies().get("dropx_workforce_category_flash")?.value;
@@ -157,6 +158,20 @@ export default async function WorkforceCategoriesPage({
               <PendingLink className="icon-button" href="/master/workforce-categories" scroll={false} aria-label="Close">x</PendingLink>
             </div>
             <WorkforceCategoryForm action={updateWorkforceCategory} initial={editing} submitLabel="Save changes" />
+            {!editing.is_system ? (
+              <form action={deleteWorkforceCategory} className="danger-form">
+                <input name="id" type="hidden" value={editing.id} />
+                <SubmitButton
+                  className="button danger"
+                  confirmDescription="This is available only when no designation or people record uses the category."
+                  confirmMessage={`Delete ${editing.name}? The category will be removed from onboarding, ID settings, and category lists.`}
+                  confirmSubmitText="Delete category"
+                  pendingText="Deleting"
+                >
+                  Delete category
+                </SubmitButton>
+              </form>
+            ) : null}
           </section>
         </div>
       ) : null}

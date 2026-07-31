@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
+import { dynamicWorkforceTable } from "@/lib/dynamic-workforce";
 import { normalizeCategoryProfileFieldRules } from "@/lib/profile-field-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
@@ -63,6 +64,19 @@ function isNextRedirectError(error: unknown) {
     String((error as { digest: string }).digest).startsWith("NEXT_REDIRECT");
 }
 
+function revalidateWorkforceCategoryPaths() {
+  revalidatePath("/master/workforce-categories");
+  revalidatePath("/master/designations");
+  revalidatePath("/settings/dropx-id-generation");
+  revalidatePath("/settings/meta");
+  revalidatePath("/people/all");
+  revalidatePath("/employees");
+  revalidatePath("/field-executive");
+  revalidatePath("/contractors");
+  revalidatePath("/vendors");
+  revalidatePath("/workers");
+}
+
 export async function createWorkforceCategory(formData: FormData) {
   const authorization = await requirePagePermission("designations", "add");
   const companyId = requireCompanyId(authorization);
@@ -90,15 +104,7 @@ export async function createWorkforceCategory(formData: FormData) {
         throw new Error(`${provisionResult.error.message} Run scripts/workforce_dynamic_category_tables_v1.sql in Supabase SQL Editor.`);
       }
     }
-    revalidatePath("/master/workforce-categories");
-    revalidatePath("/master/designations");
-    revalidatePath("/settings/dropx-id-generation");
-    revalidatePath("/people/all");
-    revalidatePath("/employees");
-    revalidatePath("/field-executive");
-    revalidatePath("/contractors");
-    revalidatePath("/vendors");
-    revalidatePath("/workers");
+    revalidateWorkforceCategoryPaths();
     categoryRedirect({ notice: "Workforce category added." });
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
@@ -137,18 +143,61 @@ export async function updateWorkforceCategory(formData: FormData) {
       .eq("id", id)
       .eq("company_id", companyId);
     if (error) throw new Error(error.message);
-    revalidatePath("/master/workforce-categories");
-    revalidatePath("/master/designations");
-    revalidatePath("/settings/dropx-id-generation");
-    revalidatePath("/people/all");
-    revalidatePath("/employees");
-    revalidatePath("/field-executive");
-    revalidatePath("/contractors");
-    revalidatePath("/vendors");
-    revalidatePath("/workers");
+    revalidateWorkforceCategoryPaths();
     categoryRedirect({ notice: "Workforce category updated." });
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     categoryRedirect({ error: error instanceof Error ? error.message : "Unable to update workforce category." });
+  }
+}
+
+export async function deleteWorkforceCategory(formData: FormData) {
+  const authorization = await requirePagePermission("designations", "edit");
+  const companyId = requireCompanyId(authorization);
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    const id = required(formData.get("id"), "Workforce category");
+    const existing = await supabaseAdmin
+      .from("workforce_categories")
+      .select("code, name, is_system")
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (existing.error) throw new Error(existing.error.message);
+    if (!existing.data) throw new Error("Workforce category was not found.");
+    if (existing.data.is_system) throw new Error("System workforce categories cannot be deleted.");
+
+    const designationUsage = await supabaseAdmin
+      .from("designations")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", companyId)
+      .contains("onboarding_categories", [existing.data.code]);
+    if (designationUsage.error) throw new Error(designationUsage.error.message);
+    if ((designationUsage.count ?? 0) > 0) {
+      throw new Error(`Remove ${existing.data.name} from all designations before deleting this category.`);
+    }
+
+    const peopleUsage = await supabaseAdmin
+      .from(dynamicWorkforceTable(existing.data.code))
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", companyId);
+    if (peopleUsage.error) throw new Error(peopleUsage.error.message);
+    if ((peopleUsage.count ?? 0) > 0) {
+      throw new Error(`This category contains ${peopleUsage.count} people record${peopleUsage.count === 1 ? "" : "s"}. Move or delete them before deleting the category.`);
+    }
+
+    const deletion = await supabaseAdmin
+      .from("workforce_categories")
+      .delete()
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .eq("is_system", false);
+    if (deletion.error) throw new Error(deletion.error.message);
+
+    revalidateWorkforceCategoryPaths();
+    categoryRedirect({ notice: "Workforce category deleted." });
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    categoryRedirect({ error: error instanceof Error ? error.message : "Unable to delete workforce category." });
   }
 }

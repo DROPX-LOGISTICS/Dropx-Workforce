@@ -93,10 +93,12 @@ type ExecutiveRow = {
     station_code: string;
     station_name: string | null;
     providers?: { name: string } | { name: string }[] | null;
+    location_models?: { code: string; name: string } | { code: string; name: string }[] | null;
   } | {
     station_code: string;
     station_name: string | null;
     providers?: { name: string } | { name: string }[] | null;
+    location_models?: { code: string; name: string } | { code: string; name: string }[] | null;
   }[] | null;
 };
 
@@ -644,7 +646,7 @@ async function loadFieldExecutiveData(
         dl_front_path,
         dl_back_path,
         profile_photo_path,
-        stations (station_code, station_name, providers (name))
+        stations (station_code, station_name, providers (name), location_models (code, name))
       `;
   const legacyExecutiveSelect = executiveSelect.replace("mobile_country_code,", "");
   let executivesResult: { data: unknown[] | null; error: { message?: string } | null } = await supabaseAdmin
@@ -678,6 +680,7 @@ async function loadFieldExecutiveData(
   const executives = visibleExecutiveRows
     .map((executive) => {
     const location = firstRelation(executive.stations);
+    const model = firstRelation(location?.location_models);
     return {
       id: executive.id,
       fullName: executive.full_name,
@@ -687,6 +690,8 @@ async function loadFieldExecutiveData(
       email: executive.email,
       location: location?.station_code || "-",
       provider: firstRelation(location?.providers)?.name || "-",
+      model: model?.code || model?.name || "-",
+      designation: executive.designation || "-",
       isActive: executive.is_active,
       status: fieldExecutiveStatus(executive)
     };

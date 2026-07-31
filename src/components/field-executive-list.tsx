@@ -14,12 +14,14 @@ export type FieldExecutiveListRow = {
   email: string;
   location: string;
   provider: string;
+  model: string;
+  designation: string;
   profilePhotoUrl?: string | null;
   isActive: boolean;
   status: string;
 };
 
-const pageSize = 10;
+const pageSize = 20;
 
 type FilterOption = {
   value: string;
@@ -107,7 +109,9 @@ export function FieldExecutiveList({
 }) {
   const [search, setSearch] = useState("");
   const [providerFilter, setProviderFilter] = useState<string[]>([]);
+  const [modelFilter, setModelFilter] = useState<string[]>([]);
   const [locationFilter, setLocationFilter] = useState<string[]>([]);
+  const [designationFilter, setDesignationFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -143,6 +147,16 @@ export function FieldExecutiveList({
       .sort((left, right) => left.localeCompare(right))
       .map((location) => ({ value: location, label: location }))
   ), [rows]);
+  const modelOptions = useMemo(() => (
+    Array.from(new Set(rows.map((row) => row.model).filter((value) => value && value !== "-")))
+      .sort((left, right) => left.localeCompare(right))
+      .map((model) => ({ value: model, label: model }))
+  ), [rows]);
+  const designationOptions = useMemo(() => (
+    Array.from(new Set(rows.map((row) => row.designation).filter((value) => value && value !== "-")))
+      .sort((left, right) => left.localeCompare(right))
+      .map((designation) => ({ value: designation, label: designation }))
+  ), [rows]);
   const statusOptions = useMemo(() => (
     Array.from(new Set(rows.map((row) => row.status).filter(Boolean)))
       .sort((left, right) => left.localeCompare(right))
@@ -153,17 +167,19 @@ export function FieldExecutiveList({
     const selectedStatuses = new Set(statusFilter);
     return rows.filter((row) => {
       const matchesSearch = !term || (
-        `${row.dropxId} ${row.biometricId} ${row.fullName} ${row.mobile} ${row.email} ${row.location} ${row.provider}`
+        `${row.dropxId} ${row.biometricId} ${row.fullName} ${row.mobile} ${row.email} ${row.location} ${row.provider} ${row.model} ${row.designation}`
           .toLowerCase()
           .includes(term)
       );
       const matchesProvider = !providerFilter.length || providerFilter.includes(row.provider);
+      const matchesModel = !modelFilter.length || modelFilter.includes(row.model);
       const matchesLocation = !locationFilter.length || locationFilter.includes(row.location);
+      const matchesDesignation = !designationFilter.length || designationFilter.includes(row.designation);
       const matchesStatus = !statusFilter.length || selectedStatuses.has(row.status.toLowerCase());
 
-      return matchesSearch && matchesProvider && matchesLocation && matchesStatus;
+      return matchesSearch && matchesProvider && matchesModel && matchesLocation && matchesDesignation && matchesStatus;
     });
-  }, [locationFilter, providerFilter, rows, search, statusFilter]);
+  }, [designationFilter, locationFilter, modelFilter, providerFilter, rows, search, statusFilter]);
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const visibleRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -195,6 +211,26 @@ export function FieldExecutiveList({
             }}
             options={locationOptions}
             selected={locationFilter}
+          />
+          <MultiCheckFilter
+            allLabel="All models"
+            label="Model"
+            onChange={(values) => {
+              setModelFilter(values);
+              setPage(1);
+            }}
+            options={modelOptions}
+            selected={modelFilter}
+          />
+          <MultiCheckFilter
+            allLabel="All designations"
+            label="Designation"
+            onChange={(values) => {
+              setDesignationFilter(values);
+              setPage(1);
+            }}
+            options={designationOptions}
+            selected={designationFilter}
           />
           <MultiCheckFilter
             allLabel="All statuses"

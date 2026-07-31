@@ -1,11 +1,9 @@
 import { cookies } from "next/headers";
-import { UserRound } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { EmployeeActionMenu } from "@/components/employee-action-menu";
 import { EmployeeForm } from "@/components/employee-form";
+import { EmployeeList } from "@/components/employee-list";
 import { PageHead } from "@/components/page-head";
 import { PendingLink } from "@/components/pending-link";
-import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
@@ -81,7 +79,17 @@ type EmployeeRow = {
   profile_photo_path?: string | null;
   upload_urls?: Record<string, string>;
   is_active: boolean;
-  stations?: { station_code: string; station_name: string | null } | { station_code: string; station_name: string | null }[] | null;
+  stations?: {
+    station_code: string;
+    station_name: string | null;
+    providers?: { name: string } | { name: string }[] | null;
+    location_models?: { code: string; name: string } | { code: string; name: string }[] | null;
+  } | {
+    station_code: string;
+    station_name: string | null;
+    providers?: { name: string } | { name: string }[] | null;
+    location_models?: { code: string; name: string } | { code: string; name: string }[] | null;
+  }[] | null;
   designations?: { code: string; name: string } | { code: string; name: string }[] | null;
 };
 
@@ -318,7 +326,7 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
   const [initialEmployeesResult, locationsResult, designationsResult] = await Promise.all([
     supabaseAdmin
       .from("employees")
-      .select("id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, location_id, designation_id, statutory_applicability, profile_completion_status, profile_return_remarks, profile_completed_at, gender, date_of_birth, aadhaar_number, pan_number, eshram_uan, father_name, blood_group, is_handicapped, address, state_code, pincode, landmark, emergency_contact_name, emergency_contact_number, emergency_contact_relation, bank_account_no, ifsc, pf_uan, pf_account_no, esi_no, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, is_active, stations (station_code, station_name), designations (code, name)")
+      .select("id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, date_of_join, location_id, designation_id, statutory_applicability, profile_completion_status, profile_return_remarks, profile_completed_at, gender, date_of_birth, aadhaar_number, pan_number, eshram_uan, father_name, blood_group, is_handicapped, address, state_code, pincode, landmark, emergency_contact_name, emergency_contact_number, emergency_contact_relation, bank_account_no, ifsc, pf_uan, pf_account_no, esi_no, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, is_active, stations (station_code, station_name, providers (name), location_models (code, name)), designations (code, name)")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false }),
     supabaseAdmin
@@ -338,7 +346,7 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
   if (isMissingColumnError(initialEmployeesResult.error)) {
     const fallbackEmployeesResult = await supabaseAdmin
       .from("employees")
-      .select("id, employee_code, full_name, mobile_country_code, mobile, email, date_of_join, statutory_applicability, is_active, stations (station_code, station_name), designations (code, name)")
+      .select("id, employee_code, full_name, mobile_country_code, mobile, email, date_of_join, statutory_applicability, is_active, stations (station_code, station_name, providers (name), location_models (code, name)), designations (code, name)")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     employeesResult = {
@@ -471,65 +479,31 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
       {!error && pagePermission.canAdd ? <EmployeeBulkImportPanel /> : null}
 
       {!error && pagePermission.canView ? (
-        <section className="panel">
-          <div className="panel-head toolbar">
-            <div>
-              <h2>Employee register</h2>
-              <p className="subtle">{employees.length} records</p>
-            </div>
-          </div>
-          <div className="table-wrap field-executive-table-wrap employee-table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Emp ID</th>
-                  <th>Full name</th>
-                  <th>Biometric ID</th>
-                  <th>Mobile</th>
-                  <th>Email</th>
-                  <th>Date of join</th>
-                  <th>Location</th>
-                  <th>Designation</th>
-                  <th>Statutory</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {employees.length ? employees.map((employee) => {
-                  const location = firstRelation(employee.stations);
-                  const designation = firstRelation(employee.designations);
-                  return (
-                    <tr key={employee.id}>
-                      <td>
-                        <div className="executive-name-cell">
-                          <span className="executive-avatar" aria-hidden="true">
-                            {employee.upload_urls?.profilePhoto ? <img alt="" src={employee.upload_urls.profilePhoto} /> : <UserRound size={17} />}
-                          </span>
-                          <strong>{employee.employee_code ?? "-"}</strong>
-                        </div>
-                      </td>
-                      <td><strong>{employee.full_name}</strong></td>
-                      <td>{employee.biometric_id ?? "-"}</td>
-                      <td>+{employee.mobile_country_code ?? "91"} {employee.mobile}</td>
-                      <td>{employee.email || "-"}</td>
-                      <td>{employee.date_of_join}</td>
-                      <td>{location?.station_code ?? "-"}</td>
-                      <td>{designation?.name ?? "-"}</td>
-                      <td>{statutoryLabel(employee.statutory_applicability)}</td>
-                      <td><StatusPill status={employeeStatus(employee)} /></td>
-                      <td className="action-cell">
-                        <EmployeeActionMenu canEdit={pagePermission.canEdit} employeeId={employee.id} fullName={employee.full_name} />
-                      </td>
-                    </tr>
-                  );
-                }) : (
-                  <tr><td className="empty-cell" colSpan={11}>No employees added yet.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <EmployeeList
+          canEdit={pagePermission.canEdit}
+          rows={employees.map((employee) => {
+            const location = firstRelation(employee.stations);
+            const provider = firstRelation(location?.providers);
+            const model = firstRelation(location?.location_models);
+            const designation = firstRelation(employee.designations);
+            return {
+              id: employee.id,
+              employeeCode: employee.employee_code ?? "-",
+              biometricId: employee.biometric_id ?? "-",
+              fullName: employee.full_name,
+              mobile: `+${employee.mobile_country_code ?? "91"} ${employee.mobile}`,
+              email: employee.email || "-",
+              dateOfJoin: employee.date_of_join,
+              location: location?.station_code ?? "-",
+              provider: provider?.name ?? "-",
+              model: model?.code || model?.name || "-",
+              designation: designation?.name ?? "-",
+              statutory: statutoryLabel(employee.statutory_applicability),
+              status: employeeStatus(employee),
+              profilePhotoUrl: employee.upload_urls?.profilePhoto ?? null
+            };
+          })}
+        />
       ) : null}
 
       {!error && pagePermission.canView && viewEmployee ? (

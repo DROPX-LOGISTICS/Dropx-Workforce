@@ -7,6 +7,7 @@ create table if not exists public.workforce_categories (
   name text not null,
   profile_field_rules jsonb not null default '{}'::jsonb,
   app_page_access text[] not null default array['dashboard', 'attendance', 'settings']::text[],
+  statutory_enabled boolean not null default false,
   is_system boolean not null default false,
   is_active boolean not null default true,
   sort_order integer not null default 100,

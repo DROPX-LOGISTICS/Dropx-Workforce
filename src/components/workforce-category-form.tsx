@@ -18,6 +18,7 @@ export type WorkforceCategoryInitial = {
   name: string;
   profile_field_rules?: unknown;
   app_page_access?: string[] | null;
+  statutory_enabled?: boolean;
   is_system: boolean;
   is_active: boolean;
 };
@@ -65,6 +66,22 @@ export function WorkforceCategoryForm({
           </label>
         ) : null}
       </div>
+
+      <section className="workforce-category-page-access">
+        <div>
+          <strong>Statutory applicability</strong>
+          <p className="subtle">Show the Not Applicable, PF and ESI selection while onboarding this category.</p>
+        </div>
+        <label className="checkbox-line">
+          <input
+            defaultChecked={initial?.statutory_enabled ?? false}
+            name="statutory_enabled"
+            type="checkbox"
+            value="true"
+          />
+          Enable statutory applicability
+        </label>
+      </section>
 
       <section className="workforce-category-page-access">
         <div>

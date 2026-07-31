@@ -19,6 +19,15 @@ import { resolveOperatingContext } from "@/lib/ops-pulse/operating-context";
 import { operatingModeForLocation } from "@/lib/ops-pulse/operating-context";
 import { loadPaymentNotificationSnapshot } from "@/lib/payment-notification-counts";
 import { opsNavItemsForMode } from "@/lib/ops-pulse/navigation";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+
+const workforceCategoryRoutes: Record<string, { code: string; href: string }> = {
+  employees: { code: "employees", href: "/employees" },
+  field_executives: { code: "delivery_associates", href: "/field-executive" },
+  contractors: { code: "contractors", href: "/contractors" },
+  vendors: { code: "vendors", href: "/vendors" },
+  workers: { code: "workers", href: "/workers" }
+};
 
 export async function AppShell({ children, active, pageCode }: { children: ReactNode; active: string; pageCode?: string }) {
   const authorization = await getAuthorization();
@@ -34,9 +43,37 @@ export async function AppShell({ children, active, pageCode }: { children: React
     )
     : { locations: [], error: null };
   const opsContext = resolveOperatingContext(opsLocationsResult.locations);
-  const shellNavItems = isOpsHost
+  const baseShellNavItems = isOpsHost
     ? opsNavItemsForMode(opsContext.mode)
     : navItems.map((item) => item.code === "ops_pulse" && opsAppUrl ? { ...item, href: opsAppUrl } : item);
+  let workforceCategories: Array<{ code: string; name: string }> = [];
+  if (!isOpsHost && supabaseAdmin && authorization.companyId) {
+    const categoryResult = await supabaseAdmin
+      .from("workforce_categories")
+      .select("code, name")
+      .eq("company_id", authorization.companyId)
+      .eq("is_active", true)
+      .order("sort_order")
+      .order("name");
+    workforceCategories = categoryResult.data ?? [];
+  }
+  const shellNavItems = baseShellNavItems.map((item) => {
+    if (item.code !== "onboard" || !workforceCategories.length) return item;
+    const categoryChildren = workforceCategories.map((category) => {
+      const known = workforceCategoryRoutes[category.code];
+      return known
+        ? { code: known.code, label: category.name, href: known.href }
+        : { label: category.name, href: `/people/all?category=${encodeURIComponent(category.code)}` };
+    });
+    return {
+      ...item,
+      children: [
+        { label: "All People", href: "/people/all" },
+        ...categoryChildren,
+        { code: "people_review", label: "Profile Review", href: "/people/review" }
+      ]
+    };
+  });
 
   const activeItem = shellNavItems.find((item) => item.label === active || item.children?.some((child) => child.label === active));
   const currentPageCode = pageCode ?? activeItem?.code;

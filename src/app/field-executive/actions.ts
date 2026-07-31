@@ -139,6 +139,7 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
   const emergencyContactNumber = optional(formData.get("emergency_contact_number"))?.replace(/\D/g, "") ?? null;
   const emergencyContactRelation = optional(formData.get("emergency_contact_relation"));
   const isActive = optional(formData.get("is_active")) !== "false";
+  const statutoryApplicability = formData.getAll("statutory_applicability").map(String).filter(Boolean);
 
   if (!/^\d{6,15}$/.test(mobile)) throw new Error("Mobile number must contain 6 to 15 digits.");
   if (biometricId && !/^\d{1,20}$/.test(biometricId)) throw new Error("Biometric enrolment ID must be numeric.");
@@ -201,6 +202,7 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
       emergency_contact_name: emergencyContactName,
       emergency_contact_number: emergencyContactNumber,
       emergency_contact_relation: emergencyContactRelation,
+      statutory_applicability: statutoryApplicability.length ? statutoryApplicability : ["not_applicable"],
       is_active: isActive
     }
   };
@@ -267,6 +269,9 @@ export async function createFieldExecutive(formData: FormData) {
       biometric_id: biometricId,
       dropx_id: dropxId,
       created_by: authorization.userId,
+      statutory_applicability: formData.getAll("statutory_applicability").map(String).filter(Boolean).length
+        ? formData.getAll("statutory_applicability").map(String).filter(Boolean)
+        : ["not_applicable"],
       is_active: true
     }, companyId);
     const executiveSelect = "id, stations (station_code, station_name, providers (name))";
@@ -435,7 +440,8 @@ export async function updateFieldExecutive(formData: FormData) {
       location_id: payload.location_id,
       designation: payload.designation,
       biometric_id: payload.biometric_id,
-      is_active: payload.is_active
+      is_active: payload.is_active,
+      statutory_applicability: payload.statutory_applicability
     };
 
     const documentPayload: Record<string, string> = {};

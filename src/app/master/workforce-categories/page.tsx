@@ -25,6 +25,11 @@ function loadFlash() {
 
 export const dynamic = "force-dynamic";
 
+function isMissingStatutoryColumn(message?: string) {
+  const text = String(message ?? "").toLowerCase();
+  return text.includes("statutory_enabled") && (text.includes("column") || text.includes("schema cache"));
+}
+
 export default async function WorkforceCategoriesPage({
   searchParams
 }: {
@@ -33,14 +38,29 @@ export default async function WorkforceCategoriesPage({
   const authorization = await requirePagePermission("designations", "access");
   const companyId = requireCompanyId(authorization);
   const permission = authorization.permissions.designations;
-  const result = supabaseAdmin
+  let result = supabaseAdmin
     ? await supabaseAdmin
       .from("workforce_categories")
-      .select("id, code, name, profile_field_rules, app_page_access, is_system, is_active")
+      .select("id, code, name, profile_field_rules, app_page_access, statutory_enabled, is_system, is_active")
       .eq("company_id", companyId)
       .order("sort_order")
       .order("name")
     : { data: null, error: { message: "Supabase service role key is not configured." } };
+  if (supabaseAdmin && isMissingStatutoryColumn(result.error?.message)) {
+    const fallback = await supabaseAdmin
+      .from("workforce_categories")
+      .select("id, code, name, profile_field_rules, app_page_access, is_system, is_active")
+      .eq("company_id", companyId)
+      .order("sort_order")
+      .order("name");
+    result = {
+      ...fallback,
+      data: (fallback.data ?? []).map((category) => ({
+        ...category,
+        statutory_enabled: category.code === "employees"
+      }))
+    } as typeof result;
+  }
   const categories = (result.data ?? []) as WorkforceCategoryInitial[];
   const query = String(searchParams?.q ?? "").trim().toLowerCase();
   const filtered = categories.filter((category) => `${category.code} ${category.name}`.toLowerCase().includes(query));
@@ -90,12 +110,13 @@ export default async function WorkforceCategoriesPage({
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Code</th><th>Category</th><th>App pages</th><th>Type</th><th>Status</th><th>Action</th></tr></thead>
+              <thead><tr><th>Code</th><th>Category</th><th>Statutory</th><th>App pages</th><th>Type</th><th>Status</th><th>Action</th></tr></thead>
               <tbody>
                 {filtered.map((category) => (
                   <tr key={category.id}>
                     <td><strong>{category.code}</strong></td>
                     <td>{category.name}</td>
+                    <td>{category.statutory_enabled ? "Enabled" : "Not enabled"}</td>
                     <td>{[
                       ...(category.app_page_access ?? [])
                         .filter((page) => page === "dashboard" || page === "attendance")

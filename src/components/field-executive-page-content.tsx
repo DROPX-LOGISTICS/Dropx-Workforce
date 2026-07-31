@@ -12,7 +12,7 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { countryCodeOptions } from "@/lib/country-codes";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { loadWorkforceCategoryRules } from "@/lib/workforce-category-rules";
+import { loadWorkforceCategoryRules, loadWorkforceCategoryStatutoryEnabled } from "@/lib/workforce-category-rules";
 import {
   nonEmployeeConfigForRoute,
   type NonEmployeeRoute
@@ -53,6 +53,7 @@ type ExecutiveRow = {
   is_active: boolean;
   onboarding_status?: string | null;
   profile_return_remarks?: string | null;
+  statutory_applicability?: string[] | null;
   location_id: string;
   designation: string | null;
   gender: string | null;
@@ -343,7 +344,8 @@ function FieldExecutiveForm({
   mode,
   returnPath,
   submitLabel,
-  dashboardRules
+  dashboardRules,
+  statutoryEnabled
 }: {
   action: (formData: FormData) => Promise<void>;
   executive?: ExecutiveRow | null;
@@ -353,6 +355,7 @@ function FieldExecutiveForm({
   returnPath: FieldExecutiveRoute;
   submitLabel?: string;
   dashboardRules: { enabled: string[]; required: string[] };
+  statutoryEnabled: boolean;
 }) {
   const workforceConfig = nonEmployeeConfigForRoute(returnPath);
   const optionalEditFields = mode === "edit" &&
@@ -385,6 +388,26 @@ function FieldExecutiveForm({
         locationOptions={locationOptions}
         required={!optionalEditFields}
       />
+      {statutoryEnabled ? (
+        <fieldset className="span-3 statutory-fieldset">
+          <legend>Statutory applicability</legend>
+          {[
+            ["not_applicable", "Not Applicable"],
+            ["pf", "PF"],
+            ["esi", "ESI"]
+          ].map(([value, label]) => (
+            <label className="checkbox-line" key={value}>
+              <input
+                defaultChecked={(executive?.statutory_applicability ?? ["not_applicable"]).includes(value)}
+                name="statutory_applicability"
+                type="checkbox"
+                value={value}
+              />
+              {label}
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
       <label hidden={!fieldEnabled("gender")}>Gender
         <SearchableSelect name="gender" options={genderOptions} defaultValue={executive?.gender} placeholder="Select gender" />
       </label>
@@ -460,12 +483,14 @@ function AddFieldExecutiveForm({
   locationOptions,
   entityLabel,
   returnPath,
-  values
+  values,
+  statutoryEnabled
 }: {
   designationOptions: ScopedDesignationOption[];
   entityLabel: string;
   locationOptions: ScopedLocationOption[];
   returnPath: FieldExecutiveRoute;
+  statutoryEnabled: boolean;
   values?: FieldExecutiveAddFormValues;
 }) {
   return (
@@ -490,6 +515,21 @@ function AddFieldExecutiveForm({
         locationName="location_id"
         locationOptions={locationOptions}
       />
+      {statutoryEnabled ? (
+        <fieldset className="span-3 statutory-fieldset">
+          <legend>Statutory applicability</legend>
+          {[
+            ["not_applicable", "Not Applicable"],
+            ["pf", "PF"],
+            ["esi", "ESI"]
+          ].map(([value, label]) => (
+            <label className="checkbox-line" key={value}>
+              <input defaultChecked={value === "not_applicable"} name="statutory_applicability" type="checkbox" value={value} />
+              {label}
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
       <div className="span-2 field-executive-location-submit">
         <div className="form-actions align-right field-executive-submit-slot">
           <SubmitButton
@@ -611,6 +651,7 @@ async function loadFieldExecutiveData(
         is_active,
         onboarding_status,
         profile_return_remarks,
+        statutory_applicability,
         location_id,
         designation,
         gender,
@@ -778,6 +819,11 @@ export async function FieldExecutivePageContent({
     designations[0]?.profile_field_rules,
     workforceConfig.designationCategory
   );
+  const statutoryEnabled = await loadWorkforceCategoryStatutoryEnabled(
+    requireCompanyId(authorization),
+    workforceConfig.designationCategory,
+    false
+  );
   const activeMessage = error ?? errorMessage ?? notice;
   const needsOperationModeMigration = Boolean(activeMessage?.toLowerCase().includes("operation_mode_id"));
   const locationOptions = locations.map((location) => ({
@@ -824,7 +870,7 @@ export async function FieldExecutivePageContent({
       {permission.canAdd ? (
         <section className="panel">
           <div className="panel-head"><h2>{addTitle}</h2></div>
-          <AddFieldExecutiveForm designationOptions={designationOptions} entityLabel={entityLabel} locationOptions={locationOptions} returnPath={returnPath} values={addFormValues} />
+          <AddFieldExecutiveForm designationOptions={designationOptions} entityLabel={entityLabel} locationOptions={locationOptions} returnPath={returnPath} statutoryEnabled={statutoryEnabled} values={addFormValues} />
         </section>
       ) : null}
 
@@ -865,6 +911,7 @@ export async function FieldExecutivePageContent({
               locationOptions={locationOptions}
               mode="edit"
               returnPath={returnPath}
+              statutoryEnabled={statutoryEnabled}
             />
             {editExecutive.onboarding_status === "under_review" ? (
               <section className="profile-review-panel">

@@ -73,12 +73,20 @@ export async function createWorkforceCategory(formData: FormData) {
       name: required(formData.get("name"), "Category name"),
       profile_field_rules: categoryRules(formData),
       app_page_access: appPageAccess(formData),
+      statutory_enabled: formData.get("statutory_enabled") === "true",
       is_system: false,
       is_active: true
     }, companyId));
     if (error) throw new Error(error.message);
     revalidatePath("/master/workforce-categories");
     revalidatePath("/master/designations");
+    revalidatePath("/settings/dropx-id-generation");
+    revalidatePath("/people/all");
+    revalidatePath("/employees");
+    revalidatePath("/field-executive");
+    revalidatePath("/contractors");
+    revalidatePath("/vendors");
+    revalidatePath("/workers");
     categoryRedirect({ notice: "Workforce category added." });
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
@@ -109,6 +117,7 @@ export async function updateWorkforceCategory(formData: FormData) {
         name: required(formData.get("name"), "Category name"),
         profile_field_rules: categoryRules(formData),
         app_page_access: appPageAccess(formData),
+        statutory_enabled: formData.get("statutory_enabled") === "true",
         is_active: clean(formData.get("status")) !== "inactive",
         updated_at: new Date().toISOString()
       })
@@ -117,6 +126,13 @@ export async function updateWorkforceCategory(formData: FormData) {
     if (error) throw new Error(error.message);
     revalidatePath("/master/workforce-categories");
     revalidatePath("/master/designations");
+    revalidatePath("/settings/dropx-id-generation");
+    revalidatePath("/people/all");
+    revalidatePath("/employees");
+    revalidatePath("/field-executive");
+    revalidatePath("/contractors");
+    revalidatePath("/vendors");
+    revalidatePath("/workers");
     categoryRedirect({ notice: "Workforce category updated." });
   } catch (error) {
     if (isNextRedirectError(error)) throw error;

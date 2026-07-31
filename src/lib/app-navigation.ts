@@ -46,6 +46,7 @@ export const navItems: NavItem[] = [
     label: "People",
     icon: "+",
     children: [
+      { label: "All People", href: "/people/all" },
       { code: "delivery_associates", label: "Field Executive", href: "/field-executive" },
       { code: "employees", label: "Employees", href: "/employees" },
       { code: "contractors", label: "Independent Contractor", href: "/contractors" },

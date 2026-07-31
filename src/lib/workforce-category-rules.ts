@@ -26,3 +26,20 @@ export async function loadWorkforceCategoryRules(
   }
   return normalizeProfileFieldRules(fallbackDesignationRules)[fallbackCategory];
 }
+
+export async function loadWorkforceCategoryStatutoryEnabled(
+  companyId: string,
+  categoryCode: string,
+  fallback = categoryCode === "employees"
+) {
+  if (!supabaseAdmin) return fallback;
+  const result = await supabaseAdmin
+    .from("workforce_categories")
+    .select("statutory_enabled")
+    .eq("company_id", companyId)
+    .eq("code", categoryCode)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (result.error || !result.data) return fallback;
+  return Boolean(result.data.statutory_enabled);
+}

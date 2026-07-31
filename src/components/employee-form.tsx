@@ -18,6 +18,7 @@ type DesignationSelectOption = SearchableSelectOption & {
 type EmployeeFormProps = {
   action: (formData: FormData) => void;
   dashboardRules: { enabled: string[]; required: string[] };
+  statutoryEnabled?: boolean;
   designationOptions: DesignationSelectOption[];
   employee?: {
     id: string;
@@ -124,7 +125,7 @@ function StatutoryMultiSelect({
   );
 }
 
-export function EmployeeForm({ action, dashboardRules, designationOptions, employee, locationOptions, mode = "create" }: EmployeeFormProps) {
+export function EmployeeForm({ action, dashboardRules, designationOptions, employee, locationOptions, mode = "create", statutoryEnabled = false }: EmployeeFormProps) {
   const [selectedLocationId, setSelectedLocationId] = useState(employee?.location_id ?? "");
   const [selectedDesignationId, setSelectedDesignationId] = useState(employee?.designation_id ?? "");
   const [selectedStatutory, setSelectedStatutory] = useState<string[]>(
@@ -201,10 +202,10 @@ export function EmployeeForm({ action, dashboardRules, designationOptions, emplo
           value={selectedDesignationId}
         />
       </label>
-      <label className="span-2">
+      {statutoryEnabled ? <label className="span-2">
         Statutory applicability
         <StatutoryMultiSelect selected={selectedStatutory} onChange={setSelectedStatutory} />
-      </label>
+      </label> : null}
       {isEdit ? (
         <>
           {fieldEnabled("gender") ? <label>Gender

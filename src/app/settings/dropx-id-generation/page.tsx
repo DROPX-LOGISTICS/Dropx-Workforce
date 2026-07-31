@@ -36,13 +36,18 @@ type OptionRow = {
   station_name?: string | null;
 };
 
-const categories = [
-  { id: "employee", code: "EMP", name: "Employees" },
-  { id: "field_executive", code: "FE", name: "Field executives" },
-  { id: "vendor", code: "VEN", name: "Vendors" },
-  { id: "contractor", code: "IC", name: "Independent Contractor" },
-  { id: "worker", code: "WRK", name: "Workers" }
-];
+const legacyCategoryKeys: Record<string, string> = {
+  employees: "employee",
+  field_executives: "field_executive",
+  vendors: "vendor",
+  contractors: "contractor",
+  workers: "worker"
+};
+
+function idCategoryCode(code: string) {
+  const compact = code.replace(/[^a-z0-9]/gi, "").toUpperCase();
+  return compact.slice(0, 5) || "CAT";
+}
 
 const settingCards: Array<{ type: SettingType; title: string; subtitle: string; defaultPrefix: string }> = [
   {
@@ -81,10 +86,11 @@ async function loadData(companyId: string) {
       companyLabel: "Company",
       locations: [] as OptionRow[],
       models: [] as OptionRow[],
-      settings: [] as SettingRow[]
+      settings: [] as SettingRow[],
+      categories: [] as Array<{ id: string; code: string; name: string }>
     };
   }
-  const [settingsResult, companyResult, locationsResult, modelsResult, designationsResult] = await Promise.all([
+  const [settingsResult, companyResult, locationsResult, modelsResult, designationsResult, categoriesResult] = await Promise.all([
     (supabaseAdmin.from("dropx_id_generation_settings") as any)
       .select("id, setting_type, scope_type, configs, is_active, is_locked")
       .eq("company_id", companyId)
@@ -92,9 +98,10 @@ async function loadData(companyId: string) {
     supabaseAdmin.from("companies").select("name, code").eq("id", companyId).maybeSingle(),
     supabaseAdmin.from("stations").select("id, station_code, station_name").eq("company_id", companyId).eq("is_active", true).order("station_code"),
     supabaseAdmin.from("location_models").select("id, code, name").eq("company_id", companyId).eq("is_active", true).order("code"),
-    supabaseAdmin.from("designations").select("id, code, name").eq("company_id", companyId).eq("is_active", true).order("code")
+    supabaseAdmin.from("designations").select("id, code, name").eq("company_id", companyId).eq("is_active", true).order("code"),
+    supabaseAdmin.from("workforce_categories").select("code, name").eq("company_id", companyId).eq("is_active", true).order("sort_order").order("name")
   ]);
-  const error = settingsResult.error?.message || companyResult.error?.message || locationsResult.error?.message || modelsResult.error?.message || designationsResult.error?.message || null;
+  const error = settingsResult.error?.message || companyResult.error?.message || locationsResult.error?.message || modelsResult.error?.message || designationsResult.error?.message || categoriesResult.error?.message || null;
   const companyRow = companyResult.data as { name?: string | null; code?: string | null } | null;
   return {
     designations: (designationsResult.data ?? []) as OptionRow[],
@@ -102,7 +109,12 @@ async function loadData(companyId: string) {
     companyLabel: companyRow?.name || companyRow?.code || "Company",
     locations: (locationsResult.data ?? []) as OptionRow[],
     models: (modelsResult.data ?? []) as OptionRow[],
-    settings: (settingsResult.data ?? []) as SettingRow[]
+    settings: (settingsResult.data ?? []) as SettingRow[],
+    categories: (categoriesResult.data ?? []).map((category) => ({
+      id: legacyCategoryKeys[category.code] ?? category.code,
+      code: idCategoryCode(category.code),
+      name: category.name
+    }))
   };
 }
 
@@ -146,7 +158,7 @@ export default async function DropxIdGenerationSettingsPage({ searchParams }: { 
 
       <IdGenerationForm
         canEdit={permission.canAdd || permission.canEdit}
-        categories={categories}
+        categories={data.categories}
         companyLabel={data.companyLabel}
         defaultPrefix={currentCard.defaultPrefix}
         designations={data.designations}

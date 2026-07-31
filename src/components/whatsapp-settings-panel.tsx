@@ -650,13 +650,14 @@ export function WhatsAppSettingsPanel({
                       {variables.length ? variables.map((variable) => (
                         <label key={variable.key}>{variable.label}
                           <SearchableSelect
-                            defaultValue={mappings[variable.key] ?? ""}
                             disabled={!canEdit || !onboardingEnabled}
+                            key={`${onboardingTarget || configuring}-${variable.key}`}
                             name={`mapping_${variable.key.replaceAll(".", "_")}`}
                             onValueChange={(value) => setMappings((current) => ({ ...current, [variable.key]: value }))}
                             options={dataOptions}
                             placeholder="Map to message data"
                             required
+                            value={mappings[variable.key] ?? ""}
                           />
                         </label>
                       )) : <p className="subtle">This template has no variables.</p>}

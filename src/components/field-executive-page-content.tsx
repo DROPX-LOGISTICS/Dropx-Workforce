@@ -838,13 +838,22 @@ export async function FieldExecutivePageContent({
       .join(" - ") || location.station_name || undefined,
     modelId: location.location_model_id ?? null
   }));
-  const designationOptions = designations.map((designation) => ({
+  const designationOptions = await Promise.all(designations.map(async (designation) => ({
     value: designation.name,
     label: designation.name,
     helper: designation.code,
     modelIds: designation.model_ids ?? [],
-    dashboardRules: categoryRules.dashboard
-  }));
+    dashboardRules: (await loadWorkforceCategoryRules(
+      requireCompanyId(authorization),
+      workforceConfig.designationCategory,
+      designation.profile_field_rules,
+      workforceConfig.designationCategory
+    )).dashboard
+  })));
+  const viewRules = designationOptions.find((option) => option.value === viewExecutive?.designation)?.dashboardRules
+    ?? categoryRules.dashboard;
+  const editRules = designationOptions.find((option) => option.value === editExecutive?.designation)?.dashboardRules
+    ?? categoryRules.dashboard;
 
   return (
     <AppShell active={activeLabel} pageCode={pageCode}>
@@ -905,7 +914,7 @@ export async function FieldExecutivePageContent({
               </div>
               <PendingLink className="icon-button" href={returnPath} scroll={false} aria-label={`Close ${entityLabel.toLowerCase()} details`}>x</PendingLink>
             </div>
-            <FieldExecutiveDetails dashboardRules={categoryRules.dashboard} executive={viewExecutive} />
+            <FieldExecutiveDetails dashboardRules={viewRules} executive={viewExecutive} />
           </section>
         </div>
       ) : null}
@@ -922,7 +931,7 @@ export async function FieldExecutivePageContent({
             </div>
             <FieldExecutiveForm
               action={updateFieldExecutive}
-              dashboardRules={categoryRules.dashboard}
+              dashboardRules={editRules}
               designationOptions={designationOptions}
               executive={editExecutive}
               locationOptions={locationOptions}

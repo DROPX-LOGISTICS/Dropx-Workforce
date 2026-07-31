@@ -429,18 +429,25 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
   const employeeCategoryRules = await loadWorkforceCategoryRules(
     companyId,
     "employees",
-    designations[0]?.profile_field_rules,
+    undefined,
     "employees"
   );
   const employeeStatutoryEnabled = await loadWorkforceCategoryStatutoryEnabled(companyId, "employees", true);
   const employeeDirectActivate = await loadWorkforceCategoryDirectActivate(companyId, "employees");
-  const designationOptions = designations.map((designation) => ({
+  const designationOptions = await Promise.all(designations.map(async (designation) => ({
     value: designation.id,
     label: designation.name,
     helper: designation.code,
     modelIds: designation.model_ids ?? [],
-    dashboardRules: employeeCategoryRules.dashboard
-  }));
+    dashboardRules: (await loadWorkforceCategoryRules(
+      companyId,
+      "employees",
+      designation.profile_field_rules,
+      "employees"
+    )).dashboard
+  })));
+  const viewRules = designationOptions.find((option) => option.value === viewEmployee?.designation_id)?.dashboardRules
+    ?? employeeCategoryRules.dashboard;
 
   return (
     <AppShell active="Employees" pageCode="employees">
@@ -518,7 +525,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
               </div>
               <PendingLink className="icon-button" href="/employees" scroll={false} aria-label="Close employee details">x</PendingLink>
             </div>
-            <EmployeeDetails dashboardRules={employeeCategoryRules.dashboard} employee={viewEmployee} />
+            <EmployeeDetails dashboardRules={viewRules} employee={viewEmployee} />
           </section>
         </div>
       ) : null}

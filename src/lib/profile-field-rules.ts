@@ -15,15 +15,9 @@ export type ProfileFieldChannelRules = {
   dashboard: ProfileFieldRuleSet;
 };
 
-export type DesignationProfileFieldRules = {
-  employees: ProfileFieldChannelRules;
-  field_executives: ProfileFieldChannelRules;
-  contractors: ProfileFieldChannelRules;
-  vendors: ProfileFieldChannelRules;
-  workers: ProfileFieldChannelRules;
-};
+export type DesignationProfileFieldRules = Record<string, ProfileFieldChannelRules>;
 
-export type ProfileFieldRuleCategory = keyof DesignationProfileFieldRules;
+export type ProfileFieldRuleCategory = string;
 
 export const workforceProfileFields: ProfileFieldRule[] = [
   { key: "gender", label: "Gender", group: "Personal details", kind: "select" },
@@ -112,6 +106,40 @@ export function normalizeProfileFieldRules(value: unknown): DesignationProfileFi
     contractors: normalizeChannelRules(record.contractors ?? legacyNonEmployeeRules, fieldExecutiveProfileFields),
     vendors: normalizeChannelRules(record.vendors ?? legacyNonEmployeeRules, fieldExecutiveProfileFields),
     workers: normalizeChannelRules(record.workers ?? legacyNonEmployeeRules, fieldExecutiveProfileFields)
+  };
+}
+
+export function profileFieldRulesForCategory(
+  value: unknown,
+  categoryCode: string,
+  fallbackCategory = categoryCode
+): ProfileFieldChannelRules {
+  const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const legacyNonEmployeeRules = record.field_executives;
+  const categoryValue = record[categoryCode]
+    ?? (categoryCode === "contractors" || categoryCode === "vendors" || categoryCode === "workers"
+      ? legacyNonEmployeeRules
+      : record[fallbackCategory]);
+  return normalizeChannelRules(categoryValue, workforceProfileFields);
+}
+
+export function intersectProfileFieldChannelRules(
+  categoryRules: ProfileFieldChannelRules,
+  designationRules: ProfileFieldChannelRules
+): ProfileFieldChannelRules {
+  const intersect = (left: string[], right: string[]) => {
+    const rightSet = new Set(right);
+    return left.filter((key) => rightSet.has(key));
+  };
+  return {
+    dropx_one: {
+      enabled: intersect(categoryRules.dropx_one.enabled, designationRules.dropx_one.enabled),
+      required: intersect(categoryRules.dropx_one.required, designationRules.dropx_one.required)
+    },
+    dashboard: {
+      enabled: intersect(categoryRules.dashboard.enabled, designationRules.dashboard.enabled),
+      required: intersect(categoryRules.dashboard.required, designationRules.dashboard.required)
+    }
   };
 }
 

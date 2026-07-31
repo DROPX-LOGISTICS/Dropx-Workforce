@@ -1,6 +1,7 @@
 import {
   normalizeCategoryProfileFieldRules,
-  normalizeProfileFieldRules,
+  intersectProfileFieldChannelRules,
+  profileFieldRulesForCategory,
   type ProfileFieldChannelRules,
   type ProfileFieldRuleCategory
 } from "@/lib/profile-field-rules";
@@ -21,10 +22,15 @@ export async function loadWorkforceCategoryRules(
       .eq("is_active", true)
       .maybeSingle();
     if (!result.error && result.data) {
-      return normalizeCategoryProfileFieldRules(result.data.profile_field_rules);
+      const categoryRules = normalizeCategoryProfileFieldRules(result.data.profile_field_rules);
+      if (fallbackDesignationRules == null) return categoryRules;
+      return intersectProfileFieldChannelRules(
+        categoryRules,
+        profileFieldRulesForCategory(fallbackDesignationRules, categoryCode, fallbackCategory)
+      );
     }
   }
-  return normalizeProfileFieldRules(fallbackDesignationRules)[fallbackCategory];
+  return profileFieldRulesForCategory(fallbackDesignationRules, categoryCode, fallbackCategory);
 }
 
 export async function loadWorkforceCategoryStatutoryEnabled(

@@ -10,9 +10,11 @@ import {
 import { SubmitButton } from "@/components/submit-button";
 import { normalizeDesignationCategories, type DesignationCategory } from "@/lib/designation-categories";
 import {
+  profileFieldRulesForCategory,
   type ProfileFieldChannelRules,
   type ProfileFieldRule,
-  type ProfileFieldRuleSet
+  type ProfileFieldRuleSet,
+  workforceProfileFields
 } from "@/lib/profile-field-rules";
 
 type ProviderOption = {
@@ -384,7 +386,19 @@ export function DesignationForm({
       </section>
       {!selectedCategories.length ? (
         <div className="designation-field-rule-empty">Select one or more workforce categories.</div>
-      ) : null}
+      ) : (
+        <div className={`designation-field-rule-grid ${selectedCategories.length === 1 ? "single" : ""}`}>
+          {selectedCategories.map((category) => (
+            <FieldRuleMatrix
+              fields={workforceProfileFields}
+              key={category}
+              namePrefix={category}
+              rules={profileFieldRulesForCategory(initial?.profile_field_rules, category)}
+              title={`${categories.find((option) => option.code === category)?.name ?? category} fields`}
+            />
+          ))}
+        </div>
+      )}
       <div className="form-actions right">
         <SubmitButton className="button" pendingText="Saving">{submitLabel}</SubmitButton>
       </div>

@@ -227,8 +227,22 @@ export async function createFieldExecutive(formData: FormData) {
     const designation = required(formData.get("designation"), "Designation");
     const directActivate = await loadWorkforceCategoryDirectActivate(companyId, config.designationCategory);
     const directPayload = directActivate ? normalizeFieldExecutivePayload(formData).payload : null;
+    const designationRuleResult = directActivate
+      ? await supabaseAdmin.from("designations")
+        .select("profile_field_rules")
+        .eq("company_id", companyId)
+        .eq("name", designation)
+        .eq("is_active", true)
+        .maybeSingle()
+      : null;
+    if (designationRuleResult?.error) throw new Error(designationRuleResult.error.message);
     const dashboardRules = directActivate
-      ? (await loadWorkforceCategoryRules(companyId, config.designationCategory, undefined, config.designationCategory)).dashboard
+      ? (await loadWorkforceCategoryRules(
+        companyId,
+        config.designationCategory,
+        designationRuleResult?.data?.profile_field_rules,
+        config.designationCategory
+      )).dashboard
       : { enabled: [] as string[], required: [] as string[] };
 
     if (directPayload) {

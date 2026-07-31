@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
+import { normalizeCategoryProfileFieldRules } from "@/lib/profile-field-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 function clean(value: FormDataEntryValue | null) {
@@ -75,6 +76,22 @@ function appPageAccess(formData: FormData) {
   ));
 }
 
+function profileFieldRules(formData: FormData, categories: string[]) {
+  return Object.fromEntries(categories.map((category) => [
+    category,
+    normalizeCategoryProfileFieldRules({
+      dropx_one: {
+        enabled: formData.getAll(`${category}_dropx_one_enabled_fields`),
+        required: formData.getAll(`${category}_dropx_one_required_fields`)
+      },
+      dashboard: {
+        enabled: formData.getAll(`${category}_dashboard_enabled_fields`),
+        required: formData.getAll(`${category}_dashboard_required_fields`)
+      }
+    })
+  ]));
+}
+
 export async function createDesignation(formData: FormData) {
   const authorization = await requirePagePermission("designations", "add");
   const companyId = requireCompanyId(authorization);
@@ -83,13 +100,15 @@ export async function createDesignation(formData: FormData) {
 
     const code = required(formData.get("code"), "Designation code").toUpperCase();
     const name = required(formData.get("name"), "Designation name");
+    const categories = onboardingCategories(formData);
     const { error } = await supabaseAdmin.from("designations").insert(withCompany({
       code,
       name,
       provider_ids: providerIds(formData),
       model_ids: modelIds(formData),
       location_ids: [],
-      onboarding_categories: onboardingCategories(formData),
+      onboarding_categories: categories,
+      profile_field_rules: profileFieldRules(formData, categories),
       app_page_access: appPageAccess(formData),
       is_active: true
     }, companyId));
@@ -113,6 +132,7 @@ export async function updateDesignation(formData: FormData) {
     const code = required(formData.get("code"), "Designation code").toUpperCase();
     const name = required(formData.get("name"), "Designation name");
     const status = clean(formData.get("status")) === "inactive" ? false : true;
+    const categories = onboardingCategories(formData);
 
     const { error } = await supabaseAdmin
       .from("designations")
@@ -122,7 +142,8 @@ export async function updateDesignation(formData: FormData) {
         provider_ids: providerIds(formData),
         model_ids: modelIds(formData),
         location_ids: [],
-        onboarding_categories: onboardingCategories(formData),
+        onboarding_categories: categories,
+        profile_field_rules: profileFieldRules(formData, categories),
         app_page_access: appPageAccess(formData),
         is_active: status,
         updated_at: new Date().toISOString()

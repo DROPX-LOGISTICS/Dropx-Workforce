@@ -149,8 +149,9 @@ export function EmployeeForm({ action, dashboardRules, designationOptions, direc
     ]
     : filteredDesignationOptions;
   const designationDisabled = !selectedLocationId || !effectiveDesignationOptions.length;
-  const fieldEnabled = (key: string) => dashboardRules.enabled.includes(key);
-  const fieldRequired = (key: string) => directActivate && !isEdit && dashboardRules.required.includes(key);
+  const effectiveRules = designationOptions.find((option) => option.value === selectedDesignationId)?.dashboardRules ?? dashboardRules;
+  const fieldEnabled = (key: string) => effectiveRules.enabled.includes(key);
+  const fieldRequired = (key: string) => directActivate && !isEdit && effectiveRules.required.includes(key);
   const hasPf = selectedStatutory.includes("pf");
   const hasEsi = selectedStatutory.includes("esi");
 

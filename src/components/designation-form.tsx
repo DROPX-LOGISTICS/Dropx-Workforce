@@ -39,9 +39,77 @@ type DesignationInitial = {
   model_ids?: string[] | null;
   onboarding_categories?: string[] | null;
   app_page_access?: string[] | null;
+  onboarding_role_ids?: string[] | null;
   profile_field_rules?: unknown;
   is_active: boolean;
 };
+
+export type OnboardingRoleOption = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+function OnboardingRoleMultiSelect({ options, selectedValues }: { options: OnboardingRoleOption[]; selectedValues: string[] }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState(selectedValues);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const filtered = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    return options.filter((option) => !term || `${option.name} ${option.code}`.toLowerCase().includes(term));
+  }, [options, query]);
+
+  useEffect(() => {
+    function close(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, []);
+
+  function toggle(id: string) {
+    setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  }
+
+  function toggleAllFiltered() {
+    const ids = filtered.map((option) => option.id);
+    const allSelected = ids.length > 0 && ids.every((id) => selectedSet.has(id));
+    setSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : Array.from(new Set([...current, ...ids])));
+  }
+
+  const labels = options.filter((option) => selectedSet.has(option.id));
+  return (
+    <div className="multi-select" ref={rootRef}>
+      {selected.map((id) => <input key={id} name="onboarding_role_ids" type="hidden" value={id} />)}
+      <button className={`multi-select-trigger ${open ? "open" : ""}`} onClick={() => setOpen((value) => !value)} type="button">
+        <span className="multi-select-summary">{labels.length ? labels.map((role) => role.name).join(", ") : "All dashboard roles"}</span>
+        <ChevronDown aria-hidden="true" className="multi-select-chevron" size={16} strokeWidth={2.4} />
+      </button>
+      {open ? (
+        <div className="multi-select-menu">
+          <div className="multi-select-search">
+            <input className="field multi-select-search-field" onChange={(event) => setQuery(event.target.value)} placeholder="Search user role" value={query} />
+          </div>
+          <label className="multi-select-all">
+            <input checked={filtered.length > 0 && filtered.every((role) => selectedSet.has(role.id))} onChange={toggleAllFiltered} type="checkbox" />
+            <span>Select all filtered</span>
+            <small>{filtered.length} roles</small>
+          </label>
+          <div className="multi-select-options">
+            {filtered.map((role) => (
+              <label className="multi-select-option" key={role.id}>
+                <input checked={selectedSet.has(role.id)} onChange={() => toggle(role.id)} type="checkbox" />
+                <span><strong>{role.name}</strong><small>{role.code}</small></span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export type WorkforceCategoryOption = {
   code: string;
@@ -325,6 +393,7 @@ export function DesignationForm({
   categories,
   initial,
   models,
+  roles,
   submitLabel = "Add designation"
 }: {
   action: (formData: FormData) => void;
@@ -332,6 +401,7 @@ export function DesignationForm({
   initial?: DesignationInitial | null;
   providers?: ProviderOption[];
   models: ModelOption[];
+  roles: OnboardingRoleOption[];
   submitLabel?: string;
 }) {
   const [selectedModels, setSelectedModels] = useState<string[]>(initial?.model_ids ?? []);
@@ -383,6 +453,13 @@ export function DesignationForm({
           <p className="subtle">A page is available only when enabled for both this designation and its workforce category. My Profile and Settings are always available.</p>
         </div>
         <AppPageAccessSelect initialPages={selectedPages} />
+      </section>
+      <section className="workforce-category-page-access">
+        <div>
+          <strong>Onboarding Access</strong>
+          <p className="subtle">Only users with the selected roles can onboard this designation. Leave empty for all roles. Owner always has access.</p>
+        </div>
+        <OnboardingRoleMultiSelect options={roles} selectedValues={initial?.onboarding_role_ids ?? []} />
       </section>
       {!selectedCategories.length ? (
         <div className="designation-field-rule-empty">Select one or more workforce categories.</div>

@@ -11,6 +11,7 @@ import { generateBiometricEnrolmentId } from "@/lib/biometric/ids";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
 import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
+import { requireDesignationOnboardingAccess } from "@/lib/designation-onboarding-access";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
 import { saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -227,20 +228,20 @@ export async function createFieldExecutive(formData: FormData) {
     const designation = required(formData.get("designation"), "Designation");
     const directActivate = await loadWorkforceCategoryDirectActivate(companyId, config.designationCategory);
     const directPayload = directActivate ? normalizeFieldExecutivePayload(formData).payload : null;
-    const designationRuleResult = directActivate
-      ? await supabaseAdmin.from("designations")
-        .select("profile_field_rules")
-        .eq("company_id", companyId)
-        .eq("name", designation)
-        .eq("is_active", true)
-        .maybeSingle()
-      : null;
-    if (designationRuleResult?.error) throw new Error(designationRuleResult.error.message);
+    const designationRuleResult = await supabaseAdmin.from("designations")
+      .select("id, profile_field_rules, onboarding_role_ids")
+      .eq("company_id", companyId)
+      .eq("name", designation)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (designationRuleResult.error) throw new Error(designationRuleResult.error.message);
+    if (!designationRuleResult.data) throw new Error("Selected designation is not available.");
+    requireDesignationOnboardingAccess(designationRuleResult.data, authorization);
     const dashboardRules = directActivate
       ? (await loadWorkforceCategoryRules(
         companyId,
         config.designationCategory,
-        designationRuleResult?.data?.profile_field_rules,
+        designationRuleResult.data.profile_field_rules,
         config.designationCategory
       )).dashboard
       : { enabled: [] as string[], required: [] as string[] };
@@ -781,7 +782,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
     const designationCodes = Array.from(new Set(rows.map((row) => row.designationCode)));
     const [locationsResult, designationsResult] = await Promise.all([
       supabaseAdmin.from("stations").select("id, station_code").eq("company_id", companyId).in("station_code", locationCodes),
-      supabaseAdmin.from("designations").select("id, code, name, onboarding_categories").eq("company_id", companyId).eq("is_active", true).in("code", designationCodes)
+      supabaseAdmin.from("designations").select("id, code, name, onboarding_categories, onboarding_role_ids").eq("company_id", companyId).eq("is_active", true).in("code", designationCodes)
     ]);
     if (locationsResult.error) throw new Error(locationsResult.error.message);
     if (designationsResult.error) throw new Error(designationsResult.error.message);
@@ -790,6 +791,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
     const designations = new Map((designationsResult.data ?? []).map((designation) => [String(designation.code).toUpperCase(), {
       id: String(designation.id),
       name: String(designation.name),
+      onboarding_role_ids: designation.onboarding_role_ids,
       workerCategory: config.category
     }]));
 
@@ -799,6 +801,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
       const designation = designations.get(row.designationCode);
       if (!locationId) throw new Error(`Row ${rowNumber}: Location ${row.locationCode} not found.`);
       if (!designation) throw new Error(`Row ${rowNumber}: Designation code ${row.designationCode} not found.`);
+      requireDesignationOnboardingAccess(designation, authorization);
       if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
         throw new Error(`Row ${rowNumber}: You do not have access to location ${row.locationCode}.`);
       }

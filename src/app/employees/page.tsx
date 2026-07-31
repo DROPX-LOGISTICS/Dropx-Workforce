@@ -5,9 +5,10 @@ import { EmployeeList } from "@/components/employee-list";
 import { PageHead } from "@/components/page-head";
 import { PendingLink } from "@/components/pending-link";
 import { SubmitButton } from "@/components/submit-button";
-import { requirePagePermission } from "@/lib/authorization";
+import { type AuthorizationContext, requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
+import { canOnboardDesignation } from "@/lib/designation-onboarding-access";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import { loadWorkforceCategoryDirectActivate, loadWorkforceCategoryRules, loadWorkforceCategoryStatutoryEnabled } from "@/lib/workforce-category-rules";
 import { bulkImportEmployees, createEmployee, reviewEmployeeProfile, updateEmployee } from "./actions";
@@ -27,6 +28,7 @@ type DesignationRow = {
   model_ids?: string[] | null;
   onboarding_categories?: string[] | null;
   profile_field_rules?: unknown;
+  onboarding_role_ids?: string[] | null;
   is_active: boolean;
 };
 
@@ -313,7 +315,7 @@ async function signedDocumentUrl(path: string | null | undefined) {
   return result.data?.signedUrl ?? "";
 }
 
-async function loadEmployees(companyId: string, locationScopeIds: string[], hasAllLocationAccess: boolean, editId?: string, viewId?: string) {
+async function loadEmployees(companyId: string, authorization: AuthorizationContext, editId?: string, viewId?: string) {
   if (!supabaseAdmin) {
     return {
       employees: [] as EmployeeRow[],
@@ -337,7 +339,7 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
       .order("station_code"),
     supabaseAdmin
       .from("designations")
-      .select("id, code, name, model_ids, onboarding_categories, profile_field_rules, is_active")
+      .select("id, code, name, model_ids, onboarding_categories, profile_field_rules, onboarding_role_ids, is_active")
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("name")
@@ -370,7 +372,7 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("name");
-    designationRows = (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...designation, model_ids: [], onboarding_categories: ["employees"], profile_field_rules: {} }));
+    designationRows = (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...designation, model_ids: [], onboarding_categories: ["employees"], profile_field_rules: {}, onboarding_role_ids: [] }));
     designationError = fallbackDesignationsResult.error;
   }
 
@@ -378,11 +380,11 @@ async function loadEmployees(companyId: string, locationScopeIds: string[], hasA
     return { employees: [], locations: [], designations: [], error: designationError.message };
   }
 
-  const allowedLocations = hasAllLocationAccess
+  const allowedLocations = authorization.hasAllLocationAccess
     ? (locationsResult.data ?? [])
-    : (locationsResult.data ?? []).filter((location) => locationScopeIds.includes(location.id) && !location.hide_from_location_list);
+    : (locationsResult.data ?? []).filter((location) => authorization.locationScopeIds.includes(location.id) && !location.hide_from_location_list);
   const allowedCodes = new Set(allowedLocations.map((location) => location.station_code));
-  const employees = hasAllLocationAccess
+  const employees = authorization.hasAllLocationAccess
     ? (employeesResult.data ?? [])
     : (employeesResult.data ?? []).filter((employee) => {
       const location = firstRelation(employee.stations);
@@ -418,7 +420,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
   const authorization = await requirePagePermission("employees", "access");
   const companyId = requireCompanyId(authorization);
   const pagePermission = authorization.permissions.employees;
-  const { employees, editEmployee, locations, designations, error, viewEmployee } = await loadEmployees(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess, searchParams?.edit, searchParams?.view);
+  const { employees, editEmployee, locations, designations, error, viewEmployee } = await loadEmployees(companyId, authorization, searchParams?.edit, searchParams?.view);
   const flash = loadFlash();
   const locationOptions = locations.map((location) => ({
     value: location.id,
@@ -446,6 +448,10 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
       "employees"
     )).dashboard
   })));
+  const onboardingDesignationOptions = designationOptions.filter((option) => {
+    const designation = designations.find((row) => row.id === option.value);
+    return designation ? canOnboardDesignation(designation, authorization) : false;
+  });
   const viewRules = designationOptions.find((option) => option.value === viewEmployee?.designation_id)?.dashboardRules
     ?? employeeCategoryRules.dashboard;
 
@@ -481,7 +487,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
       {!error && pagePermission.canAdd ? (
         <section className="panel">
           <div className="panel-head"><h2>Add employee</h2></div>
-          <EmployeeForm action={createEmployee} dashboardRules={employeeCategoryRules.dashboard} designationOptions={designationOptions} directActivate={employeeDirectActivate} locationOptions={locationOptions} statutoryEnabled={employeeStatutoryEnabled} />
+          <EmployeeForm action={createEmployee} dashboardRules={employeeCategoryRules.dashboard} designationOptions={onboardingDesignationOptions} directActivate={employeeDirectActivate} locationOptions={locationOptions} statutoryEnabled={employeeStatutoryEnabled} />
         </section>
       ) : null}
 

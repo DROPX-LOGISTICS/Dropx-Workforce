@@ -11,6 +11,7 @@ import { generateBiometricEnrolmentId } from "@/lib/biometric/ids";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
 import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
+import { requireDesignationOnboardingAccess } from "@/lib/designation-onboarding-access";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
 import { saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -131,12 +132,13 @@ export async function createEmployee(formData: FormData) {
 
     const [locationResult, designationResult] = await Promise.all([
       supabaseAdmin.from("stations").select("id, station_code, station_name").eq("id", locationId).eq("company_id", companyId).maybeSingle(),
-      supabaseAdmin.from("designations").select("id, name, profile_field_rules").eq("id", designationId).eq("company_id", companyId).eq("is_active", true).maybeSingle()
+      supabaseAdmin.from("designations").select("id, name, profile_field_rules, onboarding_role_ids").eq("id", designationId).eq("company_id", companyId).eq("is_active", true).maybeSingle()
     ]);
     if (locationResult.error) throw new Error(locationResult.error.message);
     if (designationResult.error) throw new Error(designationResult.error.message);
     if (!locationResult.data) throw new Error("Selected location is not available for this company.");
     if (!designationResult.data) throw new Error("Selected designation is not available.");
+    requireDesignationOnboardingAccess(designationResult.data, authorization);
     const directActivate = await loadWorkforceCategoryDirectActivate(companyId, "employees");
     const dashboardRules = (await loadWorkforceCategoryRules(
       companyId,
@@ -586,21 +588,23 @@ export async function bulkImportEmployees(formData: FormData) {
     const designationCodes = Array.from(new Set(rows.map((row) => row.designationCode)));
     const [locationsResult, designationsResult] = await Promise.all([
       supabaseAdmin.from("stations").select("id, station_code").eq("company_id", companyId).in("station_code", locationCodes),
-      supabaseAdmin.from("designations").select("id, code").eq("company_id", companyId).eq("is_active", true).in("code", designationCodes)
+      supabaseAdmin.from("designations").select("id, code, onboarding_role_ids").eq("company_id", companyId).eq("is_active", true).in("code", designationCodes)
     ]);
     if (locationsResult.error) throw new Error(locationsResult.error.message);
     if (designationsResult.error) throw new Error(designationsResult.error.message);
 
     const locations = new Map((locationsResult.data ?? []).map((location) => [String(location.station_code).toUpperCase(), String(location.id)]));
-    const designations = new Map((designationsResult.data ?? []).map((designation) => [String(designation.code).toUpperCase(), String(designation.id)]));
+    const designations = new Map((designationsResult.data ?? []).map((designation) => [String(designation.code).toUpperCase(), designation]));
     const inserted: { id: string; locationId: string; biometricId: string | null; dateOfJoin: string }[] = [];
 
     for (const [index, row] of rows.entries()) {
       const rowNumber = index + 2;
       const locationId = locations.get(row.locationCode);
-      const designationId = designations.get(row.designationCode);
+      const designation = designations.get(row.designationCode);
       if (!locationId) throw new Error(`Row ${rowNumber}: Location ${row.locationCode} not found.`);
-      if (!designationId) throw new Error(`Row ${rowNumber}: Designation code ${row.designationCode} not found.`);
+      if (!designation) throw new Error(`Row ${rowNumber}: Designation code ${row.designationCode} not found.`);
+      requireDesignationOnboardingAccess(designation, authorization);
+      const designationId = String(designation.id);
       if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
         throw new Error(`Row ${rowNumber}: You do not have access to location ${row.locationCode}.`);
       }

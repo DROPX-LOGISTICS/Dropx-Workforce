@@ -43,6 +43,9 @@ function friendlyError(error: unknown, fallback: string) {
   if (message.toLowerCase().includes("app_page_access")) {
     return "Designation app-page setup is pending. Run scripts/designation_app_pages_v1.sql in Supabase SQL Editor, then try again.";
   }
+  if (message.toLowerCase().includes("onboarding_role_ids")) {
+    return "Designation onboarding access setup is pending. Run scripts/designations_onboarding_role_access_v1.sql in Supabase SQL Editor, then try again.";
+  }
   return message;
 }
 
@@ -60,6 +63,17 @@ function modelIds(formData: FormData) {
       .map((value) => String(value ?? "").trim())
       .filter(Boolean)
   ));
+}
+
+function onboardingRoleIds(formData: FormData) {
+  return Array.from(new Set(formData.getAll("onboarding_role_ids").map((value) => String(value ?? "").trim()).filter(Boolean)));
+}
+
+async function validateOnboardingRoles(companyId: string, roleIds: string[]) {
+  if (!roleIds.length) return;
+  const { data, error } = await supabaseAdmin!.from("user_roles").select("id").eq("company_id", companyId).eq("is_active", true).in("id", roleIds);
+  if (error) throw new Error(error.message);
+  if ((data ?? []).length !== roleIds.length) throw new Error("One or more onboarding roles are not available for this company.");
 }
 
 function onboardingCategories(formData: FormData) {
@@ -101,6 +115,8 @@ export async function createDesignation(formData: FormData) {
     const code = required(formData.get("code"), "Designation code").toUpperCase();
     const name = required(formData.get("name"), "Designation name");
     const categories = onboardingCategories(formData);
+    const roleIds = onboardingRoleIds(formData);
+    await validateOnboardingRoles(companyId, roleIds);
     const { error } = await supabaseAdmin.from("designations").insert(withCompany({
       code,
       name,
@@ -110,6 +126,7 @@ export async function createDesignation(formData: FormData) {
       onboarding_categories: categories,
       profile_field_rules: profileFieldRules(formData, categories),
       app_page_access: appPageAccess(formData),
+      onboarding_role_ids: roleIds,
       is_active: true
     }, companyId));
     if (error) throw new Error(error.message);
@@ -133,6 +150,8 @@ export async function updateDesignation(formData: FormData) {
     const name = required(formData.get("name"), "Designation name");
     const status = clean(formData.get("status")) === "inactive" ? false : true;
     const categories = onboardingCategories(formData);
+    const roleIds = onboardingRoleIds(formData);
+    await validateOnboardingRoles(companyId, roleIds);
 
     const { error } = await supabaseAdmin
       .from("designations")
@@ -145,6 +164,7 @@ export async function updateDesignation(formData: FormData) {
         onboarding_categories: categories,
         profile_field_rules: profileFieldRules(formData, categories),
         app_page_access: appPageAccess(formData),
+        onboarding_role_ids: roleIds,
         is_active: status,
         updated_at: new Date().toISOString()
       })

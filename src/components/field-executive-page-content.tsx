@@ -11,6 +11,7 @@ import { type AuthorizationContext, requirePagePermission } from "@/lib/authoriz
 import { requireCompanyId } from "@/lib/company-scope";
 import { countryCodeOptions } from "@/lib/country-codes";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
+import { canOnboardDesignation } from "@/lib/designation-onboarding-access";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { loadWorkforceCategoryDirectActivate, loadWorkforceCategoryRules, loadWorkforceCategoryStatutoryEnabled } from "@/lib/workforce-category-rules";
 import {
@@ -35,6 +36,7 @@ type DesignationRow = {
   model_ids?: string[] | null;
   onboarding_categories?: string[] | null;
   profile_field_rules?: unknown;
+  onboarding_role_ids?: string[] | null;
   is_active: boolean;
 };
 
@@ -623,7 +625,7 @@ async function loadFieldExecutiveData(
 
   let designationsResult: { data: unknown[] | null; error: { message?: string } | null } = await supabaseAdmin
     .from("designations")
-    .select("id, code, name, model_ids, onboarding_categories, profile_field_rules, is_active")
+    .select("id, code, name, model_ids, onboarding_categories, profile_field_rules, onboarding_role_ids, is_active")
     .eq("company_id", companyId)
     .eq("is_active", true)
     .order("name");
@@ -636,7 +638,7 @@ async function loadFieldExecutiveData(
       .order("name");
     designationsResult = {
       ...fallbackDesignationsResult,
-      data: (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...(designation as Record<string, unknown>), model_ids: [], onboarding_categories: ["employees"], profile_field_rules: {} }))
+      data: (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...(designation as Record<string, unknown>), model_ids: [], onboarding_categories: ["employees"], profile_field_rules: {}, onboarding_role_ids: [] }))
     };
   }
 
@@ -850,6 +852,10 @@ export async function FieldExecutivePageContent({
       workforceConfig.designationCategory
     )).dashboard
   })));
+  const onboardingDesignationOptions = designationOptions.filter((option) => {
+    const designation = designations.find((row) => row.name === option.value);
+    return designation ? canOnboardDesignation(designation, authorization) : false;
+  });
   const viewRules = designationOptions.find((option) => option.value === viewExecutive?.designation)?.dashboardRules
     ?? categoryRules.dashboard;
   const editRules = designationOptions.find((option) => option.value === editExecutive?.designation)?.dashboardRules
@@ -887,7 +893,7 @@ export async function FieldExecutivePageContent({
             <FieldExecutiveForm
               action={createFieldExecutive}
               dashboardRules={categoryRules.dashboard}
-              designationOptions={designationOptions}
+              designationOptions={onboardingDesignationOptions}
               locationOptions={locationOptions}
               mode="create"
               returnPath={returnPath}
@@ -895,7 +901,7 @@ export async function FieldExecutivePageContent({
               submitLabel="Add and activate"
             />
           ) : (
-            <AddFieldExecutiveForm designationOptions={designationOptions} entityLabel={entityLabel} locationOptions={locationOptions} returnPath={returnPath} statutoryEnabled={statutoryEnabled} values={addFormValues} />
+            <AddFieldExecutiveForm designationOptions={onboardingDesignationOptions} entityLabel={entityLabel} locationOptions={locationOptions} returnPath={returnPath} statutoryEnabled={statutoryEnabled} values={addFormValues} />
           )}
         </section>
       ) : null}

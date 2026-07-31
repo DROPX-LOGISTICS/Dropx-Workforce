@@ -128,6 +128,10 @@ function CategoryMultiSelect({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const deletedCategories = useMemo(
+    () => selected.filter((value) => !categories.some((category) => category.code === value)),
+    [categories, selected]
+  );
   const summary = selected.length
     ? selected.map((category) => categories.find((option) => option.code === category)?.name ?? category).join(", ")
     : "Select categories";
@@ -168,6 +172,20 @@ function CategoryMultiSelect({
       {open ? (
         <div className="multi-select-menu designation-category-menu">
           <div className="multi-select-options compact">
+            {deletedCategories.map((category) => (
+              <label className="multi-select-option" key={category}>
+                <input
+                  checked
+                  className="matrix-checkbox"
+                  onChange={() => toggle(category)}
+                  type="checkbox"
+                />
+                <span>
+                  <strong>{category}</strong>
+                  <small>Deleted category - untick to remove</small>
+                </span>
+              </label>
+            ))}
             {categories.map((category) => (
               <label className="multi-select-option" key={category.code}>
                 <input

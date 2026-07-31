@@ -82,6 +82,19 @@ function onboardingCategories(formData: FormData) {
   return categories;
 }
 
+async function validateOnboardingCategories(companyId: string, categories: string[]) {
+  const { data, error } = await supabaseAdmin!
+    .from("workforce_categories")
+    .select("code")
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .in("code", categories);
+  if (error) throw new Error(error.message);
+  if ((data ?? []).length !== categories.length) {
+    throw new Error("Remove deleted workforce categories before saving this designation.");
+  }
+}
+
 function appPageAccess(formData: FormData) {
   return Array.from(new Set(
     formData.getAll("app_page_access")
@@ -115,6 +128,7 @@ export async function createDesignation(formData: FormData) {
     const code = required(formData.get("code"), "Designation code").toUpperCase();
     const name = required(formData.get("name"), "Designation name");
     const categories = onboardingCategories(formData);
+    await validateOnboardingCategories(companyId, categories);
     const roleIds = onboardingRoleIds(formData);
     await validateOnboardingRoles(companyId, roleIds);
     const { error } = await supabaseAdmin.from("designations").insert(withCompany({
@@ -150,6 +164,7 @@ export async function updateDesignation(formData: FormData) {
     const name = required(formData.get("name"), "Designation name");
     const status = clean(formData.get("status")) === "inactive" ? false : true;
     const categories = onboardingCategories(formData);
+    await validateOnboardingCategories(companyId, categories);
     const roleIds = onboardingRoleIds(formData);
     await validateOnboardingRoles(companyId, roleIds);
 

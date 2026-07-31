@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { saveMetaLeadsSettings } from "@/app/settings/meta-leads-actions";
+import { connectAndTestMetaLeadSync, saveMetaLeadsSettings } from "@/app/settings/meta-leads-actions";
 import { SubmitButton } from "@/components/submit-button";
 
 type MetaLeadsSettingsPanelProps = {
@@ -36,6 +36,13 @@ export function MetaLeadsSettingsPanel({ canEdit, settings }: MetaLeadsSettingsP
           </div>
           <div className="panel-head-actions">
             {settings.is_enabled ? <span className="status-pill good">Enabled</span> : null}
+            {canEdit && settings.is_enabled && settings.app_secret_configured && settings.access_token_configured ? (
+              <form action={connectAndTestMetaLeadSync}>
+                <SubmitButton className="button secondary compact" pendingText="Testing Meta">
+                  Connect &amp; test
+                </SubmitButton>
+              </form>
+            ) : null}
             <button className="button secondary compact" disabled={!canEdit} onClick={() => setConfiguring(true)} type="button">
               Configure
             </button>

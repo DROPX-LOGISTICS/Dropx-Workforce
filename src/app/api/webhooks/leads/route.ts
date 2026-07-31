@@ -180,6 +180,9 @@ async function saveLead(value: LeadgenValue, graphVersion: string, accessToken: 
   const ad = await resolveAd(adId, null, graphVersion, accessToken, companyId);
   const now = new Date().toISOString();
   const metaLeadId = clean(details.id) ?? value.leadgen_id;
+  const isConnectionTest = String(fieldValue(normalizedFields, ["full_name", "full name", "name"]) ?? "")
+    .toUpperCase()
+    .startsWith("DROPX META SYNC TEST");
   const saved = await supabaseAdmin
     .from("leads")
     .upsert({
@@ -196,12 +199,13 @@ async function saveLead(value: LeadgenValue, graphVersion: string, accessToken: 
       source: "meta",
       raw_payload: { webhook: value, lead: details, fields: normalizedFields },
       lead_created_at: details.created_time ? new Date(details.created_time).toISOString() : (value.created_time ? new Date(value.created_time * 1000).toISOString() : now),
+      ...(isConnectionTest ? { wa_new_sent_at: now } : {}),
       updated_at: now
     }, { onConflict: "company_id,meta_lead_id" })
     .select("id,company_id,full_name,phone,station_code,job_code,wa_new_sent_at")
     .single();
   if (saved.error) throw new Error(saved.error.message);
-  if (!saved.data.wa_new_sent_at) waitUntil(sendWorkforceApplicantWhatsApp(saved.data));
+  if (!isConnectionTest && !saved.data.wa_new_sent_at) waitUntil(sendWorkforceApplicantWhatsApp(saved.data));
 
   if (ad.leadAdId) {
     const count = await supabaseAdmin

@@ -8,6 +8,18 @@ import { deleteServiceNetworkRule, saveServiceNetworkRule } from "@/lib/ops-puls
 
 function clean(value: FormDataEntryValue | null) { return String(value ?? "").trim(); }
 function positive(value: FormDataEntryValue | null, label: string) { const number = Number(value); if (!Number.isFinite(number) || number <= 0) throw new Error(`${label} must be greater than zero.`); return number; }
+function pincodeCoordinates(value: FormDataEntryValue | null) {
+  const coordinates: Record<string, { lat: number; lng: number }> = {};
+  clean(value).split(/\r?\n/).map(line => line.trim()).filter(Boolean).forEach((line, index) => {
+    const [pincode, rawLat, rawLng] = line.split(/[,\t|]+/).map(item => item.trim());
+    const lat = Number(rawLat), lng = Number(rawLng);
+    if (!/^\d{6}$/.test(pincode) || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+      throw new Error(`Pincode coordinate row ${index + 1} must be PINCODE, LATITUDE, LONGITUDE.`);
+    }
+    coordinates[pincode] = { lat, lng };
+  });
+  return coordinates;
+}
 function finish(params: { station?: string; notice?: string; error?: string }): never { const query = new URLSearchParams(Object.entries(params).filter(([,v]) => v).map(([k,v]) => [k, String(v)])); redirect(`/ops-pulse/master/service-network?${query}`); }
 
 export async function saveServiceNetworkMaster(formData: FormData) {
@@ -25,6 +37,7 @@ export async function saveServiceNetworkMaster(formData: FormData) {
       vanSpr: positive(formData.get("van_spr"), "Van SPR"),
       bufferPercent: Math.max(0, Number(formData.get("buffer_percent") ?? 0)),
       pincodeOwnership: pincodes,
+      pincodeCoordinates: pincodeCoordinates(formData.get("pincode_coordinates")),
       jurisdictionOwner: clean(formData.get("jurisdiction_owner")),
       effectiveFrom: clean(formData.get("effective_from")),
       effectiveTo: clean(formData.get("effective_to")),

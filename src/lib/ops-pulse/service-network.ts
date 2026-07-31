@@ -8,6 +8,7 @@ export type ServiceNetworkRule = {
   vanSpr: number;
   bufferPercent: number;
   pincodeOwnership: string[];
+  pincodeCoordinates?: Record<string, { lat: number; lng: number }>;
   jurisdictionOwner: string;
   effectiveFrom: string;
   effectiveTo: string;

@@ -4,7 +4,8 @@ import type { OperatingMode } from "@/lib/ops-pulse/operating-context";
 const commonStart: NavItem[] = [
   { code: "ops_pulse", label: "Command Center", href: "/", icon: "#" },
   { code: "cod_reports", label: "Performance", href: "/performance", icon: "P" },
-  { code: "cps_associates", label: "Capacity", href: "/capacity", icon: "A" }
+  { code: "cps_associates", label: "Capacity", href: "/capacity", icon: "A" },
+  { code: "cps_associates", label: "Service Network", href: "/service-network", icon: "S" }
 ];
 
 const reports: NavItem = { code: "cod_reports", label: "Reports", href: "/reports", icon: "R" };
@@ -48,6 +49,7 @@ const administration: NavItem[] = [
       { code: "master_models", label: "Operation Models", href: "/master/models" }
       ,{ code: "cod_master", label: "Performance Master", href: "/master/performance-targets" }
       ,{ code: "cod_master", label: "Capacity Master", href: "/master/capacity" }
+      ,{ code: "cod_master", label: "Service Network Master", href: "/master/service-network" }
     ]
   },
   {
@@ -104,7 +106,7 @@ function modelOperations(mode: OperatingMode): NavItem {
 }
 
 export function opsNavItemsForMode(mode: OperatingMode): NavItem[] {
-  const start = mode === "amazon_now" ? commonStart.filter((item) => item.label !== "Capacity") : commonStart;
+  const start = mode === "amazon_now" ? commonStart.filter((item) => !["Capacity", "Service Network"].includes(item.label)) : commonStart;
   return [...start, modelOperations(mode), payments, cps, fleetNavItem, reports, ...administration];
 }
 

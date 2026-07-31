@@ -319,6 +319,10 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
   inheritGroupedParentPermissions(permissions);
 
   if (isMasterOwner) {
+    hasAllLocationAccess = true;
+    accessPages.forEach((page) => {
+      permissions[page.code] = { canView: true, canAdd: true, canEdit: true };
+    });
     permissions.company_master = { canView: true, canAdd: true, canEdit: true };
   } else if (!isMasterCompany) {
     permissions.company_master = { ...noPermission };

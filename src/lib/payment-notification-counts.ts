@@ -46,6 +46,7 @@ type PaymentNotificationRequest = {
 };
 
 const EMPTY_BADGES = {
+  people_review: 0,
   payments: 0,
   expense_requests: 0,
   payment_requests: 0,
@@ -126,15 +127,42 @@ function addItem(items: PaymentNotificationItem[], key: string, label: string, d
   items.push({ key, label, detail, href, count });
 }
 
+async function loadPeopleReviewCount(authorization: AuthorizationContext) {
+  if (!supabaseAdmin || !authorization.companyId || !hasPermission(authorization, "people_review", "access")) return 0;
+  if (!authorization.hasAllLocationAccess && !authorization.isMasterOwner && authorization.locationScopeIds.length === 0) return 0;
+
+  const sources = [
+    { table: "employees", statusColumn: "profile_completion_status" },
+    { table: "field_executives", statusColumn: "onboarding_status" },
+    { table: "contractors", statusColumn: "onboarding_status" },
+    { table: "vendors", statusColumn: "onboarding_status" },
+    { table: "workers", statusColumn: "onboarding_status" }
+  ];
+  const results = await Promise.all(sources.map(async ({ table, statusColumn }) => {
+    let query = supabaseAdmin!
+      .from(table)
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", authorization.companyId!)
+      .eq(statusColumn, "under_review");
+    if (!authorization.hasAllLocationAccess && !authorization.isMasterOwner) {
+      query = query.in("location_id", authorization.locationScopeIds);
+    }
+    const result = await query;
+    return result.error ? 0 : result.count ?? 0;
+  }));
+
+  return results.reduce((total, count) => total + count, 0);
+}
+
 export async function loadPaymentNotificationSnapshot(authorization: AuthorizationContext): Promise<PaymentNotificationSnapshot> {
   if (!authorization.companyId) return emptyPaymentNotificationSnapshot();
 
   const accessSurface = currentAccessSurface();
   const badges = { ...EMPTY_BADGES };
   const items: PaymentNotificationItem[] = [];
+  badges.people_review = await loadPeopleReviewCount(authorization);
   const canSeePayments = hasPermission(authorization, "payments", "access");
-  if (!canSeePayments) return emptyPaymentNotificationSnapshot();
-  if (!supabaseAdmin) return emptyPaymentNotificationSnapshot();
+  if (!canSeePayments || !supabaseAdmin) return { total: 0, badges, items };
 
   const { data, error } = await supabaseAdmin
     .from("payment_requests")
@@ -167,7 +195,7 @@ export async function loadPaymentNotificationSnapshot(authorization: Authorizati
     .order("created_at", { ascending: false })
     .limit(1000);
 
-  if (error || !data) return emptyPaymentNotificationSnapshot();
+  if (error || !data) return { total: 0, badges, items };
 
   const requests = data as PaymentNotificationRequest[];
   const ownRequests = authorization.userId

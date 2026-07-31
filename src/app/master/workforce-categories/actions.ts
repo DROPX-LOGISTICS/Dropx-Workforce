@@ -75,6 +75,7 @@ export async function createWorkforceCategory(formData: FormData) {
       profile_field_rules: categoryRules(formData),
       app_page_access: appPageAccess(formData),
       statutory_enabled: formData.get("statutory_enabled") === "true",
+      direct_activate: formData.get("direct_activate") === "true",
       is_system: false,
       is_active: true
     }, companyId));
@@ -129,6 +130,7 @@ export async function updateWorkforceCategory(formData: FormData) {
         profile_field_rules: categoryRules(formData),
         app_page_access: appPageAccess(formData),
         statutory_enabled: formData.get("statutory_enabled") === "true",
+        direct_activate: formData.get("direct_activate") === "true",
         is_active: clean(formData.get("status")) !== "inactive",
         updated_at: new Date().toISOString()
       })

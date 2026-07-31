@@ -12,7 +12,7 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { countryCodeOptions } from "@/lib/country-codes";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { loadWorkforceCategoryRules, loadWorkforceCategoryStatutoryEnabled } from "@/lib/workforce-category-rules";
+import { loadWorkforceCategoryDirectActivate, loadWorkforceCategoryRules, loadWorkforceCategoryStatutoryEnabled } from "@/lib/workforce-category-rules";
 import {
   nonEmployeeConfigForRoute,
   type NonEmployeeRoute
@@ -824,6 +824,10 @@ export async function FieldExecutivePageContent({
     workforceConfig.designationCategory,
     false
   );
+  const directActivate = await loadWorkforceCategoryDirectActivate(
+    requireCompanyId(authorization),
+    workforceConfig.designationCategory
+  );
   const activeMessage = error ?? errorMessage ?? notice;
   const needsOperationModeMigration = Boolean(activeMessage?.toLowerCase().includes("operation_mode_id"));
   const locationOptions = locations.map((location) => ({
@@ -870,7 +874,20 @@ export async function FieldExecutivePageContent({
       {permission.canAdd ? (
         <section className="panel">
           <div className="panel-head"><h2>{addTitle}</h2></div>
-          <AddFieldExecutiveForm designationOptions={designationOptions} entityLabel={entityLabel} locationOptions={locationOptions} returnPath={returnPath} statutoryEnabled={statutoryEnabled} values={addFormValues} />
+          {directActivate ? (
+            <FieldExecutiveForm
+              action={createFieldExecutive}
+              dashboardRules={categoryRules.dashboard}
+              designationOptions={designationOptions}
+              locationOptions={locationOptions}
+              mode="create"
+              returnPath={returnPath}
+              statutoryEnabled={statutoryEnabled}
+              submitLabel="Add and activate"
+            />
+          ) : (
+            <AddFieldExecutiveForm designationOptions={designationOptions} entityLabel={entityLabel} locationOptions={locationOptions} returnPath={returnPath} statutoryEnabled={statutoryEnabled} values={addFormValues} />
+          )}
         </section>
       ) : null}
 

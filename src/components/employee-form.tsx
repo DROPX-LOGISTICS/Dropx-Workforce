@@ -19,6 +19,7 @@ type EmployeeFormProps = {
   action: (formData: FormData) => void;
   dashboardRules: { enabled: string[]; required: string[] };
   statutoryEnabled?: boolean;
+  directActivate?: boolean;
   designationOptions: DesignationSelectOption[];
   employee?: {
     id: string;
@@ -125,13 +126,14 @@ function StatutoryMultiSelect({
   );
 }
 
-export function EmployeeForm({ action, dashboardRules, designationOptions, employee, locationOptions, mode = "create", statutoryEnabled = false }: EmployeeFormProps) {
+export function EmployeeForm({ action, dashboardRules, designationOptions, directActivate = false, employee, locationOptions, mode = "create", statutoryEnabled = false }: EmployeeFormProps) {
   const [selectedLocationId, setSelectedLocationId] = useState(employee?.location_id ?? "");
   const [selectedDesignationId, setSelectedDesignationId] = useState(employee?.designation_id ?? "");
   const [selectedStatutory, setSelectedStatutory] = useState<string[]>(
     employee?.statutory_applicability?.length ? employee.statutory_applicability : ["not_applicable"]
   );
   const isEdit = mode === "edit";
+  const showProfileFields = isEdit || directActivate;
   const selectedLocation = locationOptions.find((option) => option.value === selectedLocationId);
   const selectedModelId = selectedLocation?.modelId ?? "";
   const filteredDesignationOptions = selectedLocationId
@@ -148,7 +150,7 @@ export function EmployeeForm({ action, dashboardRules, designationOptions, emplo
     : filteredDesignationOptions;
   const designationDisabled = !selectedLocationId || !effectiveDesignationOptions.length;
   const fieldEnabled = (key: string) => dashboardRules.enabled.includes(key);
-  const fieldRequired = (key: string) => !isEdit && dashboardRules.required.includes(key);
+  const fieldRequired = (key: string) => directActivate && !isEdit && dashboardRules.required.includes(key);
   const hasPf = selectedStatutory.includes("pf");
   const hasEsi = selectedStatutory.includes("esi");
 
@@ -206,7 +208,7 @@ export function EmployeeForm({ action, dashboardRules, designationOptions, emplo
         Statutory applicability
         <StatutoryMultiSelect selected={selectedStatutory} onChange={setSelectedStatutory} />
       </label> : null}
-      {isEdit ? (
+      {showProfileFields ? (
         <>
           {fieldEnabled("gender") ? <label>Gender
             <SearchableSelect name="gender" options={genderOptions} defaultValue={employee?.gender ?? undefined} placeholder="Select gender" />
@@ -259,14 +261,14 @@ export function EmployeeForm({ action, dashboardRules, designationOptions, emplo
       <div className="form-actions align-right field-executive-submit-slot">
         <SubmitButton
           confirmCancelText="No"
-          confirmDescription={`Please confirm before ${isEdit ? "updating" : "creating"} this Employee.`}
+          confirmDescription={directActivate && !isEdit ? "This profile will be activated immediately after all required details are saved." : `Please confirm before ${isEdit ? "updating" : "creating"} this Employee.`}
           confirmMessage={`Do you want to ${isEdit ? "save" : "submit"} this Employee registration?`}
           confirmSubmitText="Yes"
           confirmTitle="Confirm submission"
           disabled={!locationOptions.length || designationDisabled}
           disabledText={!locationOptions.length ? "Add location first" : !selectedLocationId ? "Select location first" : "Add designation for this model first"}
         >
-          {isEdit ? "Save changes" : "Submit"}
+          {isEdit ? "Save changes" : directActivate ? "Add and activate" : "Submit"}
         </SubmitButton>
       </div>
     </form>

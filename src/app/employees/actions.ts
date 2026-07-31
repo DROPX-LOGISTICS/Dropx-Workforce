@@ -15,7 +15,7 @@ import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile
 import { saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createAppNotification } from "@/lib/app-notifications";
-import { loadWorkforceCategoryRules } from "@/lib/workforce-category-rules";
+import { loadWorkforceCategoryDirectActivate, loadWorkforceCategoryRules } from "@/lib/workforce-category-rules";
 import { sendEmployeeOnboardingWhatsApp } from "@/lib/whatsapp";
 
 function required(value: FormDataEntryValue | null, field: string) {
@@ -77,6 +77,37 @@ const employeeDocumentFields = [
   { ruleKey: "profile_photo", formKey: "profile_photo_file", pathKey: "profile_photo_path", label: "Profile photo" }
 ] as const;
 
+function employeeProfilePayload(formData: FormData) {
+  return {
+    gender: optional(formData.get("gender")),
+    date_of_birth: optional(formData.get("date_of_birth")),
+    father_name: optional(formData.get("father_name")),
+    blood_group: optional(formData.get("blood_group")),
+    aadhaar_number: optional(formData.get("aadhaar_number"))?.replace(/\D/g, "") ?? null,
+    pan_number: optional(formData.get("pan_number"))?.toUpperCase() ?? null,
+    eshram_uan: optional(formData.get("eshram_uan"))?.replace(/\D/g, "") ?? null,
+    is_handicapped: optional(formData.get("is_handicapped")) === null ? null : optional(formData.get("is_handicapped")) === "true",
+    address: optional(formData.get("address")),
+    state_code: optional(formData.get("state_code"))?.toUpperCase() ?? null,
+    pincode: optional(formData.get("pincode"))?.replace(/\D/g, "") ?? null,
+    landmark: optional(formData.get("landmark")),
+    emergency_contact_name: optional(formData.get("emergency_contact_name")),
+    emergency_contact_number: optional(formData.get("emergency_contact_number"))?.replace(/\D/g, "") ?? null,
+    emergency_contact_relation: optional(formData.get("emergency_contact_relation")),
+    bank_account_no: optional(formData.get("bank_account_no"))?.toUpperCase() ?? null,
+    ifsc: optional(formData.get("ifsc"))?.toUpperCase() ?? null,
+    pf_uan: optional(formData.get("pf_uan"))?.replace(/\D/g, "") ?? null,
+    pf_account_no: optional(formData.get("pf_account_no"))?.toUpperCase() ?? null,
+    esi_no: optional(formData.get("esi_no"))?.toUpperCase() ?? null,
+    driving_license_no: optional(formData.get("driving_license_no"))?.toUpperCase() ?? null,
+    driving_license_exp_date: optional(formData.get("driving_license_exp_date")),
+    vehicle_reg_no: optional(formData.get("vehicle_reg_no"))?.toUpperCase() ?? null,
+    vehicle_reg_exp_date: optional(formData.get("vehicle_reg_exp_date")),
+    vehicle_insurance_exp_date: optional(formData.get("vehicle_insurance_exp_date")),
+    vehicle_pollution_exp_date: optional(formData.get("vehicle_pollution_exp_date"))
+  };
+}
+
 export async function createEmployee(formData: FormData) {
   const authorization = await requirePagePermission("employees", "add");
   const companyId = requireCompanyId(authorization);
@@ -106,6 +137,27 @@ export async function createEmployee(formData: FormData) {
     if (designationResult.error) throw new Error(designationResult.error.message);
     if (!locationResult.data) throw new Error("Selected location is not available for this company.");
     if (!designationResult.data) throw new Error("Selected designation is not available.");
+    const directActivate = await loadWorkforceCategoryDirectActivate(companyId, "employees");
+    const dashboardRules = (await loadWorkforceCategoryRules(
+      companyId,
+      "employees",
+      designationResult.data.profile_field_rules,
+      "employees"
+    )).dashboard;
+    const profilePayload = directActivate ? employeeProfilePayload(formData) : {};
+
+    if (directActivate) {
+      const profileValues = profilePayload as Record<string, unknown>;
+      for (const key of dashboardRules.required) {
+        const documentField = employeeDocumentFields.find((field) => field.ruleKey === key);
+        if (documentField) {
+          const file = formData.get(documentField.formKey);
+          if (!(file instanceof File) || file.size === 0) throw new Error(`${documentField.label} is required.`);
+        } else if (!String(profileValues[key] ?? "").trim()) {
+          throw new Error(`${key.replaceAll("_", " ")} is required.`);
+        }
+      }
+    }
     const biometricId = await generateConfiguredBiometricId({
       category: "employee",
       companyId,
@@ -135,7 +187,9 @@ export async function createEmployee(formData: FormData) {
       designation_id: designationId,
       statutory_applicability: statutoryApplicability,
       created_by: authorization.userId,
-      profile_completion_status: "pending",
+      ...profilePayload,
+      profile_completion_status: directActivate ? "active" : "pending",
+      profile_completed_at: directActivate ? new Date().toISOString() : null,
       is_active: true
     }, companyId)).select("id").single();
     if (error) {
@@ -143,6 +197,26 @@ export async function createEmployee(formData: FormData) {
         throw new Error("Employee ID is already registered.");
       }
       throw new Error(error.message);
+    }
+
+    if (directActivate) {
+      const documentPayload: Record<string, string> = {};
+      const enabled = new Set(dashboardRules.enabled);
+      for (const field of employeeDocumentFields) {
+        if (!enabled.has(field.ruleKey)) continue;
+        const uploaded = await uploadProfileDocument({
+          companyId,
+          documentKey: field.pathKey.replace("_path", ""),
+          fileValue: formData.get(field.formKey),
+          ownerId: employee.id,
+          ownerType: "employee"
+        });
+        if (uploaded) documentPayload[field.pathKey] = uploaded.storagePath;
+      }
+      if (Object.keys(documentPayload).length) {
+        const documentUpdate = await supabaseAdmin.from("employees").update(documentPayload).eq("id", employee.id).eq("company_id", companyId);
+        if (documentUpdate.error) throw new Error(documentUpdate.error.message);
+      }
     }
 
     await syncBiometricEnrolment({

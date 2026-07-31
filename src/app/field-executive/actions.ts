@@ -15,7 +15,7 @@ import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile
 import { saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createAppNotification } from "@/lib/app-notifications";
-import { loadWorkforceCategoryRules } from "@/lib/workforce-category-rules";
+import { loadWorkforceCategoryDirectActivate, loadWorkforceCategoryRules } from "@/lib/workforce-category-rules";
 import { sendFieldExecutiveOnboardingWhatsApp } from "@/lib/whatsapp";
 import {
   nonEmployeeConfigForRoute,
@@ -225,6 +225,35 @@ export async function createFieldExecutive(formData: FormData) {
     const dateOfJoin = required(formData.get("date_of_join"), "Date of join");
     const locationId = required(formData.get("location_id"), "Location");
     const designation = required(formData.get("designation"), "Designation");
+    const directActivate = await loadWorkforceCategoryDirectActivate(companyId, config.designationCategory);
+    const directPayload = directActivate ? normalizeFieldExecutivePayload(formData).payload : null;
+    const dashboardRules = directActivate
+      ? (await loadWorkforceCategoryRules(companyId, config.designationCategory, undefined, config.designationCategory)).dashboard
+      : { enabled: [] as string[], required: [] as string[] };
+
+    if (directPayload) {
+      const payloadKeys: Record<string, keyof typeof directPayload> = {
+        gender: "gender", date_of_birth: "date_of_birth", aadhaar_number: "aadhaar_number", pan_number: "pan_number",
+        eshram_uan: "eshram_uan", father_name: "father_name", blood_group: "blood_group", is_handicapped: "is_handicapped",
+        address: "address", state_code: "state_code", pincode: "postal_pin", landmark: "landmark",
+        bank_account_no: "bank_account_no", ifsc: "ifsc_code", pf_uan: "pf_uan", pf_account_no: "pf_account_no",
+        esi_no: "esi_no", driving_license_no: "driving_license_no", driving_license_exp_date: "driving_license_exp_date",
+        vehicle_reg_no: "vehicle_reg_no", vehicle_reg_exp_date: "vehicle_reg_exp_date",
+        vehicle_insurance_exp_date: "vehicle_insurance_exp_date", vehicle_pollution_exp_date: "vehicle_pollution_exp_date",
+        emergency_contact_name: "emergency_contact_name", emergency_contact_number: "emergency_contact_number",
+        emergency_contact_relation: "emergency_contact_relation"
+      };
+      for (const key of dashboardRules.required) {
+        const documentField = fieldExecutiveDocumentFields.find((field) => field.ruleKey === key);
+        if (documentField) {
+          const file = formData.get(documentField.formKey);
+          if (!(file instanceof File) || file.size === 0) throw new Error(`${documentField.label} is required.`);
+          continue;
+        }
+        const payloadKey = payloadKeys[key];
+        if (payloadKey && !String(directPayload[payloadKey] ?? "").trim()) throw new Error(`${key.replaceAll("_", " ")} is required.`);
+      }
+    }
 
     if (!/^\d{6,15}$/.test(mobile)) throw new Error("Mobile number must contain 6 to 15 digits.");
     if (Number.isNaN(Date.parse(dateOfJoin))) throw new Error("Enter a valid date of join.");
@@ -259,6 +288,7 @@ export async function createFieldExecutive(formData: FormData) {
     const registrationToken = randomBytes(32).toString("base64url");
     const registrationTokenHash = createHash("sha256").update(registrationToken).digest("hex");
     const basePayload = withCompany({
+      ...(directPayload ?? {}),
       full_name: fullName,
       mobile_country_code: mobileCountryCode,
       mobile,
@@ -279,7 +309,7 @@ export async function createFieldExecutive(formData: FormData) {
       ...basePayload,
       onboarding_token_hash: registrationTokenHash,
       onboarding_token_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      onboarding_status: "pending"
+      onboarding_status: directActivate ? "active" : "pending"
     }).select(executiveSelect).single();
 
     const whatsappMigrationMissing = Boolean(insertResult.error?.message.toLowerCase().includes("onboarding_token"));
@@ -296,6 +326,27 @@ export async function createFieldExecutive(formData: FormData) {
       throw new Error(friendlyFieldExecutiveError(error.message));
     }
 
+
+    if (directActivate) {
+      const documentPayload: Record<string, string> = {};
+      const enabled = new Set(dashboardRules.enabled);
+      for (const field of fieldExecutiveDocumentFields) {
+        if (!enabled.has(field.ruleKey)) continue;
+        const uploaded = await uploadProfileDocument({
+          companyId,
+          documentKey: field.pathKey.replace("_path", ""),
+          fileValue: formData.get(field.formKey),
+          ownerId: executive.id,
+          ownerType: config.profileType
+        });
+        if (uploaded) documentPayload[field.pathKey] = uploaded.storagePath;
+      }
+      if (Object.keys(documentPayload).length) {
+        const documentUpdate = await supabaseAdmin.from(table).update(documentPayload).eq("id", executive.id).eq("company_id", companyId);
+        if (documentUpdate.error) throw new Error(documentUpdate.error.message);
+      }
+    }
+
     await syncBiometricEnrolment({
       companyId,
       createdBy: authorization.userId,
@@ -310,7 +361,7 @@ export async function createFieldExecutive(formData: FormData) {
 
     const stationRelation = executive.stations as unknown as { station_code?: string; station_name?: string | null; providers?: { name?: string } | Array<{ name?: string }> | null } | null;
     const providerRelation = Array.isArray(stationRelation?.providers) ? stationRelation?.providers[0] : stationRelation?.providers;
-    if (!whatsappMigrationMissing) {
+    if (!whatsappMigrationMissing && !directActivate) {
       waitUntil(sendFieldExecutiveOnboardingWhatsApp({
         companyId,
         fieldExecutiveId: executive.id,

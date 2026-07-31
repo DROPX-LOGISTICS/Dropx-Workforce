@@ -9,7 +9,7 @@ import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
-import { loadWorkforceCategoryRules, loadWorkforceCategoryStatutoryEnabled } from "@/lib/workforce-category-rules";
+import { loadWorkforceCategoryDirectActivate, loadWorkforceCategoryRules, loadWorkforceCategoryStatutoryEnabled } from "@/lib/workforce-category-rules";
 import { bulkImportEmployees, createEmployee, reviewEmployeeProfile, updateEmployee } from "./actions";
 
 type LocationRow = {
@@ -433,6 +433,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
     "employees"
   );
   const employeeStatutoryEnabled = await loadWorkforceCategoryStatutoryEnabled(companyId, "employees", true);
+  const employeeDirectActivate = await loadWorkforceCategoryDirectActivate(companyId, "employees");
   const designationOptions = designations.map((designation) => ({
     value: designation.id,
     label: designation.name,
@@ -473,7 +474,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
       {!error && pagePermission.canAdd ? (
         <section className="panel">
           <div className="panel-head"><h2>Add employee</h2></div>
-          <EmployeeForm action={createEmployee} dashboardRules={employeeCategoryRules.dashboard} designationOptions={designationOptions} locationOptions={locationOptions} statutoryEnabled={employeeStatutoryEnabled} />
+          <EmployeeForm action={createEmployee} dashboardRules={employeeCategoryRules.dashboard} designationOptions={designationOptions} directActivate={employeeDirectActivate} locationOptions={locationOptions} statutoryEnabled={employeeStatutoryEnabled} />
         </section>
       ) : null}
 

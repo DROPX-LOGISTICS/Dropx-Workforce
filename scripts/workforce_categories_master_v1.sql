@@ -8,6 +8,7 @@ create table if not exists public.workforce_categories (
   profile_field_rules jsonb not null default '{}'::jsonb,
   app_page_access text[] not null default array['dashboard', 'attendance', 'settings']::text[],
   statutory_enabled boolean not null default false,
+  direct_activate boolean not null default false,
   is_system boolean not null default false,
   is_active boolean not null default true,
   sort_order integer not null default 100,
@@ -68,6 +69,12 @@ alter table public.workforce_categories enable row level security;
 alter table public.workforce_categories
   add column if not exists app_page_access text[] not null
   default array['dashboard', 'attendance', 'settings']::text[];
+
+alter table public.workforce_categories
+  add column if not exists statutory_enabled boolean not null default false;
+
+alter table public.workforce_categories
+  add column if not exists direct_activate boolean not null default false;
 
 drop policy if exists workforce_categories_select_policy on public.workforce_categories;
 

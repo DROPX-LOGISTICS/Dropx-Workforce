@@ -19,6 +19,7 @@ export type WorkforceCategoryInitial = {
   profile_field_rules?: unknown;
   app_page_access?: string[] | null;
   statutory_enabled?: boolean;
+  direct_activate?: boolean;
   is_system: boolean;
   is_active: boolean;
 };
@@ -89,6 +90,22 @@ export function WorkforceCategoryForm({
           <p className="subtle">Choose category-controlled pages. My Profile and Settings are always available.</p>
         </div>
         <AppPageAccessSelect initialPages={selectedPages} />
+      </section>
+
+      <section className="workforce-category-page-access">
+        <div>
+          <strong>Direct activation</strong>
+          <p className="subtle">Let dashboard users complete this category's enabled onboarding fields and activate the profile immediately.</p>
+        </div>
+        <label className="checkbox-line">
+          <input
+            defaultChecked={initial?.direct_activate ?? false}
+            name="direct_activate"
+            type="checkbox"
+            value="true"
+          />
+          Enable direct activation from Dashboard
+        </label>
       </section>
 
       <div className="workforce-category-rule-matrix">

@@ -43,3 +43,16 @@ export async function loadWorkforceCategoryStatutoryEnabled(
   if (result.error || !result.data) return fallback;
   return Boolean(result.data.statutory_enabled);
 }
+
+export async function loadWorkforceCategoryDirectActivate(companyId: string, categoryCode: string) {
+  if (!supabaseAdmin) return false;
+  const result = await supabaseAdmin
+    .from("workforce_categories")
+    .select("direct_activate")
+    .eq("company_id", companyId)
+    .eq("code", categoryCode)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (result.error || !result.data) return false;
+  return Boolean(result.data.direct_activate);
+}

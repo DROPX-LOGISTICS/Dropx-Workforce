@@ -6,6 +6,8 @@ import { PageHead } from "@/components/page-head";
 import { ScopedDesignationFields } from "@/components/scoped-designation-fields";
 import { SearchableSelect } from "@/components/searchable-select";
 import { SubmitButton } from "@/components/submit-button";
+import { DirectActivationProfileFields } from "@/components/direct-activation-profile-fields";
+import { normalizeCategoryProfileFieldRules } from "@/lib/profile-field-rules";
 import { getAuthorization, hasPermission, isCompanyOwner } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { countryCodeOptions } from "@/lib/country-codes";
@@ -16,6 +18,8 @@ type CategoryRow = {
   code: string;
   name: string;
   statutory_enabled: boolean;
+  direct_activate: boolean;
+  profile_field_rules: unknown;
 };
 
 type LocationRow = {
@@ -93,7 +97,7 @@ export default async function DynamicWorkforceCategoryPage({
 
   const categoryResult = await supabaseAdmin
     .from("workforce_categories")
-    .select("code, name, statutory_enabled")
+    .select("code, name, statutory_enabled, direct_activate, profile_field_rules")
     .eq("company_id", companyId)
     .eq("code", code)
     .eq("is_active", true)
@@ -216,9 +220,10 @@ export default async function DynamicWorkforceCategoryPage({
                 <label className="check-option"><input name="statutory_applicability" type="checkbox" value="esi" /> ESI</label>
               </fieldset>
             ) : null}
+            {category.direct_activate ? <DirectActivationProfileFields rules={normalizeCategoryProfileFieldRules(category.profile_field_rules).dashboard} /> : null}
             <div className="form-actions align-right field-executive-submit-slot dynamic-workforce-submit-slot">
               <SubmitButton disabled={Boolean(provisionResult.error) || !locationOptions.length || !designationOptions.length} disabledText={provisionResult.error ? "Database setup required" : !locationOptions.length ? "Add location first" : "Add designation first"}>
-                Add profile
+                {category.direct_activate ? "Add and activate" : "Add profile"}
               </SubmitButton>
             </div>
           </form>

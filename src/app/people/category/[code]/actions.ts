@@ -8,12 +8,49 @@ import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
 import { dynamicWorkforceTable, isCustomWorkforceCategoryCode, normalizeWorkforceCategoryCode } from "@/lib/dynamic-workforce";
 import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
+import { uploadProfileDocument } from "@/lib/profile-document-storage";
+import { normalizeCategoryProfileFieldRules } from "@/lib/profile-field-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 function required(value: FormDataEntryValue | null, label: string) {
   const text = String(value ?? "").trim();
   if (!text) throw new Error(`${label} is required.`);
   return text;
+}
+
+function optional(value: FormDataEntryValue | null) {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+const documentFields = [
+  { ruleKey: "aadhaar_front", formKey: "aadhaar_front_file", pathKey: "aadhaar_front_path", label: "Aadhaar front" },
+  { ruleKey: "aadhaar_back", formKey: "aadhaar_back_file", pathKey: "aadhaar_back_path", label: "Aadhaar back" },
+  { ruleKey: "pan_upload", formKey: "pan_upload_file", pathKey: "pan_upload_path", label: "PAN upload" },
+  { ruleKey: "dl_front", formKey: "dl_front_file", pathKey: "dl_front_path", label: "DL front" },
+  { ruleKey: "dl_back", formKey: "dl_back_file", pathKey: "dl_back_path", label: "DL back" },
+  { ruleKey: "profile_photo", formKey: "profile_photo_file", pathKey: "profile_photo_path", label: "Profile photo" }
+] as const;
+
+function directProfilePayload(formData: FormData) {
+  return {
+    gender: optional(formData.get("gender")), date_of_birth: optional(formData.get("date_of_birth")),
+    aadhaar_number: optional(formData.get("aadhaar_number"))?.replace(/\D/g, "") ?? null,
+    pan_number: optional(formData.get("pan_number"))?.toUpperCase() ?? null,
+    eshram_uan: optional(formData.get("eshram_uan"))?.replace(/\D/g, "") ?? null,
+    father_name: optional(formData.get("father_name")), blood_group: optional(formData.get("blood_group")),
+    is_handicapped: optional(formData.get("is_handicapped")) === null ? null : optional(formData.get("is_handicapped")) === "true",
+    address: optional(formData.get("address")), state_code: optional(formData.get("state_code"))?.toUpperCase() ?? null,
+    postal_pin: optional(formData.get("postal_pin"))?.replace(/\D/g, "") ?? null, landmark: optional(formData.get("landmark")),
+    bank_account_no: optional(formData.get("bank_account_no"))?.toUpperCase() ?? null, ifsc_code: optional(formData.get("ifsc_code"))?.toUpperCase() ?? null,
+    pf_uan: optional(formData.get("pf_uan"))?.replace(/\D/g, "") ?? null, pf_account_no: optional(formData.get("pf_account_no"))?.toUpperCase() ?? null,
+    esi_no: optional(formData.get("esi_no"))?.toUpperCase() ?? null, driving_license_no: optional(formData.get("driving_license_no"))?.toUpperCase() ?? null,
+    driving_license_exp_date: optional(formData.get("driving_license_exp_date")), vehicle_reg_no: optional(formData.get("vehicle_reg_no"))?.toUpperCase() ?? null,
+    vehicle_reg_exp_date: optional(formData.get("vehicle_reg_exp_date")), vehicle_insurance_exp_date: optional(formData.get("vehicle_insurance_exp_date")),
+    vehicle_pollution_exp_date: optional(formData.get("vehicle_pollution_exp_date")), emergency_contact_name: optional(formData.get("emergency_contact_name")),
+    emergency_contact_number: optional(formData.get("emergency_contact_number"))?.replace(/\D/g, "") ?? null,
+    emergency_contact_relation: optional(formData.get("emergency_contact_relation"))
+  };
 }
 
 function canManagePeople(authorization: NonNullable<Awaited<ReturnType<typeof getAuthorization>>>, action: "add" | "edit" | "view") {
@@ -44,7 +81,7 @@ export async function createDynamicWorkforceProfile(formData: FormData) {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
     const categoryResult = await supabaseAdmin
       .from("workforce_categories")
-      .select("id, code, name, statutory_enabled")
+      .select("id, code, name, statutory_enabled, direct_activate, profile_field_rules")
       .eq("company_id", companyId)
       .eq("code", code)
       .eq("is_active", true)
@@ -67,6 +104,20 @@ export async function createDynamicWorkforceProfile(formData: FormData) {
     const dateOfJoin = required(formData.get("date_of_join"), "Date of join");
     const locationId = required(formData.get("location_id"), "Location");
     const designation = required(formData.get("designation"), "Designation");
+    const directActivate = Boolean(categoryResult.data.direct_activate);
+    const dashboardRules = normalizeCategoryProfileFieldRules(categoryResult.data.profile_field_rules).dashboard;
+    const profilePayload = directActivate ? directProfilePayload(formData) : {};
+    if (directActivate) {
+      const profileValues = profilePayload as Record<string, unknown>;
+      const aliases: Record<string, string> = { pincode: "postal_pin", ifsc: "ifsc_code" };
+      for (const key of dashboardRules.required) {
+        const documentField = documentFields.find((field) => field.ruleKey === key);
+        if (documentField) {
+          const file = formData.get(documentField.formKey);
+          if (!(file instanceof File) || file.size === 0) throw new Error(`${documentField.label} is required.`);
+        } else if (!String(profileValues[aliases[key] ?? key] ?? "").trim()) throw new Error(`${key.replaceAll("_", " ")} is required.`);
+      }
+    }
     if (!/^\d{6,15}$/.test(mobile)) throw new Error("Mobile number must contain 6 to 15 digits.");
     if (Number.isNaN(Date.parse(dateOfJoin))) throw new Error("Enter a valid date of join.");
     if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
@@ -116,17 +167,31 @@ export async function createDynamicWorkforceProfile(formData: FormData) {
       biometric_id: biometricId,
       dropx_id: dropxId,
       created_by: authorization.userId,
+      ...profilePayload,
       statutory_applicability: categoryResult.data.statutory_enabled && statutory.length ? statutory : ["not_applicable"],
       onboarding_token_hash: registrationTokenHash,
       onboarding_token_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      onboarding_status: "pending",
+      onboarding_status: directActivate ? "active" : "pending",
       is_active: true
     }, companyId);
-    const insertResult = await supabaseAdmin.from(dynamicWorkforceTable(code)).insert(payload);
+    const insertResult = await supabaseAdmin.from(dynamicWorkforceTable(code)).insert(payload).select("id").single();
     if (insertResult.error) {
       const message = insertResult.error.message.toLowerCase();
       if (message.includes("duplicate") || message.includes("unique")) throw new Error("DropX ID, biometric ID, mobile, or email is already registered in this category.");
       throw new Error(insertResult.error.message);
+    }
+    if (directActivate && insertResult.data) {
+      const documentPayload: Record<string, string> = {};
+      const enabled = new Set(dashboardRules.enabled);
+      for (const field of documentFields) {
+        if (!enabled.has(field.ruleKey)) continue;
+        const uploaded = await uploadProfileDocument({ companyId, documentKey: field.pathKey.replace("_path", ""), fileValue: formData.get(field.formKey), ownerId: insertResult.data.id, ownerType: "contractor" });
+        if (uploaded) documentPayload[field.pathKey] = uploaded.storagePath;
+      }
+      if (Object.keys(documentPayload).length) {
+        const updateResult = await supabaseAdmin.from(dynamicWorkforceTable(code)).update(documentPayload).eq("id", insertResult.data.id).eq("company_id", companyId);
+        if (updateResult.error) throw new Error(updateResult.error.message);
+      }
     }
     revalidatePath(`/people/category/${code}`);
     revalidatePath("/people/all");

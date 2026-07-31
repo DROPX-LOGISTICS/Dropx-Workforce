@@ -99,12 +99,14 @@ export function FieldExecutiveList({
   canEdit,
   emptyLabel = "No field executives added yet.",
   rows,
+  showActions = true,
   title = "Field Executive register"
 }: {
   basePath?: string;
   canEdit: boolean;
   emptyLabel?: string;
   rows: FieldExecutiveListRow[];
+  showActions?: boolean;
   title?: string;
 }) {
   const [search, setSearch] = useState("");
@@ -264,7 +266,7 @@ export function FieldExecutiveList({
               <th>Email</th>
               <th>Location</th>
               <th>Status</th>
-              <th>Action</th>
+              {showActions ? <th>Action</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -284,7 +286,7 @@ export function FieldExecutiveList({
                 <td>{row.email}</td>
                 <td>{row.location}</td>
                 <td><StatusPill status={row.status} /></td>
-                <td className="action-cell">
+                {showActions ? <td className="action-cell">
                   <div className="row-action-menu" ref={openMenuId === row.id ? menuRef : undefined}>
                     <button
                       aria-expanded={openMenuId === row.id}
@@ -309,10 +311,10 @@ export function FieldExecutiveList({
                       </div>
                     ) : null}
                   </div>
-                </td>
+                </td> : null}
               </tr>
             )) : (
-              <tr><td className="empty-cell" colSpan={8}>{emptyLabel}</td></tr>
+              <tr><td className="empty-cell" colSpan={showActions ? 8 : 7}>{emptyLabel}</td></tr>
             )}
           </tbody>
         </table>

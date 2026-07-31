@@ -3,6 +3,7 @@ import { PageHead } from "@/components/page-head";
 import { StatusPill } from "@/components/status-pill";
 import { getAuthorization, hasPermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { dynamicWorkforceTable, isCustomWorkforceCategoryCode } from "@/lib/dynamic-workforce";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { redirect } from "next/navigation";
 
@@ -57,6 +58,16 @@ async function loadPeople(
     .eq("is_active", true)
     .order("sort_order")
     .order("name");
+  const categories = (categoryResult.data ?? []) as Array<{ code: string; name: string }>;
+  const customSources = categories
+    .filter((category) => isCustomWorkforceCategoryCode(category.code))
+    .map((category) => ({
+      categoryCode: category.code,
+      category: category.name,
+      table: dynamicWorkforceTable(category.code),
+      codeField: "dropx_id",
+      statusField: "onboarding_status"
+    }));
   const results = await Promise.all(allowedSources.map(async (source) => {
     const designationFields = source.employeeDesignation ? ", designations (name)" : ", designation";
     const result = await supabaseAdmin!
@@ -87,10 +98,36 @@ async function loadPeople(
       }))
     };
   }));
+  const customResults = await Promise.all(customSources.map(async (source) => {
+    const result = await supabaseAdmin!
+      .from(source.table)
+      .select("full_name, mobile_country_code, mobile, email, biometric_id, location_id, is_active, dropx_id, onboarding_status, stations (station_code), designation")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false });
+    if (result.error) return { rows: [] as PersonRow[], error: result.error.message };
+    return {
+      error: null,
+      rows: (result.data ?? [])
+        .filter((row: Record<string, unknown>) => hasAllLocationAccess || locationScopeIds.includes(String(row.location_id ?? "")))
+        .map((row: Record<string, unknown>) => ({
+          category: source.category,
+          categoryCode: source.categoryCode,
+          code: String(row[source.codeField] ?? "-"),
+          biometricId: String(row.biometric_id ?? "-"),
+          fullName: String(row.full_name ?? "-"),
+          mobile: `+${String(row.mobile_country_code ?? "91")} ${String(row.mobile ?? "")}`,
+          email: String(row.email ?? "-"),
+          location: String((first(row.stations as { station_code?: string } | Array<{ station_code?: string }> | null) ?? {}).station_code ?? "-"),
+          designation: String(row.designation ?? "-"),
+          status: displayStatus(row[source.statusField], row.is_active !== false)
+        }))
+    };
+  }));
+  const allResults = [...results, ...customResults];
   return {
-    categories: (categoryResult.data ?? []) as Array<{ code: string; name: string }>,
-    rows: results.flatMap((result) => result.rows),
-    error: categoryResult.error?.message ?? results.find((result) => result.error)?.error ?? null
+    categories,
+    rows: allResults.flatMap((result) => result.rows),
+    error: categoryResult.error?.message ?? allResults.find((result) => result.error)?.error ?? null
   };
 }
 

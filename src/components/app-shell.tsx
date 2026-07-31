@@ -63,7 +63,7 @@ export async function AppShell({ children, active, pageCode }: { children: React
       const known = workforceCategoryRoutes[category.code];
       return known
         ? { code: known.code, label: category.name, href: known.href }
-        : { label: category.name, href: `/people/all?category=${encodeURIComponent(category.code)}` };
+        : { label: category.name, href: `/people/category/${encodeURIComponent(category.code)}` };
     });
     return {
       ...item,

@@ -68,8 +68,9 @@ export async function createWorkforceCategory(formData: FormData) {
   const companyId = requireCompanyId(authorization);
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    const code = categoryCode(formData.get("code"));
     const { error } = await supabaseAdmin.from("workforce_categories").insert(withCompany({
-      code: categoryCode(formData.get("code")),
+      code,
       name: required(formData.get("name"), "Category name"),
       profile_field_rules: categoryRules(formData),
       app_page_access: appPageAccess(formData),
@@ -78,6 +79,16 @@ export async function createWorkforceCategory(formData: FormData) {
       is_active: true
     }, companyId));
     if (error) throw new Error(error.message);
+    const systemCodes = new Set(["employees", "field_executives", "contractors", "vendors", "workers"]);
+    if (!systemCodes.has(code)) {
+      const provisionResult = await supabaseAdmin.rpc("provision_workforce_category_table", {
+        p_category_code: code,
+        p_company_id: companyId
+      });
+      if (provisionResult.error) {
+        throw new Error(`${provisionResult.error.message} Run scripts/workforce_dynamic_category_tables_v1.sql in Supabase SQL Editor.`);
+      }
+    }
     revalidatePath("/master/workforce-categories");
     revalidatePath("/master/designations");
     revalidatePath("/settings/dropx-id-generation");

@@ -12,6 +12,8 @@ export const dynamic = "force-dynamic";
 type LocationRow = {
   id: string;
   station_code: string;
+  providers?: { name?: string | null } | { name?: string | null }[] | null;
+  location_models?: { code?: string | null; name?: string | null } | { code?: string | null; name?: string | null }[] | null;
 };
 
 type ProfileRow = {
@@ -26,12 +28,34 @@ type ProfileRow = {
 
 type FieldExecutiveRow = {
   id: string;
+  dropx_id: string | null;
   full_name: string;
   email: string | null;
   mobile: string;
+  mobile_country_code?: string | null;
   designation?: string | null;
+  onboarding_status?: string | null;
   is_active: boolean;
-  stations?: { station_code?: string | null } | { station_code?: string | null }[] | null;
+  stations?: WorkforceLocation | WorkforceLocation[] | null;
+};
+
+type EmployeeRow = {
+  id: string;
+  employee_code: string | null;
+  full_name: string;
+  email: string | null;
+  mobile: string;
+  mobile_country_code?: string | null;
+  profile_completion_status?: string | null;
+  is_active: boolean;
+  stations?: WorkforceLocation | WorkforceLocation[] | null;
+  designations?: { name?: string | null } | { name?: string | null }[] | null;
+};
+
+type WorkforceLocation = {
+  station_code?: string | null;
+  providers?: { name?: string | null } | { name?: string | null }[] | null;
+  location_models?: { code?: string | null; name?: string | null } | { code?: string | null; name?: string | null }[] | null;
 };
 
 type CampaignRecipientRow = {
@@ -92,6 +116,20 @@ function normalizeMobile(value: string | null | undefined) {
   return String(value ?? "").replace(/\D/g, "");
 }
 
+function relationList<T>(value: T | T[] | null | undefined) {
+  return Array.isArray(value) ? value : value ? [value] : [];
+}
+
+function workforceStatus(status: string | null | undefined, isActive: boolean) {
+  const normalized = String(status ?? "").trim().toLowerCase();
+  if (normalized === "under_review") return "Under Review";
+  if (normalized === "returned") return "Returned";
+  if (normalized === "submitted") return "Submitted";
+  if (normalized === "pending" || normalized === "draft") return "Pending";
+  if (normalized === "active") return "Active";
+  return isActive ? "Active" : "Inactive";
+}
+
 async function loadBulkWhatsAppData(companyId: string) {
   const defaults = {
     contacts: [],
@@ -105,14 +143,19 @@ async function loadBulkWhatsAppData(companyId: string) {
   };
   if (!supabaseAdmin) return { ...defaults, error: "Supabase service role key is not configured." };
 
-  const [settings, templates, profiles, senderProfiles, campaignProfiles, fieldExecutives, locations, campaigns] = await Promise.all([
+  const workforceLocationSelect = "stations (station_code, providers (name), location_models (code, name))";
+  const [settings, templates, profiles, senderProfiles, campaignProfiles, employees, fieldExecutives, contractors, vendors, workers, locations, campaigns] = await Promise.all([
     supabaseAdmin.from("whatsapp_settings").select("is_enabled").eq("company_id", companyId).eq("id", true).maybeSingle(),
     supabaseAdmin.from("whatsapp_template_cache").select("template_id, whatsapp_profile_id, name, language, category, status, components").eq("company_id", companyId).order("name"),
     supabaseAdmin.from("profiles").select("id, full_name, email, mobile, role, location_scope_ids, is_active").eq("company_id", companyId).order("full_name"),
     supabaseAdmin.from("whatsapp_profiles").select("id, profile_name, phone_number_id, default_country_code, is_default, is_active").eq("company_id", companyId).eq("is_active", true).order("profile_name"),
     supabaseAdmin.from("whatsapp_profiles").select("id, profile_name").eq("company_id", companyId),
-    supabaseAdmin.from("field_executives").select("id, full_name, email, mobile, designation, is_active, stations (station_code)").eq("company_id", companyId).order("full_name"),
-    supabaseAdmin.from("stations").select("id, station_code").eq("company_id", companyId),
+    supabaseAdmin.from("employees").select(`id, employee_code, full_name, email, mobile, mobile_country_code, profile_completion_status, is_active, ${workforceLocationSelect}, designations (name)`).eq("company_id", companyId).order("full_name"),
+    supabaseAdmin.from("field_executives").select(`id, dropx_id, full_name, email, mobile, mobile_country_code, designation, onboarding_status, is_active, ${workforceLocationSelect}`).eq("company_id", companyId).order("full_name"),
+    supabaseAdmin.from("contractors").select(`id, dropx_id, full_name, email, mobile, mobile_country_code, designation, onboarding_status, is_active, ${workforceLocationSelect}`).eq("company_id", companyId).order("full_name"),
+    supabaseAdmin.from("vendors").select(`id, dropx_id, full_name, email, mobile, mobile_country_code, designation, onboarding_status, is_active, ${workforceLocationSelect}`).eq("company_id", companyId).order("full_name"),
+    supabaseAdmin.from("workers").select(`id, dropx_id, full_name, email, mobile, mobile_country_code, designation, onboarding_status, is_active, ${workforceLocationSelect}`).eq("company_id", companyId).order("full_name"),
+    supabaseAdmin.from("stations").select("id, station_code, providers (name), location_models (code, name)").eq("company_id", companyId),
     supabaseAdmin
       .from("whatsapp_campaigns")
       .select("id, campaign_code, whatsapp_profile_id, whatsapp_profile_name, created_at, total_count, sent_count, failed_count, pending_count, status, whatsapp_campaign_recipients (id, row_no, recipient_name, recipient_mobile, country_code, status, provider_message_id, error_message, sent_at, updated_at)")
@@ -122,41 +165,86 @@ async function loadBulkWhatsAppData(companyId: string) {
   ]);
 
   const campaignSetupMissing = campaigns.error?.message?.includes("whatsapp_campaigns") || campaigns.error?.message?.includes("whatsapp_campaign_recipients");
-  const error = settings.error?.message || templates.error?.message || profiles.error?.message || senderProfiles.error?.message || campaignProfiles.error?.message || fieldExecutives.error?.message || locations.error?.message || null;
-  const locationCodeById = new Map(((locations.data ?? []) as LocationRow[]).map((location) => [location.id, location.station_code]));
+  const error = settings.error?.message || templates.error?.message || profiles.error?.message || senderProfiles.error?.message || campaignProfiles.error?.message ||
+    employees.error?.message || fieldExecutives.error?.message || contractors.error?.message || vendors.error?.message || workers.error?.message || locations.error?.message || null;
+  const locationsById = new Map(((locations.data ?? []) as LocationRow[]).map((location) => [location.id, location]));
   const profileNameById = new Map(((campaignProfiles.data ?? []) as Array<{ id: string; profile_name: string }>).map((profile) => [profile.id, profile.profile_name]));
   const userContacts = ((profiles.data ?? []) as ProfileRow[])
     .filter((profile) => normalizeMobile(profile.mobile))
-    .map((profile) => ({
-      id: `profile:${profile.id}`,
-      source: "User" as const,
-      name: profile.full_name || profile.email || "User",
-      mobile: normalizeMobile(profile.mobile),
-      email: profile.email ?? "",
-      location: (profile.location_scope_ids ?? []).map((id) => locationCodeById.get(id)).filter(Boolean).slice(0, 3).join(", "),
-      role: profile.role ?? "User",
-      designation: profile.role ?? "User",
-      status: profile.is_active ? "Active" : "Inactive"
-    }));
-  const executiveContacts = ((fieldExecutives.data ?? []) as FieldExecutiveRow[])
-    .filter((executive) => normalizeMobile(executive.mobile))
-    .map((executive) => {
-      const station = firstRelation(executive.stations);
+    .map((profile) => {
+      const scopedLocations = (profile.location_scope_ids ?? []).map((id) => locationsById.get(id)).filter(Boolean) as LocationRow[];
       return {
-        id: `field_executive:${executive.id}`,
-        source: "Field Executive" as const,
-        name: executive.full_name,
-        mobile: normalizeMobile(executive.mobile),
-        email: executive.email ?? "",
-        location: station?.station_code ?? "",
-        role: executive.designation || "Field Executive",
-        designation: executive.designation || "Field Executive",
-        status: executive.is_active ? "Active" : "Inactive"
+        id: `profile:${profile.id}`,
+        source: "Dashboard User",
+        name: profile.full_name || profile.email || "User",
+        mobile: normalizeMobile(profile.mobile),
+        email: profile.email ?? "",
+        dropx_id: "",
+        location: scopedLocations.map((location) => location.station_code).join(", "),
+        provider: scopedLocations.flatMap((location) => relationList(location.providers).map((provider) => provider.name ?? "")).filter(Boolean).join(", "),
+        model: scopedLocations.flatMap((location) => relationList(location.location_models).map((model) => model.code || model.name || "")).filter(Boolean).join(", "),
+        role: profile.role ?? "User",
+        designation: profile.role ?? "User",
+        status: profile.is_active ? "Active" : "Inactive"
       };
     });
 
+  function workforceContacts(rows: FieldExecutiveRow[], source: string, idPrefix: string) {
+    return rows
+      .filter((person) => normalizeMobile(person.mobile))
+      .map((person) => {
+        const station = firstRelation(person.stations);
+        const provider = firstRelation(station?.providers);
+        const model = firstRelation(station?.location_models);
+        return {
+          id: `${idPrefix}:${person.id}`,
+          source,
+          name: person.full_name,
+          mobile: normalizeMobile(person.mobile),
+          country_code: normalizeMobile(person.mobile_country_code) || "91",
+          email: person.email ?? "",
+          dropx_id: person.dropx_id ?? "",
+          location: station?.station_code ?? "",
+          provider: provider?.name ?? "",
+          model: model?.code || model?.name || "",
+          role: person.designation || source,
+          designation: person.designation || source,
+          status: workforceStatus(person.onboarding_status, person.is_active)
+        };
+      });
+  }
+
+  const employeeContacts = ((employees.data ?? []) as EmployeeRow[])
+    .filter((employee) => normalizeMobile(employee.mobile))
+    .map((employee) => {
+      const station = firstRelation(employee.stations);
+      const designation = firstRelation(employee.designations);
+      const provider = firstRelation(station?.providers);
+      const model = firstRelation(station?.location_models);
+      return {
+        id: `employee:${employee.id}`,
+        source: "Employee",
+        name: employee.full_name,
+        mobile: normalizeMobile(employee.mobile),
+        country_code: normalizeMobile(employee.mobile_country_code) || "91",
+        email: employee.email ?? "",
+        dropx_id: employee.employee_code ?? "",
+        location: station?.station_code ?? "",
+        provider: provider?.name ?? "",
+        model: model?.code || model?.name || "",
+        role: designation?.name || "Employee",
+        designation: designation?.name || "Employee",
+        status: workforceStatus(employee.profile_completion_status, employee.is_active)
+      };
+    });
+  const executiveContacts = workforceContacts((fieldExecutives.data ?? []) as FieldExecutiveRow[], "Field Executive", "field_executive");
+  const contractorContacts = workforceContacts((contractors.data ?? []) as FieldExecutiveRow[], "Independent Contractor", "contractor");
+  const vendorContacts = workforceContacts((vendors.data ?? []) as FieldExecutiveRow[], "Vendor", "vendor");
+  const workerContacts = workforceContacts((workers.data ?? []) as FieldExecutiveRow[], "Worker", "worker");
+
   return {
-    contacts: [...userContacts, ...executiveContacts].sort((left, right) => left.name.localeCompare(right.name)),
+    contacts: [...userContacts, ...employeeContacts, ...executiveContacts, ...contractorContacts, ...vendorContacts, ...workerContacts]
+      .sort((left, right) => left.name.localeCompare(right.name)),
     error,
     campaignError: campaignSetupMissing ? `${campaigns.error?.message} Run scripts/whatsapp_campaigns_v1.sql in Supabase SQL Editor.` : campaigns.error?.message ?? null,
     campaigns: ((campaigns.data ?? []) as CampaignRow[]).map((campaign) => ({

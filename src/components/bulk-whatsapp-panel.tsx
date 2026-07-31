@@ -30,11 +30,14 @@ type WhatsAppProfile = {
 
 type Contact = {
   id: string;
-  source: "User" | "Field Executive";
+  source: string;
   name: string;
   mobile: string;
   email: string;
+  dropx_id?: string;
   location: string;
+  provider?: string;
+  model?: string;
   role: string;
   designation?: string;
   status: string;
@@ -77,8 +80,11 @@ const databaseFieldOptions = [
   { value: "name", label: "Name" },
   { value: "mobile", label: "Mobile number" },
   { value: "email", label: "Email" },
+  { value: "dropx_id", label: "DropX ID" },
   { value: "source", label: "Source" },
   { value: "location", label: "Location" },
+  { value: "provider", label: "Provider" },
+  { value: "model", label: "Model" },
   { value: "role", label: "Role / designation" },
   { value: "status", label: "Status" },
   { value: "country_code", label: "Country code" }
@@ -236,6 +242,8 @@ export function BulkWhatsAppPanel({
   const [contactSources, setContactSources] = useState<string[]>([]);
   const [contactStatuses, setContactStatuses] = useState<string[]>(["active"]);
   const [contactLocations, setContactLocations] = useState<string[]>([]);
+  const [contactProviders, setContactProviders] = useState<string[]>([]);
+  const [contactModels, setContactModels] = useState<string[]>([]);
   const [contactRoles, setContactRoles] = useState<string[]>([]);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [sendListIds, setSendListIds] = useState<Set<string>>(new Set());
@@ -302,14 +310,17 @@ export function BulkWhatsAppPanel({
   const excelFieldOptions = excelHeaders.map((header) => ({ value: header, label: header }));
   const fieldOptions = sourceMode === "excel" ? excelFieldOptions : databaseFieldOptions;
   const sourceOptions = [
-    { value: "User", label: "Users" },
-    { value: "Field Executive", label: "Field Executives" }
+    { value: "Dashboard User", label: "Dashboard Users" },
+    { value: "Employee", label: "Employees" },
+    { value: "Field Executive", label: "Field Executives" },
+    { value: "Independent Contractor", label: "Independent Contractors" },
+    { value: "Vendor", label: "Vendors" },
+    { value: "Worker", label: "Workers" }
   ];
-  const statusOptions = [
-    { value: "active", label: "Active" },
-    { value: "inactive", label: "Inactive" }
-  ];
+  const statusOptions = uniqueOptions(contacts.map((contact) => contact.status)).map((status) => ({ value: status.toLowerCase(), label: status }));
   const locationOptions = uniqueOptions(contacts.flatMap((contact) => contact.location.split(",").map((item) => item.trim()))).map((location) => ({ value: location, label: location }));
+  const providerOptions = uniqueOptions(contacts.flatMap((contact) => (contact.provider ?? "").split(",").map((item) => item.trim()))).map((provider) => ({ value: provider, label: provider }));
+  const modelOptions = uniqueOptions(contacts.flatMap((contact) => (contact.model ?? "").split(",").map((item) => item.trim()))).map((model) => ({ value: model, label: model }));
   const roleOptions = uniqueOptions(contacts.map((contact) => contact.designation || contact.role)).map((role) => ({ value: role, label: role }));
   const effectiveMappings = useMemo(() => {
     const merged: Record<string, MappingRule> = {};
@@ -351,17 +362,21 @@ export function BulkWhatsAppPanel({
   const filteredContacts = useMemo(() => {
     const term = search.trim().toLowerCase();
     return contacts.filter((contact) => {
-      const searchable = `${contact.name} ${contact.mobile} ${contact.email} ${contact.location} ${contact.role} ${contact.designation ?? ""}`.toLowerCase();
+      const searchable = `${contact.name} ${contact.mobile} ${contact.email} ${contact.dropx_id ?? ""} ${contact.location} ${contact.provider ?? ""} ${contact.model ?? ""} ${contact.role} ${contact.designation ?? ""}`.toLowerCase();
       const matchesSearch = !term || searchable.includes(term);
       const contactLocationList = contact.location.split(",").map((item) => item.trim()).filter(Boolean);
+      const contactProviderList = (contact.provider ?? "").split(",").map((item) => item.trim()).filter(Boolean);
+      const contactModelList = (contact.model ?? "").split(",").map((item) => item.trim()).filter(Boolean);
       const matchesSource = !contactSources.length || contactSources.includes(contact.source);
       const matchesStatus = !contactStatuses.length || contactStatuses.includes(contact.status.toLowerCase());
       const matchesLocation = !contactLocations.length || contactLocationList.some((location) => contactLocations.includes(location));
+      const matchesProvider = !contactProviders.length || contactProviderList.some((provider) => contactProviders.includes(provider));
+      const matchesModel = !contactModels.length || contactModelList.some((model) => contactModels.includes(model));
       const roleValue = contact.designation || contact.role;
       const matchesRole = !contactRoles.length || contactRoles.includes(roleValue);
-      return matchesSearch && matchesSource && matchesStatus && matchesLocation && matchesRole;
+      return matchesSearch && matchesSource && matchesStatus && matchesLocation && matchesProvider && matchesModel && matchesRole;
     });
-  }, [contactLocations, contactRoles, contactSources, contactStatuses, contacts, search]);
+  }, [contactLocations, contactModels, contactProviders, contactRoles, contactSources, contactStatuses, contacts, search]);
   const totalPages = Math.max(1, Math.ceil(filteredContacts.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const visibleContacts = filteredContacts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -643,10 +658,12 @@ export function BulkWhatsAppPanel({
           </div>
           {sourceMode === "database" ? (
             <div className="bulk-recipient-filters">
-              <input className="field" onChange={(event) => updateFilters(() => setSearch(event.target.value))} placeholder="Search name, mobile, email, location" value={search} />
+              <input className="field" onChange={(event) => updateFilters(() => setSearch(event.target.value))} placeholder="Search ID, name, mobile, email" value={search} />
               <MultiCheckFilter label="All data" onChange={(values) => updateFilters(() => setContactSources(values))} options={sourceOptions} selected={contactSources} />
+              <MultiCheckFilter label="All providers" onChange={(values) => updateFilters(() => setContactProviders(values))} options={providerOptions} selected={contactProviders} />
+              <MultiCheckFilter label="All models" onChange={(values) => updateFilters(() => setContactModels(values))} options={modelOptions} selected={contactModels} />
               <MultiCheckFilter label="All locations" onChange={(values) => updateFilters(() => setContactLocations(values))} options={locationOptions} selected={contactLocations} />
-              <MultiCheckFilter label="All roles" onChange={(values) => updateFilters(() => setContactRoles(values))} options={roleOptions} selected={contactRoles} />
+              <MultiCheckFilter label="All designations" onChange={(values) => updateFilters(() => setContactRoles(values))} options={roleOptions} selected={contactRoles} />
               <MultiCheckFilter label="All statuses" onChange={(values) => updateFilters(() => setContactStatuses(values))} options={statusOptions} selected={contactStatuses} />
             </div>
           ) : (
@@ -691,7 +708,12 @@ export function BulkWhatsAppPanel({
                   {visibleContacts.length ? visibleContacts.map((contact) => (
                     <tr key={contact.id}>
                       <td><input checked={checkedIds.has(contact.id)} onChange={() => toggleContact(contact.id)} type="checkbox" /></td>
-                      <td><strong>{contact.name}</strong><br /><span className="subtle">{contact.email || "-"}</span></td>
+                      <td>
+                        <strong>{contact.name}</strong><br />
+                        <span className="subtle">
+                          {[contact.dropx_id, contact.email].filter(Boolean).join(" · ") || "-"}
+                        </span>
+                      </td>
                       <td>{contact.mobile}</td>
                       <td>{contact.source}</td>
                       <td>{contact.location || "-"}</td>

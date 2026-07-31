@@ -7702,6 +7702,44 @@ tbody tr:hover td {
   width: min(260px, 82vw);
 }
 
+.all-people-filters {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: min(100%, 1040px);
+}
+
+.all-people-search {
+  width: 240px;
+}
+
+.all-people-filter {
+  width: 145px;
+  flex: 0 0 145px;
+}
+
+.all-people-filter .bulk-multi-filter-trigger strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 820px) {
+  .all-people-filters,
+  .all-people-search,
+  .all-people-filter {
+    width: 100%;
+  }
+
+  .all-people-filter {
+    flex-basis: 100%;
+  }
+}
+
 .business-doc-selection {
   display: grid;
   gap: 10px;

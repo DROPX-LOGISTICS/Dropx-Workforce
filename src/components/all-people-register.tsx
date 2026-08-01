@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { EllipsisVertical, Eye, Pencil } from "lucide-react";
+import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
 
 export type AllPeopleRow = {
+  id: string;
   category: string;
   categoryCode: string;
   code: string;
@@ -14,7 +17,11 @@ export type AllPeopleRow = {
   location: string;
   designation: string;
   status: string;
+  actionBasePath: string;
+  canEdit: boolean;
 };
+
+const rowsPerPage = 20;
 
 type FilterOption = { value: string; label: string };
 
@@ -88,12 +95,57 @@ function optionsFrom(values: string[]) {
     .map((value) => ({ value, label: value }));
 }
 
+function AllPeopleActionMenu({ row }: { row: AllPeopleRow }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const tableWrap = menuRef.current?.closest(".employee-table-wrap");
+    tableWrap?.classList.add("menu-open");
+    function closeMenu(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setOpen(false);
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", closeMenu);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      tableWrap?.classList.remove("menu-open");
+      document.removeEventListener("mousedown", closeMenu);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  return (
+    <div className="row-action-menu" ref={menuRef}>
+      <button aria-expanded={open} aria-haspopup="menu" aria-label={`Actions for ${row.fullName}`} className="icon-button" onClick={() => setOpen((current) => !current)} type="button">
+        <EllipsisVertical aria-hidden="true" size={17} />
+      </button>
+      {open ? (
+        <div className="row-action-popover">
+          <PendingLink className="row-action-item" href={`${row.actionBasePath}?view=${row.id}`} scroll={false}>
+            <Eye aria-hidden="true" size={15} /> View
+          </PendingLink>
+          {row.canEdit ? (
+            <PendingLink className="row-action-item" href={`${row.actionBasePath}?edit=${row.id}`} scroll={false}>
+              <Pencil aria-hidden="true" size={15} /> Edit
+            </PendingLink>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function AllPeopleRegister({ rows }: { rows: AllPeopleRow[] }) {
   const [search, setSearch] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
   const [locations, setLocations] = useState<string[]>([]);
   const [designations, setDesignations] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
 
   const categoryOptions = useMemo(() => (
     Array.from(new Map(rows.map((row) => [row.categoryCode, row.category])).entries())
@@ -114,6 +166,14 @@ export function AllPeopleRegister({ rows }: { rows: AllPeopleRow[] }) {
       return !term || `${row.code} ${row.biometricId} ${row.fullName} ${row.mobile} ${row.email} ${row.location} ${row.designation} ${row.category}`.toLowerCase().includes(term);
     });
   }, [categories, designations, locations, rows, search, statuses]);
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
+  const currentPage = Math.min(page, totalPages);
+  const visibleRows = filteredRows.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  useEffect(() => setPage(1), [categories, designations, locations, search, statuses]);
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   return (
     <section className="panel">
@@ -130,21 +190,29 @@ export function AllPeopleRegister({ rows }: { rows: AllPeopleRow[] }) {
           <MultiCheckFilter allLabel="All statuses" label="Status" onChange={setStatuses} options={statusOptions} selected={statuses} />
         </div>
       </div>
-      <div className="table-wrap">
+      <div className="table-wrap field-executive-table-wrap employee-table-wrap all-people-table-wrap">
         <table>
-          <thead><tr><th>DropX ID</th><th>Biometric ID</th><th>Full name</th><th>Category</th><th>Mobile</th><th>Email</th><th>Location</th><th>Designation</th><th>Status</th></tr></thead>
+          <thead><tr><th>DropX ID</th><th>Biometric ID</th><th>Full name</th><th>Category</th><th>Mobile</th><th>Email</th><th>Location</th><th>Designation</th><th>Status</th><th>Action</th></tr></thead>
           <tbody>
-            {filteredRows.map((row) => (
-              <tr key={`${row.category}:${row.code}`}>
+            {visibleRows.map((row) => (
+              <tr key={`${row.categoryCode}:${row.id}`}>
                 <td><strong>{row.code}</strong></td><td>{row.biometricId}</td><td><strong>{row.fullName}</strong></td>
                 <td>{row.category}</td><td>{row.mobile}</td><td>{row.email}</td><td>{row.location}</td><td>{row.designation}</td>
                 <td><StatusPill status={row.status} /></td>
+                <td><AllPeopleActionMenu row={row} /></td>
               </tr>
             ))}
-            {!filteredRows.length ? <tr><td className="empty-cell" colSpan={9}>No people match the selected filters.</td></tr> : null}
+            {!filteredRows.length ? <tr><td className="empty-cell" colSpan={10}>No people match the selected filters.</td></tr> : null}
           </tbody>
         </table>
       </div>
+      {filteredRows.length ? (
+        <div className="panel-foot pagination">
+          <button className="pager-button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} type="button">Previous</button>
+          <span>Page {currentPage} of {totalPages}</span>
+          <button className="pager-button" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)} type="button">Next</button>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -4022,6 +4022,26 @@ h3 {
   min-width: 210px;
 }
 
+.all-people-table-wrap table {
+  min-width: 1420px;
+}
+
+.all-people-table-wrap th:nth-child(1),
+.all-people-table-wrap td:nth-child(1) {
+  width: 125px;
+}
+
+.all-people-table-wrap th:nth-child(2),
+.all-people-table-wrap td:nth-child(2) {
+  min-width: 125px;
+}
+
+.all-people-table-wrap th:nth-child(10),
+.all-people-table-wrap td:nth-child(10) {
+  width: 72px;
+  text-align: center;
+}
+
 .row-action-menu {
   position: relative;
   display: inline-flex;

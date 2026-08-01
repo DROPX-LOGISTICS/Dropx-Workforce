@@ -226,21 +226,21 @@ function EmployeeDetails({
           {enabled.has("emergency_contact_relation") ? <EmployeeDetail label="Relation" value={employee.emergency_contact_relation} /> : null}
         </dl>
       </section> : null}
-      {hasAny("aadhaar_number", "pan_number", "eshram_uan", "address", "state_code", "pincode", "landmark") ? <section>
+      {hasAny("aadhaar_number", "pan_number", "address", "state_code", "pincode", "landmark") ? <section>
         <h3>Identity and address</h3>
         <dl className="executive-detail-grid">
           {enabled.has("aadhaar_number") ? <EmployeeDetail label="Aadhaar number" value={employee.aadhaar_number} /> : null}
           {enabled.has("pan_number") ? <EmployeeDetail label="PAN number" value={employee.pan_number} /> : null}
-          {enabled.has("eshram_uan") ? <EmployeeDetail label="eShram UAN" value={employee.eshram_uan} /> : null}
           {enabled.has("address") ? <EmployeeDetail label="Address" value={employee.address} /> : null}
           {enabled.has("state_code") ? <EmployeeDetail label="State" value={employee.state_code} /> : null}
           {enabled.has("pincode") ? <EmployeeDetail label="Postal PIN" value={employee.pincode} /> : null}
           {enabled.has("landmark") ? <EmployeeDetail label="Landmark" value={employee.landmark} /> : null}
         </dl>
       </section> : null}
-      {hasAny("pf_uan", "pf_account_no", "esi_no") ? <section>
+      {hasAny("eshram_uan", "pf_uan", "pf_account_no", "esi_no") ? <section>
         <h3>Statutory</h3>
         <dl className="executive-detail-grid">
+          {enabled.has("eshram_uan") ? <EmployeeDetail label="eShram UAN" value={employee.eshram_uan} /> : null}
           {enabled.has("pf_uan") ? <EmployeeDetail label="PF UAN" value={employee.pf_uan} /> : null}
           {enabled.has("pf_account_no") ? <EmployeeDetail label="PF Account No" value={employee.pf_account_no} /> : null}
           {enabled.has("esi_no") ? <EmployeeDetail label="ESI No" value={employee.esi_no} /> : null}

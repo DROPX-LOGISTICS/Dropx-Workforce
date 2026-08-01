@@ -286,12 +286,11 @@ function FieldExecutiveDetails({
           {enabled.has("emergency_contact_relation") ? <ExecutiveDetail label="Relation" value={executive.emergency_contact_relation} /> : null}
         </dl>
       </section> : null}
-      {hasAny("aadhaar_number", "pan_number", "eshram_uan", "address", "landmark", "state_code", "pincode") ? <section>
+      {hasAny("aadhaar_number", "pan_number", "address", "landmark", "state_code", "pincode") ? <section>
         <h3>Identity and address</h3>
         <dl className="executive-detail-grid">
           {enabled.has("aadhaar_number") ? <ExecutiveDetail label="Aadhaar number" value={executive.aadhaar_number} /> : null}
           {enabled.has("pan_number") ? <ExecutiveDetail label="PAN number" value={executive.pan_number} /> : null}
-          {enabled.has("eshram_uan") ? <ExecutiveDetail label="eShram UAN" value={executive.eshram_uan} /> : null}
           {enabled.has("address") ? <ExecutiveDetail label="Address" value={executive.address} /> : null}
           {enabled.has("landmark") ? <ExecutiveDetail label="Landmark" value={executive.landmark} /> : null}
           {enabled.has("state_code") ? <ExecutiveDetail label="State" value={executive.state_code} /> : null}
@@ -305,9 +304,10 @@ function FieldExecutiveDetails({
           {enabled.has("ifsc") ? <ExecutiveDetail label="IFSC" value={executive.ifsc_code} /> : null}
         </dl>
       </section> : null}
-      {hasAny("pf_uan", "pf_account_no", "esi_no") ? <section>
+      {hasAny("eshram_uan", "pf_uan", "pf_account_no", "esi_no") ? <section>
         <h3>Statutory</h3>
         <dl className="executive-detail-grid">
+          {enabled.has("eshram_uan") ? <ExecutiveDetail label="eShram UAN" value={executive.eshram_uan} /> : null}
           {enabled.has("pf_uan") ? <ExecutiveDetail label="PF UAN" value={executive.pf_uan} /> : null}
           {enabled.has("pf_account_no") ? <ExecutiveDetail label="PF Account No" value={executive.pf_account_no} /> : null}
           {enabled.has("esi_no") ? <ExecutiveDetail label="ESI No" value={executive.esi_no} /> : null}
@@ -418,8 +418,6 @@ function FieldExecutiveForm({
 
       <label hidden={!fieldEnabled("aadhaar_number")}>Aadhaar number<input className="field" inputMode="numeric" maxLength={12} name="aadhaar_number" pattern="[0-9]{12}" placeholder="Enter Aadhaar number" required={fieldRequired("aadhaar_number")} defaultValue={textValue(executive?.aadhaar_number)} /></label>
       <label hidden={!fieldEnabled("pan_number")}>PAN number<input className="field" name="pan_number" placeholder="Enter PAN number" required={fieldRequired("pan_number")} defaultValue={textValue(executive?.pan_number)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="pan" pageCode={workforceConfig.pageCode} profileType={workforceConfig.profileType} /> : null}</label>
-      <label hidden={!fieldEnabled("eshram_uan")}>eShram UAN<input className="field" inputMode="numeric" maxLength={12} name="eshram_uan" pattern="[0-9]{12}" placeholder="Enter eShram UAN" required={fieldRequired("eshram_uan")} defaultValue={textValue(executive?.eshram_uan)} /></label>
-
       <label className="span-3" hidden={!fieldEnabled("address")}>Address<input className="field" name="address" placeholder="Enter complete address" required={fieldRequired("address")} defaultValue={textValue(executive?.address)} /></label>
       <label hidden={!fieldEnabled("pincode")}>Postal PIN<input className="field" inputMode="numeric" maxLength={6} name="postal_pin" pattern="[0-9]{6}" placeholder="Enter PIN" required={fieldRequired("pincode")} defaultValue={textValue(executive?.postal_pin)} /></label>
       <label hidden={!fieldEnabled("landmark")}>Land mark<input className="field" name="landmark" placeholder="Enter landmark" required={fieldRequired("landmark")} defaultValue={textValue(executive?.landmark)} /></label>
@@ -440,6 +438,7 @@ function FieldExecutiveForm({
 
       <label hidden={!fieldEnabled("bank_account_no")}>Bank A/c No.<input className="field" name="bank_account_no" pattern="[A-Za-z0-9]*" placeholder="Enter bank account number" required={fieldRequired("bank_account_no")} defaultValue={textValue(executive?.bank_account_no)} /></label>
       <label hidden={!fieldEnabled("ifsc")}>IFSC<input className="field" name="ifsc_code" placeholder="Enter IFSC" required={fieldRequired("ifsc")} defaultValue={textValue(executive?.ifsc_code)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="bank" pageCode={workforceConfig.pageCode} profileType={workforceConfig.profileType} /> : null}</label>
+      <label hidden={!fieldEnabled("eshram_uan")}>eShram UAN<input className="field" inputMode="numeric" maxLength={12} name="eshram_uan" pattern="[0-9]{12}" placeholder="Enter eShram UAN" required={fieldRequired("eshram_uan")} defaultValue={textValue(executive?.eshram_uan)} /></label>
       <label hidden={!fieldEnabled("pf_uan")}>PF UAN<input className="field" inputMode="numeric" maxLength={12} name="pf_uan" pattern="[0-9]{12}" placeholder="Enter PF UAN" required={fieldRequired("pf_uan")} defaultValue={textValue(executive?.pf_uan)} />{mode === "edit" && executive ? <ProfileVerificationPanel accountId={executive.id} kind="pf_uan" pageCode={workforceConfig.pageCode} profileType={workforceConfig.profileType} /> : null}</label>
       <label hidden={!fieldEnabled("pf_account_no")}>PF Account No<input className="field" name="pf_account_no" pattern="[A-Za-z0-9]*" placeholder="Enter PF Account No" required={fieldRequired("pf_account_no")} defaultValue={textValue(executive?.pf_account_no)} /></label>
       <label hidden={!fieldEnabled("esi_no")}>ESI No<input className="field" name="esi_no" pattern="[A-Za-z0-9]*" placeholder="Enter ESI No" required={fieldRequired("esi_no")} defaultValue={textValue(executive?.esi_no)} /></label>

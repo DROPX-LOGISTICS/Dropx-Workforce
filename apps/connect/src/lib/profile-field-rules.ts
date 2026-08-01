@@ -24,7 +24,7 @@ export const workforceProfileFields: ProfileFieldRule[] = [
   { key: "date_of_birth", label: "Date of birth", group: "Personal details", kind: "date" },
   { key: "aadhaar_number", label: "Aadhaar number", group: "Personal details", kind: "number" },
   { key: "pan_number", label: "PAN number", group: "Personal details", kind: "text" },
-  { key: "eshram_uan", label: "eShram UAN", group: "Personal details", kind: "number" },
+  { key: "eshram_uan", label: "eShram UAN", group: "Statutory details", kind: "number" },
   { key: "father_name", label: "Father name", group: "Personal details", kind: "text" },
   { key: "blood_group", label: "Blood group", group: "Personal details", kind: "select" },
   { key: "is_handicapped", label: "Handicapped", group: "Personal details", kind: "select" },

@@ -612,7 +612,6 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
         ...(enabled.has("date_of_birth") ? { "Date of birth": values.dateOfBirth } : {}),
         ...(enabled.has("aadhaar_number") ? { "Aadhaar number": values.aadhaarNumber } : {}),
         ...(enabled.has("pan_number") ? { PAN: values.panNumber } : {}),
-        ...(enabled.has("eshram_uan") ? { "eShram UAN": values.eshramUan } : {}),
         ...(enabled.has("father_name") ? { "Father name": values.fatherName } : {}),
         ...(enabled.has("blood_group") ? { "Blood group": values.bloodGroup } : {}),
         ...(enabled.has("is_handicapped") ? { Handicapped: values.isHandicapped === "true" ? "Yes" : "No" } : {})
@@ -627,7 +626,8 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
         ...(enabled.has("bank_account_no") ? { "Bank account no": values.bankAccountNo } : {}),
         ...(enabled.has("ifsc") ? { IFSC: values.ifsc } : {})
       }},
-      ...(["pf_uan","pf_account_no","esi_no"].some((field) => enabled.has(field)) ? [{ name: "Statutory details", values: {
+      ...(["eshram_uan","pf_uan","pf_account_no","esi_no"].some((field) => enabled.has(field)) ? [{ name: "Statutory details", values: {
+        ...(enabled.has("eshram_uan") ? { "eShram UAN": values.eshramUan } : {}),
         ...(enabled.has("pf_uan") ? { "PF UAN": values.pfUan } : {}),
         ...(enabled.has("pf_account_no") ? { "PF Account No": values.pfAccountNo } : {}),
         ...(enabled.has("esi_no") ? { "ESI No": values.esiNo } : {})
@@ -751,7 +751,6 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
         />
         <VerificationText checks={[currentCheck("pan_aadhaar")]} />
       </> : null}
-      {input("eshram_uan","eShram UAN")}
       {input("father_name","Father name")}
       {input("blood_group","Blood group",{ choices: bloodGroups })}
       {input("is_handicapped","Handicapped",{ choices: [{ value: "false", label: "No" }, { value: "true", label: "Yes" }] })}
@@ -766,7 +765,8 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
         <VerificationText checks={[currentCheck("bank")]} />
       </> : null}
     </ProfileSection>
-    {["pf_uan","pf_account_no","esi_no"].some((field) => enabled.has(field)) ? <ProfileSection title="Statutory details">
+    {["eshram_uan","pf_uan","pf_account_no","esi_no"].some((field) => enabled.has(field)) ? <ProfileSection title="Statutory details">
+      {input("eshram_uan","eShram UAN")}
       {(executive || profile.statutoryApplicability?.includes("pf")) && enabled.has("pf_uan") ? <>
         <label className="dx-field">
           <span>Do you have PF UAN? *</span>

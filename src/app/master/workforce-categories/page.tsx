@@ -36,7 +36,7 @@ export default async function WorkforceCategoriesPage({
 }: {
   searchParams?: { add?: string; edit?: string; q?: string };
 }) {
-  const authorization = await requirePagePermission("designations", "access");
+  const authorization = await requirePagePermission("workforce_categories", "access");
   const companyId = requireCompanyId(authorization);
   const permission = authorization.permissions.designations;
   let result = supabaseAdmin
@@ -70,7 +70,7 @@ export default async function WorkforceCategoriesPage({
   const flash = loadFlash();
 
   return (
-    <AppShell active="Workforce Categories" pageCode="designations">
+    <AppShell active="Workforce Categories" pageCode="workforce_categories">
       <PageHead
         eyebrow="Master Data"
         title="Workforce Categories"

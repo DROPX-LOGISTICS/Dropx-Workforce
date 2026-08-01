@@ -3,10 +3,10 @@
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getAuthorization, hasPermission, isCompanyOwner } from "@/lib/authorization";
+import { getAuthorization, hasPermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
-import { dynamicWorkforceTable, isCustomWorkforceCategoryCode, normalizeWorkforceCategoryCode } from "@/lib/dynamic-workforce";
+import { dynamicWorkforceTable, isCustomWorkforceCategoryCode, normalizeWorkforceCategoryCode, workforceCategoryPageCode } from "@/lib/dynamic-workforce";
 import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
 import { normalizeCategoryProfileFieldRules } from "@/lib/profile-field-rules";
@@ -53,12 +53,6 @@ function directProfilePayload(formData: FormData) {
   };
 }
 
-function canManagePeople(authorization: NonNullable<Awaited<ReturnType<typeof getAuthorization>>>, action: "add" | "edit" | "view") {
-  if (isCompanyOwner(authorization)) return true;
-  return ["employees", "delivery_associates", "contractors", "vendors", "workers"]
-    .some((pageCode) => hasPermission(authorization, pageCode, action));
-}
-
 function categoryPath(code: string, params?: Record<string, string>) {
   const query = params ? `?${new URLSearchParams(params).toString()}` : "";
   return `/people/category/${encodeURIComponent(code)}${query}`;
@@ -74,7 +68,8 @@ export async function createDynamicWorkforceProfile(formData: FormData) {
   if (!isCustomWorkforceCategoryCode(code)) redirect("/people/all");
   const authorization = await getAuthorization();
   if (!authorization) redirect("/login");
-  if (!canManagePeople(authorization, "add")) redirect("/unauthorized?page=onboard&action=add");
+  const pageCode = workforceCategoryPageCode(code);
+  if (!hasPermission(authorization, pageCode, "add")) redirect(`/unauthorized?page=${encodeURIComponent(pageCode)}&action=add`);
   const companyId = requireCompanyId(authorization);
 
   try {
@@ -216,7 +211,8 @@ export async function updateDynamicWorkforceProfile(formData: FormData) {
   if (!isCustomWorkforceCategoryCode(code)) redirect("/people/all");
   const authorization = await getAuthorization();
   if (!authorization) redirect("/login");
-  if (!canManagePeople(authorization, "edit")) redirect("/unauthorized?page=onboard&action=edit");
+  const pageCode = workforceCategoryPageCode(code);
+  if (!hasPermission(authorization, pageCode, "edit")) redirect(`/unauthorized?page=${encodeURIComponent(pageCode)}&action=edit`);
   const companyId = requireCompanyId(authorization);
   const id = required(formData.get("id"), "Profile");
 

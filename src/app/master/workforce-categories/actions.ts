@@ -78,7 +78,7 @@ function revalidateWorkforceCategoryPaths() {
 }
 
 export async function createWorkforceCategory(formData: FormData) {
-  const authorization = await requirePagePermission("designations", "add");
+  const authorization = await requirePagePermission("workforce_categories", "add");
   const companyId = requireCompanyId(authorization);
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
@@ -113,7 +113,7 @@ export async function createWorkforceCategory(formData: FormData) {
 }
 
 export async function updateWorkforceCategory(formData: FormData) {
-  const authorization = await requirePagePermission("designations", "edit");
+  const authorization = await requirePagePermission("workforce_categories", "edit");
   const companyId = requireCompanyId(authorization);
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
@@ -152,7 +152,7 @@ export async function updateWorkforceCategory(formData: FormData) {
 }
 
 export async function deleteWorkforceCategory(formData: FormData) {
-  const authorization = await requirePagePermission("designations", "edit");
+  const authorization = await requirePagePermission("workforce_categories", "edit");
   const companyId = requireCompanyId(authorization);
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
@@ -203,7 +203,7 @@ export async function deleteWorkforceCategory(formData: FormData) {
 }
 
 export async function forceDeleteWorkersCategory(formData: FormData) {
-  const authorization = await requirePagePermission("designations", "edit");
+  const authorization = await requirePagePermission("workforce_categories", "edit");
   const companyId = requireCompanyId(authorization);
   try {
     if (!authorization.isMasterOwner && authorization.roleCode !== "OWNER") {

@@ -10,13 +10,23 @@ type PermissionPage = {
 
 type PermissionAction = "view" | "add" | "edit";
 
+type PermissionGroup = {
+  key: string;
+  label: string;
+  codes: string[];
+  hiddenCodes?: string[];
+  matches?: (page: PermissionPage) => boolean;
+};
+
 const actions: Array<{ key: PermissionAction; label: string }> = [
   { key: "view", label: "View" },
   { key: "add", label: "Add" },
   { key: "edit", label: "Edit" }
 ];
 
-const groupDefinitions = [
+const workforceCategoryCodes = new Set(["employees", "delivery_associates", "contractors", "vendors", "workers"]);
+
+const groupDefinitions: PermissionGroup[] = [
   { key: "leads", label: "Leads", codes: ["leads_dashboard", "leads_all", "leads_followups", "leads_interviews", "leads_reports", "leads_ads", "leads_sop"], hiddenCodes: ["leads"] },
   { key: "fleet", label: "Fleet", codes: ["fleet_action_center", "fleet_vehicle_view", "fleet_date_view", "fleet_station_view", "fleet_tracking", "fleet_fuel_log", "fleet_live_gps", "fleet_maintenance", "fleet_reports"], hiddenCodes: ["fleet"] },
   { key: "operations", label: "Operations", codes: ["daily_submission", "cod_executive_reconciliation", "cod_submission", "cod_validation", "cod_reports", "cod_portal_checks"], hiddenCodes: ["cod"] },
@@ -24,8 +34,13 @@ const groupDefinitions = [
   { key: "cps", label: "CPS", codes: ["cps_overview", "cps_daily", "cps_monthly", "cps_cost_breakup", "cps_stations", "cps_shipments", "cps_associates", "cps_reports", "cps_inputs", "cps_unmapped"], hiddenCodes: ["cps"] },
   { key: "payments", label: "Payments", codes: ["expense_requests", "payment_requests", "payment_approvals", "payment_process", "payment_reports"], hiddenCodes: ["payments"] },
   { key: "reports", label: "Reports", codes: ["attendance_reports", "verification_api_reports"], hiddenCodes: ["reports"] },
-  { key: "onboard", label: "People", codes: ["delivery_associates", "employees", "contractors", "vendors", "workers", "people_review"] },
-  { key: "master_data", label: "Master Data", codes: ["master_locations", "master_providers", "master_models", "payment_methods", "master_payment_banks", "master_payment_heads", "designations", "biometric_devices", "cod_master", "master_documents"] },
+  {
+    key: "onboard",
+    label: "People",
+    codes: ["people_all", "people_review", "executive_id_onboarding"],
+    matches: (page) => workforceCategoryCodes.has(page.code) || page.code.startsWith("workforce_category_")
+  },
+  { key: "master_data", label: "Master Data", codes: ["master_locations", "master_providers", "master_models", "payment_methods", "master_payment_banks", "master_payment_heads", "workforce_categories", "workforce_whatsapp", "designations", "biometric_devices", "cod_master", "master_documents", "master_imports"] },
   { key: "settings", label: "Settings", codes: ["app_settings", "ai_connector", "amazon_connector", "developer_mode"] }
 ];
 
@@ -60,7 +75,7 @@ export function PermissionMatrix({
 
   const groups = useMemo(() => groupDefinitions.map((definition) => ({
     ...definition,
-    pages: definition.codes.flatMap((code) => pages.filter((page) => page.code === code)),
+    pages: pages.filter((page) => definition.codes.includes(page.code) || definition.matches?.(page)),
     hiddenPages: (definition.hiddenCodes ?? []).flatMap((code) => pages.filter((page) => page.code === code))
   })).filter((group) => group.pages.length), [pages]);
   const groupedPageIds = useMemo(() => new Set(groups.flatMap((group) => [...group.pages, ...group.hiddenPages].map((page) => page.id))), [groups]);

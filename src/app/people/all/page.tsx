@@ -1,9 +1,9 @@
 import { AppShell } from "@/components/app-shell";
 import { AllPeopleRegister, type AllPeopleRow } from "@/components/all-people-register";
 import { PageHead } from "@/components/page-head";
-import { getAuthorization, hasPermission, isCompanyOwner } from "@/lib/authorization";
+import { getAuthorization, hasPermission, type AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
-import { dynamicWorkforceTable, isCustomWorkforceCategoryCode } from "@/lib/dynamic-workforce";
+import { dynamicWorkforceTable, isCustomWorkforceCategoryCode, workforceCategoryPageCode } from "@/lib/dynamic-workforce";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { redirect } from "next/navigation";
 
@@ -32,7 +32,7 @@ async function loadPeople(
   allowedSources: PeopleSource[],
   locationScopeIds: string[],
   hasAllLocationAccess: boolean,
-  canEditCustomCategories: boolean
+  authorization: AuthorizationContext
 ) {
   if (!supabaseAdmin) {
     return {
@@ -49,6 +49,8 @@ async function loadPeople(
     .order("sort_order")
     .order("name");
   const categories = (categoryResult.data ?? []) as Array<{ code: string; name: string }>;
+  const activeCategoryCodes = new Set(categories.map((category) => category.code));
+  const currentSources = allowedSources.filter((source) => activeCategoryCodes.has(source.categoryCode));
   const customSources = categories
     .filter((category) => isCustomWorkforceCategoryCode(category.code))
     .map((category) => ({
@@ -58,9 +60,9 @@ async function loadPeople(
       codeField: "dropx_id",
       statusField: "onboarding_status",
       basePath: `/people/category/${category.code}`,
-      canEdit: canEditCustomCategories
+      canEdit: hasPermission(authorization, workforceCategoryPageCode(category.code), "edit")
     }));
-  const results = await Promise.all(allowedSources.map(async (source) => {
+  const results = await Promise.all(currentSources.map(async (source) => {
     const designationFields = source.employeeDesignation ? ", designations (name)" : ", designation";
     const result = await supabaseAdmin!
       .from(source.table)
@@ -134,20 +136,21 @@ export const dynamic = "force-dynamic";
 export default async function AllPeoplePage() {
   const authorization = await getAuthorization();
   if (!authorization) redirect("/login");
-  const allowedSources: PeopleSource[] = sources
-    .filter((source) => hasPermission(authorization, source.pageCode, "access"))
-    .map((source) => ({ ...source, canEdit: hasPermission(authorization, source.pageCode, "edit") }));
-  if (!allowedSources.length) redirect("/unauthorized?page=people&action=access");
+  if (!hasPermission(authorization, "people_all", "access")) redirect("/unauthorized?page=people_all&action=access");
+  const allowedSources: PeopleSource[] = sources.map((source) => ({
+    ...source,
+    canEdit: hasPermission(authorization, source.pageCode, "edit")
+  }));
   const companyId = requireCompanyId(authorization);
   const data = await loadPeople(
     companyId,
     allowedSources,
     authorization.locationScopeIds,
     authorization.hasAllLocationAccess,
-    isCompanyOwner(authorization) || sources.some((source) => hasPermission(authorization, source.pageCode, "edit"))
+    authorization
   );
   return (
-    <AppShell active="All People">
+    <AppShell active="All People" pageCode="people_all">
       <PageHead eyebrow="People" title="All People" subtitle="View every workforce category in one consolidated register." />
       {data.error ? (
         <section className="panel message-panel error"><div className="panel-body"><strong>Unable to load people</strong><p className="subtle">{data.error}</p></div></section>

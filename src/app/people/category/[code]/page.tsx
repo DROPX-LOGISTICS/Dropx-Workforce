@@ -11,11 +11,11 @@ import { DirectActivationProfileFields } from "@/components/direct-activation-pr
 import { normalizeCategoryProfileFieldRules } from "@/lib/profile-field-rules";
 import { workforceProfileFields } from "@/lib/profile-field-rules";
 import { filterOnboardingLocations } from "@/lib/onboarding-location-access";
-import { getAuthorization, hasPermission, isCompanyOwner } from "@/lib/authorization";
+import { getAuthorization, hasPermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { countryCodeOptions } from "@/lib/country-codes";
 import { formatDashboardDate } from "@/lib/date-format";
-import { dynamicWorkforceTable, isCustomWorkforceCategoryCode, normalizeWorkforceCategoryCode, singularCategoryLabel } from "@/lib/dynamic-workforce";
+import { dynamicWorkforceTable, isCustomWorkforceCategoryCode, normalizeWorkforceCategoryCode, singularCategoryLabel, workforceCategoryPageCode } from "@/lib/dynamic-workforce";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type CategoryRow = {
@@ -109,12 +109,6 @@ function first<T>(value: T | T[] | null | undefined) {
   return Array.isArray(value) ? value[0] ?? null : value ?? null;
 }
 
-function canAccessPeople(authorization: NonNullable<Awaited<ReturnType<typeof getAuthorization>>>, action: "view" | "add" | "edit") {
-  if (isCompanyOwner(authorization)) return true;
-  return ["employees", "delivery_associates", "contractors", "vendors", "workers"]
-    .some((pageCode) => hasPermission(authorization, pageCode, action));
-}
-
 function statusLabel(row: Pick<ProfileRow, "is_active" | "onboarding_status">) {
   if (!row.is_active) return "Inactive";
   const value = String(row.onboarding_status ?? "pending").replaceAll("_", " ");
@@ -138,9 +132,10 @@ export default async function DynamicWorkforceCategoryPage({
 }) {
   const code = normalizeWorkforceCategoryCode(params.code);
   if (!isCustomWorkforceCategoryCode(code)) notFound();
+  const pageCode = workforceCategoryPageCode(code);
   const authorization = await getAuthorization();
   if (!authorization) redirect("/login");
-  if (!canAccessPeople(authorization, "view")) redirect("/unauthorized?page=onboard&action=access");
+  if (!hasPermission(authorization, pageCode, "access")) redirect(`/unauthorized?page=${encodeURIComponent(pageCode)}&action=access`);
   const companyId = requireCompanyId(authorization);
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
 
@@ -223,12 +218,12 @@ export default async function DynamicWorkforceCategoryPage({
   )) ?? null;
   const dashboardRules = normalizeCategoryProfileFieldRules(category.profile_field_rules).dashboard;
   const enabledFields = workforceProfileFields.filter((field) => dashboardRules.enabled.includes(field.key));
-  const canEdit = canAccessPeople(authorization, "edit");
+  const canEdit = hasPermission(authorization, pageCode, "edit");
   const entityLabel = singularCategoryLabel(category.name);
   const error = searchParams?.error ?? provisionResult.error?.message ?? locationsResult.error?.message ?? designationsResult.error?.message ?? profileResult.error?.message;
 
   return (
-    <AppShell active={category.name}>
+    <AppShell active={category.name} pageCode={pageCode}>
       <PageHead eyebrow="Workforce master" title={category.name} subtitle={`Register and maintain ${category.name.toLowerCase()} by location.`} />
       {error || searchParams?.notice ? (
         <section className={`panel message-panel ${error ? "error" : "success"}`}>
@@ -242,7 +237,7 @@ export default async function DynamicWorkforceCategoryPage({
         </section>
       ) : null}
 
-      {canAccessPeople(authorization, "add") ? (
+      {hasPermission(authorization, pageCode, "add") ? (
         <section className="panel">
           <div className="panel-head"><h2>{`Add ${entityLabel.toLowerCase()}`}</h2></div>
           <form action={createDynamicWorkforceProfile} className="form-grid three field-executive-add-form">

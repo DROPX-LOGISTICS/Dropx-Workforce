@@ -7,7 +7,7 @@ import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export async function updateOnboardingStatus(formData: FormData) {
-  const authorization = await requirePagePermission("cod_reports", "edit");
+  const authorization = await requirePagePermission("executive_id_onboarding", "edit");
   const companyId = requireCompanyId(authorization);
   const { locations } = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const id = String(formData.get("id") ?? "");

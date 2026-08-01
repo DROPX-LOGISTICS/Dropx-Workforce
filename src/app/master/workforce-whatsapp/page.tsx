@@ -11,7 +11,7 @@ import { saveWorkforceWhatsApp } from "./actions";
 export const dynamic = "force-dynamic";
 
 export default async function WorkforceWhatsAppMasterPage() {
-  const authorization = await requirePagePermission("designations", "access");
+  const authorization = await requirePagePermission("workforce_whatsapp", "access");
   const companyId = requireCompanyId(authorization);
   const permission = authorization.permissions.designations;
   const [config, contacts] = supabaseAdmin ? await Promise.all([
@@ -27,7 +27,7 @@ export default async function WorkforceWhatsAppMasterPage() {
   const ready = rows.filter((row) => row.poc_mobile && row.address).length;
 
   return (
-    <AppShell active="Workforce WhatsApp" pageCode="designations">
+    <AppShell active="Workforce WhatsApp" pageCode="workforce_whatsapp">
       <PageHead eyebrow="Master Data" title="Workforce Applicant WhatsApp" subtitle="Control the automatic acknowledgement sent when a workforce applicant submits a Meta lead form." />
       {flash.error || flash.notice ? <section className={`panel message-panel ${flash.error ? "error" : "success"}`}><div className="panel-body"><strong>{flash.error ? "Action required" : "Saved"}</strong><p className="subtle" style={{ marginTop: 6 }}>{flash.error ?? flash.notice}</p></div></section> : null}
       <section className="panel">

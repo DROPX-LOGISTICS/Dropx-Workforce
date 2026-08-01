@@ -9,7 +9,7 @@ import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 export const dynamic = "force-dynamic";
 
 export default async function ImportMasterPage() {
-  const authorization = await requirePagePermission("imports", "access");
+  const authorization = await requirePagePermission("master_imports", "access");
   const companyId = requireCompanyId(authorization);
   const result = supabaseAdmin
     ? await supabaseAdmin
@@ -21,7 +21,7 @@ export default async function ImportMasterPage() {
     : { data: null, error: { message: "Supabase service key is not configured." } };
 
   return (
-    <AppShell active="Import Master" pageCode="imports">
+    <AppShell active="Import Master" pageCode="master_imports">
       <PageHead
         eyebrow="Master Data"
         title="Import Master"

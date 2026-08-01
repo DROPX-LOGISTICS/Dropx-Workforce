@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { workforceCategoryPageCode, workforceCategoryPagePrefix } from "@/lib/dynamic-workforce";
 
 export const accessPages = [
   { code: "dashboard", name: "Command Center", sort_order: 10 },
@@ -10,12 +11,9 @@ export const accessPages = [
   { code: "leads_reports", name: "Lead Reports", sort_order: 35 },
   { code: "leads_ads", name: "All Ads", sort_order: 36 },
   { code: "leads_sop", name: "Ad SOP", sort_order: 37 },
-  { code: "delivery_associates", name: "Field Executive", sort_order: 20 },
-  { code: "employees", name: "Employees", sort_order: 21 },
-  { code: "contractors", name: "Independent Contractor", sort_order: 22 },
-  { code: "vendors", name: "Vendors", sort_order: 23 },
-  { code: "workers", name: "Workers", sort_order: 24 },
-  { code: "people_review", name: "Profile Review", sort_order: 25 },
+  { code: "people_all", name: "All People", sort_order: 20 },
+  { code: "people_review", name: "Profile Review", sort_order: 29 },
+  { code: "executive_id_onboarding", name: "Executive ID Onboarding", sort_order: 30 },
   { code: "provider_mapping", name: "ID Mapping", sort_order: 40 },
   { code: "fleet", name: "Fleet", sort_order: 45 },
   { code: "fleet_action_center", name: "Action Center", sort_order: 46 },
@@ -74,10 +72,13 @@ export const accessPages = [
   { code: "payment_methods", name: "Payment Methods", sort_order: 123 },
   { code: "master_payment_banks", name: "Payment Banks", sort_order: 124 },
   { code: "master_payment_heads", name: "Payment Heads", sort_order: 125 },
-  { code: "designations", name: "Designations", sort_order: 126 },
-  { code: "biometric_devices", name: "Device Master", sort_order: 127 },
-  { code: "cod_master", name: "COD Master", sort_order: 128 },
-  { code: "master_documents", name: "Documents", sort_order: 129 },
+  { code: "workforce_categories", name: "Workforce Categories", sort_order: 126 },
+  { code: "workforce_whatsapp", name: "Workforce WhatsApp", sort_order: 127 },
+  { code: "designations", name: "Designations", sort_order: 128 },
+  { code: "biometric_devices", name: "Device Master", sort_order: 129 },
+  { code: "cod_master", name: "COD Master", sort_order: 130 },
+  { code: "master_documents", name: "Documents", sort_order: 131 },
+  { code: "master_imports", name: "Import Master", sort_order: 132 },
   { code: "reports", name: "Reports", sort_order: 130 },
   { code: "attendance_reports", name: "Attendance Reports", sort_order: 131 },
   { code: "verification_api_reports", name: "Verification API Reports", sort_order: 132 },
@@ -89,6 +90,7 @@ export const accessPages = [
 ];
 
 type PageRow = { id: string; code: string; is_active?: boolean | null };
+type WorkforceCategoryRow = { code: string; name: string };
 type PermissionRow = {
   role_id: string;
   page_id: string;
@@ -294,10 +296,63 @@ async function copyLegacyGroupPermissions(
   }
 }
 
+async function seedTargetPermissionsFromSources(
+  supabase: SupabaseClient,
+  companyId: string,
+  sourceCodes: string[],
+  targetCode: string
+) {
+  const pages = await getPagesByCodes(supabase, companyId, [...sourceCodes, targetCode]);
+  const targetPage = pages.get(targetCode);
+  const sourcePages = sourceCodes.map((code) => pages.get(code)).filter(Boolean) as PageRow[];
+  if (!targetPage || !sourcePages.length) return;
+
+  const { data: grants, error } = await supabase
+    .from("role_page_permissions")
+    .select("role_id, page_id, can_view, can_add, can_edit")
+    .eq("company_id", companyId)
+    .in("page_id", [...sourcePages.map((page) => page.id), targetPage.id]);
+  if (error) throw new Error(error.message);
+
+  const existingTargetRoles = new Set(
+    (grants ?? []).filter((grant) => grant.page_id === targetPage.id).map((grant) => grant.role_id)
+  );
+  const byRole = new Map<string, Omit<PermissionRow, "role_id" | "page_id">>();
+  (grants ?? []).filter((grant) => grant.page_id !== targetPage.id).forEach((grant) => {
+    if (existingTargetRoles.has(grant.role_id)) return;
+    const current = byRole.get(grant.role_id) ?? { can_view: false, can_add: false, can_edit: false };
+    byRole.set(grant.role_id, {
+      can_view: current.can_view || grant.can_view || grant.can_add || grant.can_edit,
+      can_add: current.can_add || grant.can_add,
+      can_edit: current.can_edit || grant.can_edit
+    });
+  });
+
+  await upsertPermissionRows(
+    supabase,
+    companyId,
+    Array.from(byRole, ([role_id, permission]) => ({ role_id, page_id: targetPage.id, ...permission }))
+  );
+}
+
 export async function ensureAccessPages(supabase: SupabaseClient, companyId: string) {
   if (!companyId) throw new Error("Company is required to seed access pages.");
 
   const now = new Date().toISOString();
+  const categoryResult = await supabase
+    .from("workforce_categories")
+    .select("code, name")
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .order("sort_order")
+    .order("name");
+  if (categoryResult.error) throw new Error(categoryResult.error.message);
+  const categoryPages = ((categoryResult.data ?? []) as WorkforceCategoryRow[]).map((category, index) => ({
+    code: workforceCategoryPageCode(category.code),
+    name: category.name,
+    sort_order: 21 + index
+  })).filter((page) => page.code);
+  const expectedPages = [...accessPages, ...categoryPages];
   const { data: currentPages, error: currentPagesError } = await supabase
     .from("app_pages")
     .select("id, code, is_active")
@@ -306,7 +361,7 @@ export async function ensureAccessPages(supabase: SupabaseClient, companyId: str
 
   const currentPageByCode = new Map((currentPages ?? []).map((page: PageRow) => [page.code, page]));
 
-  for (const page of accessPages) {
+  for (const page of expectedPages) {
     const existing = currentPageByCode.get(page.code);
     if (existing) {
       const { error } = await supabase
@@ -315,6 +370,7 @@ export async function ensureAccessPages(supabase: SupabaseClient, companyId: str
         .eq("company_id", companyId)
         .eq("id", existing.id);
       if (error) throw new Error(error.message);
+      currentPageByCode.set(page.code, { ...existing, is_active: true });
     } else {
       const { data, error } = await supabase
         .from("app_pages")
@@ -338,7 +394,25 @@ export async function ensureAccessPages(supabase: SupabaseClient, companyId: str
     }
   }
 
-  await mergeRetiredPagePermissions(supabase, companyId, "onboarding", "delivery_associates");
+  const expectedCodes = new Set(expectedPages.map((page) => page.code));
+  const categoryPermissionCodes = new Set([
+    "employees",
+    "delivery_associates",
+    "contractors",
+    "vendors",
+    "workers"
+  ]);
+  for (const page of currentPages ?? []) {
+    const isCategoryPermission = categoryPermissionCodes.has(page.code) || page.code.startsWith(workforceCategoryPagePrefix);
+    if (isCategoryPermission && !expectedCodes.has(page.code) && page.is_active !== false) {
+      await retirePage(supabase, companyId, page.id);
+      currentPageByCode.set(page.code, { ...page, is_active: false });
+    }
+  }
+
+  if (expectedCodes.has("delivery_associates")) {
+    await mergeRetiredPagePermissions(supabase, companyId, "onboarding", "delivery_associates");
+  }
   await copyLegacyGroupPermissions(supabase, companyId, "settings", [
     "master_locations",
     "master_providers",
@@ -360,8 +434,14 @@ export async function ensureAccessPages(supabase: SupabaseClient, companyId: str
     "fleet_maintenance",
     "fleet_reports"
   ], false);
+  const categoryCodes = categoryPages.map((page) => page.code);
+  await seedTargetPermissionsFromSources(supabase, companyId, categoryCodes, "people_all");
+  await seedTargetPermissionsFromSources(supabase, companyId, ["cod_reports"], "executive_id_onboarding");
+  await seedTargetPermissionsFromSources(supabase, companyId, ["designations"], "workforce_categories");
+  await seedTargetPermissionsFromSources(supabase, companyId, ["designations"], "workforce_whatsapp");
+  await seedTargetPermissionsFromSources(supabase, companyId, ["imports"], "master_imports");
 
-  const activePages = Array.from(currentPageByCode.values()).filter((page) => page.is_active !== false);
+  const activePages = Array.from(currentPageByCode.values()).filter((page) => expectedCodes.has(page.code) && page.is_active !== false);
   const ownerRole = await getFirstRoleByCode(supabase, companyId, "OWNER");
   if (ownerRole && activePages.length) {
     await upsertPermissionRows(

@@ -16,7 +16,7 @@ function finish(payload: { error?: string; notice?: string }): never {
 }
 
 export async function saveWorkforceWhatsApp(formData: FormData) {
-  const authorization = await requirePagePermission("designations", "edit");
+  const authorization = await requirePagePermission("workforce_whatsapp", "edit");
   const companyId = requireCompanyId(authorization);
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");

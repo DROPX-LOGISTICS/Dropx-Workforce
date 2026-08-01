@@ -20,6 +20,7 @@ import { operatingModeForLocation } from "@/lib/ops-pulse/operating-context";
 import { loadPaymentNotificationSnapshot } from "@/lib/payment-notification-counts";
 import { opsNavItemsForMode } from "@/lib/ops-pulse/navigation";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { workforceCategoryPageCode } from "@/lib/dynamic-workforce";
 
 const workforceCategoryRoutes: Record<string, { code: string; href: string }> = {
   employees: { code: "employees", href: "/employees" },
@@ -63,12 +64,12 @@ export async function AppShell({ children, active, pageCode }: { children: React
       const known = workforceCategoryRoutes[category.code];
       return known
         ? { code: known.code, label: category.name, href: known.href }
-        : { label: category.name, href: `/people/category/${encodeURIComponent(category.code)}` };
+        : { code: workforceCategoryPageCode(category.code), label: category.name, href: `/people/category/${encodeURIComponent(category.code)}` };
     });
     return {
       ...item,
       children: [
-        { label: "All People", href: "/people/all" },
+        { code: "people_all", label: "All People", href: "/people/all" },
         ...categoryChildren,
         { code: "people_review", label: "Profile Review", href: "/people/review" }
       ]

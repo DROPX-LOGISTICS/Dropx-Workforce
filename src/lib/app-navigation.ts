@@ -46,16 +46,11 @@ export const navItems: NavItem[] = [
     label: "People",
     icon: "+",
     children: [
-      { label: "All People", href: "/people/all" },
-      { code: "delivery_associates", label: "Field Executive", href: "/field-executive" },
-      { code: "employees", label: "Employees", href: "/employees" },
-      { code: "contractors", label: "Independent Contractor", href: "/contractors" },
-      { code: "vendors", label: "Vendors", href: "/vendors" },
-      { code: "workers", label: "Workers", href: "/workers" },
+      { code: "people_all", label: "All People", href: "/people/all" },
       { code: "people_review", label: "Profile Review", href: "/people/review" }
     ]
   },
-  { code: "cod_reports", label: "Executive ID Onboarding", href: "/executive-id-onboarding", icon: "ID" },
+  { code: "executive_id_onboarding", label: "Executive ID Onboarding", href: "/executive-id-onboarding", icon: "ID" },
   { code: "provider_mapping", label: "ID Mapping", href: "/provider-mapping", icon: "<>" },
   fleetNavItem,
   { code: "mapping", label: "Mapping", href: "/mapping", icon: "<>" },
@@ -117,12 +112,12 @@ export const navItems: NavItem[] = [
       { code: "payment_methods", label: "Payment Methods", href: "/master/payment-methods" },
       { code: "master_payment_banks", label: "Payment Banks", href: "/master/payment-banks" },
       { code: "master_payment_heads", label: "Payment Heads", href: "/master/payment-heads" },
-      { code: "designations", label: "Workforce Categories", href: "/master/workforce-categories" },
-      { code: "designations", label: "Workforce WhatsApp", href: "/master/workforce-whatsapp" },
+      { code: "workforce_categories", label: "Workforce Categories", href: "/master/workforce-categories" },
+      { code: "workforce_whatsapp", label: "Workforce WhatsApp", href: "/master/workforce-whatsapp" },
       { code: "designations", label: "Designations", href: "/master/designations" },
       { code: "biometric_devices", label: "Device Master", href: "/master/biometric-devices" },
       { code: "master_documents", label: "Documents", href: "/master/documents" },
-      { code: "imports", label: "Import Master", href: "/master/imports" }
+      { code: "master_imports", label: "Import Master", href: "/master/imports" }
     ]
   },
   {

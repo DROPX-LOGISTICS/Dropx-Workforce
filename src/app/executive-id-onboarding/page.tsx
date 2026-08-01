@@ -33,7 +33,7 @@ function isOnboardingRow(row: ImportRow) {
 function daysSince(value: string) { return Math.max(0, Math.floor((Date.now() - new Date(`${value}T00:00:00+05:30`).getTime()) / 86400000)); }
 
 export default async function ExecutiveIdOnboardingPage({ searchParams }: { searchParams?: SearchParams }) {
-  const authorization = await requirePagePermission("cod_reports", "access");
+  const authorization = await requirePagePermission("executive_id_onboarding", "access");
   const companyId = requireCompanyId(authorization);
   const { locations } = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const permitted = resolveOperatingContext(locations).selectedLocations;
@@ -76,7 +76,7 @@ export default async function ExecutiveIdOnboardingPage({ searchParams }: { sear
   const cleared = sourceRows.filter((row) => row.opsStatus === "cleared").length;
   const oldestPending = pending ? Math.max(...sourceRows.filter((row) => row.opsStatus !== "cleared").map((row) => daysSince(row.pendingSince))) : 0;
 
-  return <AppShell active="Executive ID Onboarding" pageCode="cod_reports"><div className="onboarding-workspace">
+  return <AppShell active="Executive ID Onboarding" pageCode="executive_id_onboarding"><div className="onboarding-workspace">
     <PageHead eyebrow="Executive Setup" title="Executive ID Onboarding" subtitle="Amazon in-app onboarding, ID readiness and action closure." />
     <div className="onboarding-toolbar">
       <OnboardingScopeFilter stations={permitted.map((location) => ({ code: location.station_code, name: location.station_name || location.city || location.station_code, cluster: location.cluster || "Unassigned" }))} selectedStations={selectedCodes} selectedClusters={requestedClusters} status={status}/>

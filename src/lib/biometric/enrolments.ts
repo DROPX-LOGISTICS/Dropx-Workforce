@@ -47,8 +47,10 @@ export async function syncBiometricEnrolment({
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
 
   const cleaned = cleanEnrolmentId(enrolmentId);
-  const resolvedProfileType: WorkforceProfileType = profileType ??
-    (workerType === "employee" ? "employee" : "field_executive");
+  if (workerType === "individual_contract" && !profileType) {
+    throw new Error("Profile type is required for a non-employee biometric enrolment.");
+  }
+  const resolvedProfileType: WorkforceProfileType = profileType ?? "employee";
   const personColumn = resolvedProfileType === "employee"
     ? "employee_id"
     : resolvedProfileType === "field_executive"

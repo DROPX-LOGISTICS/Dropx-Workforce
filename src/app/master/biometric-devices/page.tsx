@@ -116,22 +116,40 @@ function shortLocation(locationMap: Map<string, LocationRow>, locationId: string
 async function loadWorkerMap(companyId: string, enrolmentIds: string[]) {
   const workerMap = new Map<string, WorkerInfo>();
   if (!supabaseAdmin || !enrolmentIds.length) return workerMap;
+  const admin = supabaseAdmin;
 
-  const enrolments = await supabaseAdmin
+  const enrolments = await admin
     .from("biometric_enrolments")
-    .select("enrolment_id, employee_id, field_executive_id")
+    .select("enrolment_id, employee_id, field_executive_id, profile_type, account_id")
     .eq("company_id", companyId)
     .in("enrolment_id", enrolmentIds);
   if (enrolments.error) return workerMap;
 
   const employeeIds = Array.from(new Set((enrolments.data ?? []).map((row) => row.employee_id).filter(Boolean))) as string[];
   const executiveIds = Array.from(new Set((enrolments.data ?? []).map((row) => row.field_executive_id).filter(Boolean))) as string[];
+  const profileIds = new Map<string, string[]>();
+  for (const row of enrolments.data ?? []) {
+    if (!row.profile_type || row.profile_type === "employee" || row.profile_type === "field_executive" || !row.account_id) continue;
+    profileIds.set(row.profile_type, [...(profileIds.get(row.profile_type) ?? []), row.account_id]);
+  }
   const employees = employeeIds.length
-    ? await supabaseAdmin.from("employees").select("id, employee_code, full_name").eq("company_id", companyId).in("id", employeeIds)
+    ? await admin.from("employees").select("id, employee_code, full_name").eq("company_id", companyId).in("id", employeeIds)
     : { data: [], error: null };
   const executives = executiveIds.length
-    ? await supabaseAdmin.from("field_executives").select("id, dropx_id, full_name").eq("company_id", companyId).in("id", executiveIds)
+    ? await admin.from("field_executives").select("id, dropx_id, full_name").eq("company_id", companyId).in("id", executiveIds)
     : { data: [], error: null };
+  const profileTables = { contractor: "contractors", vendor: "vendors", worker: "workers" } as const;
+  const profileResults = await Promise.all(Object.entries(profileTables).map(async ([profileType, table]) => {
+    const ids = Array.from(new Set(profileIds.get(profileType) ?? []));
+    const result = ids.length
+      ? await admin.from(table).select("id, dropx_id, full_name").eq("company_id", companyId).in("id", ids)
+      : { data: [], error: null };
+    return [profileType, new Map((result.data ?? []).map((profile) => [profile.id, {
+      code: profile.dropx_id ?? "-",
+      name: profile.full_name ?? "Unknown"
+    }]))] as const;
+  }));
+  const profilesByType = new Map(profileResults);
 
   const employeesById = new Map((employees.data ?? []).map((employee) => [employee.id, {
     code: employee.employee_code ?? "-",
@@ -147,7 +165,9 @@ async function loadWorkerMap(companyId: string, enrolmentIds: string[]) {
       ? employeesById.get(enrolment.employee_id)
       : enrolment.field_executive_id
         ? executivesById.get(enrolment.field_executive_id)
-        : null;
+        : enrolment.profile_type && enrolment.account_id
+          ? profilesByType.get(enrolment.profile_type)?.get(enrolment.account_id)
+          : null;
     workerMap.set(enrolment.enrolment_id, worker ?? { code: enrolment.enrolment_id, name: "Unknown enrolment" });
   }
 

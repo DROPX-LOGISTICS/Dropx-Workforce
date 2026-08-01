@@ -243,16 +243,28 @@ async function loadDailyWorkerSnapshot({
       locationId = executive.data.location_id ?? locationId;
     }
   } else if (fieldExecutiveId) {
-    const executive = await supabaseAdmin
-      .from("field_executives")
+    const contractor = await supabaseAdmin
+      .from("contractors")
       .select("dropx_id, full_name, location_id")
       .eq("company_id", companyId)
       .eq("id", fieldExecutiveId)
       .maybeSingle();
-    if (!executive.error && executive.data) {
-      workerCode = executive.data.dropx_id ?? null;
-      workerName = executive.data.full_name ?? null;
-      locationId = executive.data.location_id ?? locationId;
+    if (!contractor.error && contractor.data) {
+      workerCode = contractor.data.dropx_id ?? null;
+      workerName = contractor.data.full_name ?? null;
+      locationId = contractor.data.location_id ?? locationId;
+    } else {
+      const executive = await supabaseAdmin
+        .from("field_executives")
+        .select("dropx_id, full_name, location_id")
+        .eq("company_id", companyId)
+        .eq("id", fieldExecutiveId)
+        .maybeSingle();
+      if (!executive.error && executive.data) {
+        workerCode = executive.data.dropx_id ?? null;
+        workerName = executive.data.full_name ?? null;
+        locationId = executive.data.location_id ?? locationId;
+      }
     }
   }
 
@@ -519,10 +531,10 @@ export async function loadAttendanceReportRows({
   const locationsById = new Map(((locationResult.data ?? []) as LocationLookupRow[]).map((location) => [location.id, location]));
   const biometricWorkers: BiometricWorkerLookup[] = [
     ...((biometricEmployeeResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "employee" as const })),
-    ...((biometricExecutiveResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "field_executive" as const })),
     ...((biometricContractorResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "contractor" as const })),
     ...((biometricVendorResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "vendor" as const })),
-    ...((biometricWorkerResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "worker" as const }))
+    ...((biometricWorkerResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "worker" as const })),
+    ...((biometricExecutiveResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "field_executive" as const }))
   ];
   const biometricWorkersById = new Map<string, BiometricWorkerLookup>();
   biometricWorkers.forEach((worker) => {

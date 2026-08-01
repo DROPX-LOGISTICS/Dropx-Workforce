@@ -109,17 +109,24 @@ function locationLabel(locations: Map<string, LocationRow>, id: string | null) {
 
 async function loadDuplicateEnrolments(companyId: string) {
   if (!supabaseAdmin) return [] as DuplicateRow[];
-  const [employees, executives] = await Promise.all([
-    supabaseAdmin
+  const admin = supabaseAdmin;
+  const profileTables = [
+    ["Field executive", "field_executives"],
+    ["Independent contractor", "contractors"],
+    ["Vendor", "vendors"],
+    ["Worker", "workers"]
+  ] as const;
+  const [employees, ...profiles] = await Promise.all([
+    admin
       .from("employees")
       .select("employee_code, full_name, biometric_id")
       .eq("company_id", companyId)
       .not("biometric_id", "is", null),
-    supabaseAdmin
-      .from("field_executives")
+    ...profileTables.map(([, table]) => admin
+      .from(table)
       .select("dropx_id, full_name, biometric_id")
       .eq("company_id", companyId)
-      .not("biometric_id", "is", null)
+      .not("biometric_id", "is", null))
   ]);
 
   const grouped = new Map<string, string[]>();
@@ -128,10 +135,13 @@ async function loadDuplicateEnrolments(companyId: string) {
     if (!enrolmentId) continue;
     grouped.set(enrolmentId, [...(grouped.get(enrolmentId) ?? []), `${employee.employee_code ?? enrolmentId} - ${employee.full_name ?? "Employee"}`]);
   }
-  for (const executive of executives.data ?? []) {
-    const enrolmentId = cleanEnrolment(executive.biometric_id);
-    if (!enrolmentId) continue;
-    grouped.set(enrolmentId, [...(grouped.get(enrolmentId) ?? []), `${executive.dropx_id ?? enrolmentId} - ${executive.full_name ?? "Field executive"}`]);
+  for (const [index, result] of profiles.entries()) {
+    const [label] = profileTables[index];
+    for (const profile of result.data ?? []) {
+      const enrolmentId = cleanEnrolment(profile.biometric_id);
+      if (!enrolmentId) continue;
+      grouped.set(enrolmentId, [...(grouped.get(enrolmentId) ?? []), `${profile.dropx_id ?? enrolmentId} - ${profile.full_name ?? label}`]);
+    }
   }
 
   return Array.from(grouped.entries())

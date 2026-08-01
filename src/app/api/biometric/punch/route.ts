@@ -77,9 +77,9 @@ function enrolmentPriority(
   const workerType = "worker_type" in row ? row.worker_type : row.workerType;
   const profileType = "profile_type" in row ? row.profile_type : row.profileType;
   const active = "status" in row ? row.status === "Active" : row.isActive;
-  const profileOrder = ["employee", "field_executive", "contractor", "vendor", "worker"];
+  const profileOrder = ["employee", "contractor", "vendor", "worker", "field_executive"];
   return [
-    Math.max(profileOrder.indexOf(profileType ?? (workerType === "employee" ? "employee" : "field_executive")), 0),
+    Math.max(profileOrder.indexOf(profileType ?? (workerType === "employee" ? "employee" : "contractor")), 0),
     active ? 0 : 1
   ];
 }
@@ -320,6 +320,47 @@ async function createEnrolmentFromWorker({
   throw new Error(insertResult.error.message);
 }
 
+async function reconcileLegacyEnrolment(
+  companyId: string,
+  enrolment: EnrolmentRow
+) {
+  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+  if (enrolment.profile_type && enrolment.profile_type !== "field_executive") return enrolment;
+
+  const matches = await findWorkerMatches(companyId, enrolment.enrolment_id);
+  const linkedId = enrolment.account_id ?? enrolment.field_executive_id;
+  const linkedContractor = matches.find((match) =>
+    match.profileType === "contractor" && Boolean(linkedId) && match.accountId === linkedId
+  );
+  const contractorMatches = matches.filter((match) => match.profileType === "contractor");
+  const fieldExecutiveMatches = matches.filter((match) => match.profileType === "field_executive");
+  const contractor = linkedContractor ??
+    (!linkedId && contractorMatches.length === 1 && fieldExecutiveMatches.length === 0
+      ? contractorMatches[0]
+      : null);
+  if (!contractor) return enrolment;
+
+  const repaired = {
+    worker_type: contractor.workerType,
+    profile_type: contractor.profileType,
+    account_id: contractor.accountId,
+    employee_id: null,
+    field_executive_id: null,
+    location_id: contractor.locationId ?? enrolment.location_id,
+    status: contractor.isActive ? "Active" : "Inactive",
+    updated_at: new Date().toISOString()
+  };
+  const result = await supabaseAdmin
+    .from("biometric_enrolments")
+    .update(repaired)
+    .eq("id", enrolment.id)
+    .eq("company_id", companyId)
+    .select("id, enrolment_id, worker_type, employee_id, field_executive_id, profile_type, account_id, location_id, status")
+    .single();
+  if (result.error) throw new Error(result.error.message);
+  return result.data as EnrolmentRow;
+}
+
 export async function POST(request: NextRequest) {
   try {
     if (!supabaseAdmin) return jsonError("Supabase service role key is not configured.", 500);
@@ -405,6 +446,10 @@ export async function POST(request: NextRequest) {
     }
 
     let enrolment = pickPreferredEnrolment(enrolmentRows);
+
+    if (enrolment) {
+      enrolment = await reconcileLegacyEnrolment(device.company_id, enrolment);
+    }
 
     if (!enrolment) {
       const workers = await findWorkerMatches(device.company_id, enrolmentId);
@@ -502,7 +547,7 @@ export async function POST(request: NextRequest) {
     await rebuildAttendanceDay(device.company_id, canonicalEnrolmentId, punchDate);
 
     const profileType = enrolment.profile_type ??
-      (enrolment.worker_type === "employee" ? "employee" : "field_executive");
+      (enrolment.worker_type === "employee" ? "employee" : "contractor");
     const recipientAccountId = enrolment.account_id ??
       (profileType === "employee" ? enrolment.employee_id : enrolment.field_executive_id);
     if (!alreadyStored && recipientAccountId) {

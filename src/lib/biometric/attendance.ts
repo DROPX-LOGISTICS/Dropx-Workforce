@@ -36,6 +36,20 @@ type PunchRow = {
   calculated: boolean;
 };
 
+type BiometricWorkerLookupRow = {
+  biometric_id: string | null;
+  designation?: string | null;
+  designation_id?: string | null;
+  dropx_id?: string | null;
+  employee_code?: string | null;
+  full_name: string | null;
+  location_id: string | null;
+};
+
+type BiometricWorkerLookup = BiometricWorkerLookupRow & {
+  profileType: "employee" | "field_executive" | "contractor" | "vendor" | "worker";
+};
+
 type DailyRow = {
   enrolment_id: string;
   worker_type: string | null;
@@ -110,6 +124,19 @@ function normalizeDailyRows(rows: Partial<DailyRow>[]): DailyRow[] {
     station_code: row.station_code ?? null,
     worker_name: row.worker_name ?? null
   })).filter((row) => row.enrolment_id && row.punch_date);
+}
+
+function normalizeBiometricId(value: string | null | undefined) {
+  const normalized = String(value ?? "").trim().replace(/^0+(?=\d)/, "");
+  return normalized || "0";
+}
+
+function biometricIdVariants(values: string[]) {
+  return Array.from(new Set(values.flatMap((value) => {
+    const raw = String(value ?? "").trim();
+    const normalized = normalizeBiometricId(raw);
+    return [raw, normalized, normalized.padStart(6, "0"), normalized.padStart(8, "0")].filter(Boolean);
+  })));
 }
 
 export function istDate(value: Date) {
@@ -418,7 +445,9 @@ export async function loadAttendanceReportRows({
   const employeeIds = Array.from(new Set(dailyRows.map((row) => row.employee_id).filter(Boolean))) as string[];
   const executiveIds = Array.from(new Set(dailyRows.map((row) => row.field_executive_id).filter(Boolean))) as string[];
   const dailyLocationIds = Array.from(new Set(dailyRows.map((row) => row.location_id).filter(Boolean))) as string[];
-  const [employeeResult, executiveResult, locationResult] = await Promise.all([
+  const enrolmentIds = Array.from(new Set(dailyRows.map((row) => row.enrolment_id)));
+  const biometricVariants = biometricIdVariants(enrolmentIds);
+  const [employeeResult, executiveResult, locationResult, biometricEmployeeResult, biometricExecutiveResult, biometricContractorResult, biometricVendorResult, biometricWorkerResult] = await Promise.all([
     employeeIds.length
       ? supabaseAdmin
         .from("employees")
@@ -439,16 +468,71 @@ export async function loadAttendanceReportRows({
         .select("id, station_code, station_name")
         .eq("company_id", companyId)
         .in("id", dailyLocationIds)
+      : Promise.resolve({ data: [], error: null }),
+    biometricVariants.length
+      ? supabaseAdmin
+        .from("employees")
+        .select("employee_code, full_name, biometric_id, designation_id, location_id")
+        .eq("company_id", companyId)
+        .in("biometric_id", biometricVariants)
+      : Promise.resolve({ data: [], error: null }),
+    biometricVariants.length
+      ? supabaseAdmin
+        .from("field_executives")
+        .select("dropx_id, full_name, biometric_id, designation, location_id")
+        .eq("company_id", companyId)
+        .in("biometric_id", biometricVariants)
+      : Promise.resolve({ data: [], error: null }),
+    biometricVariants.length
+      ? supabaseAdmin
+        .from("contractors")
+        .select("dropx_id, full_name, biometric_id, designation, location_id")
+        .eq("company_id", companyId)
+        .in("biometric_id", biometricVariants)
+      : Promise.resolve({ data: [], error: null }),
+    biometricVariants.length
+      ? supabaseAdmin
+        .from("vendors")
+        .select("dropx_id, full_name, biometric_id, designation, location_id")
+        .eq("company_id", companyId)
+        .in("biometric_id", biometricVariants)
+      : Promise.resolve({ data: [], error: null }),
+    biometricVariants.length
+      ? supabaseAdmin
+        .from("workers")
+        .select("dropx_id, full_name, biometric_id, designation, location_id")
+        .eq("company_id", companyId)
+        .in("biometric_id", biometricVariants)
       : Promise.resolve({ data: [], error: null })
   ]);
   if (employeeResult.error) throw new Error(employeeResult.error.message);
   if (executiveResult.error) throw new Error(executiveResult.error.message);
   if (locationResult.error) throw new Error(locationResult.error.message);
+  if (biometricEmployeeResult.error) throw new Error(biometricEmployeeResult.error.message);
+  if (biometricExecutiveResult.error) throw new Error(biometricExecutiveResult.error.message);
+  if (biometricContractorResult.error) throw new Error(biometricContractorResult.error.message);
+  if (biometricVendorResult.error) throw new Error(biometricVendorResult.error.message);
+  if (biometricWorkerResult.error) throw new Error(biometricWorkerResult.error.message);
 
   const employeesById = new Map(((employeeResult.data ?? []) as EmployeeLookupRow[]).map((employee) => [employee.id, employee]));
   const executivesById = new Map(((executiveResult.data ?? []) as ExecutiveLookupRow[]).map((executive) => [executive.id, executive]));
   const locationsById = new Map(((locationResult.data ?? []) as LocationLookupRow[]).map((location) => [location.id, location]));
-  const designationIds = Array.from(new Set(Array.from(employeesById.values()).map((employee) => employee.designation_id).filter(Boolean))) as string[];
+  const biometricWorkers: BiometricWorkerLookup[] = [
+    ...((biometricEmployeeResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "employee" as const })),
+    ...((biometricExecutiveResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "field_executive" as const })),
+    ...((biometricContractorResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "contractor" as const })),
+    ...((biometricVendorResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "vendor" as const })),
+    ...((biometricWorkerResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "worker" as const }))
+  ];
+  const biometricWorkersById = new Map<string, BiometricWorkerLookup>();
+  biometricWorkers.forEach((worker) => {
+    const key = normalizeBiometricId(worker.biometric_id);
+    if (!biometricWorkersById.has(key)) biometricWorkersById.set(key, worker);
+  });
+  const designationIds = Array.from(new Set([
+    ...Array.from(employeesById.values()).map((employee) => employee.designation_id),
+    ...biometricWorkers.map((worker) => worker.designation_id)
+  ].filter(Boolean))) as string[];
   const designationResult = designationIds.length
     ? await supabaseAdmin.from("designations").select("id, code, name").in("id", designationIds)
     : { data: [], error: null };
@@ -456,7 +540,6 @@ export async function loadAttendanceReportRows({
   const designationsById = new Map(((designationResult.data ?? []) as DesignationLookupRow[]).map((designation) => [designation.id, designation]));
 
   const punchFilterDates = Array.from(new Set(dailyRows.map((row) => row.punch_date)));
-  const enrolmentIds = Array.from(new Set(dailyRows.map((row) => row.enrolment_id)));
   let punchesByKey = new Map<string, PunchRow[]>();
 
   if (enrolmentIds.length && punchFilterDates.length) {
@@ -484,17 +567,21 @@ export async function loadAttendanceReportRows({
     const employee = row.employee_id ? employeesById.get(row.employee_id) : null;
     const executive = row.field_executive_id ? executivesById.get(row.field_executive_id) : null;
     const designation = employee?.designation_id ? designationsById.get(employee.designation_id) : null;
+    const biometricWorker = biometricWorkersById.get(normalizeBiometricId(row.enrolment_id));
+    const biometricDesignation = biometricWorker?.designation_id
+      ? designationsById.get(biometricWorker.designation_id)
+      : null;
     const station = row.location_id ? locationsById.get(row.location_id) : null;
     const punches = punchesByKey.get(`${row.enrolment_id}:${row.punch_date}`) ?? [];
     const labels = Object.fromEntries(punches.map((punch) => [punch.punch_label, formatTime(punch.punch_time)]));
     const firstDevice = punches.find((punch) => punch.device_serial)?.device_serial ?? "";
     const reportRow: AttendanceReportRow = {
       enrolmentId: row.enrolment_id,
-      workerCode: employee?.employee_code ?? executive?.dropx_id ?? row.employee_code ?? row.enrolment_id,
-      workerName: employee?.full_name ?? executive?.full_name ?? row.worker_name ?? "Unknown",
-      workerType: row.worker_type === "employee" ? "Employee" : "Individual Contract",
+      workerCode: employee?.employee_code ?? executive?.dropx_id ?? biometricWorker?.employee_code ?? biometricWorker?.dropx_id ?? row.employee_code ?? row.enrolment_id,
+      workerName: employee?.full_name ?? executive?.full_name ?? biometricWorker?.full_name ?? row.worker_name ?? "Unknown",
+      workerType: row.worker_type === "employee" || biometricWorker?.profileType === "employee" ? "Employee" : "Individual Contract",
       location: station?.station_code ?? row.station_code ?? "-",
-      designation: designation?.code ?? executive?.designation ?? "-",
+      designation: designation?.code ?? executive?.designation ?? biometricDesignation?.code ?? biometricWorker?.designation ?? "-",
       punchDate: row.punch_date,
       inTime: formatTime(row.in_time),
       outTime: formatTime(row.out_time),

@@ -201,3 +201,55 @@ export async function deleteWorkforceCategory(formData: FormData) {
     categoryRedirect({ error: error instanceof Error ? error.message : "Unable to delete workforce category." });
   }
 }
+
+export async function forceDeleteWorkersCategory(formData: FormData) {
+  const authorization = await requirePagePermission("designations", "edit");
+  const companyId = requireCompanyId(authorization);
+  try {
+    if (!authorization.isMasterOwner) throw new Error("Only the owner can force delete a system workforce category.");
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    const id = required(formData.get("id"), "Workforce category");
+    const existing = await supabaseAdmin
+      .from("workforce_categories")
+      .select("code, name")
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (existing.error) throw new Error(existing.error.message);
+    if (!existing.data) throw new Error("Workforce category was not found.");
+    if (existing.data.code !== "workers") throw new Error("This force-delete action is restricted to the Workers category.");
+
+    const designationResult = await supabaseAdmin
+      .from("designations")
+      .select("id, onboarding_categories")
+      .eq("company_id", companyId)
+      .contains("onboarding_categories", ["workers"]);
+    if (designationResult.error) throw new Error(designationResult.error.message);
+
+    for (const designation of designationResult.data ?? []) {
+      const categories = Array.isArray(designation.onboarding_categories)
+        ? designation.onboarding_categories.filter((category) => category !== "workers")
+        : [];
+      const update = await supabaseAdmin
+        .from("designations")
+        .update({ onboarding_categories: categories })
+        .eq("id", designation.id)
+        .eq("company_id", companyId);
+      if (update.error) throw new Error(update.error.message);
+    }
+
+    const deletion = await supabaseAdmin
+      .from("workforce_categories")
+      .delete()
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .eq("code", "workers");
+    if (deletion.error) throw new Error(deletion.error.message);
+
+    revalidateWorkforceCategoryPaths();
+    categoryRedirect({ notice: "Workers category force deleted. Historical worker profile records were retained." });
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    categoryRedirect({ error: error instanceof Error ? error.message : "Unable to force delete the Workers category." });
+  }
+}

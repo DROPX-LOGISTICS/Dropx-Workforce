@@ -8,7 +8,7 @@ import { WorkforceCategoryForm, type WorkforceCategoryInitial } from "@/componen
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { createWorkforceCategory, deleteWorkforceCategory, updateWorkforceCategory } from "./actions";
+import { createWorkforceCategory, deleteWorkforceCategory, forceDeleteWorkersCategory, updateWorkforceCategory } from "./actions";
 
 function loadFlash() {
   const raw = cookies().get("dropx_workforce_category_flash")?.value;
@@ -169,6 +169,20 @@ export default async function WorkforceCategoriesPage({
                   pendingText="Deleting"
                 >
                   Delete category
+                </SubmitButton>
+              </form>
+            ) : null}
+            {editing.code === "workers" && authorization.isMasterOwner ? (
+              <form action={forceDeleteWorkersCategory} className="danger-form">
+                <input name="id" type="hidden" value={editing.id} />
+                <SubmitButton
+                  className="button danger"
+                  confirmDescription="Workers will be removed from all designations and category lists. Historical worker profile records will be retained."
+                  confirmMessage="Force delete Workers category?"
+                  confirmSubmitText="Force delete"
+                  pendingText="Deleting"
+                >
+                  Force delete category
                 </SubmitButton>
               </form>
             ) : null}

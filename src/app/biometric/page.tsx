@@ -4,6 +4,7 @@ import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDateTime } from "@/lib/date-format";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -66,14 +67,7 @@ type DuplicateRow = {
 };
 
 function formatDateTime(value: string | null) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "short",
-    timeStyle: "medium",
-    timeZone: "Asia/Kolkata"
-  }).format(date);
+  return formatDashboardDateTime(value);
 }
 
 function formatTime(value: string | null) {

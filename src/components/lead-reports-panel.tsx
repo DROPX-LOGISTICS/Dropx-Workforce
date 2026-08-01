@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { formatDashboardDate } from "@/lib/date-format";
 import type { LeadAdRow, LeadRow } from "@/lib/leads-data";
 
 type ReportType = "lead_data" | "ad_spend";
@@ -43,12 +44,7 @@ function formatMoney(value: number | null | undefined) {
 }
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return "-";
-  return new Date(value).toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric"
-  });
+  return formatDashboardDate(value);
 }
 
 function csvValue(value: string | number | null | undefined) {

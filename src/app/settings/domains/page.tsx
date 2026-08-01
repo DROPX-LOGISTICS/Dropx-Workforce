@@ -4,6 +4,7 @@ import { PageHead } from "@/components/page-head";
 import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDateTime } from "@/lib/date-format";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { addAllowedDomain, setAllowedDomainStatus } from "../domains-actions";
 
@@ -137,7 +138,7 @@ export default async function DomainsSettingsPage() {
                           {domain.is_active ? "Active" : "Inactive"}
                         </span>
                       </td>
-                      <td>{domain.updated_at ? new Date(domain.updated_at).toLocaleString("en-IN") : "-"}</td>
+                      <td>{formatDashboardDateTime(domain.updated_at)}</td>
                       <td>
                         {canEdit ? (
                           <form action={setAllowedDomainStatus}>

@@ -5,6 +5,7 @@ import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission } from "@/lib/authorization";
+import { formatDashboardDate } from "@/lib/date-format";
 import { platformModules } from "@/lib/platform-modules";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import { signOut } from "@/app/login/actions";
@@ -57,9 +58,7 @@ function loadFlash() {
 }
 
 function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("en-GB");
+  return formatDashboardDate(value);
 }
 
 async function loadPlatformData() {

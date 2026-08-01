@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SearchableSelect } from "@/components/searchable-select";
 import { TemplateMediaPreview } from "@/components/template-media-preview";
+import { formatDashboardDateTime } from "@/lib/date-format";
 import { acceptsForHeaderMedia } from "@/lib/whatsapp-media";
 import { extractWhatsAppTemplateVariables, getWhatsAppTemplateHeaderMediaType, type WhatsAppTemplateComponent } from "@/lib/whatsapp-template";
 
@@ -65,13 +66,7 @@ type InboxMedia = {
 const replyWindowMs = 24 * 60 * 60 * 1000;
 
 function displayDate(value: string | null) {
-  if (!value) return "-";
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(value));
+  return formatDashboardDateTime(value);
 }
 
 function senderNameFromMessage(text: string | null | undefined) {

@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDate } from "@/lib/date-format";
 import { loadCodLocations, locationLabel, locationModelName } from "@/lib/ops-pulse/cod";
 import {
   operatingModeLabel,
@@ -334,7 +335,7 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
             <span><strong>{stationsAboveTarget}</strong>CPS above target</span>
             <span><strong>{stationsWithSlsRisk}</strong>SLS below 80%</span>
             <span><strong>{stationComparison.filter((row) => row.issues === 0).length}</strong>No flagged variance</span>
-            <span><strong>{latestPerformanceImport ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" }).format(new Date(latestPerformanceImport)) : "—"}</strong>Performance freshness</span>
+            <span><strong>{formatDashboardDate(latestPerformanceImport, "—")}</strong>Performance freshness</span>
           </div>
           <div className="performance-matrix-wrap">
             <table className="station-overview-table">
@@ -358,7 +359,7 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
             <header><div><span>VOLUME TREND</span><h2>Daily throughput</h2></div><strong>{count(mtdVolume)} MTD</strong></header>
             <div className="ops-bar-chart" aria-label="Daily volume chart">
               {daily.length ? daily.map(([workDate, value]) => (
-                <div className="ops-bar-column" key={workDate} title={`${workDate}: ${count(value)}`}>
+                <div className="ops-bar-column" key={workDate} title={`${formatDashboardDate(workDate)}: ${count(value)}`}>
                   <span style={{ height: `${Math.max(4, Math.round((value / maxDaily) * 100))}%` }} />
                   <small>{workDate.slice(-2)}</small>
                 </div>

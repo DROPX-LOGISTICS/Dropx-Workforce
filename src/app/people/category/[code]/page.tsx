@@ -13,6 +13,7 @@ import { workforceProfileFields } from "@/lib/profile-field-rules";
 import { getAuthorization, hasPermission, isCompanyOwner } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { countryCodeOptions } from "@/lib/country-codes";
+import { formatDashboardDate } from "@/lib/date-format";
 import { dynamicWorkforceTable, isCustomWorkforceCategoryCode, normalizeWorkforceCategoryCode, singularCategoryLabel } from "@/lib/dynamic-workforce";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
@@ -301,7 +302,7 @@ export default async function DynamicWorkforceCategoryPage({
                 <div className="executive-detail-item"><dt>Full name</dt><dd>{displayValue(selectedProfile.full_name)}</dd></div>
                 <div className="executive-detail-item"><dt>Mobile</dt><dd>{selectedProfile.mobile ? `+${selectedProfile.mobile_country_code ?? "91"} ${selectedProfile.mobile}` : "-"}</dd></div>
                 <div className="executive-detail-item"><dt>Email</dt><dd>{displayValue(selectedProfile.email)}</dd></div>
-                <div className="executive-detail-item"><dt>Date of join</dt><dd>{displayValue(selectedProfile.date_of_join)}</dd></div>
+                <div className="executive-detail-item"><dt>Date of join</dt><dd>{formatDashboardDate(selectedProfile.date_of_join)}</dd></div>
                 <div className="executive-detail-item"><dt>Location</dt><dd>{displayValue(first(selectedProfile.stations)?.station_code)}</dd></div>
                 <div className="executive-detail-item"><dt>Designation</dt><dd>{displayValue(selectedProfile.designation)}</dd></div>
                 <div className="executive-detail-item"><dt>Status</dt><dd>{statusLabel(selectedProfile)}</dd></div>
@@ -311,7 +312,8 @@ export default async function DynamicWorkforceCategoryPage({
                   {enabledFields.filter((field) => field.group === group).map((field) => {
                     const pathColumn = uploadColumns[field.key];
                     if (pathColumn) return <div className="executive-detail-item" key={field.key}><dt>{field.label}</dt><dd>{selectedProfile[pathColumn] ? <a className="button secondary compact" href={`/api/people/category-document?code=${encodeURIComponent(code)}&id=${encodeURIComponent(selectedProfile.id)}&field=${encodeURIComponent(field.key)}`} target="_blank" rel="noreferrer">View</a> : "-"}</dd></div>;
-                    return <div className="executive-detail-item" key={field.key}><dt>{field.label}</dt><dd>{displayValue(selectedProfile[fieldColumnNames[field.key] ?? field.key as keyof ProfileRow])}</dd></div>;
+                    const fieldValue = selectedProfile[fieldColumnNames[field.key] ?? field.key as keyof ProfileRow];
+                    return <div className="executive-detail-item" key={field.key}><dt>{field.label}</dt><dd>{field.kind === "date" ? formatDashboardDate(String(fieldValue ?? "")) : displayValue(fieldValue)}</dd></div>;
                   })}
                 </dl></section>
               ))}

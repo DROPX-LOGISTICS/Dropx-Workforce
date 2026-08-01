@@ -8,6 +8,7 @@ import { BusinessDocumentFilters } from "@/components/business-document-filters"
 import { BusinessDocumentsTable } from "@/components/business-documents-table";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDate } from "@/lib/date-format";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import { createBusinessDocument, deleteBusinessDocument, updateBusinessDocument } from "./actions";
 
@@ -568,10 +569,7 @@ function daysUntil(value: string | null | undefined) {
 }
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return "-";
-  const [year, month, day] = value.slice(0, 10).split("-");
-  if (!year || !month || !day) return value;
-  return `${day}-${month}-${year}`;
+  return formatDashboardDate(value);
 }
 
 function startOfDay(date: Date) {

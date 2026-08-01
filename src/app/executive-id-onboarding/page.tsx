@@ -3,6 +3,7 @@ import { OnboardingScopeFilter } from "@/components/onboarding-scope-filter";
 import { PageHead } from "@/components/page-head";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDate } from "@/lib/date-format";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { resolveOperatingContext } from "@/lib/ops-pulse/operating-context";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -87,7 +88,7 @@ export default async function ExecutiveIdOnboardingPage({ searchParams }: { sear
       <article><span>Pending</span><strong>{pending}</strong><small>Action required</small></article>
       <article><span>Cleared</span><strong>{cleared}</strong><small>Closed items</small></article>
       <article><span>Oldest pending</span><strong>{oldestPending} days</strong><small>Ageing</small></article>
-      <article><span>Latest upload</span><strong>{latestBatch ? latestBatch.created_at.slice(0, 10) : "—"}</strong><small>{latestBatch?.file_name || "No matching batch"}</small></article>
+      <article><span>Latest upload</span><strong>{formatDashboardDate(latestBatch?.created_at, "—")}</strong><small>{latestBatch?.file_name || "No matching batch"}</small></article>
     </section>
     <section className="panel"><div className="panel-head"><div><h2>Onboarding action register</h2><p className="subtle">{latestBatch ? `${sourceRows.length} records from the latest daily upload` : "No onboarding upload was identified in the recent report batches."}</p></div></div>
       <div className="table-wrap"><table className="onboarding-table"><thead><tr><th>DA</th><th>Email</th><th>Transporter ID</th><th>Station / Cluster</th><th>Pending since</th><th>Upload status</th><th>Action item</th><th>Closure</th></tr></thead><tbody>

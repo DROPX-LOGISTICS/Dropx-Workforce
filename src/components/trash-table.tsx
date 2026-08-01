@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Download, Eye } from "lucide-react";
 import { SubmitButton } from "@/components/submit-button";
+import { formatDashboardDateTime } from "@/lib/date-format";
 
 export type TrashItem = {
   id: string;
@@ -157,14 +158,5 @@ function deleteClass(value: number | null) {
 }
 
 function formatDateTime(value: string | null) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(date);
+  return formatDashboardDateTime(value);
 }

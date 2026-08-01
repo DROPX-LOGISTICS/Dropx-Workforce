@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { bulkMetaLeadAdAction, changeMetaLeadAdStatus, deleteMetaLeadAd, removeLocalLeadAd } from "@/app/leads/actions";
 import { SubmitButton } from "@/components/submit-button";
+import { formatDashboardDate } from "@/lib/date-format";
 import type { LeadAdRow } from "@/lib/leads-data";
 
 const pageSize = 20;
@@ -23,10 +24,7 @@ function clean(value: string | null | undefined) {
 }
 
 function formatDate(value: string | null) {
-  if (!value) return "-";
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return formatDashboardDate(value);
 }
 
 function formatMoney(value: number | null | undefined) {

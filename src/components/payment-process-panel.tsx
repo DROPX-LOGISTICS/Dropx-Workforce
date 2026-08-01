@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { PageHead } from "@/components/page-head";
 import { StatusPill } from "@/components/status-pill";
+import { formatDashboardDate } from "@/lib/date-format";
 
 export type PaymentProcessBank = {
   id: string;
@@ -49,7 +50,7 @@ function dateOnly(value: string) {
 }
 
 function displayDate(value: string) {
-  return new Date(value).toLocaleDateString("en-GB");
+  return formatDashboardDate(value);
 }
 
 type Props = {

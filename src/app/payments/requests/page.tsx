@@ -7,6 +7,7 @@ import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDate, formatDashboardDateTime } from "@/lib/date-format";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import { createPaymentRequest, resubmitPaymentRequest, submitPaymentBankDetails } from "./actions";
 
@@ -331,7 +332,7 @@ export default async function PaymentRequestsPage({
                       <td>{request.bank_account_no ?? "-"}</td>
                       <td>{request.ifsc ?? "-"}</td>
                       <td><StatusPill status={request.approval_status || request.status} /></td>
-                      <td>{new Date(request.created_at).toLocaleDateString("en-GB")}</td>
+                      <td>{formatDashboardDate(request.created_at)}</td>
                       {pagePermission.canAdd ? (
                         <td>
                           {canSubmitBankDetails(request, authorization.userId) ? (
@@ -449,7 +450,7 @@ export default async function PaymentRequestsPage({
                 <div className="payment-return-remarks">
                   <div>
                     <strong>Return remarks:</strong>
-                    <span>{new Date(returnRemark.created_at).toLocaleString("en-GB")}</span>
+                    <span>{formatDashboardDateTime(returnRemark.created_at)}</span>
                   </div>
                   <p>{returnRemarkText}</p>
                 </div>

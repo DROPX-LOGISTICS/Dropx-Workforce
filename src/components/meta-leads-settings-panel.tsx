@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { connectAndTestMetaLeadSync, saveMetaLeadsSettings } from "@/app/settings/meta-leads-actions";
 import { SubmitButton } from "@/components/submit-button";
+import { formatDashboardDateTime } from "@/lib/date-format";
 
 type MetaLeadsSettingsPanelProps = {
   canEdit: boolean;
@@ -63,7 +64,7 @@ export function MetaLeadsSettingsPanel({ canEdit, settings }: MetaLeadsSettingsP
           </div>
           <div>
             <span className="subtle">Last sync</span>
-            <strong>{settings.last_synced_at ? new Date(settings.last_synced_at).toLocaleString("en-IN") : "-"}</strong>
+            <strong>{formatDashboardDateTime(settings.last_synced_at)}</strong>
           </div>
         </div>
       </section>

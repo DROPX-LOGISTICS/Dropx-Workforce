@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { getAuthorization } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDate } from "@/lib/date-format";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type RequestRow = {
@@ -104,7 +105,7 @@ export async function GET() {
       "Email": request.email ?? "",
       "Status": request.status,
       "Remarks": request.remarks ?? "",
-      "Created": new Date(request.created_at).toLocaleDateString("en-GB"),
+      "Created": formatDashboardDate(request.created_at),
       ...Object.fromEntries(Object.entries(answersByRequest.get(request.id) ?? {}).map(([key, value]) => [key, safeSheetValue(value)]))
     }));
 

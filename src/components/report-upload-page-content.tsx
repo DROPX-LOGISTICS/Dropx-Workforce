@@ -5,6 +5,7 @@ import { ReportImportUploader } from "@/components/report-import-uploader";
 import { ShipmentCoverageVisibility } from "@/components/shipment-coverage-visibility";
 import { StatusPill } from "@/components/status-pill";
 import { getAuthorization } from "@/lib/authorization";
+import { formatDashboardDate, formatDashboardDateTime } from "@/lib/date-format";
 import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
 import { loadCodLocations, locationModelName, providerName } from "@/lib/ops-pulse/cod";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
@@ -46,22 +47,11 @@ function validDate(value?: string) {
 }
 
 function displayDate(value: string) {
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC"
-  }).format(new Date(`${value}T00:00:00Z`));
+  return formatDashboardDate(value);
 }
 
 function displayDateTime(value: string) {
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "Asia/Kolkata"
-  }).format(new Date(value));
+  return formatDashboardDateTime(value);
 }
 
 function addDays(value: string, days: number) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { formatDashboardDateTime } from "@/lib/date-format";
 
 export type CampaignRecipient = {
   id: string;
@@ -84,7 +85,7 @@ function formatUserId(recipient: CampaignRecipient, channel?: string | null) {
 }
 
 function formatUpdatedAt(value?: string | null) {
-  return value ? new Date(value).toLocaleString("en-IN") : "-";
+  return formatDashboardDateTime(value);
 }
 
 export function CampaignReport({
@@ -216,7 +217,7 @@ export function CampaignReport({
                           <span className="campaign-code">{campaign.campaign_code}</span>
                           {showChannel ? <span>{campaign.channel || "WhatsApp"}</span> : null}
                           <span>{campaign.whatsapp_profile_name || "-"}</span>
-                          <span>{new Date(campaign.created_at).toLocaleString("en-IN")}</span>
+                          <span>{formatDashboardDateTime(campaign.created_at)}</span>
                           <span>{counts.all}</span>
                           <span className="muted-count">{counts.sent}</span>
                           <span className="good-text">{counts.delivered}</span>

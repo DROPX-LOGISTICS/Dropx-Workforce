@@ -6,6 +6,7 @@ import { VerificationApiLogDetails } from "@/components/verification-api-log-det
 import { VerificationApiReportFilters } from "@/components/verification-api-report-filters";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDateTime } from "@/lib/date-format";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type SearchParams = {
@@ -100,11 +101,7 @@ function labelFor(options: string[][], value: string) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Kolkata"
-  }).format(new Date(value));
+  return formatDashboardDateTime(value);
 }
 
 function performerLabel(value: string | null, source: string) {

@@ -3,6 +3,7 @@
 import { Activity, Download, Eye, Fuel, Gauge, MoreVertical, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/searchable-select";
+import { formatDashboardDate, formatDashboardDateTime } from "@/lib/date-format";
 
 type FleetMetric = {
   vehicle_no: string;
@@ -390,7 +391,7 @@ function FleetFrame({
           <div className="fleet-mark" />
           <div>
             <h1>DropX Fleet Dashboard</h1>
-            <p>{generatedAt ? `Updated ${new Date(generatedAt).toLocaleString("en-IN")}` : "Loading latest fleet data"}</p>
+            <p>{generatedAt ? `Updated ${formatDashboardDateTime(generatedAt)}` : "Loading latest fleet data"}</p>
           </div>
         </div>
         {fleetManager ? (
@@ -1680,7 +1681,7 @@ function LiveGps({ rows }: { rows: GpsRow[] }) {
           <span className="fleet-vehicle-text" key={row.vehicle_no}>{row.vehicle_no}</span>,
           `${formatNumber(row.speed)} km/h`,
           row.ignition ? "ON" : "OFF",
-          row.gps_time ? new Date(row.gps_time).toLocaleString("en-IN") : "-",
+          formatDashboardDateTime(row.gps_time),
           <a href={`https://maps.google.com/?q=${row.latitude},${row.longitude}`} target="_blank" key="map">Map</a>
         ])}
       />
@@ -2152,23 +2153,11 @@ function formatCurrency(value: number) {
 }
 
 function formatDateValue(value?: string) {
-  if (!value) return "-";
-  if (!isIsoDate(value)) return value;
-  const [year, month, day] = value.split("-");
-  return `${day}/${month}/${year}`;
+  return formatDashboardDate(value);
 }
 
 function formatDateTime(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
+  return formatDashboardDateTime(value, "");
 }
 
 function normalizeOptionalDate(value?: string) {

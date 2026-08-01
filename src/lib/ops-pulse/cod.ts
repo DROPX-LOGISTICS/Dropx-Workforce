@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { formatDashboardDate, formatDashboardDateTime } from "@/lib/date-format";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { loadShipmentCountAssociateDays } from "@/lib/ops-pulse/capacity-shipments";
 
@@ -404,21 +405,11 @@ export function formatAmount(value: number | string | null | undefined) {
 }
 
 export function formatDate(value: string | null | undefined) {
-  if (!value) return "-";
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" }).format(date);
+  return formatDashboardDate(value);
 }
 
 export function formatDateTime(value: string | null | undefined) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone: "Asia/Kolkata"
-  }).format(date);
+  return formatDashboardDateTime(value);
 }
 
 export function formatTime(value: string | null | undefined) {

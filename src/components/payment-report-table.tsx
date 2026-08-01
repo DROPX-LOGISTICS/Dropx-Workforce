@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Eye } from "lucide-react";
 import { StatusPill } from "@/components/status-pill";
+import { formatDashboardDate, formatDashboardDateTime } from "@/lib/date-format";
 
 export type PaymentReportAnswer = {
   id: string;
@@ -59,11 +60,11 @@ function formatAmount(amount: number | null) {
 }
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleDateString("en-GB");
+  return formatDashboardDate(value);
 }
 
 function formatDateTime(value: string) {
-  return new Date(value).toLocaleString("en-GB");
+  return formatDashboardDateTime(value);
 }
 
 function isProcessingStarted(request: PaymentReportRequest) {

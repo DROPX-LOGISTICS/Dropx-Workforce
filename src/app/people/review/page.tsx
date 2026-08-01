@@ -6,6 +6,7 @@ import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDateTime } from "@/lib/date-format";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import {
   nonEmployeeProfileConfigs,
@@ -85,12 +86,7 @@ function firstRelation<T>(value: T | T[] | null | undefined) {
 }
 
 function formatDateTime(value: string | null) {
-  if (!value) return "-";
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Kolkata"
-  }).format(new Date(value));
+  return formatDashboardDateTime(value);
 }
 
 function verificationValue(profile: ReviewProfile, kind: string) {

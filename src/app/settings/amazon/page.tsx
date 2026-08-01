@@ -8,6 +8,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { isCompanyOwner, requirePagePermission } from "@/lib/authorization";
 import { amazonTaskDefinitions, isAmazonConnectorSetupError, loadAmazonConnectors } from "@/lib/amazon-connectors";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDateTime } from "@/lib/date-format";
 import { isSupabaseAdminConfigured } from "@/lib/supabase-admin";
 import { saveAmazonConnector, warmupAmazonPortalSession } from "./actions";
 
@@ -24,12 +25,7 @@ function parseFlash() {
 }
 
 function formatDateTime(value: string | null | undefined) {
-  if (!value) return "-";
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Kolkata"
-  }).format(new Date(value));
+  return formatDashboardDateTime(value);
 }
 
 function effectiveTaskStatus({

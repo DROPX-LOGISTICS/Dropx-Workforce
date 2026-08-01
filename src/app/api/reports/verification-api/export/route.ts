@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import { type NextRequest } from "next/server";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDateTime } from "@/lib/date-format";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type AuditRow = {
@@ -89,11 +90,7 @@ function jsonValue(value: unknown) {
 }
 
 function displayDate(value: string) {
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Kolkata"
-  }).format(new Date(value));
+  return formatDashboardDateTime(value);
 }
 
 export const dynamic = "force-dynamic";

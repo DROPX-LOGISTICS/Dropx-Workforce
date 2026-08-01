@@ -7,6 +7,7 @@ import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDateTime } from "@/lib/date-format";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import { createBiometricDevice, deleteBiometricDevice, updateBiometricDevice } from "./actions";
 
@@ -80,14 +81,7 @@ function loadFlash() {
 }
 
 function formatDateTime(value: string | null) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "short",
-    timeStyle: "medium",
-    timeZone: "Asia/Kolkata"
-  }).format(date);
+  return formatDashboardDateTime(value);
 }
 
 function isDeviceConnected(device: DeviceRow) {

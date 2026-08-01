@@ -4,6 +4,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { LeadAdsPanel } from "@/components/lead-ads-panel";
 import { LeadReportsPanel } from "@/components/lead-reports-panel";
 import { LeadSopPanel } from "@/components/lead-sop-panel";
+import { formatDashboardDateTime } from "@/lib/date-format";
 import type { LeadRow, LeadWorkspaceData } from "@/lib/leads-data";
 
 type LeadsWorkspaceProps = {
@@ -30,14 +31,7 @@ const tabs = [
 ] as const;
 
 function formatDate(value: string | null) {
-  if (!value) return "-";
-  return new Date(value).toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
+  return formatDashboardDateTime(value);
 }
 
 function statusLabel(value: string | null) {

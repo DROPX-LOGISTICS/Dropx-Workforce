@@ -7,6 +7,7 @@ import { StatusPill } from "@/components/status-pill";
 import { Eye } from "lucide-react";
 import { requirePagePermission, type AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDate, formatDashboardDateTime } from "@/lib/date-format";
 import { getPaymentApprovalEligibility } from "@/lib/payment-approval-scope";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import {
@@ -314,7 +315,7 @@ export default async function PaymentApprovalsPage({
                     <td>{request.amount == null ? "-" : `Rs ${Number(request.amount).toLocaleString("en-IN")}`}</td>
                     <td>{request.profiles?.full_name ?? request.profiles?.email ?? "-"}</td>
                     <td><StatusPill status={request.approval_status || request.status} /></td>
-                    <td>{new Date(request.created_at).toLocaleDateString("en-GB")}</td>
+                    <td>{formatDashboardDate(request.created_at)}</td>
                     {pagePermission.canEdit ? <td><PendingLink className="button secondary compact" href={`/payments/approvals?${new URLSearchParams({ ...Object.fromEntries(currentParams), manage: request.id }).toString()}`} scroll={false}>Manage</PendingLink></td> : null}
                   </tr>
                 )) : (
@@ -400,7 +401,7 @@ export default async function PaymentApprovalsPage({
                             <td>{log.profiles?.full_name ?? log.profiles?.email ?? "-"}</td>
                             <td>{log.user_roles?.name ?? log.user_roles?.code ?? "-"}</td>
                             <td>{log.comments || "-"}</td>
-                            <td>{new Date(log.created_at).toLocaleString("en-GB")}</td>
+                            <td>{formatDashboardDateTime(log.created_at)}</td>
                           </tr>
                         ))}
                       </tbody>

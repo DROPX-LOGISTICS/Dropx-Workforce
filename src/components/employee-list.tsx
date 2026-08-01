@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { UserRound } from "lucide-react";
 import { EmployeeActionMenu } from "@/components/employee-action-menu";
 import { StatusPill } from "@/components/status-pill";
+import { formatDashboardDate } from "@/lib/date-format";
 
 export type EmployeeListRow = {
   id: string;
@@ -200,7 +201,7 @@ export function EmployeeList({
                 <td>{row.biometricId}</td>
                 <td>{row.mobile}</td>
                 <td>{row.email}</td>
-                <td>{row.dateOfJoin}</td>
+                <td>{formatDashboardDate(row.dateOfJoin)}</td>
                 <td>{row.location}</td>
                 <td>{row.designation}</td>
                 <td>{row.statutory}</td>

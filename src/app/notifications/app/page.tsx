@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDateTime } from "@/lib/date-format";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { workforceProfileTypes, workforceTable, type WorkforceProfileType } from "@/lib/workforce-profiles";
 import { sendAppNotification } from "./actions";
@@ -137,7 +138,7 @@ export default async function AppNotificationsPage({
                 {history.map((row) => {
                   const recipient = recipientByKey.get(`${row.recipient_profile_type}:${row.recipient_account_id}`);
                   return <tr key={row.id}>
-                    <td>{new Date(row.created_at).toLocaleString("en-IN")}</td>
+                    <td>{formatDashboardDateTime(row.created_at)}</td>
                     <td><strong>{recipient?.name ?? "Account"}</strong><small>{recipient?.reference} · {profileLabels[row.recipient_profile_type as WorkforceProfileType] ?? row.recipient_profile_type}</small></td>
                     <td>
                       <strong>{row.title}</strong>

@@ -10,6 +10,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { type AuthorizationContext, requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { countryCodeOptions } from "@/lib/country-codes";
+import { formatDashboardDate } from "@/lib/date-format";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { canOnboardDesignation } from "@/lib/designation-onboarding-access";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -259,7 +260,7 @@ function FieldExecutiveDetails({
           <ExecutiveDetail label="ID" value={executive.dropx_id} />
           <ExecutiveDetail label="Full name" value={executive.full_name} />
           <ExecutiveDetail label="Designation" value={executive.designation} />
-          <ExecutiveDetail label="Date of join" value={executive.date_of_join} />
+          <ExecutiveDetail label="Date of join" value={formatDashboardDate(executive.date_of_join)} />
           <ExecutiveDetail label="Location" value={location?.station_name || location?.station_code} />
           <ExecutiveDetail label="Status" value={fieldExecutiveStatus(executive)} />
           <ExecutiveDetail label="Biometric enrolment ID" value={executive.biometric_id} />
@@ -271,7 +272,7 @@ function FieldExecutiveDetails({
           <ExecutiveDetail label="Mobile" value={`+${executive.mobile_country_code ?? "91"} ${executive.mobile}`} />
           <ExecutiveDetail label="Email" value={executive.email} />
           {enabled.has("gender") ? <ExecutiveDetail label="Gender" value={executive.gender} /> : null}
-          {enabled.has("date_of_birth") ? <ExecutiveDetail label="Date of birth" value={executive.date_of_birth} /> : null}
+          {enabled.has("date_of_birth") ? <ExecutiveDetail label="Date of birth" value={formatDashboardDate(executive.date_of_birth)} /> : null}
           {enabled.has("father_name") ? <ExecutiveDetail label="Father name" value={executive.father_name} /> : null}
           {enabled.has("blood_group") ? <ExecutiveDetail label="Blood group" value={executive.blood_group} /> : null}
           {enabled.has("is_handicapped") ? <ExecutiveDetail label="Handicapped" value={executive.is_handicapped} /> : null}
@@ -316,11 +317,11 @@ function FieldExecutiveDetails({
         <h3>License and vehicle</h3>
         <dl className="executive-detail-grid">
           {enabled.has("driving_license_no") ? <ExecutiveDetail label="Driving license number" value={executive.driving_license_no} /> : null}
-          {enabled.has("driving_license_exp_date") ? <ExecutiveDetail label="Driving license expiry" value={executive.driving_license_exp_date} /> : null}
+          {enabled.has("driving_license_exp_date") ? <ExecutiveDetail label="Driving license expiry" value={formatDashboardDate(executive.driving_license_exp_date)} /> : null}
           {enabled.has("vehicle_reg_no") ? <ExecutiveDetail label="Vehicle registration number" value={executive.vehicle_reg_no} /> : null}
-          {enabled.has("vehicle_reg_exp_date") ? <ExecutiveDetail label="Vehicle registration expiry" value={executive.vehicle_reg_exp_date} /> : null}
-          {enabled.has("vehicle_insurance_exp_date") ? <ExecutiveDetail label="Vehicle Insurance expiry" value={executive.vehicle_insurance_exp_date} /> : null}
-          {enabled.has("vehicle_pollution_exp_date") ? <ExecutiveDetail label="Pollution expiry" value={executive.vehicle_pollution_exp_date} /> : null}
+          {enabled.has("vehicle_reg_exp_date") ? <ExecutiveDetail label="Vehicle registration expiry" value={formatDashboardDate(executive.vehicle_reg_exp_date)} /> : null}
+          {enabled.has("vehicle_insurance_exp_date") ? <ExecutiveDetail label="Vehicle Insurance expiry" value={formatDashboardDate(executive.vehicle_insurance_exp_date)} /> : null}
+          {enabled.has("vehicle_pollution_exp_date") ? <ExecutiveDetail label="Pollution expiry" value={formatDashboardDate(executive.vehicle_pollution_exp_date)} /> : null}
         </dl>
       </section> : null}
       {hasAny("aadhaar_front", "aadhaar_back", "pan_upload", "dl_front", "dl_back", "profile_photo") ? <section>

@@ -7,6 +7,7 @@ import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDate } from "@/lib/date-format";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import { createExpenseRequest, submitPaymentBankDetails } from "@/app/payments/requests/actions";
 
@@ -267,7 +268,7 @@ export default async function ExpenseRequestPage({
                     <td>{headById.get(request.payment_head_id)?.name ?? "-"}</td>
                     <td>{request.amount_requested == null ? "-" : `Rs ${Number(request.amount_requested).toLocaleString("en-IN")}`}</td>
                     <td><StatusPill status={request.approval_status || request.status} /></td>
-                    <td>{new Date(request.created_at).toLocaleDateString("en-GB")}</td>
+                    <td>{formatDashboardDate(request.created_at)}</td>
                     {pagePermission.canAdd ? (
                       <td>
                         {canSubmitBankDetails(request, authorization.userId) ? (

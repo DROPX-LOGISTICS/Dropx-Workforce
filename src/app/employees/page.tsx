@@ -7,6 +7,7 @@ import { PendingLink } from "@/components/pending-link";
 import { SubmitButton } from "@/components/submit-button";
 import { type AuthorizationContext, requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDate } from "@/lib/date-format";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { canOnboardDesignation } from "@/lib/designation-onboarding-access";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
@@ -198,7 +199,7 @@ function EmployeeDetails({
           <EmployeeDetail label="Employee ID" value={employee.employee_code} />
           <EmployeeDetail label="Full name" value={employee.full_name} />
           <EmployeeDetail label="Biometric ID" value={employee.biometric_id} />
-          <EmployeeDetail label="Date of join" value={employee.date_of_join} />
+          <EmployeeDetail label="Date of join" value={formatDashboardDate(employee.date_of_join)} />
           <EmployeeDetail label="Location" value={location?.station_name || location?.station_code} />
           <EmployeeDetail label="Designation" value={designation?.name} />
           <EmployeeDetail label="Statutory" value={statutoryLabel(employee.statutory_applicability)} />
@@ -211,7 +212,7 @@ function EmployeeDetails({
           <EmployeeDetail label="Mobile" value={`+${employee.mobile_country_code ?? "91"} ${employee.mobile}`} />
           <EmployeeDetail label="Email" value={employee.email} />
           {enabled.has("gender") ? <EmployeeDetail label="Gender" value={employee.gender} /> : null}
-          {enabled.has("date_of_birth") ? <EmployeeDetail label="Date of birth" value={employee.date_of_birth} /> : null}
+          {enabled.has("date_of_birth") ? <EmployeeDetail label="Date of birth" value={formatDashboardDate(employee.date_of_birth)} /> : null}
           {enabled.has("father_name") ? <EmployeeDetail label="Father name" value={employee.father_name} /> : null}
           {enabled.has("blood_group") ? <EmployeeDetail label="Blood group" value={employee.blood_group} /> : null}
           {enabled.has("is_handicapped") ? <EmployeeDetail label="Handicapped" value={employee.is_handicapped} /> : null}
@@ -249,11 +250,11 @@ function EmployeeDetails({
         <h3>License and vehicle</h3>
         <dl className="executive-detail-grid">
           {enabled.has("driving_license_no") ? <EmployeeDetail label="Driving license number" value={employee.driving_license_no} /> : null}
-          {enabled.has("driving_license_exp_date") ? <EmployeeDetail label="Driving license expiry" value={employee.driving_license_exp_date} /> : null}
+          {enabled.has("driving_license_exp_date") ? <EmployeeDetail label="Driving license expiry" value={formatDashboardDate(employee.driving_license_exp_date)} /> : null}
           {enabled.has("vehicle_reg_no") ? <EmployeeDetail label="Vehicle registration number" value={employee.vehicle_reg_no} /> : null}
-          {enabled.has("vehicle_reg_exp_date") ? <EmployeeDetail label="Vehicle registration expiry" value={employee.vehicle_reg_exp_date} /> : null}
-          {enabled.has("vehicle_insurance_exp_date") ? <EmployeeDetail label="Vehicle Insurance expiry" value={employee.vehicle_insurance_exp_date} /> : null}
-          {enabled.has("vehicle_pollution_exp_date") ? <EmployeeDetail label="Pollution expiry" value={employee.vehicle_pollution_exp_date} /> : null}
+          {enabled.has("vehicle_reg_exp_date") ? <EmployeeDetail label="Vehicle registration expiry" value={formatDashboardDate(employee.vehicle_reg_exp_date)} /> : null}
+          {enabled.has("vehicle_insurance_exp_date") ? <EmployeeDetail label="Vehicle Insurance expiry" value={formatDashboardDate(employee.vehicle_insurance_exp_date)} /> : null}
+          {enabled.has("vehicle_pollution_exp_date") ? <EmployeeDetail label="Pollution expiry" value={formatDashboardDate(employee.vehicle_pollution_exp_date)} /> : null}
         </dl>
       </section> : null}
       {hasAny("bank_account_no", "ifsc") ? <section>

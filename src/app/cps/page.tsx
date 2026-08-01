@@ -2,6 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { formatDashboardDate } from "@/lib/date-format";
 import { loadCodLocations, locationLabel } from "@/lib/ops-pulse/cod";
 import { operatingModeLabel, resolveOperatingContext } from "@/lib/ops-pulse/operating-context";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -77,7 +78,7 @@ export default async function CpsPage() {
           <article className={unmapped ? "attention" : "healthy"}><div className="ops-kpi-icon">!</div><span>Unmapped IDs</span><strong>{display(unmapped)}</strong><small>{unmapped ? "Requires ID mapping" : "Mapping complete"}</small></article>
           <article><div className="ops-kpi-icon">C</div><span>Overall CPS</span><strong>{number(cost?.overall_cps).toFixed(2)}</strong><small>Target {number(cost?.target_cps).toFixed(2)}</small></article>
           <article className={number(cost?.target_gap) > 0 ? "attention" : "healthy"}><div className="ops-kpi-icon">G</div><span>Target gap</span><strong>{number(cost?.target_gap).toFixed(2)}</strong><small>Impact ₹{display(number(cost?.target_impact))}</small></article>
-          <article><div className="ops-kpi-icon">Σ</div><span>Total cost</span><strong>₹{display(number(cost?.total_cost))}</strong><small>{cost?.work_date ?? "Awaiting CPS calculation"}</small></article>
+          <article><div className="ops-kpi-icon">Σ</div><span>Total cost</span><strong>₹{display(number(cost?.total_cost))}</strong><small>{cost?.work_date ? formatDashboardDate(cost.work_date) : "Awaiting CPS calculation"}</small></article>
         </section>
         <section className="ops-visual-grid">
           <article className="ops-visual-card wide">

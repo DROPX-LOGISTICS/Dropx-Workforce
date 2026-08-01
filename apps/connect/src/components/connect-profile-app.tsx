@@ -183,6 +183,11 @@ function title(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function profileStatusLabel(profileStatus?: string | null, accountStatus?: string | null) {
+  const raw = profileStatus?.trim() || accountStatus?.trim() || "active";
+  return title(raw.toLowerCase());
+}
+
 function displayDate(value = "") {
   const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return iso ? `${iso[3]}/${iso[2]}/${iso[1]}` : value;
@@ -600,7 +605,7 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
         Designation: read.designation,
         "Date of join": read.dateOfJoin,
         "Mobile number": read.mobile,
-        ...(executive ? { Status: profile.status === "under_review" ? "Under review" : "Active" } : {})
+        Status: profileStatusLabel(profile.status, account.status)
       }},
       { name: "Personal details", values: {
         ...(enabled.has("gender") ? { Gender: values.gender } : {}),

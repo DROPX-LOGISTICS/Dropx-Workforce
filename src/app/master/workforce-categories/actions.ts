@@ -206,7 +206,9 @@ export async function forceDeleteWorkersCategory(formData: FormData) {
   const authorization = await requirePagePermission("designations", "edit");
   const companyId = requireCompanyId(authorization);
   try {
-    if (!authorization.isMasterOwner) throw new Error("Only the owner can force delete a system workforce category.");
+    if (!authorization.isMasterOwner && authorization.roleCode !== "OWNER") {
+      throw new Error("Only the owner can force delete a system workforce category.");
+    }
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
     const id = required(formData.get("id"), "Workforce category");
     const existing = await supabaseAdmin

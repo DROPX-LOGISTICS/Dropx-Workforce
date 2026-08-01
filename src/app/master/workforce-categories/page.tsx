@@ -172,7 +172,7 @@ export default async function WorkforceCategoriesPage({
                 </SubmitButton>
               </form>
             ) : null}
-            {editing.code === "workers" && authorization.isMasterOwner ? (
+            {editing.code === "workers" && (authorization.isMasterOwner || authorization.roleCode === "OWNER") ? (
               <form action={forceDeleteWorkersCategory} className="danger-form">
                 <input name="id" type="hidden" value={editing.id} />
                 <SubmitButton

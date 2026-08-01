@@ -10,6 +10,7 @@ import { PendingLink } from "@/components/pending-link";
 import { DirectActivationProfileFields } from "@/components/direct-activation-profile-fields";
 import { normalizeCategoryProfileFieldRules } from "@/lib/profile-field-rules";
 import { workforceProfileFields } from "@/lib/profile-field-rules";
+import { filterOnboardingLocations } from "@/lib/onboarding-location-access";
 import { getAuthorization, hasPermission, isCompanyOwner } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { countryCodeOptions } from "@/lib/country-codes";
@@ -180,10 +181,7 @@ export default async function DynamicWorkforceCategoryPage({
       .order("created_at", { ascending: false });
 
   const rawLocations = (locationsResult.data ?? []) as unknown as LocationRow[];
-  const locations = rawLocations.filter((location) => (
-    !location.hide_from_location_list &&
-    (authorization.hasAllLocationAccess || authorization.locationScopeIds.includes(location.id))
-  ));
+  const locations = filterOnboardingLocations(rawLocations, authorization);
   const designations = ((designationsResult.data ?? []) as unknown as DesignationRow[])
     .filter((designation) => (designation.onboarding_categories ?? []).includes(code));
   const locationOptions = locations.map((location) => ({

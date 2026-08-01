@@ -10,6 +10,7 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { formatDashboardDate } from "@/lib/date-format";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { canOnboardDesignation } from "@/lib/designation-onboarding-access";
+import { filterOnboardingLocations } from "@/lib/onboarding-location-access";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import { loadWorkforceCategoryDirectActivate, loadWorkforceCategoryRules, loadWorkforceCategoryStatutoryEnabled } from "@/lib/workforce-category-rules";
 import { bulkImportEmployees, createEmployee, reviewEmployeeProfile, updateEmployee } from "./actions";
@@ -381,9 +382,7 @@ async function loadEmployees(companyId: string, authorization: AuthorizationCont
     return { employees: [], locations: [], designations: [], error: designationError.message };
   }
 
-  const allowedLocations = authorization.hasAllLocationAccess
-    ? (locationsResult.data ?? [])
-    : (locationsResult.data ?? []).filter((location) => authorization.locationScopeIds.includes(location.id) && !location.hide_from_location_list);
+  const allowedLocations = filterOnboardingLocations(locationsResult.data ?? [], authorization);
   const allowedCodes = new Set(allowedLocations.map((location) => location.station_code));
   const employees = authorization.hasAllLocationAccess
     ? (employeesResult.data ?? [])

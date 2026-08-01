@@ -13,6 +13,7 @@ import { countryCodeOptions } from "@/lib/country-codes";
 import { formatDashboardDate } from "@/lib/date-format";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { canOnboardDesignation } from "@/lib/designation-onboarding-access";
+import { filterOnboardingLocations } from "@/lib/onboarding-location-access";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { loadWorkforceCategoryDirectActivate, loadWorkforceCategoryRules, loadWorkforceCategoryStatutoryEnabled } from "@/lib/workforce-category-rules";
 import {
@@ -118,13 +119,6 @@ type FieldExecutiveAddFormValues = {
 
 function firstRelation<T>(value: T | T[] | null | undefined) {
   return Array.isArray(value) ? value[0] ?? null : value ?? null;
-}
-
-function filterLocationsByAccess<T extends { id: string }>(locations: T[], authorization: AuthorizationContext) {
-  if (authorization.hasAllLocationAccess) return locations;
-
-  const allowedIds = new Set(authorization.locationScopeIds);
-  return locations.filter((location) => allowedIds.has(location.id) && !(location as { hide_from_location_list?: boolean | null }).hide_from_location_list);
 }
 
 function isMissingColumnError(error: unknown) {
@@ -706,7 +700,7 @@ async function loadFieldExecutiveData(
   }
 
   const rawLocations = (locationsResult.data ?? []) as unknown as LocationRow[];
-  const locations = filterLocationsByAccess(rawLocations, authorization).map((location) => ({
+  const locations = filterOnboardingLocations(rawLocations, authorization).map((location) => ({
     ...location,
     providers: firstRelation(location.providers),
     location_models: firstRelation(location.location_models)

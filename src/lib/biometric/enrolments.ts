@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import type { WorkforceProfileType } from "@/lib/workforce-profiles";
+import { backfillHistoricalPunches } from "@/lib/biometric/attendance";
 
 type WorkerType = "employee" | "individual_contract";
 
@@ -118,11 +119,23 @@ export async function syncBiometricEnrolment({
       .eq("id", existing.id)
       .eq("company_id", companyId);
     if (error) throw new Error(error.message);
-    return;
+  } else {
+    const { error } = await supabaseAdmin
+      .from("biometric_enrolments")
+      .insert(payload);
+    if (error) throw new Error(error.message);
   }
 
-  const { error } = await supabaseAdmin
-    .from("biometric_enrolments")
-    .insert(payload);
-  if (error) throw new Error(error.message);
+  await backfillHistoricalPunches({
+    accountId: personId,
+    companyId,
+    employeeId: resolvedProfileType === "employee" ? personId : null,
+    enrolmentId: cleaned,
+    fieldExecutiveId: resolvedProfileType === "field_executive" ? personId : null,
+    isActive,
+    locationId,
+    profileType: resolvedProfileType,
+    workerStatus: isActive ? "Active" : "Inactive",
+    workerType
+  });
 }

@@ -375,6 +375,139 @@ export async function rebuildAttendanceDay(companyId: string, enrolmentId: strin
   if (firstUpsert.error) throw new Error(firstUpsert.error.message);
 }
 
+type HistoricalRawPunchRow = {
+  id: string;
+  device_id: string | null;
+  device_serial: string;
+  enrolment_id: string | null;
+  punch_time: string;
+};
+
+export async function backfillHistoricalPunches({
+  accountId,
+  companyId,
+  employeeId,
+  enrolmentId,
+  fieldExecutiveId,
+  isActive,
+  locationId,
+  profileType,
+  workerStatus,
+  workerType
+}: {
+  accountId: string;
+  companyId: string;
+  employeeId: string | null;
+  enrolmentId: string;
+  fieldExecutiveId: string | null;
+  isActive: boolean;
+  locationId: string;
+  profileType: string;
+  workerStatus: string;
+  workerType: string;
+}) {
+  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+
+  const enrolmentIds = biometricIdVariants([enrolmentId]);
+  const rawEventIds: string[] = [];
+  const rawPunches: HistoricalRawPunchRow[] = [];
+  const pageSize = 500;
+
+  for (let from = 0; ; from += pageSize) {
+    const alerts = await supabaseAdmin
+      .from("biometric_alerts")
+      .select("raw_event_id")
+      .eq("company_id", companyId)
+      .eq("alert_type", "unknown_enrolment")
+      .in("enrolment_id", enrolmentIds)
+      .not("raw_event_id", "is", null)
+      .is("resolved_at", null)
+      .range(from, from + pageSize - 1);
+    if (alerts.error) throw new Error(alerts.error.message);
+
+    const page = (alerts.data ?? [])
+      .map((alert) => alert.raw_event_id)
+      .filter((id): id is string => Boolean(id));
+    rawEventIds.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  const uniqueRawEventIds = Array.from(new Set(rawEventIds));
+  for (let offset = 0; offset < uniqueRawEventIds.length; offset += 100) {
+    const ids = uniqueRawEventIds.slice(offset, offset + 100);
+    const result = await supabaseAdmin
+      .from("biometric_raw_events")
+      .select("id, device_id, device_serial, enrolment_id, punch_time")
+      .eq("company_id", companyId)
+      .in("id", ids)
+      .ilike("event_type", "timelog")
+      .not("punch_time", "is", null);
+    if (result.error) throw new Error(result.error.message);
+    rawPunches.push(...((result.data ?? []) as HistoricalRawPunchRow[]));
+  }
+  rawPunches.sort((left, right) =>
+    new Date(left.punch_time).getTime() - new Date(right.punch_time).getTime()
+  );
+
+  if (!rawPunches.length) return 0;
+
+  const affectedDates = new Set<string>();
+  for (let offset = 0; offset < rawPunches.length; offset += pageSize) {
+    const page = rawPunches.slice(offset, offset + pageSize);
+    const rows = page.map((rawPunch) => {
+      const punchDate = istDate(new Date(rawPunch.punch_time));
+      affectedDates.add(punchDate);
+      return {
+        company_id: companyId,
+        raw_event_id: rawPunch.id,
+        device_id: rawPunch.device_id,
+        enrolment_id: enrolmentId,
+        worker_type: workerType,
+        profile_type: profileType,
+        account_id: accountId,
+        employee_id: employeeId,
+        field_executive_id: fieldExecutiveId,
+        location_id: locationId,
+        device_serial: rawPunch.device_serial,
+        punch_time: rawPunch.punch_time,
+        punch_date: punchDate,
+        punch_order: 1,
+        punch_label: punchLabel(1),
+        worker_status: workerStatus,
+        calculated: isActive
+      };
+    });
+
+    const insert = await supabaseAdmin
+      .from("attendance_punches")
+      .upsert(rows, {
+        ignoreDuplicates: true,
+        onConflict: "company_id,device_serial,enrolment_id,punch_time"
+      });
+    if (insert.error) throw new Error(insert.error.message);
+  }
+
+  if (isActive) {
+    for (const punchDate of Array.from(affectedDates).sort()) {
+      await rebuildAttendanceDay(companyId, enrolmentId, punchDate);
+    }
+  }
+
+  const processedRawEventIds = rawPunches.map((rawPunch) => rawPunch.id);
+  for (let offset = 0; offset < processedRawEventIds.length; offset += 100) {
+    const resolve = await supabaseAdmin
+      .from("biometric_alerts")
+      .update({ resolved_at: new Date().toISOString() })
+      .eq("company_id", companyId)
+      .eq("alert_type", "unknown_enrolment")
+      .in("raw_event_id", processedRawEventIds.slice(offset, offset + 100))
+      .is("resolved_at", null);
+    if (resolve.error) throw new Error(resolve.error.message);
+  }
+
+  return rawPunches.length;
+}
+
 function reportMatchesType(row: AttendanceReportRow, type: AttendanceReportType) {
   if (type === "present") return row.status === "P";
   if (type === "absent") return row.status === "A";

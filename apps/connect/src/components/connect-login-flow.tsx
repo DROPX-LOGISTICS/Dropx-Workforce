@@ -245,6 +245,16 @@ export function ConnectLoginFlow() {
     if (destination && ["dashboard", "profile", "attendance", "leave", "settings"].includes(destination)) {
       setNotificationMenu(false);
       open(destination);
+    } else if (destination) {
+      try {
+        const url = new URL(destination);
+        if (url.protocol === "https:" || url.protocol === "http:") {
+          setNotificationMenu(false);
+          window.location.assign(url.toString());
+        }
+      } catch {
+        // Ignore malformed notification links.
+      }
     }
   }
   async function clearNotifications() {

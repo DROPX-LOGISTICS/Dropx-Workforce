@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { AppNotificationComposer, type AppNotificationRecipient } from "@/components/app-notification-composer";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { formatDashboardDateTime } from "@/lib/date-format";
@@ -13,6 +14,10 @@ type Recipient = {
   profileType: WorkforceProfileType;
   name: string;
   reference: string;
+  biometricId: string;
+  category: string;
+  location: string;
+  designation: string;
 };
 
 const profileLabels: Record<WorkforceProfileType, string> = {
@@ -29,18 +34,35 @@ async function loadRecipients(companyId: string) {
     const referenceColumn = profileType === "employee" ? "employee_code" : "dropx_id";
     const result = await supabaseAdmin!
       .from(workforceTable(profileType))
-      .select(`id, full_name, ${referenceColumn}`)
+      .select(`id, full_name, biometric_id, designation, designation_id, ${referenceColumn}, stations (station_code)`)
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("full_name")
       .limit(5000);
     if (result.error) return [] as Recipient[];
-    return (result.data ?? []).map((row) => ({
+    const employeeDesignationIds = profileType === "employee"
+      ? Array.from(new Set((result.data ?? []).map((row) => row.designation_id).filter(Boolean)))
+      : [];
+    const designationResult = employeeDesignationIds.length
+      ? await supabaseAdmin!.from("designations").select("id, name").in("id", employeeDesignationIds)
+      : { data: [], error: null };
+    const designationById = new Map((designationResult.data ?? []).map((row) => [String(row.id), String(row.name ?? "")]));
+    return (result.data ?? []).map((row) => {
+      const record = row as Record<string, unknown>;
+      const station = Array.isArray(record.stations) ? record.stations[0] : record.stations;
+      return ({
       id: String(row.id),
       profileType,
       name: String(row.full_name ?? "Unnamed"),
-      reference: String((row as Record<string, unknown>)[referenceColumn] ?? "")
-    }));
+      reference: String(record[referenceColumn] ?? ""),
+      biometricId: String(record.biometric_id ?? ""),
+      category: profileLabels[profileType],
+      location: String((station as { station_code?: string } | null)?.station_code ?? ""),
+      designation: profileType === "employee"
+        ? designationById.get(String(record.designation_id ?? "")) ?? ""
+        : String(record.designation ?? "")
+    });
+    });
   }));
   return results.flat();
 }
@@ -73,58 +95,16 @@ export default async function AppNotificationsPage({
         <header>
           <p>NOTIFICATIONS</p>
           <h1>App notifications</h1>
-          <span>Send an in-app message to an individual DropX One account.</span>
+          <span>Send personalized Android and web notifications to one or many DropX One accounts.</span>
         </header>
-        {searchParams?.sent === "1" ? <div className="success-banner">Notification sent.</div> : null}
+        {searchParams?.sent ? <div className="success-banner">{searchParams.sent} {searchParams.sent === "1" ? "notification" : "notifications"} sent.</div> : null}
         {searchParams?.error ? <div className="error-banner">{searchParams.error}</div> : null}
         <section className="app-notification-composer">
           <div>
             <h2>New notification</h2>
             <p>The notification appears in both the Android and web inbox.</p>
           </div>
-          <form action={sendAppNotification}>
-            <label>
-              Category
-              <select name="profileType" required>
-                <option value="">Select category</option>
-                {workforceProfileTypes.map((type) => <option key={type} value={type}>{profileLabels[type]}</option>)}
-              </select>
-            </label>
-            <label className="wide">
-              Recipient
-              <select name="accountId" required>
-                <option value="">Select account</option>
-                {workforceProfileTypes.map((type) => (
-                  <optgroup key={type} label={profileLabels[type]}>
-                    {recipients.filter((row) => row.profileType === type).map((row) => (
-                      <option key={`${type}:${row.id}`} value={row.id}>
-                        {[row.reference, row.name].filter(Boolean).join(" - ")}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </label>
-            <label>
-              Title
-              <input maxLength={120} name="title" placeholder="Notification title" required />
-            </label>
-            <label>
-              Open page
-              <select name="route">
-                <option value="">No linked page</option>
-                <option value="dashboard">Dashboard</option>
-                <option value="profile">My Profile</option>
-                <option value="attendance">Attendance</option>
-                <option value="settings">Settings</option>
-              </select>
-            </label>
-            <label className="wide">
-              Message
-              <textarea maxLength={1000} name="body" placeholder="Write the notification message" required rows={4} />
-            </label>
-            <button type="submit">Send notification</button>
-          </form>
+          <AppNotificationComposer action={sendAppNotification} recipients={recipients as AppNotificationRecipient[]} />
         </section>
         <section className="app-notification-history">
           <div>

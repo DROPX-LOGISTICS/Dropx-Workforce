@@ -135,6 +135,10 @@ function resultMessage(value: unknown) {
   return text(data.message || result.message || root.message || root.error || status.message);
 }
 
+function cacheDurationHours(response: Response) {
+  return response.status === 500 ? 3 / 60 : 24;
+}
+
 async function claimProviderCall(input: ProviderCall, requestData: unknown, hash: string) {
   if (!supabaseAdmin) return null;
   const { data, error } = await supabaseAdmin.rpc("claim_verification_api_request", {
@@ -254,7 +258,13 @@ export async function callVerificationProvider(input: ProviderCall) {
     });
     const body = await response.json().catch(() => ({}));
     if (claim?.log_id) {
-      await completeProviderCall(claim.log_id, response, body, Date.now() - startedAt, 24);
+      await completeProviderCall(
+        claim.log_id,
+        response,
+        body,
+        Date.now() - startedAt,
+        cacheDurationHours(response)
+      );
     } else {
       await writeAudit({
         ...input,

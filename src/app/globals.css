@@ -15014,6 +15014,19 @@ td strong,
 }
 
 .app-notification-recipient-field { position: relative; display: grid; gap: 6px; }
+.app-notification-recipient-workbench {
+  overflow: visible; border: 1px solid #e1e5eb; border-radius: 8px; background: #fff;
+}
+.app-notification-recipient-head {
+  display: grid; grid-template-columns: minmax(170px, .45fr) minmax(0, 2.55fr); gap: 14px;
+  align-items: center; padding: 13px 14px; border-bottom: 1px solid #e1e5eb;
+}
+.app-notification-recipient-head h3 { margin: 0; font-size: 15px; }
+.app-notification-recipient-head p { margin: 3px 0 0; color: #667085; font-size: 11px; }
+.app-bulk-recipient-filters { grid-template-columns: minmax(200px, 1.4fr) repeat(6, minmax(120px, 1fr)); }
+.app-notification-recipient-workbench .table-wrap { max-height: 470px; }
+.app-notification-recipient-workbench table { min-width: 920px; }
+.app-notification-recipient-workbench .bulk-send-list { border-top: 1px solid #e1e5eb; }
 .app-notification-field-label { color: #526174; font-size: 11px; font-weight: 700; text-transform: uppercase; }
 .app-notification-composer .app-recipient-trigger {
   grid-column: auto; display: flex; align-items: center; justify-content: space-between; width: 100%;
@@ -15081,6 +15094,10 @@ td strong,
   .app-recipient-filters { grid-template-columns: 1fr; }
   .app-recipient-menu { position: fixed; top: auto; right: 12px; bottom: 12px; left: 12px; max-height: min(72vh, 560px); }
   .app-recipient-options { max-height: min(43vh, 340px); }
+  .app-notification-recipient-head { grid-template-columns: 1fr; }
+  .app-bulk-recipient-filters { grid-template-columns: 1fr; }
+  .app-notification-recipient-workbench .bulk-list-actions { align-items: stretch; flex-wrap: wrap; }
+  .app-notification-recipient-workbench .bulk-filter-counts { width: 100%; }
 }
 
 .people-review-file-grid {

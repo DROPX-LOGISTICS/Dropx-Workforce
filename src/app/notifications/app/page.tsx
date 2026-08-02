@@ -18,6 +18,12 @@ type Recipient = {
   category: string;
   location: string;
   designation: string;
+  mobile: string;
+  countryCode: string;
+  email: string;
+  provider: string;
+  model: string;
+  status: string;
 };
 
 const profileLabels: Record<WorkforceProfileType, string> = {
@@ -34,7 +40,7 @@ async function loadRecipients(companyId: string) {
     const referenceColumn = profileType === "employee" ? "employee_code" : "dropx_id";
     const result = await supabaseAdmin!
       .from(workforceTable(profileType))
-      .select(`id, full_name, biometric_id, designation, designation_id, ${referenceColumn}, stations (station_code)`)
+      .select(`id, full_name, biometric_id, designation, designation_id, mobile, mobile_country_code, email, profile_completion_status, onboarding_status, ${referenceColumn}, stations (station_code, providers (name), location_models (code, name))`)
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("full_name")
@@ -50,6 +56,9 @@ async function loadRecipients(companyId: string) {
     return (result.data ?? []).map((row) => {
       const record = row as Record<string, unknown>;
       const station = Array.isArray(record.stations) ? record.stations[0] : record.stations;
+      const stationRecord = station as { station_code?: string; providers?: unknown; location_models?: unknown } | null;
+      const providerRelation = Array.isArray(stationRecord?.providers) ? stationRecord?.providers[0] : stationRecord?.providers;
+      const modelRelation = Array.isArray(stationRecord?.location_models) ? stationRecord?.location_models[0] : stationRecord?.location_models;
       return ({
       id: String(row.id),
       profileType,
@@ -57,10 +66,16 @@ async function loadRecipients(companyId: string) {
       reference: String(record[referenceColumn] ?? ""),
       biometricId: String(record.biometric_id ?? ""),
       category: profileLabels[profileType],
-      location: String((station as { station_code?: string } | null)?.station_code ?? ""),
+      location: String(stationRecord?.station_code ?? ""),
       designation: profileType === "employee"
         ? designationById.get(String(record.designation_id ?? "")) ?? ""
-        : String(record.designation ?? "")
+        : String(record.designation ?? ""),
+      mobile: String(record.mobile ?? ""),
+      countryCode: String(record.mobile_country_code ?? "91"),
+      email: String(record.email ?? ""),
+      provider: String((providerRelation as { name?: string } | null)?.name ?? ""),
+      model: String((modelRelation as { code?: string; name?: string } | null)?.code ?? (modelRelation as { name?: string } | null)?.name ?? ""),
+      status: String(record.profile_completion_status ?? record.onboarding_status ?? "Active")
     });
     });
   }));

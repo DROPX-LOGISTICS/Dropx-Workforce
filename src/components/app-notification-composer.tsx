@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, Link2, Search, Users, X } from "lucide-react";
+import { ChevronDown, Link2, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import type { WorkforceProfileType } from "@/lib/workforce-profiles";
@@ -14,7 +14,15 @@ export type AppNotificationRecipient = {
   category: string;
   location: string;
   designation: string;
+  mobile: string;
+  countryCode: string;
+  email: string;
+  provider: string;
+  model: string;
+  status: string;
 };
+
+type FilterOption = { value: string; label: string };
 
 const variables = [
   { token: "{full_name}", label: "Full name" },
@@ -24,6 +32,91 @@ const variables = [
   { token: "{location}", label: "Location" },
   { token: "{designation}", label: "Designation" }
 ];
+
+const pageSize = 10;
+
+function keyFor(recipient: AppNotificationRecipient) {
+  return `${recipient.profileType}:${recipient.id}`;
+}
+
+function uniqueOptions(values: string[]): FilterOption[] {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
+    .sort((left, right) => left.localeCompare(right))
+    .map((value) => ({ value, label: value }));
+}
+
+function displayMobile(mobile: string, countryCode: string) {
+  const digits = mobile.replace(/\D/g, "");
+  const code = countryCode.replace(/\D/g, "") || "91";
+  const localNumber = digits.startsWith(code) && digits.length > 10 ? digits.slice(code.length) : digits;
+  return localNumber ? `+${code} ${localNumber}` : "-";
+}
+
+function MultiCheckFilter({
+  label,
+  options,
+  selected,
+  onChange
+}: {
+  label: string;
+  options: FilterOption[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [term, setTerm] = useState("");
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const shown = useMemo(() => {
+    const normalized = term.trim().toLowerCase();
+    return normalized ? options.filter((option) => option.label.toLowerCase().includes(normalized)) : options;
+  }, [options, term]);
+  const summary = selected.length ? `${selected.length} selected` : label;
+
+  useEffect(() => {
+    function close(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  function toggle(value: string) {
+    const next = new Set(selectedSet);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    onChange(Array.from(next));
+  }
+
+  return (
+    <div className="bulk-multi-filter" ref={rootRef}>
+      <button className={`bulk-multi-filter-trigger ${open ? "open" : ""}`} onClick={() => setOpen((value) => !value)} type="button">
+        <span>{summary}</span><ChevronDown aria-hidden="true" size={15} />
+      </button>
+      {open ? (
+        <div className="bulk-multi-filter-menu">
+          <label className="bulk-multi-filter-search">
+            <Search aria-hidden="true" size={15} />
+            <input onChange={(event) => setTerm(event.target.value)} placeholder="Search" value={term} />
+          </label>
+          <div className="bulk-multi-filter-actions">
+            <button onClick={() => onChange(options.map((option) => option.value))} type="button">Select all</button>
+            <button onClick={() => onChange([])} type="button">Clear</button>
+          </div>
+          <div className="bulk-multi-filter-options">
+            {shown.map((option) => (
+              <label key={option.value}>
+                <input checked={selectedSet.has(option.value)} onChange={() => toggle(option.value)} type="checkbox" />
+                <span>{option.label}</span>
+              </label>
+            ))}
+            {!shown.length ? <p className="subtle">No options found.</p> : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function SendButton({ count }: { count: number }) {
   const { pending } = useFormStatus();
@@ -41,66 +134,74 @@ export function AppNotificationComposer({
   action: (formData: FormData) => void | Promise<void>;
   recipients: AppNotificationRecipient[];
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("");
-  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [providers, setProviders] = useState<string[]>([]);
+  const [models, setModels] = useState<string[]>([]);
+  const [locations, setLocations] = useState<string[]>([]);
+  const [designations, setDesignations] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([]);
+  const [checkedKeys, setCheckedKeys] = useState<string[]>([]);
+  const [sendListKeys, setSendListKeys] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
   const [openTarget, setOpenTarget] = useState("");
   const [activeField, setActiveField] = useState<"title" | "body">("body");
-  const rootRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const keyFor = (recipient: AppNotificationRecipient) => `${recipient.profileType}:${recipient.id}`;
-  const selectedSet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
-  const categories = useMemo(
-    () => Array.from(new Set(recipients.map((recipient) => recipient.category))).sort(),
-    [recipients]
-  );
+  const categoryOptions = useMemo(() => uniqueOptions(recipients.map((row) => row.category)), [recipients]);
+  const providerOptions = useMemo(() => uniqueOptions(recipients.map((row) => row.provider)), [recipients]);
+  const modelOptions = useMemo(() => uniqueOptions(recipients.map((row) => row.model)), [recipients]);
+  const locationOptions = useMemo(() => uniqueOptions(recipients.map((row) => row.location)), [recipients]);
+  const designationOptions = useMemo(() => uniqueOptions(recipients.map((row) => row.designation)), [recipients]);
+  const statusOptions = useMemo(() => uniqueOptions(recipients.map((row) => row.status)), [recipients]);
+  const checkedSet = useMemo(() => new Set(checkedKeys), [checkedKeys]);
+  const sendListSet = useMemo(() => new Set(sendListKeys), [sendListKeys]);
+
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
     return recipients.filter((recipient) => {
-      if (category && recipient.category !== category) return false;
+      if (categories.length && !categories.includes(recipient.category)) return false;
+      if (providers.length && !providers.includes(recipient.provider)) return false;
+      if (models.length && !models.includes(recipient.model)) return false;
+      if (locations.length && !locations.includes(recipient.location)) return false;
+      if (designations.length && !designations.includes(recipient.designation)) return false;
+      if (statuses.length && !statuses.includes(recipient.status)) return false;
       if (!term) return true;
-      return [
-        recipient.name,
-        recipient.reference,
-        recipient.biometricId,
-        recipient.location,
-        recipient.designation,
-        recipient.category
-      ].join(" ").toLowerCase().includes(term);
+      return [recipient.name, recipient.reference, recipient.biometricId, recipient.mobile, recipient.email]
+        .join(" ").toLowerCase().includes(term);
     });
-  }, [category, query, recipients]);
-  const selected = useMemo(
-    () => recipients.filter((recipient) => selectedSet.has(keyFor(recipient))),
-    [recipients, selectedSet]
-  );
-  const allFilteredSelected = filtered.length > 0 && filtered.every((recipient) => selectedSet.has(keyFor(recipient)));
+  }, [categories, designations, locations, models, providers, query, recipients, statuses]);
 
-  useEffect(() => {
-    function closeMenu(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setMenuOpen(false);
-    }
-    document.addEventListener("mousedown", closeMenu);
-    return () => document.removeEventListener("mousedown", closeMenu);
-  }, []);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const visible = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const checked = recipients.filter((recipient) => checkedSet.has(keyFor(recipient)));
+  const sendList = recipients.filter((recipient) => sendListSet.has(keyFor(recipient)));
+
+  useEffect(() => setPage(1), [query, categories, providers, models, locations, designations, statuses]);
 
   function toggleRecipient(recipient: AppNotificationRecipient) {
     const key = keyFor(recipient);
-    setSelectedKeys((current) => current.includes(key)
-      ? current.filter((value) => value !== key)
-      : [...current, key]);
+    setCheckedKeys((current) => current.includes(key) ? current.filter((value) => value !== key) : [...current, key]);
   }
 
-  function toggleAllFiltered() {
-    const filteredKeys = filtered.map(keyFor);
-    setSelectedKeys((current) => {
-      const next = new Set(current);
-      if (allFilteredSelected) filteredKeys.forEach((key) => next.delete(key));
-      else filteredKeys.forEach((key) => next.add(key));
-      return Array.from(next);
-    });
+  function selectCurrent() {
+    setCheckedKeys((current) => Array.from(new Set([...current, ...visible.map(keyFor)])));
+  }
+
+  function selectAllFiltered() {
+    setCheckedKeys((current) => Array.from(new Set([...current, ...filtered.map(keyFor)])));
+  }
+
+  function addToList() {
+    setSendListKeys((current) => Array.from(new Set([...current, ...checkedKeys])));
+    setCheckedKeys([]);
+  }
+
+  function clearAll() {
+    setCheckedKeys([]);
+    setSendListKeys([]);
   }
 
   function insertVariable(token: string) {
@@ -121,130 +222,55 @@ export function AppNotificationComposer({
 
   return (
     <form action={action}>
-      <input name="selectedRecipients" type="hidden" value={JSON.stringify(selectedKeys)} />
-      <div className="wide app-notification-recipient-field" ref={rootRef}>
-        <span className="app-notification-field-label">Recipients</span>
-        <button
-          aria-expanded={menuOpen}
-          className={`app-recipient-trigger ${menuOpen ? "open" : ""}`}
-          onClick={() => setMenuOpen((current) => !current)}
-          type="button"
-        >
-          <span className="app-recipient-trigger-copy">
-            <Users aria-hidden="true" size={17} />
-            <span>{selected.length ? `${selected.length} selected` : "Select recipients"}</span>
-          </span>
-          <ChevronDown aria-hidden="true" size={17} />
-        </button>
-        {selected.length ? (
-          <div className="app-recipient-tags">
-            {selected.slice(0, 4).map((recipient) => (
-              <button key={keyFor(recipient)} onClick={() => toggleRecipient(recipient)} type="button">
-                {recipient.name}<X aria-hidden="true" size={13} />
-              </button>
-            ))}
-            {selected.length > 4 ? <span>+{selected.length - 4} more</span> : null}
-            <button className="clear" onClick={() => setSelectedKeys([])} type="button">Clear all</button>
+      <input name="selectedRecipients" type="hidden" value={JSON.stringify(sendListKeys)} />
+      <section className="wide app-notification-recipient-workbench">
+        <div className="app-notification-recipient-head">
+          <div><h3>Recipients</h3><p>{sendList.length} in send list, {checked.length} selected</p></div>
+          <div className="bulk-recipient-filters app-bulk-recipient-filters">
+            <input className="field" onChange={(event) => setQuery(event.target.value)} placeholder="Search ID, name, mobile, email" value={query} />
+            <MultiCheckFilter label="All data" onChange={setCategories} options={categoryOptions} selected={categories} />
+            <MultiCheckFilter label="All providers" onChange={setProviders} options={providerOptions} selected={providers} />
+            <MultiCheckFilter label="All models" onChange={setModels} options={modelOptions} selected={models} />
+            <MultiCheckFilter label="All locations" onChange={setLocations} options={locationOptions} selected={locations} />
+            <MultiCheckFilter label="All designations" onChange={setDesignations} options={designationOptions} selected={designations} />
+            <MultiCheckFilter label="All statuses" onChange={setStatuses} options={statusOptions} selected={statuses} />
           </div>
-        ) : null}
-        {menuOpen ? (
-          <div className="app-recipient-menu">
-            <div className="app-recipient-filters">
-              <label>
-                <Search aria-hidden="true" size={16} />
-                <input
-                  autoFocus
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search name, ID, biometric ID, location"
-                  value={query}
-                />
-              </label>
-              <select aria-label="Filter recipients by category" onChange={(event) => setCategory(event.target.value)} value={category}>
-                <option value="">All categories</option>
-                {categories.map((value) => <option key={value} value={value}>{value}</option>)}
-              </select>
-            </div>
-            <button className="app-recipient-select-all" onClick={toggleAllFiltered} type="button">
-              <span className={`app-recipient-checkbox ${allFilteredSelected ? "selected" : ""}`}>
-                {allFilteredSelected ? <Check aria-hidden="true" size={14} /> : null}
-              </span>
-              <span>{allFilteredSelected ? "Clear filtered" : "Select all filtered"}</span>
-              <small>{filtered.length} shown</small>
-            </button>
-            <div className="app-recipient-options">
-              {filtered.map((recipient) => {
-                const checked = selectedSet.has(keyFor(recipient));
-                return (
-                  <button key={keyFor(recipient)} onClick={() => toggleRecipient(recipient)} type="button">
-                    <span className={`app-recipient-checkbox ${checked ? "selected" : ""}`}>
-                      {checked ? <Check aria-hidden="true" size={14} /> : null}
-                    </span>
-                    <span className="app-recipient-option-copy">
-                      <strong>{recipient.name}</strong>
-                      <small>{[recipient.reference, recipient.biometricId, recipient.category, recipient.location].filter(Boolean).join(" · ")}</small>
-                    </span>
-                  </button>
-                );
-              })}
-              {!filtered.length ? <p>No matching people found.</p> : null}
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      <label>
-        Title
-        <input
-          maxLength={120}
-          name="title"
-          onFocus={() => setActiveField("title")}
-          placeholder="Notification title"
-          ref={titleRef}
-          required
-        />
-      </label>
-      <label>
-        Open page
-        <select name="openTarget" onChange={(event) => setOpenTarget(event.target.value)} value={openTarget}>
-          <option value="">No linked page</option>
-          <option value="dashboard">Dashboard</option>
-          <option value="profile">My Profile</option>
-          <option value="attendance">Attendance</option>
-          <option value="leave">Leave</option>
-          <option value="settings">Settings</option>
-          <option value="custom_url">Custom URL</option>
-        </select>
-      </label>
-      {openTarget === "custom_url" ? (
-        <label className="wide app-notification-custom-url">
-          Custom URL
-          <span><Link2 aria-hidden="true" size={17} /><input maxLength={2048} name="customUrl" placeholder="https://example.com/page" required type="url" /></span>
-        </label>
-      ) : null}
-      <label className="wide">
-        Message
-        <textarea
-          maxLength={1000}
-          name="body"
-          onFocus={() => setActiveField("body")}
-          placeholder="Write the notification message"
-          ref={bodyRef}
-          required
-          rows={4}
-        />
-      </label>
-      <div className="wide app-notification-variables">
-        <span>Insert into {activeField === "title" ? "title" : "message"}</span>
-        <div>
-          {variables.map((variable) => (
-            <button key={variable.token} onClick={() => insertVariable(variable.token)} type="button">
-              {variable.label}
-            </button>
-          ))}
         </div>
-        <small>Each variable is replaced separately for every selected person.</small>
-      </div>
-      <SendButton count={selected.length} />
+        <div className="bulk-list-actions">
+          <div className="bulk-filter-counts"><strong>{filtered.length}</strong> filtered<span>{visible.length} on page</span><span>{checked.length} selected</span></div>
+          <button className="button ghost compact" disabled={!visible.length} onClick={selectCurrent} type="button">Select Current</button>
+          <button className="button ghost compact" disabled={!filtered.length} onClick={selectAllFiltered} type="button">Select All Filtered</button>
+          <button className="button secondary compact" disabled={!checked.length} onClick={addToList} type="button">Add to list</button>
+          <button className="button ghost compact" disabled={!sendList.length && !checked.length} onClick={clearAll} type="button">Clear</button>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th><input aria-label="Select visible recipients" checked={visible.length > 0 && visible.every((row) => checkedSet.has(keyFor(row)))} onChange={() => visible.every((row) => checkedSet.has(keyFor(row))) ? setCheckedKeys((current) => current.filter((key) => !visible.some((row) => keyFor(row) === key))) : selectCurrent()} type="checkbox" /></th><th>Name</th><th>Mobile</th><th>Source</th><th>Location</th><th>Status</th></tr></thead>
+            <tbody>
+              {visible.map((recipient) => <tr key={keyFor(recipient)}>
+                <td><input checked={checkedSet.has(keyFor(recipient))} onChange={() => toggleRecipient(recipient)} type="checkbox" /></td>
+                <td><strong>{recipient.name}</strong><br /><span className="subtle">{[recipient.reference, recipient.email].filter(Boolean).join(" | ") || "-"}</span></td>
+                <td>{displayMobile(recipient.mobile, recipient.countryCode)}</td>
+                <td><strong>{recipient.category}</strong><br /><span className="subtle">{recipient.designation || "-"}</span></td>
+                <td>{recipient.location || "-"}</td><td>{recipient.status}</td>
+              </tr>)}
+              {!visible.length ? <tr><td className="empty-cell" colSpan={6}>No recipients found.</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+        {totalPages > 1 ? <div className="panel-foot pagination"><button className="pager-button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} type="button">Prev</button><span>Page {currentPage} of {totalPages}</span><button className="pager-button" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)} type="button">Next</button></div> : null}
+        <div className="bulk-send-list">
+          <div className="bulk-send-list-head"><strong>Send list</strong><span className="subtle">{sendList.length} contact{sendList.length === 1 ? "" : "s"}</span></div>
+          {sendList.length ? <div className="bulk-send-list-tags">{sendList.map((recipient) => <button key={keyFor(recipient)} onClick={() => setSendListKeys((current) => current.filter((key) => key !== keyFor(recipient)))} title="Remove from send list" type="button"><span>{recipient.name}</span><small>{recipient.reference || recipient.mobile}</small><X aria-hidden="true" size={13} /></button>)}</div> : <p className="subtle">Select recipients above and click Add to list.</p>}
+        </div>
+      </section>
+
+      <label>Title<input maxLength={120} name="title" onFocus={() => setActiveField("title")} placeholder="Notification title" ref={titleRef} required /></label>
+      <label>Open page<select name="openTarget" onChange={(event) => setOpenTarget(event.target.value)} value={openTarget}><option value="">No linked page</option><option value="dashboard">Dashboard</option><option value="profile">My Profile</option><option value="attendance">Attendance</option><option value="leave">Leave</option><option value="settings">Settings</option><option value="custom_url">Custom URL</option></select></label>
+      {openTarget === "custom_url" ? <label className="wide app-notification-custom-url">Custom URL<span><Link2 aria-hidden="true" size={17} /><input maxLength={2048} name="customUrl" placeholder="https://example.com/page" required type="url" /></span></label> : null}
+      <label className="wide">Message<textarea maxLength={1000} name="body" onFocus={() => setActiveField("body")} placeholder="Write the notification message" ref={bodyRef} required rows={4} /></label>
+      <div className="wide app-notification-variables"><span>Insert into {activeField === "title" ? "title" : "message"}</span><div>{variables.map((variable) => <button key={variable.token} onClick={() => insertVariable(variable.token)} type="button">{variable.label}</button>)}</div><small>Each variable is replaced separately for every selected person.</small></div>
+      <SendButton count={sendList.length} />
     </form>
   );
 }

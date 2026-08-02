@@ -265,6 +265,7 @@ export function FieldExecutiveList({
               <th>Mobile</th>
               <th>Email</th>
               <th>Location</th>
+              <th>Designation</th>
               <th>Status</th>
               {showActions ? <th>Action</th> : null}
             </tr>
@@ -285,6 +286,7 @@ export function FieldExecutiveList({
                 <td>{row.mobile}</td>
                 <td>{row.email}</td>
                 <td>{row.location}</td>
+                <td>{row.designation}</td>
                 <td><StatusPill status={row.status} /></td>
                 {showActions ? <td className="action-cell">
                   <div className="row-action-menu" ref={openMenuId === row.id ? menuRef : undefined}>
@@ -314,7 +316,7 @@ export function FieldExecutiveList({
                 </td> : null}
               </tr>
             )) : (
-              <tr><td className="empty-cell" colSpan={showActions ? 8 : 7}>{emptyLabel}</td></tr>
+              <tr><td className="empty-cell" colSpan={showActions ? 9 : 8}>{emptyLabel}</td></tr>
             )}
           </tbody>
         </table>

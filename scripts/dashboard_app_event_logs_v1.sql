@@ -43,10 +43,25 @@ insert into public.app_pages (code, name, sort_order, is_active)
 values ('event_log_reports', 'Event Log', 133, true)
 on conflict (code) do update set name = excluded.name, sort_order = excluded.sort_order, is_active = true;
 
+update public.role_permissions rp
+set can_view = true,
+    can_add = true,
+    can_edit = true
+from public.roles r,
+     public.app_pages p
+where rp.role_id = r.id
+  and rp.page_id = p.id
+  and upper(r.code) = 'OWNER'
+  and p.code = 'event_log_reports';
+
 insert into public.role_permissions (role_id, page_id, can_view, can_add, can_edit)
 select r.id, p.id, true, true, true
 from public.roles r
 join public.app_pages p on p.code = 'event_log_reports'
 where upper(r.code) = 'OWNER'
-on conflict (role_id, page_id) do update
-set can_view = true, can_add = true, can_edit = true;
+  and not exists (
+    select 1
+    from public.role_permissions rp
+    where rp.role_id = r.id
+      and rp.page_id = p.id
+  );

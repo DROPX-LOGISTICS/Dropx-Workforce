@@ -4,7 +4,7 @@ import { PageHead } from "@/components/page-head";
 import { ReportImportUploader } from "@/components/report-import-uploader";
 import { ShipmentCoverageVisibility } from "@/components/shipment-coverage-visibility";
 import { StatusPill } from "@/components/status-pill";
-import { getAuthorization } from "@/lib/authorization";
+import { requirePagePermission } from "@/lib/authorization";
 import { formatDashboardDate, formatDashboardDateTime } from "@/lib/date-format";
 import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
 import { loadCodLocations, locationModelName, providerName } from "@/lib/ops-pulse/cod";
@@ -155,13 +155,13 @@ export async function ReportUploadPageContent({
   selectedReport?: string;
   showShipmentCoverage?: boolean;
 }) {
-  const authorization = await getAuthorization();
-  const companyId = authorization?.companyId ?? null;
+  const authorization = await requirePagePermission(pageCode, "access");
+  const companyId = authorization.companyId;
   const date = validDate(selectedDate);
   const [{ rows: reports, error: masterError }, { rows: batches, error: batchError }, locationResult] = await Promise.all([
     loadImportMaster(companyId),
     loadBatches(companyId),
-    authorization && companyId
+    companyId
       ? loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess)
       : Promise.resolve({ locations: [], error: null })
   ]);

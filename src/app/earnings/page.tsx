@@ -1,9 +1,11 @@
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
+import { requirePagePermission } from "@/lib/authorization";
 
-export default function EarningsPage() {
+export default async function EarningsPage() {
+  await requirePagePermission("earnings", "access");
   return (
-    <AppShell active="Earnings Review">
+    <AppShell active="Earnings Review" pageCode="earnings">
       <PageHead
         eyebrow="Payroll preparation"
         title="Month-to-date earnings review"

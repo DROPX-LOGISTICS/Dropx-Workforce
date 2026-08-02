@@ -1,9 +1,11 @@
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
+import { requirePagePermission } from "@/lib/authorization";
 
-export default function RateCardsPage() {
+export default async function RateCardsPage() {
+  await requirePagePermission("rate_cards", "access");
   return (
-    <AppShell active="Rate Cards">
+    <AppShell active="Rate Cards" pageCode="rate_cards">
       <PageHead
         eyebrow="Finance"
         title="Rate cards"

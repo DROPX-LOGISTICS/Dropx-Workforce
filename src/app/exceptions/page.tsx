@@ -1,9 +1,11 @@
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
+import { requirePagePermission } from "@/lib/authorization";
 
-export default function ExceptionsPage() {
+export default async function ExceptionsPage() {
+  await requirePagePermission("exceptions", "access");
   return (
-    <AppShell active="Exceptions">
+    <AppShell active="Exceptions" pageCode="exceptions">
       <PageHead
         eyebrow="Controls"
         title="Exception queue"

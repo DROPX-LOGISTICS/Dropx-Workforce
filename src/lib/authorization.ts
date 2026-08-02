@@ -3,7 +3,6 @@ import { cache } from "react";
 import { accessPages, ensureAccessPages } from "@/lib/access-pages";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
-import { workforceCategoryPagePrefix } from "@/lib/dynamic-workforce";
 
 export type PermissionAction = "access" | "view" | "add" | "edit";
 
@@ -129,27 +128,6 @@ function inheritGroupedParentPermissions(permissions: Record<string, PagePermiss
       canEdit: inherited.canEdit
     };
   }
-}
-
-function inheritPeopleReviewPermissions(permissions: Record<string, PagePermission>) {
-  const profilePageCodes = Object.keys(permissions).filter((code) => (
-    peopleProfilePageCodes.includes(code) || code.startsWith(workforceCategoryPagePrefix)
-  ));
-  const inherited = profilePageCodes.reduce<PagePermission>((acc, code) => {
-    const permission = permissions[code] ?? noPermission;
-    return {
-      canView: acc.canView || permission.canView || permission.canAdd || permission.canEdit,
-      canAdd: false,
-      canEdit: acc.canEdit || permission.canEdit
-    };
-  }, { ...noPermission });
-  const configured = permissions.people_review ?? noPermission;
-
-  permissions.people_review = {
-    canView: configured.canView || configured.canAdd || configured.canEdit || inherited.canView,
-    canAdd: configured.canAdd,
-    canEdit: configured.canEdit || inherited.canEdit
-  };
 }
 
 async function ensureMissingCurrentAccessPages(companyId: string) {
@@ -328,7 +306,6 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
     }
   }
 
-  inheritPeopleReviewPermissions(permissions);
   inheritGroupedParentPermissions(permissions);
 
   if (isMasterOwner) {

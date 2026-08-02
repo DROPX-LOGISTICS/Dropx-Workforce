@@ -38,31 +38,37 @@ async function loadRecipients(companyId: string) {
   if (!supabaseAdmin) return [] as Recipient[];
   const results = await Promise.all(workforceProfileTypes.map(async (profileType) => {
     const referenceColumn = profileType === "employee" ? "employee_code" : "dropx_id";
+    const profileColumns = profileType === "employee"
+      ? `id, full_name, biometric_id, designation_id, mobile, mobile_country_code, email, profile_completion_status, ${referenceColumn}, stations (station_code, providers (name), location_models (code, name))`
+      : `id, full_name, biometric_id, designation, mobile, mobile_country_code, email, onboarding_status, ${referenceColumn}, stations (station_code, providers (name), location_models (code, name))`;
     const result = await supabaseAdmin!
       .from(workforceTable(profileType))
-      .select(`id, full_name, biometric_id, designation, designation_id, mobile, mobile_country_code, email, profile_completion_status, onboarding_status, ${referenceColumn}, stations (station_code, providers (name), location_models (code, name))`)
+      .select(profileColumns)
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("full_name")
       .limit(5000);
-    if (result.error) return [] as Recipient[];
+    if (result.error) {
+      console.error(`[app-notifications] Unable to load ${profileType} recipients:`, result.error.message);
+      return [] as Recipient[];
+    }
+    const rows = (result.data ?? []) as unknown as Array<Record<string, unknown>>;
     const employeeDesignationIds = profileType === "employee"
-      ? Array.from(new Set((result.data ?? []).map((row) => row.designation_id).filter(Boolean)))
+      ? Array.from(new Set(rows.map((row) => row.designation_id).filter(Boolean)))
       : [];
     const designationResult = employeeDesignationIds.length
       ? await supabaseAdmin!.from("designations").select("id, name").in("id", employeeDesignationIds)
       : { data: [], error: null };
     const designationById = new Map((designationResult.data ?? []).map((row) => [String(row.id), String(row.name ?? "")]));
-    return (result.data ?? []).map((row) => {
-      const record = row as Record<string, unknown>;
+    return rows.map((record) => {
       const station = Array.isArray(record.stations) ? record.stations[0] : record.stations;
       const stationRecord = station as { station_code?: string; providers?: unknown; location_models?: unknown } | null;
       const providerRelation = Array.isArray(stationRecord?.providers) ? stationRecord?.providers[0] : stationRecord?.providers;
       const modelRelation = Array.isArray(stationRecord?.location_models) ? stationRecord?.location_models[0] : stationRecord?.location_models;
       return ({
-      id: String(row.id),
+      id: String(record.id),
       profileType,
-      name: String(row.full_name ?? "Unnamed"),
+      name: String(record.full_name ?? "Unnamed"),
       reference: String(record[referenceColumn] ?? ""),
       biometricId: String(record.biometric_id ?? ""),
       category: profileLabels[profileType],

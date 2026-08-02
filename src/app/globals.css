@@ -15027,6 +15027,34 @@ td strong,
 .app-notification-recipient-workbench .table-wrap { max-height: 470px; }
 .app-notification-recipient-workbench table { min-width: 920px; }
 .app-notification-recipient-workbench .bulk-send-list { border-top: 1px solid #e1e5eb; }
+.app-notification-composer .app-notification-recipient-workbench .bulk-multi-filter-trigger {
+  grid-column: auto;
+  justify-self: stretch;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #fff;
+  color: #111827;
+  box-shadow: none;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.app-notification-composer .app-notification-recipient-workbench .bulk-multi-filter-trigger strong {
+  color: #111827;
+  font-weight: 600;
+}
+.app-notification-composer .app-notification-recipient-workbench .bulk-multi-filter-trigger:hover {
+  border-color: #c7ced8;
+  background: #f8fafc;
+}
+.app-notification-composer .app-notification-recipient-workbench .bulk-multi-filter-trigger.open,
+.app-notification-composer .app-notification-recipient-workbench .bulk-multi-filter-trigger:focus-visible {
+  border-color: #eb6a28;
+  background: #fff;
+  color: #111827;
+  box-shadow: 0 0 0 2px rgba(235, 106, 40, 0.12);
+}
 .app-notification-field-label { color: #526174; font-size: 11px; font-weight: 700; text-transform: uppercase; }
 .app-notification-composer .app-recipient-trigger {
   grid-column: auto; display: flex; align-items: center; justify-content: space-between; width: 100%;

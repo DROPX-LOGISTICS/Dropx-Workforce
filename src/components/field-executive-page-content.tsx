@@ -806,7 +806,11 @@ export async function FieldExecutivePageContent({
   viewId?: string;
 }) {
   const authorization = await requirePagePermission(pageCode, "access");
-  const permission = authorization.permissions[pageCode];
+  const permission = authorization.permissions[pageCode] ?? {
+    canView: false,
+    canAdd: false,
+    canEdit: false
+  };
   const workforceConfig = nonEmployeeConfigForRoute(returnPath);
   const { executives, locations, designations, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, designationCategoryFilter, workforceConfig.table, editId, viewId);
   const categoryRules = await loadWorkforceCategoryRules(

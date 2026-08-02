@@ -419,7 +419,11 @@ export const dynamic = "force-dynamic";
 export default async function EmployeesPage({ searchParams }: { searchParams?: { edit?: string; view?: string } }) {
   const authorization = await requirePagePermission("employees", "access");
   const companyId = requireCompanyId(authorization);
-  const pagePermission = authorization.permissions.employees;
+  const pagePermission = authorization.permissions.employees ?? {
+    canView: false,
+    canAdd: false,
+    canEdit: false
+  };
   const { employees, editEmployee, locations, designations, error, viewEmployee } = await loadEmployees(companyId, authorization, searchParams?.edit, searchParams?.view);
   const flash = loadFlash();
   const locationOptions = locations.map((location) => ({

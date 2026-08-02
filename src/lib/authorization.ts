@@ -92,6 +92,17 @@ const peopleProfilePageCodes = [
   "workers"
 ];
 
+const initializedPermissionCodes = Array.from(new Set([
+  ...accessPages.map((page) => page.code),
+  ...peopleProfilePageCodes
+]));
+
+function grantFullAccess(permissions: Record<string, PagePermission>) {
+  initializedPermissionCodes.forEach((code) => {
+    permissions[code] = { canView: true, canAdd: true, canEdit: true };
+  });
+}
+
 function normalizeEmail(value: string | null | undefined) {
   return String(value ?? "").trim().toLowerCase();
 }
@@ -206,7 +217,7 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
   if (!profile?.is_active) return null;
 
   const permissions: Record<string, PagePermission> = Object.fromEntries(
-    accessPages.map((page) => [page.code, { ...noPermission }])
+    initializedPermissionCodes.map((code) => [code, { ...noPermission }])
   );
   let roleName: string | null = null;
   let hasAllLocationAccess = false;
@@ -266,9 +277,7 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
 
     if (role?.is_active && roleCode === "OWNER") {
       hasAllLocationAccess = true;
-      accessPages.forEach((page) => {
-        permissions[page.code] = { canView: true, canAdd: true, canEdit: true };
-      });
+      grantFullAccess(permissions);
   } else if (role?.is_active) {
     let pagesResult = await supabaseAdmin
       .from("app_pages")
@@ -324,9 +333,7 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
 
   if (isMasterOwner) {
     hasAllLocationAccess = true;
-    accessPages.forEach((page) => {
-      permissions[page.code] = { canView: true, canAdd: true, canEdit: true };
-    });
+    grantFullAccess(permissions);
     permissions.company_master = { canView: true, canAdd: true, canEdit: true };
   } else if (!isMasterCompany) {
     permissions.company_master = { ...noPermission };

@@ -84,22 +84,23 @@ async function resolveRecipients(companyId: string, selected: SelectedRecipient[
   for (const profileType of Array.from(new Set(selected.map((recipient) => recipient.profileType)))) {
     const ids = selected.filter((recipient) => recipient.profileType === profileType).map((recipient) => recipient.id);
     const referenceColumn = profileType === "employee" ? "employee_code" : "dropx_id";
+    const designationColumn = profileType === "employee" ? "designation_id" : "designation";
     const result = await supabaseAdmin!
       .from(workforceTable(profileType))
-      .select(`id, full_name, biometric_id, designation, designation_id, ${referenceColumn}, stations (station_code)`)
+      .select(`id, full_name, biometric_id, ${designationColumn}, ${referenceColumn}, stations (station_code)`)
       .eq("company_id", companyId)
       .in("id", ids);
     if (result.error) fail(result.error.message);
+    const records = (result.data ?? []) as unknown as Array<Record<string, unknown>>;
     const employeeDesignationIds = profileType === "employee"
-      ? Array.from(new Set((result.data ?? []).map((row) => row.designation_id).filter(Boolean)))
+      ? Array.from(new Set(records.map((row) => row.designation_id).filter(Boolean)))
       : [];
     const designationResult = employeeDesignationIds.length
       ? await supabaseAdmin!.from("designations").select("id, name").in("id", employeeDesignationIds)
       : { data: [], error: null };
     if (designationResult.error) fail(designationResult.error.message);
     const designationById = new Map((designationResult.data ?? []).map((row) => [String(row.id), String(row.name ?? "")]));
-    (result.data ?? []).forEach((row) => {
-      const record = row as Record<string, unknown>;
+    records.forEach((record) => {
       const station = first(record.stations as { station_code?: string } | Array<{ station_code?: string }> | null);
       resolved.push({
         id: String(record.id),

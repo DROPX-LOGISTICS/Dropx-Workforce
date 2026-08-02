@@ -4954,6 +4954,11 @@ h3 {
   color: #6941c6;
 }
 
+.status-pill.under-review {
+  background: #eaf2ff;
+  color: #175cd3;
+}
+
 .table-wrap {
   border-color: #e4e7ec;
   border-radius: 8px;

@@ -1,6 +1,8 @@
 export function StatusPill({ status }: { status: string }) {
   const lower = status.toLowerCase();
-  const tone = lower.includes("returned")
+  const tone = lower.includes("under review") || lower.includes("under_review")
+    ? "under-review"
+    : lower.includes("returned")
     ? "returned"
     : lower.includes("inactive")
     || lower.includes("disabled")

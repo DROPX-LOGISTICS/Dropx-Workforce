@@ -14710,6 +14710,19 @@ td strong,
   background: #ffffff;
 }
 
+.event-log-filters {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
+  gap: 12px;
+  padding: 16px;
+  align-items: end;
+}
+.event-log-filters label { display: grid; gap: 5px; font-size: 12px; color: var(--muted); }
+.event-log-search { grid-column: span 2; }
+.event-log-filter-actions { display: flex; gap: 8px; align-items: end; }
+.event-log-json { margin: 0; padding: 16px; max-height: 60vh; overflow: auto; border: 1px solid var(--line); background: #f8fafc; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 900px) { .event-log-filters { grid-template-columns: 1fr 1fr; } .event-log-search { grid-column: span 2; } }
+
 .people-review-listing-head {
   align-items: flex-end;
   gap: 18px;

@@ -82,6 +82,7 @@ export const accessPages = [
   { code: "reports", name: "Reports", sort_order: 130 },
   { code: "attendance_reports", name: "Attendance Reports", sort_order: 131 },
   { code: "verification_api_reports", name: "Verification API Reports", sort_order: 132 },
+  { code: "event_log_reports", name: "Event Log", sort_order: 133 },
   { code: "payment_settings", name: "Payment Settings", sort_order: 131 },
   { code: "app_settings", name: "Settings", sort_order: 132 },
   { code: "ai_connector", name: "AI Connector", sort_order: 133 },

@@ -4,6 +4,7 @@ import { Menu, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
+import { EventLogTracker } from "@/components/event-log-tracker";
 
 type AppShellFrameProps = {
   children: ReactNode;
@@ -27,6 +28,7 @@ export function AppShellFrame({ children, desktopActions, mobileActions, sidebar
 
   return (
     <div className={`shell ${sidebarOpen ? "sidebar-open" : ""}`}>
+      <EventLogTracker />
       <header className="mobile-topbar">
         <button
           type="button"

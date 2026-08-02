@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { Bell, CalendarDays, CheckCheck, ChevronRight, Fingerprint, Gauge, LogOut, Menu, Settings, SwitchCamera, UserRound, UsersRound, X } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ConnectAttendance } from "./connect-attendance";
 import { ConnectDashboard } from "./connect-dashboard";
 import { ConnectLeave } from "./connect-leave";
@@ -63,6 +63,7 @@ export function ConnectLoginFlow() {
   const [notice, setNotice] = useState("");
   const [avatar, setAvatar] = useState("");
   const [lockedAccounts, setLockedAccounts] = useState<AppAccount[]>([]);
+  const lastLoggedScreen = useRef("");
 
   function route(rows: AppAccount[]) {
     const filtered = rows.filter((row) => row.profileType !== "user");
@@ -100,6 +101,61 @@ export function ConnectLoginFlow() {
     setUnreadNotifications(0);
     if (account) void loadNotifications(false);
   }, [account?.id, account?.profileType]);
+  useEffect(() => {
+    if (!account || ["mobile", "pin", "otp", "createPin", "unlock", "accounts"].includes(step)) return;
+    const key = `${account.profileType}:${account.id}:${step}`;
+    if (lastLoggedScreen.current === key) return;
+    lastLoggedScreen.current = key;
+    void fetch("/api/connect/event-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        accountId: account.id,
+        profileType: account.profileType,
+        platform: "dropx_one_web",
+        eventCode: "screen_view",
+        module: "dropx_one",
+        action: "view",
+        route: step,
+        metadata: { screen: step }
+      }),
+      keepalive: true
+    }).catch(() => undefined);
+  }, [account, step]);
+  useEffect(() => {
+    if (!account) return;
+    const send = (eventCode: string, action: string, metadata: Record<string, string>) => {
+      void fetch("/api/connect/event-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: account.id,
+          profileType: account.profileType,
+          platform: "dropx_one_web",
+          eventCode,
+          module: "dropx_one",
+          action,
+          route: step,
+          metadata
+        }),
+        keepalive: true
+      }).catch(() => undefined);
+    };
+    const onClick = (event: MouseEvent) => {
+      const target = (event.target as HTMLElement | null)?.closest<HTMLElement>("button, a[href], [role='button']");
+      if (!target) return;
+      const label = String(target.getAttribute("aria-label") || target.getAttribute("title") || target.textContent || "")
+        .replace(/\s+/g, " ").trim().slice(0, 80);
+      if (label) send("app_action", "click", { label, screen: step });
+    };
+    const onSubmit = () => send("app_form_submit", "submit", { screen: step });
+    document.addEventListener("click", onClick, true);
+    document.addEventListener("submit", onSubmit, true);
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("submit", onSubmit, true);
+    };
+  }, [account, step]);
 
   async function call(path: string, body: object) {
     setPending(true); setError(""); setNotice("");

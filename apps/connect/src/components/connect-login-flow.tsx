@@ -56,6 +56,7 @@ export function ConnectLoginFlow() {
   const [profileMenu, setProfileMenu] = useState(false);
   const [notificationMenu, setNotificationMenu] = useState(false);
   const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationClearing, setNotificationClearing] = useState(false);
   const [notifications, setNotifications] = useState<ConnectNotification[]>([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [pending, setPending] = useState(false);
@@ -246,6 +247,30 @@ export function ConnectLoginFlow() {
       open(destination);
     }
   }
+  async function clearNotifications() {
+    if (!account || !unreadNotifications || notificationClearing) return;
+    setNotificationClearing(true);
+    try {
+      const response = await fetch("/api/connect/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: account.id,
+          profileType: account.profileType,
+          markAll: true
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Unable to clear notifications.");
+      const readAt = new Date().toISOString();
+      setNotifications((rows) => rows.map((row) => row.read_at ? row : { ...row, read_at: readAt }));
+      setUnreadNotifications(0);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to clear notifications.");
+    } finally {
+      setNotificationClearing(false);
+    }
+  }
   async function saveDefaultAccount(nextKey: string) {
     setPending(true); setError(""); setNotice("");
     const selected = accounts.find((row) => accountKey(row) === nextKey);
@@ -366,7 +391,7 @@ export function ConnectLoginFlow() {
       <button aria-label="Notifications" className="dx-notification-trigger" disabled={!account} onClick={() => void loadNotifications()}><Bell />{unreadNotifications ? <b>{unreadNotifications > 99 ? "99+" : unreadNotifications}</b> : null}</button>
       <button className="avatar" onClick={() => { setProfileMenu((v) => !v); setNotificationMenu(false); setDrawer(false); }}>{avatar ? <img alt="" src={avatar} /> : <b>{(account?.name || "U")[0]}</b>}</button>
       {notificationMenu ? <aside className="dx-notification-pop">
-        <header><strong>Notifications</strong>{unreadNotifications ? <small>{unreadNotifications} unread</small> : null}</header>
+        <header><strong>Notifications</strong><span>{unreadNotifications ? <small>{unreadNotifications} unread</small> : null}{unreadNotifications ? <button disabled={notificationClearing} onClick={() => void clearNotifications()} title="Mark all notifications as read">{notificationClearing ? <i className="mini-spin" /> : <CheckCheck />}Clear all</button> : null}</span></header>
         {notificationLoading ? <div className="dx-notification-empty"><span className="mini-spin" /></div> : notifications.length ? <div className="dx-notification-list">
           {notifications.map((item) => <button className={item.read_at ? "read" : "unread"} key={item.id} onClick={() => void readNotification(item)}>
             <i>{item.read_at ? <CheckCheck /> : <Bell />}</i>

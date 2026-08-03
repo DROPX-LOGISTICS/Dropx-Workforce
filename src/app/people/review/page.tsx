@@ -29,7 +29,6 @@ type ReviewIssue = {
 type ReviewProfile = {
   id: string;
   profileType: WorkforceProfileType;
-  category: string;
   dropxId: string;
   biometricId: string;
   fullName: string;
@@ -40,14 +39,6 @@ type ReviewProfile = {
   values: Record<string, string>;
   attachmentPaths: Array<{ field: string; label: string; path: string }>;
   issues: ReviewIssue[];
-};
-
-const categoryLabels: Record<WorkforceProfileType, string> = {
-  employee: "Employee",
-  field_executive: "Field Executive",
-  contractor: "Independent Contractor",
-  vendor: "Vendor",
-  worker: "Worker"
 };
 
 const issueLabels: Record<string, string> = {
@@ -157,7 +148,6 @@ async function loadReviewProfiles(
       profiles.push({
         id,
         profileType,
-        category: categoryLabels[profileType],
         dropxId: text(raw.employee_code ?? raw.dropx_id) || "-",
         biometricId: text(raw.biometric_id) || "-",
         fullName: text(raw.full_name) || "Unnamed profile",
@@ -192,7 +182,7 @@ export default async function PeopleReviewPage({
   searchParams
 }: {
   searchParams?: {
-    category?: string;
+    designation?: string;
     error?: string;
     issue?: string;
     notice?: string;
@@ -208,11 +198,14 @@ export default async function PeopleReviewPage({
     authorization.locationScopeIds,
     authorization.hasAllLocationAccess
   );
-  const category = text(searchParams?.category);
+  const designation = text(searchParams?.designation);
   const issue = text(searchParams?.issue);
   const search = text(searchParams?.search).toLowerCase();
+  const designationOptions = Array.from(
+    new Set(profiles.map((profile) => profile.designation).filter((value) => value && value !== "-"))
+  ).sort((a, b) => a.localeCompare(b));
   const filteredProfiles = profiles.filter((profile) => {
-    if (category && profile.profileType !== category) return false;
+    if (designation && profile.designation !== designation) return false;
     if (issue && !profile.issues.some((item) => item.kind === issue)) return false;
     if (search && ![
       profile.fullName,
@@ -250,11 +243,11 @@ export default async function PeopleReviewPage({
           </div>
           <form className="people-review-filters" method="get">
             <label>
-              <span>Category</span>
-              <select className="select" defaultValue={category} name="category">
-                <option value="">All categories</option>
-                {workforceProfileTypes.map((profileType) => (
-                  <option key={profileType} value={profileType}>{categoryLabels[profileType]}</option>
+              <span>Designation</span>
+              <select className="select" defaultValue={designation} name="designation">
+                <option value="">All designations</option>
+                {designationOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
                 ))}
               </select>
             </label>
@@ -275,7 +268,7 @@ export default async function PeopleReviewPage({
               </span>
             </label>
             <button className="button secondary" type="submit">Filter</button>
-            {(category || issue || search) ? <PendingLink className="button secondary" href="/people/review">Clear</PendingLink> : null}
+            {(designation || issue || search) ? <PendingLink className="button secondary" href="/people/review">Clear</PendingLink> : null}
           </form>
         </div>
 
@@ -284,7 +277,7 @@ export default async function PeopleReviewPage({
             <thead>
               <tr>
                 <th>Profile</th>
-                <th>Category</th>
+                <th>Designation</th>
                 <th>Location</th>
                 <th>Fields requiring review</th>
                 <th>Updated</th>
@@ -304,8 +297,7 @@ export default async function PeopleReviewPage({
                     </div>
                   </td>
                   <td>
-                    <strong>{profile.category}</strong>
-                    <small className="people-review-subline">{profile.designation}</small>
+                    <strong>{profile.designation}</strong>
                   </td>
                   <td>{profile.location}</td>
                   <td>
@@ -344,7 +336,7 @@ export default async function PeopleReviewPage({
           <section aria-modal="true" className="modal-panel wide people-review-modal" role="dialog">
             <div className="panel-head people-review-modal-head">
               <div>
-                <span className="profile-review-eyebrow">{selected.category}</span>
+                <span className="profile-review-eyebrow">{selected.designation}</span>
                 <h2>{selected.fullName}</h2>
                 <p className="subtle">{selected.dropxId} / Biometric ID {selected.biometricId} / {selected.location}</p>
               </div>

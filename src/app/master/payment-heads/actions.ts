@@ -102,16 +102,16 @@ async function createPaymentHeadUnsafe(formData: FormData) {
   const code = required(formData.get("code"), "Payment Head Code").toUpperCase();
   const name = required(formData.get("name"), "Payment Head Name");
   const externalId = clean(formData.get("external_id"));
-  const initialApprovalRoleId = required(formData.get("initial_approval_role_id"), "Initial Approver Role");
+  const initialApprovalRoleIds = parseRoleIds(formData, "initial_approval_role_ids");
   const finalApprovalRoleIds = parseRoleIds(formData, "final_approval_role_ids");
   const paymentProcessRoleIds = parseRoleIds(formData, "payment_process_role_ids");
   const requestExpenseApproval = formData.get("request_expense_approval") === "yes";
   const expenseApprovalThreshold = parseOptionalAmount(formData.get("expense_approval_threshold"), "Threshold Limit");
   const questions = parseQuestions(formData);
-  await validateRoleIds([initialApprovalRoleId], companyId, "Initial Approver Role");
+  await validateRoleIds(initialApprovalRoleIds, companyId, "Initial Approver Role");
   await validateRoleIds(finalApprovalRoleIds, companyId, "Final Approval User Role");
   await validateRoleIds(paymentProcessRoleIds, companyId, "Payment Process User Role");
-  if (finalApprovalRoleIds.includes(initialApprovalRoleId)) {
+  if (initialApprovalRoleIds.some((roleId) => finalApprovalRoleIds.includes(roleId))) {
     throw new Error("Initial and final approver roles must be different.");
   }
 
@@ -121,7 +121,8 @@ async function createPaymentHeadUnsafe(formData: FormData) {
       code,
       name,
       external_id: externalId,
-      initial_approval_role_id: initialApprovalRoleId,
+      initial_approval_role_id: initialApprovalRoleIds[0],
+      initial_approval_role_ids: initialApprovalRoleIds,
       final_approval_role_id: finalApprovalRoleIds[0],
       final_approval_role_ids: finalApprovalRoleIds,
       payment_process_role_ids: paymentProcessRoleIds,
@@ -167,17 +168,17 @@ async function updatePaymentHeadUnsafe(formData: FormData) {
   const code = required(formData.get("code"), "Payment Head Code").toUpperCase();
   const name = required(formData.get("name"), "Payment Head Name");
   const externalId = clean(formData.get("external_id"));
-  const initialApprovalRoleId = required(formData.get("initial_approval_role_id"), "Initial Approver Role");
+  const initialApprovalRoleIds = parseRoleIds(formData, "initial_approval_role_ids");
   const finalApprovalRoleIds = parseRoleIds(formData, "final_approval_role_ids");
   const paymentProcessRoleIds = parseRoleIds(formData, "payment_process_role_ids");
   const requestExpenseApproval = formData.get("request_expense_approval") === "yes";
   const expenseApprovalThreshold = parseOptionalAmount(formData.get("expense_approval_threshold"), "Threshold Limit");
   const isActive = formData.get("is_active") !== "false";
   const questions = parseQuestions(formData);
-  await validateRoleIds([initialApprovalRoleId], companyId, "Initial Approver Role");
+  await validateRoleIds(initialApprovalRoleIds, companyId, "Initial Approver Role");
   await validateRoleIds(finalApprovalRoleIds, companyId, "Final Approval User Role");
   await validateRoleIds(paymentProcessRoleIds, companyId, "Payment Process User Role");
-  if (finalApprovalRoleIds.includes(initialApprovalRoleId)) {
+  if (initialApprovalRoleIds.some((roleId) => finalApprovalRoleIds.includes(roleId))) {
     throw new Error("Initial and final approver roles must be different.");
   }
 
@@ -187,7 +188,8 @@ async function updatePaymentHeadUnsafe(formData: FormData) {
       code,
       name,
       external_id: externalId,
-      initial_approval_role_id: initialApprovalRoleId,
+      initial_approval_role_id: initialApprovalRoleIds[0],
+      initial_approval_role_ids: initialApprovalRoleIds,
       final_approval_role_id: finalApprovalRoleIds[0],
       final_approval_role_ids: finalApprovalRoleIds,
       payment_process_role_ids: paymentProcessRoleIds,

@@ -34,6 +34,7 @@ type RequestRow = {
   approval_status: string | null;
   current_approver_user_id: string | null;
   current_approver_role_id: string | null;
+  current_approver_role_ids: string[] | null;
   final_approval_role_id: string | null;
   final_approval_role_ids: string[] | null;
   requested_by: string | null;
@@ -139,6 +140,7 @@ async function loadApprovals(companyId: string, authorization: AuthorizationCont
       approval_status,
       current_approver_user_id,
       current_approver_role_id,
+      current_approver_role_ids,
       final_approval_role_id,
       final_approval_role_ids,
       requested_by,

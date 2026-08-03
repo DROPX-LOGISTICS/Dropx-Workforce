@@ -7,6 +7,7 @@ create table if not exists public.payment_heads (
   name text not null,
   external_id text,
   initial_approval_role_id uuid references public.user_roles(id) on delete set null,
+  initial_approval_role_ids uuid[] not null default '{}'::uuid[],
   final_approval_role_id uuid references public.user_roles(id),
   final_approval_role_ids uuid[] not null default '{}'::uuid[],
   payment_process_role_ids uuid[] not null default '{}'::uuid[],
@@ -79,6 +80,7 @@ create table if not exists public.payment_requests (
   current_step_order integer not null default 1,
   current_approver_user_id uuid references public.profiles(id),
   current_approver_role_id uuid references public.user_roles(id),
+  current_approver_role_ids uuid[] not null default '{}'::uuid[],
   final_approval_role_id uuid references public.user_roles(id),
   final_approval_role_ids uuid[] not null default '{}'::uuid[],
   payment_process_role_ids uuid[] not null default '{}'::uuid[],
@@ -121,6 +123,7 @@ alter table public.payment_heads add column if not exists code text;
 alter table public.payment_heads add column if not exists name text;
 alter table public.payment_heads add column if not exists external_id text;
 alter table public.payment_heads add column if not exists initial_approval_role_id uuid references public.user_roles(id) on delete set null;
+alter table public.payment_heads add column if not exists initial_approval_role_ids uuid[] not null default '{}'::uuid[];
 alter table public.payment_heads add column if not exists final_approval_role_id uuid references public.user_roles(id);
 alter table public.payment_heads add column if not exists final_approval_role_ids uuid[] not null default '{}'::uuid[];
 alter table public.payment_heads add column if not exists payment_process_role_ids uuid[] not null default '{}'::uuid[];
@@ -190,6 +193,7 @@ alter table public.payment_requests add column if not exists approval_status tex
 alter table public.payment_requests add column if not exists current_step_order integer not null default 1;
 alter table public.payment_requests add column if not exists current_approver_user_id uuid references public.profiles(id);
 alter table public.payment_requests add column if not exists current_approver_role_id uuid references public.user_roles(id);
+alter table public.payment_requests add column if not exists current_approver_role_ids uuid[] not null default '{}'::uuid[];
 alter table public.payment_requests add column if not exists final_approval_role_id uuid references public.user_roles(id);
 alter table public.payment_requests add column if not exists final_approval_role_ids uuid[] not null default '{}'::uuid[];
 alter table public.payment_requests add column if not exists payment_process_role_ids uuid[] not null default '{}'::uuid[];

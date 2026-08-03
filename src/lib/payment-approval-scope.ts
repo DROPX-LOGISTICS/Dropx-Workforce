@@ -6,6 +6,7 @@ export type PaymentApprovalScopeRequest = {
   requested_by: string | null;
   current_approver_user_id: string | null;
   current_approver_role_id?: string | null;
+  current_approver_role_ids?: string[] | null;
 };
 
 export async function getPaymentApprovalEligibility(companyId: string, authorization: AuthorizationContext, requests: PaymentApprovalScopeRequest[]) {
@@ -22,6 +23,11 @@ export async function getPaymentApprovalEligibility(companyId: string, authoriza
     }
 
     if (request.current_approver_role_id && request.current_approver_role_id === authorization.roleId) {
+      eligibleIds.add(request.id);
+      continue;
+    }
+
+    if (authorization.roleId && (request.current_approver_role_ids ?? []).includes(authorization.roleId)) {
       eligibleIds.add(request.id);
       continue;
     }

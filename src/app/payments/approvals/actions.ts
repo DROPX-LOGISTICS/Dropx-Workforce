@@ -303,7 +303,7 @@ export async function approvePaymentRequest(formData: FormData) {
   const comments = clean(formData.get("comments"));
   const { data: request, error } = await supabaseAdmin
     .from("payment_requests")
-    .select("id, location_id, requested_by, current_approver_user_id, current_approver_role_id, final_approval_role_id, final_approval_role_ids")
+    .select("id, location_id, requested_by, current_approver_user_id, current_approver_role_id, current_approver_role_ids, final_approval_role_id, final_approval_role_ids")
     .eq("id", requestId)
     .eq("company_id", companyId)
     .single();
@@ -342,6 +342,7 @@ export async function approvePaymentRequest(formData: FormData) {
         approval_status: `${roleCode}_APPROVED`,
         current_approver_user_id: null,
         current_approver_role_id: null,
+        current_approver_role_ids: [],
         updated_at: new Date().toISOString()
       });
   } else {
@@ -352,6 +353,7 @@ export async function approvePaymentRequest(formData: FormData) {
         current_step_order: 2,
         current_approver_user_id: target.userId,
         current_approver_role_id: target.roleId,
+        current_approver_role_ids: finalRoleIds,
         updated_at: new Date().toISOString()
       }, {
         status: "pending",
@@ -359,6 +361,7 @@ export async function approvePaymentRequest(formData: FormData) {
         current_step_order: 2,
         current_approver_user_id: target.userId,
         current_approver_role_id: target.roleId,
+        current_approver_role_ids: finalRoleIds,
         updated_at: new Date().toISOString()
       });
   }
@@ -386,7 +389,7 @@ export async function rejectPaymentRequest(formData: FormData) {
   const comments = required(formData.get("comments"), "Reject remarks");
   const { data: request, error } = await supabaseAdmin
     .from("payment_requests")
-    .select("id, location_id, requested_by, current_approver_user_id, current_approver_role_id")
+    .select("id, location_id, requested_by, current_approver_user_id, current_approver_role_id, current_approver_role_ids")
     .eq("id", requestId)
     .eq("company_id", companyId)
     .single();
@@ -407,6 +410,7 @@ export async function rejectPaymentRequest(formData: FormData) {
       approval_status: "REJECTED",
       current_approver_user_id: null,
       current_approver_role_id: null,
+      current_approver_role_ids: [],
       updated_at: new Date().toISOString()
     });
 
@@ -432,7 +436,7 @@ export async function returnPaymentRequest(formData: FormData) {
   const comments = required(formData.get("comments"), "Return remarks");
   const { data: request, error } = await supabaseAdmin
     .from("payment_requests")
-    .select("id, location_id, requested_by, current_approver_user_id, current_approver_role_id")
+    .select("id, location_id, requested_by, current_approver_user_id, current_approver_role_id, current_approver_role_ids")
     .eq("id", requestId)
     .eq("company_id", companyId)
     .single();
@@ -453,12 +457,14 @@ export async function returnPaymentRequest(formData: FormData) {
       approval_status: "RETURNED",
       current_approver_user_id: null,
       current_approver_role_id: null,
+      current_approver_role_ids: [],
       updated_at: new Date().toISOString()
     }, {
         status: "pending",
         approval_status: "RETURNED",
         current_approver_user_id: null,
         current_approver_role_id: null,
+        current_approver_role_ids: [],
         updated_at: new Date().toISOString()
       });
 

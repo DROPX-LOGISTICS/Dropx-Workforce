@@ -40,6 +40,7 @@ type PaymentNotificationRequest = {
   approval_status: string | null;
   current_approver_user_id: string | null;
   current_approver_role_id: string | null;
+  current_approver_role_ids: string[] | null;
   payment_process_role_ids: string[] | null;
   created_at: string | null;
   payment_heads?: PaymentHeadRelation | PaymentHeadRelation[] | null;
@@ -83,7 +84,7 @@ function isReturnedOrRejected(request: PaymentNotificationRequest) {
 }
 
 function hasCurrentApprover(request: PaymentNotificationRequest) {
-  return Boolean(request.current_approver_user_id || request.current_approver_role_id);
+  return Boolean(request.current_approver_user_id || request.current_approver_role_id || request.current_approver_role_ids?.length);
 }
 
 function isFinalApproved(request: PaymentNotificationRequest) {
@@ -109,7 +110,7 @@ function needsPaymentDetails(request: PaymentNotificationRequest) {
 function isPendingApproval(request: PaymentNotificationRequest) {
   const status = requestStatus(request);
   if (CLOSED_STATUSES.has(status)) return false;
-  return Boolean(request.current_approver_user_id || request.current_approver_role_id || status === "PENDING" || !status);
+  return Boolean(request.current_approver_user_id || request.current_approver_role_id || request.current_approver_role_ids?.length || status === "PENDING" || !status);
 }
 
 function isReadyForPaymentProcess(request: PaymentNotificationRequest) {
@@ -184,6 +185,7 @@ export async function loadPaymentNotificationSnapshot(authorization: Authorizati
       approval_status,
       current_approver_user_id,
       current_approver_role_id,
+      current_approver_role_ids,
       payment_process_role_ids,
       created_at,
       payment_heads (
@@ -241,7 +243,8 @@ export async function loadPaymentNotificationSnapshot(authorization: Authorizati
         location_id: request.location_id,
         requested_by: request.requested_by,
         current_approver_user_id: request.current_approver_user_id,
-        current_approver_role_id: request.current_approver_role_id
+        current_approver_role_id: request.current_approver_role_id,
+        current_approver_role_ids: request.current_approver_role_ids
       }))
     );
     badges.payment_approvals = requests

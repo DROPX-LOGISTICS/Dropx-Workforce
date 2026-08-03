@@ -1,7 +1,7 @@
 "use client";
 
 import { Menu, X } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { EventLogTracker } from "@/components/event-log-tracker";
@@ -16,6 +16,7 @@ type AppShellFrameProps = {
 export function AppShellFrame({ children, desktopActions, mobileActions, sidebar }: AppShellFrameProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -25,6 +26,23 @@ export function AppShellFrame({ children, desktopActions, mobileActions, sidebar
     document.body.classList.toggle("mobile-nav-open", sidebarOpen);
     return () => document.body.classList.remove("mobile-nav-open");
   }, [sidebarOpen]);
+
+  useEffect(() => {
+    const cleanParams = new URLSearchParams(searchParams.toString());
+    let removedFlash = false;
+
+    for (const key of Array.from(cleanParams.keys())) {
+      if (/^(?:error|notice|success)$/i.test(key) || /(?:Error|Notice|Success)$/.test(key)) {
+        cleanParams.delete(key);
+        removedFlash = true;
+      }
+    }
+
+    if (!removedFlash) return;
+
+    const query = cleanParams.toString();
+    window.history.replaceState(window.history.state, "", `${pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+  }, [pathname, searchParams]);
 
   return (
     <div className={`shell ${sidebarOpen ? "sidebar-open" : ""}`}>

@@ -13,6 +13,9 @@ type AppShellFrameProps = {
   sidebar: ReactNode;
 };
 
+const flashQueryKeyPattern = /^(?:error|notice|success|sent|saved|deleted|added|initialized|updated|created|uploaded)$/i;
+const compoundFlashQueryKeyPattern = /_(?:sent|saved|deleted|added|initialized|updated|created|uploaded)$/i;
+
 export function AppShellFrame({ children, desktopActions, mobileActions, sidebar }: AppShellFrameProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
@@ -32,7 +35,11 @@ export function AppShellFrame({ children, desktopActions, mobileActions, sidebar
     let removedFlash = false;
 
     for (const key of Array.from(cleanParams.keys())) {
-      if (/^(?:error|notice|success)$/i.test(key) || /(?:Error|Notice|Success)$/.test(key)) {
+      if (
+        flashQueryKeyPattern.test(key) ||
+        compoundFlashQueryKeyPattern.test(key) ||
+        /(?:Error|Notice|Success)$/.test(key)
+      ) {
         cleanParams.delete(key);
         removedFlash = true;
       }

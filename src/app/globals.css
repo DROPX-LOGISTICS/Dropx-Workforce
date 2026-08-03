@@ -15055,6 +15055,89 @@ td strong,
   color: #111827;
   box-shadow: 0 0 0 2px rgba(235, 106, 40, 0.12);
 }
+.app-notification-composer button:not(:disabled),
+.app-notification-composer .bulk-multi-filter-option,
+.app-notification-composer .bulk-multi-filter-options label {
+  cursor: pointer;
+}
+.app-notification-composer button:disabled { cursor: not-allowed; }
+.app-notification-composer .bulk-multi-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  border-bottom: 1px solid #e6e9ee;
+  background: #f8fafc;
+}
+.app-notification-composer .bulk-multi-filter-actions button {
+  grid-column: auto;
+  justify-self: auto;
+  min-height: 31px;
+  padding: 5px 10px;
+  border: 1px solid #d6dce5;
+  border-radius: 5px;
+  background: #fff;
+  color: #344054;
+  box-shadow: none;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.app-notification-composer .bulk-multi-filter-actions button:first-child {
+  border-color: #f1b28e;
+  color: #b54708;
+}
+.app-notification-composer .bulk-multi-filter-actions button:hover {
+  border-color: #ea8b55;
+  background: #fff7ed;
+  color: #9a3412;
+}
+.app-notification-composer .app-notification-recipient-workbench .bulk-send-list {
+  gap: 9px;
+  padding: 11px 14px 13px;
+  background: #fafbfc;
+}
+.app-notification-composer .app-notification-recipient-workbench .bulk-send-list-tags {
+  gap: 7px;
+  max-height: 96px;
+}
+.app-notification-composer .app-notification-recipient-workbench .bulk-send-list-tags button {
+  grid-column: auto;
+  justify-self: auto;
+  gap: 7px;
+  min-height: 31px;
+  padding: 5px 7px 5px 9px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #fff;
+  color: #344054;
+  box-shadow: none;
+  font-weight: 500;
+}
+.app-notification-composer .app-notification-recipient-workbench .bulk-send-list-tags button:hover {
+  border-color: #eea477;
+  background: #fff8f3;
+}
+.app-notification-composer .app-notification-recipient-workbench .bulk-send-list-tags span {
+  color: #182230;
+  font-size: 11.5px;
+  font-weight: 650;
+}
+.app-notification-composer .app-notification-recipient-workbench .bulk-send-list-tags small {
+  padding-left: 7px;
+  border-left: 1px solid #e4e7ec;
+  color: #667085;
+  font-size: 10.5px;
+}
+.app-notification-composer .app-notification-recipient-workbench .bulk-send-list-tags svg {
+  padding: 2px;
+  border-radius: 4px;
+  color: #98a2b3;
+  box-sizing: content-box;
+}
+.app-notification-composer .app-notification-recipient-workbench .bulk-send-list-tags button:hover svg {
+  background: #fee4e2;
+  color: #b42318;
+}
 .app-notification-field-label { color: #526174; font-size: 11px; font-weight: 700; text-transform: uppercase; }
 .app-notification-composer .app-recipient-trigger {
   grid-column: auto; display: flex; align-items: center; justify-content: space-between; width: 100%;

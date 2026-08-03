@@ -15091,47 +15091,86 @@ td strong,
   background: #fff7ed;
   color: #9a3412;
 }
+.app-notification-composer .bulk-multi-filter-menu {
+  width: min(280px, calc(100vw - 32px));
+}
+.app-notification-composer .bulk-multi-filter-options {
+  overflow-x: hidden;
+}
+.app-notification-composer .bulk-multi-filter-options > label {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  width: 100%;
+  min-height: 38px;
+  margin: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid #edf0f3;
+  color: #475467;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-transform: none;
+  box-sizing: border-box;
+}
+.app-notification-composer .bulk-multi-filter-options > label:hover {
+  background: #fff8f3;
+}
+.app-notification-composer .bulk-multi-filter-options > label input {
+  grid-column: 1;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  padding: 0;
+  accent-color: #eb5a31;
+}
+.app-notification-composer .bulk-multi-filter-options > label span {
+  grid-column: 2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .app-notification-composer .app-notification-recipient-workbench .bulk-send-list {
   gap: 9px;
   padding: 11px 14px 13px;
-  background: #fafbfc;
+  background: #fff;
 }
 .app-notification-composer .app-notification-recipient-workbench .bulk-send-list-tags {
-  gap: 7px;
+  gap: 6px;
   max-height: 96px;
 }
 .app-notification-composer .app-notification-recipient-workbench .bulk-send-list-tags button {
   grid-column: auto;
   justify-self: auto;
-  gap: 7px;
-  min-height: 31px;
-  padding: 5px 7px 5px 9px;
-  border: 1px solid #d9dee7;
-  border-radius: 6px;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 7px 4px 10px;
+  border: 1px solid #f0a93d;
+  border-radius: 999px;
   background: #fff;
   color: #344054;
   box-shadow: none;
   font-weight: 500;
 }
 .app-notification-composer .app-notification-recipient-workbench .bulk-send-list-tags button:hover {
-  border-color: #eea477;
-  background: #fff8f3;
+  border-color: #e77a16;
+  background: #fffaf2;
 }
 .app-notification-composer .app-notification-recipient-workbench .bulk-send-list-tags span {
-  color: #182230;
+  color: #101828;
   font-size: 11.5px;
-  font-weight: 650;
+  font-weight: 700;
 }
 .app-notification-composer .app-notification-recipient-workbench .bulk-send-list-tags small {
-  padding-left: 7px;
-  border-left: 1px solid #e4e7ec;
   color: #667085;
   font-size: 10.5px;
 }
 .app-notification-composer .app-notification-recipient-workbench .bulk-send-list-tags svg {
-  padding: 2px;
-  border-radius: 4px;
-  color: #98a2b3;
+  padding: 1px;
+  border-radius: 999px;
+  color: #d85d0a;
   box-sizing: content-box;
 }
 .app-notification-composer .app-notification-recipient-workbench .bulk-send-list-tags button:hover svg {

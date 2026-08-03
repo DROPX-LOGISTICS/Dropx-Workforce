@@ -7753,6 +7753,68 @@ tbody tr:hover td {
   white-space: nowrap;
 }
 
+.all-people-export-trigger,
+.all-people-export-actions .button {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+  justify-content: center;
+}
+
+.all-people-export-dialog {
+  width: min(900px, calc(100vw - 32px));
+}
+
+.all-people-export-body {
+  padding: 18px;
+}
+
+.all-people-export-toolbar,
+.all-people-export-actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.all-people-export-toolbar {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 14px;
+}
+
+.all-people-export-select-all,
+.all-people-export-columns label {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 9px;
+}
+
+.all-people-export-columns {
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-height: min(54vh, 520px);
+  overflow-y: auto;
+  padding-top: 8px;
+}
+
+.all-people-export-columns label {
+  border-bottom: 1px solid #edf0f4;
+  min-height: 42px;
+  padding: 8px 10px;
+}
+
+.all-people-export-columns label:hover {
+  background: #fff8f2;
+}
+
+.all-people-export-actions {
+  border-top: 1px solid var(--line);
+  justify-content: flex-end;
+  padding: 14px 18px;
+}
+
 @media (max-width: 820px) {
   .all-people-filters,
   .all-people-search,
@@ -7762,6 +7824,10 @@ tbody tr:hover td {
 
   .all-people-filter {
     flex-basis: 100%;
+  }
+
+  .all-people-export-columns {
+    grid-template-columns: 1fr;
   }
 }
 

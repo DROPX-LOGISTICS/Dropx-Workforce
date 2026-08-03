@@ -4,6 +4,7 @@ import { PageHead } from "@/components/page-head";
 import { getAuthorization, hasPermission, type AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { dynamicWorkforceTable, isCustomWorkforceCategoryCode, workforceCategoryPageCode } from "@/lib/dynamic-workforce";
+import type { AllPeopleExportValues } from "@/lib/all-people-export";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { redirect } from "next/navigation";
 
@@ -25,6 +26,102 @@ function displayStatus(value: unknown, active: boolean) {
   if (!active) return "Inactive";
   const text = String(value ?? "pending").replaceAll("_", " ");
   return text.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+const sharedProfileColumns = [
+  "full_name", "mobile_country_code", "mobile", "email", "date_of_join", "is_active", "statutory_applicability",
+  "gender", "date_of_birth", "aadhaar_number", "pan_number", "eshram_uan", "father_name", "blood_group",
+  "is_handicapped", "address", "state_code", "landmark", "bank_account_no", "pf_uan", "pf_account_no", "esi_no",
+  "emergency_contact_number", "emergency_contact_name", "emergency_contact_relation", "driving_license_no",
+  "driving_license_exp_date", "vehicle_reg_no", "vehicle_reg_exp_date", "vehicle_insurance_exp_date",
+  "vehicle_pollution_exp_date", "aadhaar_front_path", "aadhaar_back_path", "pan_upload_path", "dl_front_path",
+  "dl_back_path", "profile_photo_path", "profile_return_remarks", "created_at", "updated_at"
+].join(", ");
+
+function text(value: unknown) {
+  return value == null ? "" : String(value);
+}
+
+function dateText(value: unknown) {
+  const raw = text(value).trim();
+  if (!raw) return "";
+  const dateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) return `${dateOnly[3]}/${dateOnly[2]}/${dateOnly[1]}`;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+  }).format(date).replace(",", "");
+}
+
+function booleanText(value: unknown) {
+  return value === true ? "Yes" : value === false ? "No" : "";
+}
+
+function listText(value: unknown) {
+  return Array.isArray(value) ? value.map(text).filter(Boolean).join(", ") : text(value);
+}
+
+function buildExportValues(
+  row: Record<string, unknown>,
+  codeField: string,
+  category: string,
+  location: string,
+  designation: string,
+  status: string,
+  employee: boolean
+): AllPeopleExportValues {
+  const countryCode = text(row.mobile_country_code).replace(/^\+/, "");
+  return {
+    dropxId: text(row[codeField]),
+    biometricId: text(row.biometric_id),
+    fullName: text(row.full_name),
+    category,
+    mobileCountryCode: countryCode ? `+${countryCode}` : "",
+    mobileNumber: text(row.mobile),
+    email: text(row.email),
+    dateOfJoin: dateText(row.date_of_join),
+    location,
+    designation,
+    status,
+    active: booleanText(row.is_active),
+    statutoryApplicability: listText(row.statutory_applicability),
+    gender: text(row.gender),
+    dateOfBirth: dateText(row.date_of_birth),
+    aadhaarNumber: text(row.aadhaar_number),
+    panNumber: text(row.pan_number),
+    eshramUan: text(row.eshram_uan),
+    fatherName: text(row.father_name),
+    bloodGroup: text(row.blood_group),
+    handicapped: booleanText(row.is_handicapped),
+    address: text(row.address),
+    stateCode: text(row.state_code),
+    pincode: text(row[employee ? "pincode" : "postal_pin"]),
+    landmark: text(row.landmark),
+    bankAccountNumber: text(row.bank_account_no),
+    ifsc: text(row[employee ? "ifsc" : "ifsc_code"]),
+    pfUan: text(row.pf_uan),
+    pfAccountNumber: text(row.pf_account_no),
+    esiNumber: text(row.esi_no),
+    emergencyContactNumber: text(row.emergency_contact_number),
+    emergencyContactName: text(row.emergency_contact_name),
+    emergencyContactRelation: text(row.emergency_contact_relation),
+    drivingLicenseNumber: text(row.driving_license_no),
+    drivingLicenseExpiry: dateText(row.driving_license_exp_date),
+    vehicleRegistrationNumber: text(row.vehicle_reg_no),
+    vehicleRegistrationExpiry: dateText(row.vehicle_reg_exp_date),
+    vehicleInsuranceExpiry: dateText(row.vehicle_insurance_exp_date),
+    pollutionExpiry: dateText(row.vehicle_pollution_exp_date),
+    aadhaarFrontFile: text(row.aadhaar_front_path),
+    aadhaarBackFile: text(row.aadhaar_back_path),
+    panFile: text(row.pan_upload_path),
+    drivingLicenseFrontFile: text(row.dl_front_path),
+    drivingLicenseBackFile: text(row.dl_back_path),
+    profilePhotoFile: text(row.profile_photo_path),
+    returnRemarks: text(row.profile_return_remarks),
+    createdAt: dateText(row.created_at),
+    updatedAt: dateText(row.updated_at)
+  };
 }
 
 async function loadPeople(
@@ -64,63 +161,74 @@ async function loadPeople(
     }));
   const results = await Promise.all(currentSources.map(async (source) => {
     const designationFields = source.employeeDesignation ? ", designations (name)" : ", designation";
+    const sourceSpecificFields = source.employeeDesignation ? ", pincode, ifsc" : ", postal_pin, ifsc_code";
     const result = await supabaseAdmin!
       .from(source.table)
-      .select(`id, full_name, mobile_country_code, mobile, email, biometric_id, location_id, is_active, ${source.codeField}, ${source.statusField}, stations (station_code)${designationFields}`)
+      .select(`id, ${sharedProfileColumns}, biometric_id, location_id, ${source.codeField}, ${source.statusField}, stations (station_code)${designationFields}${sourceSpecificFields}`)
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     if (result.error) return { rows: [] as AllPeopleRow[], error: result.error.message };
+    const sourceRows = (result.data ?? []) as unknown as Record<string, unknown>[];
     return {
       error: null,
-      rows: (result.data ?? [])
+      rows: sourceRows
         .filter((row: Record<string, unknown>) => hasAllLocationAccess || locationScopeIds.includes(String(row.location_id ?? "")))
-        .map((row: Record<string, unknown>) => ({
-        id: String(row.id),
-        category: source.category,
-        categoryCode: source.categoryCode,
-        code: String(row[source.codeField] ?? "-"),
-        biometricId: String(row.biometric_id ?? "-"),
-        fullName: String(row.full_name ?? "-"),
-        mobile: `+${String(row.mobile_country_code ?? "91")} ${String(row.mobile ?? "")}`,
-        email: String(row.email ?? "-"),
-        location: String((first(row.stations as { station_code?: string } | Array<{ station_code?: string }> | null) ?? {}).station_code ?? "-"),
-        designation: String(
-          row.designation ??
-          (first(row.designations as { name?: string } | Array<{ name?: string }> | null) ?? {}).name ??
-          "-"
-        ),
-        status: displayStatus(row[source.statusField], row.is_active !== false),
-        actionBasePath: source.basePath,
-        canEdit: source.canEdit
-      }))
+        .map((row: Record<string, unknown>) => {
+          const location = String((first(row.stations as { station_code?: string } | Array<{ station_code?: string }> | null) ?? {}).station_code ?? "-");
+          const designation = String(row.designation ?? (first(row.designations as { name?: string } | Array<{ name?: string }> | null) ?? {}).name ?? "-");
+          const status = displayStatus(row[source.statusField], row.is_active !== false);
+          return {
+            id: String(row.id),
+            category: source.category,
+            categoryCode: source.categoryCode,
+            code: String(row[source.codeField] ?? "-"),
+            biometricId: String(row.biometric_id ?? "-"),
+            fullName: String(row.full_name ?? "-"),
+            mobile: `+${String(row.mobile_country_code ?? "91")} ${String(row.mobile ?? "")}`,
+            email: String(row.email ?? "-"),
+            location,
+            designation,
+            status,
+            actionBasePath: source.basePath,
+            canEdit: source.canEdit,
+            exportValues: buildExportValues(row, source.codeField, source.category, location, designation, status, source.employeeDesignation)
+          };
+        })
     };
   }));
   const customResults = await Promise.all(customSources.map(async (source) => {
     const result = await supabaseAdmin!
       .from(source.table)
-      .select("id, full_name, mobile_country_code, mobile, email, biometric_id, location_id, is_active, dropx_id, onboarding_status, stations (station_code), designation")
+      .select(`id, ${sharedProfileColumns}, biometric_id, location_id, dropx_id, onboarding_status, postal_pin, ifsc_code, stations (station_code), designation`)
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     if (result.error) return { rows: [] as AllPeopleRow[], error: result.error.message };
+    const sourceRows = (result.data ?? []) as unknown as Record<string, unknown>[];
     return {
       error: null,
-      rows: (result.data ?? [])
+      rows: sourceRows
         .filter((row: Record<string, unknown>) => hasAllLocationAccess || locationScopeIds.includes(String(row.location_id ?? "")))
-        .map((row: Record<string, unknown>) => ({
-          id: String(row.id),
-          category: source.category,
-          categoryCode: source.categoryCode,
-          code: String(row[source.codeField] ?? "-"),
-          biometricId: String(row.biometric_id ?? "-"),
-          fullName: String(row.full_name ?? "-"),
-          mobile: `+${String(row.mobile_country_code ?? "91")} ${String(row.mobile ?? "")}`,
-          email: String(row.email ?? "-"),
-          location: String((first(row.stations as { station_code?: string } | Array<{ station_code?: string }> | null) ?? {}).station_code ?? "-"),
-          designation: String(row.designation ?? "-"),
-          status: displayStatus(row[source.statusField], row.is_active !== false),
-          actionBasePath: source.basePath,
-          canEdit: source.canEdit
-        }))
+        .map((row: Record<string, unknown>) => {
+          const location = String((first(row.stations as { station_code?: string } | Array<{ station_code?: string }> | null) ?? {}).station_code ?? "-");
+          const designation = String(row.designation ?? "-");
+          const status = displayStatus(row[source.statusField], row.is_active !== false);
+          return {
+            id: String(row.id),
+            category: source.category,
+            categoryCode: source.categoryCode,
+            code: String(row[source.codeField] ?? "-"),
+            biometricId: String(row.biometric_id ?? "-"),
+            fullName: String(row.full_name ?? "-"),
+            mobile: `+${String(row.mobile_country_code ?? "91")} ${String(row.mobile ?? "")}`,
+            email: String(row.email ?? "-"),
+            location,
+            designation,
+            status,
+            actionBasePath: source.basePath,
+            canEdit: source.canEdit,
+            exportValues: buildExportValues(row, source.codeField, source.category, location, designation, status, false)
+          };
+        })
     };
   }));
   const allResults = [...results, ...customResults];

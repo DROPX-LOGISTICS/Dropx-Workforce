@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EllipsisVertical, Eye, Pencil } from "lucide-react";
+import { Download, EllipsisVertical, Eye, Pencil, X } from "lucide-react";
 import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
+import { allPeopleExportColumns, type AllPeopleExportKey, type AllPeopleExportValues } from "@/lib/all-people-export";
 
 export type AllPeopleRow = {
   id: string;
@@ -19,6 +20,7 @@ export type AllPeopleRow = {
   status: string;
   actionBasePath: string;
   canEdit: boolean;
+  exportValues: AllPeopleExportValues;
 };
 
 const rowsPerPage = 20;
@@ -146,6 +148,9 @@ export function AllPeopleRegister({ rows }: { rows: AllPeopleRow[] }) {
   const [designations, setDesignations] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<string[]>([]);
   const [page, setPage] = useState(1);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [selectedExportColumns, setSelectedExportColumns] = useState<AllPeopleExportKey[]>(() => allPeopleExportColumns.map((column) => column.key));
 
   const categoryOptions = useMemo(() => (
     Array.from(new Map(rows.map((row) => [row.categoryCode, row.category])).entries())
@@ -175,6 +180,48 @@ export function AllPeopleRegister({ rows }: { rows: AllPeopleRow[] }) {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
+  const selectedExportSet = useMemo(() => new Set(selectedExportColumns), [selectedExportColumns]);
+
+  function toggleExportColumn(key: AllPeopleExportKey) {
+    setSelectedExportColumns((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+  }
+
+  async function exportPeople() {
+    if (!selectedExportColumns.length || !filteredRows.length) return;
+    setExporting(true);
+    try {
+      const XLSX = await import("xlsx");
+      const columns = allPeopleExportColumns.filter((column) => selectedExportSet.has(column.key));
+      const data = [
+        columns.map((column) => column.label),
+        ...filteredRows.map((row) => columns.map((column) => row.exportValues[column.key] ?? ""))
+      ];
+      const worksheet = XLSX.utils.aoa_to_sheet(data);
+
+      // Excel must receive identifiers as text or it removes leading zeroes and rounds values over 15 digits.
+      for (let rowIndex = 1; rowIndex < data.length; rowIndex += 1) {
+        for (let columnIndex = 0; columnIndex < columns.length; columnIndex += 1) {
+          const address = XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex });
+          const cell = worksheet[address];
+          if (cell) {
+            cell.t = "s";
+            cell.v = String(data[rowIndex][columnIndex] ?? "");
+            cell.z = "@";
+          }
+        }
+      }
+      worksheet["!cols"] = columns.map((column) => ({ wch: Math.min(42, Math.max(14, column.label.length + 3)) }));
+      worksheet["!autofilter"] = { ref: worksheet["!ref"] ?? "A1:A1" };
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "All People");
+      const date = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(workbook, `all-people-${date}.xlsx`, { compression: true });
+      setExportOpen(false);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <section className="panel">
       <div className="panel-head toolbar">
@@ -188,6 +235,9 @@ export function AllPeopleRegister({ rows }: { rows: AllPeopleRow[] }) {
           <MultiCheckFilter allLabel="All locations" label="Location" onChange={setLocations} options={locationOptions} selected={locations} />
           <MultiCheckFilter allLabel="All designations" label="Designation" onChange={setDesignations} options={designationOptions} selected={designations} />
           <MultiCheckFilter allLabel="All statuses" label="Status" onChange={setStatuses} options={statusOptions} selected={statuses} />
+          <button className="button secondary all-people-export-trigger" disabled={!filteredRows.length} onClick={() => setExportOpen(true)} type="button">
+            <Download aria-hidden="true" size={16} /> Export
+          </button>
         </div>
       </div>
       <div className="table-wrap field-executive-table-wrap employee-table-wrap all-people-table-wrap">
@@ -211,6 +261,50 @@ export function AllPeopleRegister({ rows }: { rows: AllPeopleRow[] }) {
           <button className="pager-button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} type="button">Previous</button>
           <span>Page {currentPage} of {totalPages}</span>
           <button className="pager-button" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)} type="button">Next</button>
+        </div>
+      ) : null}
+      {exportOpen ? (
+        <div className="modal-backdrop" onMouseDown={(event) => {
+          if (event.currentTarget === event.target && !exporting) setExportOpen(false);
+        }}>
+          <section aria-labelledby="all-people-export-title" aria-modal="true" className="modal-panel all-people-export-dialog" role="dialog">
+            <div className="panel-head">
+              <div>
+                <h2 id="all-people-export-title">Export people</h2>
+                <p className="subtle">Choose the Excel columns. All titles are selected by default.</p>
+              </div>
+              <button aria-label="Close export" className="icon-button" disabled={exporting} onClick={() => setExportOpen(false)} type="button">
+                <X aria-hidden="true" size={18} />
+              </button>
+            </div>
+            <div className="all-people-export-body">
+              <div className="all-people-export-toolbar">
+                <label className="all-people-export-select-all">
+                  <input
+                    checked={selectedExportColumns.length === allPeopleExportColumns.length}
+                    onChange={(event) => setSelectedExportColumns(event.target.checked ? allPeopleExportColumns.map((column) => column.key) : [])}
+                    type="checkbox"
+                  />
+                  <strong>Select all titles</strong>
+                </label>
+                <span className="subtle">{filteredRows.length} filtered record{filteredRows.length === 1 ? "" : "s"}</span>
+              </div>
+              <div className="all-people-export-columns">
+                {allPeopleExportColumns.map((column) => (
+                  <label key={column.key}>
+                    <input checked={selectedExportSet.has(column.key)} onChange={() => toggleExportColumn(column.key)} type="checkbox" />
+                    <span>{column.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="all-people-export-actions">
+              <button className="button secondary" disabled={exporting} onClick={() => setExportOpen(false)} type="button">Cancel</button>
+              <button className="button" disabled={exporting || !selectedExportColumns.length || !filteredRows.length} onClick={exportPeople} type="button">
+                <Download aria-hidden="true" size={16} /> {exporting ? "Preparing..." : "Export Excel"}
+              </button>
+            </div>
+          </section>
         </div>
       ) : null}
     </section>

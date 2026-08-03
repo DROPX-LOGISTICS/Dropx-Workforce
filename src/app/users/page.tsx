@@ -1,9 +1,9 @@
 import { AppShell } from "@/components/app-shell";
 import { AddUserForm } from "@/components/add-user-form";
+import { DismissibleModal, DismissModalButton } from "@/components/dismissible-modal";
 import { ManageUserForm } from "@/components/manage-user-form";
 import { PageHead } from "@/components/page-head";
 import { PermissionMatrix } from "@/components/permission-matrix";
-import { PendingLink } from "@/components/pending-link";
 import { SearchableSelect } from "@/components/searchable-select";
 import { SubmitButton } from "@/components/submit-button";
 import { UserRolesListPanel } from "@/components/user-roles-list-panel";
@@ -556,31 +556,31 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       ) : null}
 
       {showAddUser ? (
-        <div className="modal-backdrop">
+        <DismissibleModal closeHref={sectionHref("users")}>
           <section className="modal-panel wide" aria-label="Add user">
             <div className="panel-head">
               <div>
                 <h2>Add user</h2>
                 <p className="subtle">Create the login user, assign a role, and set location access.</p>
               </div>
-              <PendingLink className="icon-button" href={sectionHref("users")} scroll={false} aria-label="Close add user">x</PendingLink>
+              <DismissModalButton className="icon-button" aria-label="Close add user">x</DismissModalButton>
             </div>
             <div className="panel-body">
               <AddUserForm roles={addUserRoles} users={addUserProfiles} locations={locationScopeOptions} />
             </div>
           </section>
-        </div>
+        </DismissibleModal>
       ) : null}
 
       {showAddRole ? (
-        <div className="modal-backdrop">
+        <DismissibleModal closeHref={sectionHref("roles")}>
           <section className="modal-panel wide" aria-label="Add user role">
             <div className="panel-head">
               <div>
                 <h2>Add user role</h2>
                 <p className="subtle">Set the role code, role name, and page-level permissions.</p>
               </div>
-              <PendingLink className="icon-button" href={sectionHref("roles")} scroll={false} aria-label="Close add user role">x</PendingLink>
+              <DismissModalButton className="icon-button" aria-label="Close add user role">x</DismissModalButton>
             </div>
             {roleModalError ? (
               <div className="modal-inline-message error" role="alert">
@@ -612,22 +612,22 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
               ) : null}
               <div className="form-actions modal-actions">
                 <SubmitButton disabled={Boolean(error)} disabledText="DB setup needed">Save role</SubmitButton>
-                <PendingLink className="button secondary" href={sectionHref("roles")} scroll={false}>Cancel</PendingLink>
+                <DismissModalButton className="button secondary">Cancel</DismissModalButton>
               </div>
             </form>
           </section>
-        </div>
+        </DismissibleModal>
       ) : null}
 
       {editRole ? (
-        <div className="modal-backdrop">
+        <DismissibleModal closeHref={sectionHref("roles")}>
           <section className="modal-panel wide" aria-label="Manage user role">
             <div className="panel-head">
               <div>
                 <h2>Manage user role</h2>
                 <p className="subtle">Edit role hierarchy, location access, permissions, and active status.</p>
               </div>
-              <PendingLink className="icon-button" href={sectionHref("roles")} scroll={false} aria-label="Close manage user role">x</PendingLink>
+              <DismissModalButton className="icon-button" aria-label="Close manage user role">x</DismissModalButton>
             </div>
             {roleModalError ? (
               <div className="modal-inline-message error" role="alert">
@@ -642,7 +642,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                   OWNER is protected and cannot be edited or deleted.
                 </p>
                 <div className="form-actions" style={{ marginTop: 14 }}>
-                  <a className="button secondary" href={sectionHref("roles")}>Close</a>
+                  <DismissModalButton className="button secondary">Close</DismissModalButton>
                 </div>
               </div>
             ) : (
@@ -676,7 +676,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                   <PermissionMatrix pages={pages} initialPermissions={editRolePermissions} />
                   <div className="form-actions modal-actions">
                     <SubmitButton>Save role</SubmitButton>
-                    <a className="button secondary" href={sectionHref("roles")}>Cancel</a>
+                    <DismissModalButton className="button secondary">Cancel</DismissModalButton>
                   </div>
                 </form>
                 {editRole.code !== "LOCATION" ? (
@@ -701,18 +701,18 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
               </>
             )}
           </section>
-        </div>
+        </DismissibleModal>
       ) : null}
 
       {editUser ? (
-        <div className="modal-backdrop">
+        <DismissibleModal closeHref={userReturnHref}>
           <section className="modal-panel" aria-label="Manage user">
             <div className="panel-head">
               <div>
                 <h2>Manage user</h2>
                 <p className="subtle">Update the user role or deactivate/delete the profile.</p>
               </div>
-              <PendingLink className="icon-button" href={userReturnHref} scroll={false} aria-label="Close manage user">x</PendingLink>
+              <DismissModalButton className="icon-button" aria-label="Close manage user">x</DismissModalButton>
             </div>
             <ManageUserForm
               locations={locationScopeOptions}
@@ -752,7 +752,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
               >Delete user</SubmitButton>
             </form> : null}
           </section>
-        </div>
+        </DismissibleModal>
       ) : null}
     </AppShell>
   );

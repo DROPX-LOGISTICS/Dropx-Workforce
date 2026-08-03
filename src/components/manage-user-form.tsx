@@ -5,7 +5,7 @@ import { resendUserInvitation, updateUser } from "@/app/users/actions";
 import { LocationScopeOption, LocationScopeSelect } from "@/components/location-scope-select";
 import { SubmitButton } from "@/components/submit-button";
 import { AddUserProfileOption, AddUserRoleOption, reportingUsersAboveRole } from "@/components/add-user-form";
-import { PendingLink } from "@/components/pending-link";
+import { DismissModalButton } from "@/components/dismissible-modal";
 import { countryCodeOptions } from "@/lib/country-codes";
 
 type ManageUser = {
@@ -152,7 +152,7 @@ export function ManageUserForm({
         </label>
         <div className="form-actions span-2">
           {!isLocked ? <SubmitButton>Save changes</SubmitButton> : null}
-          <PendingLink className="button secondary" href={returnHref} scroll={false}>Cancel</PendingLink>
+          <DismissModalButton className="button secondary">Cancel</DismissModalButton>
         </div>
       </form>
       {user.invitationPending && !isLocked ? (

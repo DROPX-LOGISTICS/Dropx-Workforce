@@ -8,6 +8,7 @@ import { formatDashboardDate } from "@/lib/date-format";
 
 export type PaymentProcessBank = {
   id: string;
+  bank_code: string;
   display_name: string;
   account_no: string;
 };
@@ -51,6 +52,10 @@ function dateOnly(value: string) {
 
 function displayDate(value: string) {
   return formatDashboardDate(value);
+}
+
+function fileTypeForBank(bank: PaymentProcessBank | undefined) {
+  return bank?.bank_code === "FEDERAL_BANK" ? "fedone" : "";
 }
 
 type Props = {
@@ -97,6 +102,8 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [status, setStatus] = useState("approved");
+  const [selectedBankId, setSelectedBankId] = useState("");
+  const [fileType, setFileType] = useState("");
 
   useEffect(() => {
     if (finalizeResultKey) setFinalizeOpen(false);
@@ -135,6 +142,11 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
     setSelectedIds((current) => current.includes(id)
       ? current.filter((item) => item !== id)
       : [...current, id]);
+  }
+
+  function selectBank(bankId: string) {
+    setSelectedBankId(bankId);
+    setFileType(fileTypeForBank(banks.find((bank) => bank.id === bankId)));
   }
 
   return (
@@ -203,7 +215,7 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
             style={{ alignItems: "end", gridTemplateColumns: "minmax(240px, 1.2fr) minmax(190px, 1fr) minmax(170px, 0.8fr) minmax(190px, auto)" }}
           >
             <label>Bank
-              <select className="field" name="bank_id" required>
+              <select className="field" name="bank_id" onChange={(event) => selectBank(event.target.value)} required value={selectedBankId}>
                 <option value="">Select bank</option>
                 {banks.map((bank) => (
                   <option key={bank.id} value={bank.id}>{bank.display_name} | {bank.account_no}</option>
@@ -211,7 +223,8 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
               </select>
             </label>
             <label>File type
-              <select className="field" name="file_type" defaultValue="fedone" required>
+              <select className="field" disabled={!selectedBankId || !fileType} name="file_type" onChange={(event) => setFileType(event.target.value)} required value={fileType}>
+                <option value="">{selectedBankId ? "No file type configured" : "Select file type"}</option>
                 <option value="fedone">Federal Bank - FedOne</option>
               </select>
             </label>
@@ -219,7 +232,7 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
               <input className="field" name="value_date" type="date" defaultValue={today} required />
             </label>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, justifySelf: "end" }}>
-              <button className="button" disabled={!banks.length || !selectedBankTransferIds.length} type="submit">
+              <button className="button" disabled={!selectedBankId || !fileType || !selectedBankTransferIds.length} type="submit">
                 Download bank file
               </button>
             </div>

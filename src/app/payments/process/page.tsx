@@ -145,6 +145,7 @@ export default async function PaymentProcessPage({
         <PaymentProcessPanel
           banks={banks.map((bank) => ({
             id: bank.id,
+            bank_code: bank.bank_code,
             display_name: bank.display_name,
             account_no: bank.account_no
           }))}

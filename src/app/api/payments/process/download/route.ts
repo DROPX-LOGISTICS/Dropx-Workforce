@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type PaymentBankRow = {
   id: string;
+  bank_code: string;
   display_name: string;
   account_no: string;
   is_active: boolean;
@@ -128,22 +129,26 @@ export async function GET(request: Request) {
 
     const params = new URL(request.url).searchParams;
     const bankId = params.get("bank_id");
-    const fileType = params.get("file_type") ?? "fedone";
+    const fileType = String(params.get("file_type") ?? "").trim();
     const valueDate = formatValueDate(params.get("value_date"));
     const requestIds = parseRequestIds(params.get("request_ids"));
     if (!bankId) return Response.json({ error: "Select bank." }, { status: 400 });
+    if (!fileType) return Response.json({ error: "Select file type." }, { status: 400 });
     if (fileType !== "fedone") return Response.json({ error: "Unsupported bank file type." }, { status: 400 });
     if (!requestIds.length) return Response.json({ error: "Select at least one approved payment request." }, { status: 400 });
 
     const { data: bank, error: bankError } = await supabaseAdmin
       .from("payment_banks")
-      .select("id, display_name, account_no, is_active")
+      .select("id, bank_code, display_name, account_no, is_active")
       .eq("company_id", companyId)
       .eq("id", bankId)
       .maybeSingle();
     if (bankError) throw new Error(bankError.message);
     const paymentBank = bank as PaymentBankRow | null;
     if (!paymentBank?.is_active) return Response.json({ error: "Selected bank is not active." }, { status: 400 });
+    if (fileType === "fedone" && paymentBank.bank_code !== "FEDERAL_BANK") {
+      return Response.json({ error: "Selected file type is not available for this bank." }, { status: 400 });
+    }
 
     let requestsQuery = supabaseAdmin
       .from("payment_requests")

@@ -227,83 +227,94 @@ async function loadAccessData(
   }
 
   await ensureAccessPages(supabaseAdmin, companyId);
+  const client = supabaseAdmin;
 
-  let pagesResult = await supabaseAdmin
-    .from("app_pages")
-    .select("id, code, name, sort_order, is_active")
-    .eq("company_id", companyId)
-    .eq("is_active", true)
-    .order("sort_order");
-  if (isMissingCompanyColumn(pagesResult.error)) {
-    pagesResult = await supabaseAdmin
+  const pagesPromise = (async () => {
+    let result = await client
       .from("app_pages")
       .select("id, code, name, sort_order, is_active")
+      .eq("company_id", companyId)
       .eq("is_active", true)
       .order("sort_order");
-  }
-  if (!pagesResult.error && !(pagesResult.data ?? []).length) {
-    pagesResult = await supabaseAdmin
-      .from("app_pages")
-      .select("id, code, name, sort_order, is_active")
-      .in("code", accessPages.map((page) => page.code))
-      .is("company_id", null)
-      .eq("is_active", true)
-      .order("sort_order");
-  }
+    if (isMissingCompanyColumn(result.error)) {
+      result = await client
+        .from("app_pages")
+        .select("id, code, name, sort_order, is_active")
+        .eq("is_active", true)
+        .order("sort_order");
+    }
+    if (!result.error && !(result.data ?? []).length) {
+      result = await client
+        .from("app_pages")
+        .select("id, code, name, sort_order, is_active")
+        .in("code", accessPages.map((page) => page.code))
+        .is("company_id", null)
+        .eq("is_active", true)
+        .order("sort_order");
+    }
+    return result;
+  })();
 
-  let rolesResult = await supabaseAdmin
-    .from("user_roles")
-    .select("id, code, name, location_access_mode, parent_role_id, is_system, is_active")
-    .eq("company_id", companyId)
-    .order("code");
-  if (isMissingCompanyColumn(rolesResult.error)) {
-    rolesResult = await supabaseAdmin
+  const rolesPromise = (async () => {
+    let result = await client
       .from("user_roles")
       .select("id, code, name, location_access_mode, parent_role_id, is_system, is_active")
+      .eq("company_id", companyId)
       .order("code");
-  }
-  if (!rolesResult.error && !(rolesResult.data ?? []).length) {
-    rolesResult = await supabaseAdmin
-      .from("user_roles")
-      .select("id, code, name, location_access_mode, parent_role_id, is_system, is_active")
-      .eq("is_active", true)
-      .order("code");
-  }
+    if (isMissingCompanyColumn(result.error)) {
+      result = await client
+        .from("user_roles")
+        .select("id, code, name, location_access_mode, parent_role_id, is_system, is_active")
+        .order("code");
+    }
+    if (!result.error && !(result.data ?? []).length) {
+      result = await client
+        .from("user_roles")
+        .select("id, code, name, location_access_mode, parent_role_id, is_system, is_active")
+        .eq("is_active", true)
+        .order("code");
+    }
+    return result;
+  })();
 
-  let permissionsResult = await supabaseAdmin
-    .from("role_page_permissions")
-    .select("role_id, page_id, can_view, can_add, can_edit")
-    .eq("company_id", companyId);
-  if (isMissingCompanyColumn(permissionsResult.error)) {
-    permissionsResult = await supabaseAdmin
+  const permissionsPromise = (async () => {
+    let result = await client
       .from("role_page_permissions")
-      .select("role_id, page_id, can_view, can_add, can_edit");
-  }
+      .select("role_id, page_id, can_view, can_add, can_edit")
+      .eq("company_id", companyId);
+    if (isMissingCompanyColumn(result.error)) {
+      result = await client
+        .from("role_page_permissions")
+        .select("role_id, page_id, can_view, can_add, can_edit");
+    }
+    return result;
+  })();
 
-  let usersResult: { data: UserRow[] | null; error: { message?: string } | null } = { data: [], error: null };
-  if (options.includeUsers) {
-    usersResult = await supabaseAdmin
+  const usersPromise = (async (): Promise<{ data: UserRow[] | null; error: { message?: string } | null }> => {
+    if (!options.includeUsers) return { data: [], error: null };
+    let result = await client
       .from("profiles")
       .select("id, employee_id, full_name, email, mobile_country_code, mobile, role_id, role, reports_to_user_id, location_scope_ids, invite_method, is_active")
       .eq("company_id", companyId)
-      .order("full_name");
-    if (isMissingColumnError(usersResult.error)) {
-      usersResult = await supabaseAdmin
+      .order("full_name") as unknown as { data: UserRow[] | null; error: { message?: string } | null };
+    if (isMissingColumnError(result.error)) {
+      result = await client
         .from("profiles")
         .select("id, employee_id, full_name, email, mobile, role_id, role, reports_to_user_id, location_scope_ids, invite_method, is_active")
         .eq("company_id", companyId)
-        .order("full_name");
+        .order("full_name") as unknown as { data: UserRow[] | null; error: { message?: string } | null };
     }
-    if (isMissingCompanyColumn(usersResult.error)) {
-      usersResult = await supabaseAdmin
+    if (isMissingCompanyColumn(result.error)) {
+      result = await client
         .from("profiles")
         .select("id, employee_id, full_name, email, mobile, role_id, role, reports_to_user_id, location_scope_ids, invite_method, is_active")
-        .order("full_name");
+        .order("full_name") as unknown as { data: UserRow[] | null; error: { message?: string } | null };
     }
-  }
+    return result;
+  })();
 
-  let locationsResult: { data: RawLocationRow[] | null; error: { message?: string } | null } = { data: [], error: null };
-  if (options.includeUsers || options.includeRoleEditorData) {
+  const locationsPromise = (async (): Promise<{ data: RawLocationRow[] | null; error: { message?: string } | null }> => {
+    if (!options.includeUsers && !options.includeRoleEditorData) return { data: [], error: null };
     const locationSelect = `
         id,
         station_code,
@@ -329,28 +340,37 @@ async function loadAccessData(
         providers (name),
         location_models (code, name)
       `;
-    locationsResult = await supabaseAdmin
+    let result = await client
       .from("stations")
       .select(locationSelect)
       .eq("is_active", true)
       .eq("company_id", companyId)
-      .order("station_code");
-    if (isMissingColumnError(locationsResult.error)) {
-      locationsResult = await supabaseAdmin
+      .order("station_code") as unknown as { data: RawLocationRow[] | null; error: { message?: string } | null };
+    if (isMissingColumnError(result.error)) {
+      result = await client
         .from("stations")
         .select(legacyLocationSelect)
         .eq("is_active", true)
         .eq("company_id", companyId)
-        .order("station_code");
+        .order("station_code") as unknown as { data: RawLocationRow[] | null; error: { message?: string } | null };
     }
-    if (isMissingCompanyColumn(locationsResult.error)) {
-      locationsResult = await supabaseAdmin
+    if (isMissingCompanyColumn(result.error)) {
+      result = await client
         .from("stations")
         .select(legacyLocationSelect)
         .eq("is_active", true)
-        .order("station_code");
+        .order("station_code") as unknown as { data: RawLocationRow[] | null; error: { message?: string } | null };
     }
-  }
+    return result;
+  })();
+
+  const [pagesResult, rolesResult, permissionsResult, usersResult, locationsResult] = await Promise.all([
+    pagesPromise,
+    rolesPromise,
+    permissionsPromise,
+    usersPromise,
+    locationsPromise
+  ]);
 
   const rawLocations = (locationsResult.data ?? []) as unknown as RawLocationRow[];
   const users = (usersResult.data ?? []) as UserRow[];

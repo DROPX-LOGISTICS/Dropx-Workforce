@@ -90,7 +90,13 @@ export const accessPages = [
   { code: "developer_mode", name: "Developer Mode", sort_order: 135 }
 ];
 
-type PageRow = { id: string; code: string; is_active?: boolean | null };
+type PageRow = {
+  id: string;
+  code: string;
+  name?: string | null;
+  sort_order?: number | null;
+  is_active?: boolean | null;
+};
 type WorkforceCategoryRow = { code: string; name: string };
 type PermissionRow = {
   role_id: string;
@@ -177,35 +183,42 @@ async function upsertPermissionRows(supabase: SupabaseClient, companyId: string,
   const pageIds = Array.from(new Set(rows.map((row) => row.page_id)));
   const { data: existing, error: existingError } = await supabase
     .from("role_page_permissions")
-    .select("role_id, page_id")
+    .select("role_id, page_id, can_view, can_add, can_edit")
     .eq("company_id", companyId)
     .in("role_id", roleIds)
     .in("page_id", pageIds);
   if (existingError) throw new Error(existingError.message);
 
-  const existingKeys = new Set((existing ?? []).map((row) => `${row.role_id}:${row.page_id}`));
+  const existingByKey = new Map((existing ?? []).map((row) => [`${row.role_id}:${row.page_id}`, row]));
   const insertRows = rows
-    .filter((row) => !existingKeys.has(`${row.role_id}:${row.page_id}`))
+    .filter((row) => !existingByKey.has(`${row.role_id}:${row.page_id}`))
     .map((row) => ({ company_id: companyId, ...row }));
-  const updateRows = rows.filter((row) => existingKeys.has(`${row.role_id}:${row.page_id}`));
+  const updateRows = rows.filter((row) => {
+    const existingRow = existingByKey.get(`${row.role_id}:${row.page_id}`);
+    return existingRow && (
+      Boolean(existingRow.can_view) !== row.can_view ||
+      Boolean(existingRow.can_add) !== row.can_add ||
+      Boolean(existingRow.can_edit) !== row.can_edit
+    );
+  });
 
   if (insertRows.length) {
     const { error } = await supabase.from("role_page_permissions").insert(insertRows);
     if (error) {
       if (!isDuplicatePermissionError(error)) throw new Error(error.message);
 
-      for (const row of insertRows) {
+      await Promise.all(insertRows.map(async (row) => {
         const { error: updateError } = await supabase
           .from("role_page_permissions")
           .update({ can_view: row.can_view, can_add: row.can_add, can_edit: row.can_edit, company_id: companyId })
           .eq("role_id", row.role_id)
           .eq("page_id", row.page_id);
         if (updateError) throw new Error(updateError.message);
-      }
+      }));
     }
   }
 
-  for (const row of updateRows) {
+  await Promise.all(updateRows.map(async (row) => {
     const { error } = await supabase
       .from("role_page_permissions")
       .update({ can_view: row.can_view, can_add: row.can_add, can_edit: row.can_edit })
@@ -213,7 +226,7 @@ async function upsertPermissionRows(supabase: SupabaseClient, companyId: string,
       .eq("role_id", row.role_id)
       .eq("page_id", row.page_id);
     if (error) throw new Error(error.message);
-  }
+  }));
 }
 
 async function retirePage(supabase: SupabaseClient, companyId: string, pageId: string) {
@@ -340,37 +353,50 @@ export async function ensureAccessPages(supabase: SupabaseClient, companyId: str
   if (!companyId) throw new Error("Company is required to seed access pages.");
 
   const now = new Date().toISOString();
-  const categoryResult = await supabase
-    .from("workforce_categories")
-    .select("code, name")
-    .eq("company_id", companyId)
-    .eq("is_active", true)
-    .order("sort_order")
-    .order("name");
+  const [categoryResult, currentPagesResult] = await Promise.all([
+    supabase
+      .from("workforce_categories")
+      .select("code, name")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .order("sort_order")
+      .order("name"),
+    supabase
+      .from("app_pages")
+      .select("id, code, name, sort_order, is_active")
+      .eq("company_id", companyId)
+  ]);
   if (categoryResult.error) throw new Error(categoryResult.error.message);
+  if (currentPagesResult.error) throw new Error(currentPagesResult.error.message);
+
   const categoryPages = ((categoryResult.data ?? []) as WorkforceCategoryRow[]).map((category, index) => ({
     code: workforceCategoryPageCode(category.code),
     name: category.name,
     sort_order: 21 + index
   })).filter((page) => page.code);
   const expectedPages = [...accessPages, ...categoryPages];
-  const { data: currentPages, error: currentPagesError } = await supabase
-    .from("app_pages")
-    .select("id, code, is_active")
-    .eq("company_id", companyId);
-  if (currentPagesError) throw new Error(currentPagesError.message);
+  const currentPages = currentPagesResult.data;
 
   const currentPageByCode = new Map((currentPages ?? []).map((page: PageRow) => [page.code, page]));
+
+  let pageCatalogChanged = false;
+  let pageTopologyChanged = false;
 
   for (const page of expectedPages) {
     const existing = currentPageByCode.get(page.code);
     if (existing) {
-      const { error } = await supabase
-        .from("app_pages")
-        .update({ ...page, is_active: true, updated_at: now })
-        .eq("company_id", companyId)
-        .eq("id", existing.id);
-      if (error) throw new Error(error.message);
+      const needsUpdate = existing.name !== page.name ||
+        Number(existing.sort_order) !== page.sort_order ||
+        existing.is_active === false;
+      if (needsUpdate) {
+        const { error } = await supabase
+          .from("app_pages")
+          .update({ ...page, is_active: true, updated_at: now })
+          .eq("company_id", companyId)
+          .eq("id", existing.id);
+        if (error) throw new Error(error.message);
+        pageCatalogChanged = true;
+      }
       currentPageByCode.set(page.code, { ...existing, is_active: true });
     } else {
       const { data, error } = await supabase
@@ -392,6 +418,8 @@ export async function ensureAccessPages(supabase: SupabaseClient, companyId: str
       } else {
         currentPageByCode.set(page.code, data);
       }
+      pageCatalogChanged = true;
+      pageTopologyChanged = true;
     }
   }
 
@@ -408,13 +436,19 @@ export async function ensureAccessPages(supabase: SupabaseClient, companyId: str
     if (isCategoryPermission && !expectedCodes.has(page.code) && page.is_active !== false) {
       await retirePage(supabase, companyId, page.id);
       currentPageByCode.set(page.code, { ...page, is_active: false });
+      pageCatalogChanged = true;
+      pageTopologyChanged = true;
     }
   }
 
-  if (expectedCodes.has("delivery_associates")) {
+  // Normal page visits should only validate the catalog. Permission migrations
+  // and role repairs are needed when the catalog changes, not on every render.
+  if (!pageCatalogChanged) return;
+
+  if (pageTopologyChanged && expectedCodes.has("delivery_associates")) {
     await mergeRetiredPagePermissions(supabase, companyId, "onboarding", "delivery_associates");
   }
-  await copyLegacyGroupPermissions(supabase, companyId, "settings", [
+  if (pageTopologyChanged) await copyLegacyGroupPermissions(supabase, companyId, "settings", [
     "master_locations",
     "master_providers",
     "master_models",
@@ -424,7 +458,7 @@ export async function ensureAccessPages(supabase: SupabaseClient, companyId: str
     "designations",
     "biometric_devices"
   ], true);
-  await copyLegacyGroupPermissions(supabase, companyId, "fleet", [
+  if (pageTopologyChanged) await copyLegacyGroupPermissions(supabase, companyId, "fleet", [
     "fleet_action_center",
     "fleet_vehicle_view",
     "fleet_date_view",
@@ -435,12 +469,14 @@ export async function ensureAccessPages(supabase: SupabaseClient, companyId: str
     "fleet_maintenance",
     "fleet_reports"
   ], false);
-  const categoryCodes = categoryPages.map((page) => page.code);
-  await seedTargetPermissionsFromSources(supabase, companyId, categoryCodes, "people_all");
-  await seedTargetPermissionsFromSources(supabase, companyId, ["cod_reports"], "executive_id_onboarding");
-  await seedTargetPermissionsFromSources(supabase, companyId, ["designations"], "workforce_categories");
-  await seedTargetPermissionsFromSources(supabase, companyId, ["designations"], "workforce_whatsapp");
-  await seedTargetPermissionsFromSources(supabase, companyId, ["imports"], "master_imports");
+  if (pageTopologyChanged) {
+    const categoryCodes = categoryPages.map((page) => page.code);
+    await seedTargetPermissionsFromSources(supabase, companyId, categoryCodes, "people_all");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["cod_reports"], "executive_id_onboarding");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["designations"], "workforce_categories");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["designations"], "workforce_whatsapp");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["imports"], "master_imports");
+  }
 
   const activePages = Array.from(currentPageByCode.values()).filter((page) => expectedCodes.has(page.code) && page.is_active !== false);
   const ownerRole = await getFirstRoleByCode(supabase, companyId, "OWNER");

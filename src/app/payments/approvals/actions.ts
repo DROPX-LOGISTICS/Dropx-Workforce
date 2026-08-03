@@ -35,7 +35,12 @@ async function nextApprover(companyId: string, finalRoleIds: string[]) {
   return { userId: finalUser.id, roleId: finalUser.role_id ?? finalRoleIds[0] ?? null };
 }
 
-async function ensureUserHasNotAlreadyActed(companyId: string, requestId: string, userId: string | null) {
+async function ensureUserHasNotAlreadyActed(
+  companyId: string,
+  requestId: string,
+  userId: string | null,
+  approvalCycle: number
+) {
   if (!supabaseAdmin || !userId) return;
 
   const baseQuery = supabaseAdmin
@@ -43,6 +48,7 @@ async function ensureUserHasNotAlreadyActed(companyId: string, requestId: string
     .select("id", { count: "exact", head: true })
     .eq("company_id", companyId)
     .eq("approver_user_id", userId)
+    .eq("approval_cycle", approvalCycle)
     .or(`payment_request_id.eq.${requestId},request_id.eq.${requestId}`);
   const { count, error } = await baseQuery;
   if (error) {
@@ -51,6 +57,7 @@ async function ensureUserHasNotAlreadyActed(companyId: string, requestId: string
       .select("id", { count: "exact", head: true })
       .eq("company_id", companyId)
       .eq("approver_user_id", userId)
+      .eq("approval_cycle", approvalCycle)
       .eq("request_id", requestId);
     if (!legacyQuery.error && (legacyQuery.count ?? 0) > 0) {
       throw new Error("You have already acted on this payment request.");
@@ -146,7 +153,7 @@ async function runApprovalAction(formData: FormData, action: (payload: FormData)
   }
 }
 
-async function insertApprovalLog(payload: Record<string, unknown>, companyId: string) {
+export async function insertPaymentApprovalLog(payload: Record<string, unknown>, companyId: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
   const admin = supabaseAdmin;
   const approvalRequestId = (approvalPayload: Record<string, unknown>) =>
@@ -197,6 +204,7 @@ async function insertApprovalLog(payload: Record<string, unknown>, companyId: st
       return "USER";
     }
     if (name === "sequence_no" || name === "step_order") return nextApprovalSequence(approvalPayload);
+    if (name === "approval_cycle") return Number(approvalPayload.approval_cycle) || 1;
     if (name === "status") return approvalPayload.action ?? "approved";
     if (name === "request_id") return approvalPayload.payment_request_id;
     if (name === "payment_request_id") return approvalPayload.request_id;
@@ -303,13 +311,14 @@ export async function approvePaymentRequest(formData: FormData) {
   const comments = clean(formData.get("comments"));
   const { data: request, error } = await supabaseAdmin
     .from("payment_requests")
-    .select("id, location_id, requested_by, current_approver_user_id, current_approver_role_id, current_approver_role_ids, final_approval_role_id, final_approval_role_ids")
+    .select("id, location_id, requested_by, approval_cycle, current_approver_user_id, current_approver_role_id, current_approver_role_ids, final_approval_role_id, final_approval_role_ids")
     .eq("id", requestId)
     .eq("company_id", companyId)
     .single();
   if (error || !request) throw new Error("Payment request not found.");
   if (!(await canActOnPaymentRequest(companyId, authorization, request))) throw new Error("This request is not pending with you.");
-  await ensureUserHasNotAlreadyActed(companyId, request.id, authorization.userId);
+  const approvalCycle = Number(request.approval_cycle) || 1;
+  await ensureUserHasNotAlreadyActed(companyId, request.id, authorization.userId, approvalCycle);
 
   const { data: role } = await supabaseAdmin
     .from("user_roles")
@@ -319,10 +328,11 @@ export async function approvePaymentRequest(formData: FormData) {
     .maybeSingle();
   const roleCode = String(role?.code ?? authorization.roleCode ?? "USER").trim().toUpperCase();
 
-  await insertApprovalLog({
+  await insertPaymentApprovalLog({
     payment_request_id: request.id,
     approver_user_id: authorization.userId,
     approver_role_id: authorization.roleId ?? request.current_approver_role_id,
+    approval_cycle: approvalCycle,
     action: "approved",
     comments
   }, companyId);
@@ -389,18 +399,20 @@ export async function rejectPaymentRequest(formData: FormData) {
   const comments = required(formData.get("comments"), "Reject remarks");
   const { data: request, error } = await supabaseAdmin
     .from("payment_requests")
-    .select("id, location_id, requested_by, current_approver_user_id, current_approver_role_id, current_approver_role_ids")
+    .select("id, location_id, requested_by, approval_cycle, current_approver_user_id, current_approver_role_id, current_approver_role_ids")
     .eq("id", requestId)
     .eq("company_id", companyId)
     .single();
   if (error || !request) throw new Error("Payment request not found.");
   if (!(await canActOnPaymentRequest(companyId, authorization, request))) throw new Error("This request is not pending with you.");
-  await ensureUserHasNotAlreadyActed(companyId, request.id, authorization.userId);
+  const approvalCycle = Number(request.approval_cycle) || 1;
+  await ensureUserHasNotAlreadyActed(companyId, request.id, authorization.userId, approvalCycle);
 
-  await insertApprovalLog({
+  await insertPaymentApprovalLog({
     payment_request_id: request.id,
     approver_user_id: authorization.userId,
     approver_role_id: authorization.roleId ?? request.current_approver_role_id,
+    approval_cycle: approvalCycle,
     action: "rejected",
     comments
   }, companyId);
@@ -436,18 +448,20 @@ export async function returnPaymentRequest(formData: FormData) {
   const comments = required(formData.get("comments"), "Return remarks");
   const { data: request, error } = await supabaseAdmin
     .from("payment_requests")
-    .select("id, location_id, requested_by, current_approver_user_id, current_approver_role_id, current_approver_role_ids")
+    .select("id, location_id, requested_by, approval_cycle, current_approver_user_id, current_approver_role_id, current_approver_role_ids")
     .eq("id", requestId)
     .eq("company_id", companyId)
     .single();
   if (error || !request) throw new Error("Payment request not found.");
   if (!(await canActOnPaymentRequest(companyId, authorization, request))) throw new Error("This request is not pending with you.");
-  await ensureUserHasNotAlreadyActed(companyId, request.id, authorization.userId);
+  const approvalCycle = Number(request.approval_cycle) || 1;
+  await ensureUserHasNotAlreadyActed(companyId, request.id, authorization.userId, approvalCycle);
 
-  await insertApprovalLog({
+  await insertPaymentApprovalLog({
     payment_request_id: request.id,
     approver_user_id: authorization.userId,
     approver_role_id: authorization.roleId ?? request.current_approver_role_id,
+    approval_cycle: approvalCycle,
     action: "returned",
     comments
   }, companyId);

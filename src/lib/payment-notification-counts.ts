@@ -78,9 +78,8 @@ function isExpenseRequest(request: PaymentNotificationRequest) {
   return normalizeStatus(request.category) === "EXPENSE";
 }
 
-function isReturnedOrRejected(request: PaymentNotificationRequest) {
-  const status = requestStatus(request);
-  return status === "RETURNED" || status === "REJECTED";
+function isReturned(request: PaymentNotificationRequest) {
+  return requestStatus(request) === "RETURNED";
 }
 
 function hasCurrentApprover(request: PaymentNotificationRequest) {
@@ -99,7 +98,7 @@ function isFinalApproved(request: PaymentNotificationRequest) {
 function hasPaymentDetails(request: PaymentNotificationRequest) {
   const mode = normalizeStatus(request.payment_mode || "account_transfer");
   if (request.amount === null || request.amount === undefined) return false;
-  if (mode === "ONLINE") return Boolean(request.payment_portal?.trim());
+  if (mode === "ONLINE" || mode === "ONLINE_PAYMENT") return Boolean(request.payment_portal?.trim());
   return Boolean(request.bank_account_no?.trim() && request.ifsc?.trim() && request.account_holder_name?.trim());
 }
 
@@ -207,7 +206,7 @@ export async function loadPaymentNotificationSnapshot(authorization: Authorizati
   if (hasPermission(authorization, "expense_requests", "access")) {
     badges.expense_requests = ownRequests
       .filter(isExpenseRequest)
-      .filter((request) => isReturnedOrRejected(request) || needsPaymentDetails(request))
+      .filter((request) => isReturned(request) || needsPaymentDetails(request))
       .length;
     addItem(
       items,
@@ -222,13 +221,13 @@ export async function loadPaymentNotificationSnapshot(authorization: Authorizati
   if (hasPermission(authorization, "payment_requests", "access")) {
     badges.payment_requests = ownRequests
       .filter((request) => !isExpenseRequest(request))
-      .filter(isReturnedOrRejected)
+      .filter(isReturned)
       .length;
     addItem(
       items,
       "payment_requests",
       "Payment requests",
-      `${badges.payment_requests} payment request${badges.payment_requests === 1 ? "" : "s"} returned or rejected`,
+      `${badges.payment_requests} payment request${badges.payment_requests === 1 ? "" : "s"} returned for action`,
       "/payments/requests",
       badges.payment_requests
     );

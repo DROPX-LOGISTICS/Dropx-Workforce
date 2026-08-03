@@ -48,6 +48,11 @@ function activeQuestions(questions: QuestionRow[] | null | undefined) {
     .sort((first, second) => first.sort_order - second.sort_order);
 }
 
+function configuredRoleIds(roleIds: string[] | null | undefined, legacyRoleId: string | null | undefined) {
+  if (Array.isArray(roleIds)) return roleIds;
+  return legacyRoleId ? [legacyRoleId] : [];
+}
+
 async function loadPaymentHeads(companyId: string) {
   if (!supabaseAdmin) return { heads: [] as PaymentHeadRow[], roles: [] as RoleRow[], error: "Supabase service role key is not configured." };
   const [headsResult, rolesResult] = await Promise.all([
@@ -168,8 +173,8 @@ export default async function PaymentHeadsPage({ searchParams }: { searchParams?
                       <td><strong>{head.code}</strong></td>
                       <td>{head.name}</td>
                       <td>{head.external_id || "-"}</td>
-                      <td>{(head.initial_approval_role_ids?.length ? head.initial_approval_role_ids : head.initial_approval_role_id ? [head.initial_approval_role_id] : []).map((roleId) => roleById.get(roleId)?.name).filter(Boolean).join(", ") || "-"}</td>
-                      <td>{(head.final_approval_role_ids?.length ? head.final_approval_role_ids : head.final_approval_role_id ? [head.final_approval_role_id] : []).map((roleId) => roleById.get(roleId)?.name).filter(Boolean).join(", ") || "-"}</td>
+                      <td>{configuredRoleIds(head.initial_approval_role_ids, head.initial_approval_role_id).map((roleId) => roleById.get(roleId)?.name).filter(Boolean).join(", ") || "-"}</td>
+                      <td>{configuredRoleIds(head.final_approval_role_ids, head.final_approval_role_id).map((roleId) => roleById.get(roleId)?.name).filter(Boolean).join(", ") || "-"}</td>
                       <td>{(head.payment_process_role_ids ?? []).map((roleId) => roleById.get(roleId)?.name).filter(Boolean).join(", ") || "-"}</td>
                       <td>{head.request_expense_approval ? (head.expense_approval_threshold == null ? "All requests" : `Above Rs ${Number(head.expense_approval_threshold).toLocaleString("en-IN")}`) : "-"}</td>
                       <td>{expenseFields} expense / {paymentFields} payment</td>

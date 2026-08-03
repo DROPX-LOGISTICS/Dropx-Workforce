@@ -7,6 +7,7 @@ import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { sendPaymentNotification } from "@/lib/payment-email-notifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { insertPaymentApprovalLog } from "../approvals/actions";
 
 function clean(value: FormDataEntryValue | null) {
   const text = String(value ?? "").trim();
@@ -131,6 +132,13 @@ async function approverForRoles(companyId: string, roleIds: string[], label: str
   return { userId: approver.id, roleId: approver.role_id ?? roleIds[0] };
 }
 
+function configuredRoleIds(roleIds: string[] | null | undefined, legacyRoleId: string | null | undefined) {
+  // An empty modern array is an intentional "no role" configuration. Only
+  // legacy rows where the array is absent should fall back to the old column.
+  if (Array.isArray(roleIds)) return roleIds;
+  return legacyRoleId ? [legacyRoleId] : [];
+}
+
 export async function createExpenseRequest(formData: FormData) {
   const authorization = await requirePagePermission("expense_requests", "add");
   const companyId = requireCompanyId(authorization);
@@ -165,8 +173,8 @@ export async function createExpenseRequest(formData: FormData) {
       }
     }
 
-    const initialApprovalRoleIds = (headResult.data.initial_approval_role_ids?.length ? headResult.data.initial_approval_role_ids : headResult.data.initial_approval_role_id ? [headResult.data.initial_approval_role_id] : []) as string[];
-    const finalApprovalRoleIds = (headResult.data.final_approval_role_ids?.length ? headResult.data.final_approval_role_ids : headResult.data.final_approval_role_id ? [headResult.data.final_approval_role_id] : []) as string[];
+    const initialApprovalRoleIds = configuredRoleIds(headResult.data.initial_approval_role_ids, headResult.data.initial_approval_role_id);
+    const finalApprovalRoleIds = configuredRoleIds(headResult.data.final_approval_role_ids, headResult.data.final_approval_role_id);
     const paymentProcessRoleIds = (headResult.data.payment_process_role_ids ?? []) as string[];
     if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
     if (!paymentProcessRoleIds.length) throw new Error("Payment process role is not configured for this payment head.");
@@ -344,8 +352,8 @@ export async function createPaymentRequest(formData: FormData) {
         throw new Error("You can request payment only for your assigned locations.");
       }
     }
-    const initialApprovalRoleIds = (headResult.data.initial_approval_role_ids?.length ? headResult.data.initial_approval_role_ids : headResult.data.initial_approval_role_id ? [headResult.data.initial_approval_role_id] : []) as string[];
-    const finalApprovalRoleIds = (headResult.data.final_approval_role_ids?.length ? headResult.data.final_approval_role_ids : headResult.data.final_approval_role_id ? [headResult.data.final_approval_role_id] : []) as string[];
+    const initialApprovalRoleIds = configuredRoleIds(headResult.data.initial_approval_role_ids, headResult.data.initial_approval_role_id);
+    const finalApprovalRoleIds = configuredRoleIds(headResult.data.final_approval_role_ids, headResult.data.final_approval_role_id);
     const paymentProcessRoleIds = (headResult.data.payment_process_role_ids ?? []) as string[];
     if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
     if (!paymentProcessRoleIds.length) throw new Error("Payment process role is not configured for this payment head.");
@@ -719,7 +727,7 @@ export async function resubmitPaymentRequest(formData: FormData) {
 
     const { data: request, error: requestError } = await admin
       .from("payment_requests")
-      .select("id, location_id, payment_head_id, requested_by, status, approval_status, processed_at, utr_cin")
+      .select("id, location_id, payment_head_id, requested_by, status, approval_status, approval_cycle, processed_at, utr_cin")
       .eq("id", requestId)
       .eq("company_id", companyId)
       .single();
@@ -734,6 +742,7 @@ export async function resubmitPaymentRequest(formData: FormData) {
       (request as { processed_at?: string | null; utr_cin?: string | null }).processed_at ||
       (request as { utr_cin?: string | null }).utr_cin
     );
+    const nextApprovalCycle = (Number(request.approval_cycle) || 1) + 1;
 
     const [locationResult, headResult] = await Promise.all([
       admin.from("stations").select("id, station_code, station_manager_email").eq("id", request.location_id).eq("company_id", companyId).single(),
@@ -751,8 +760,8 @@ export async function resubmitPaymentRequest(formData: FormData) {
     let currentApprovalRoleIds: string[] = [];
     let currentApprovalStep = 1;
     if (!wasReturnedAfterProcessing) {
-      const initialApprovalRoleIds = (headResult.data.initial_approval_role_ids?.length ? headResult.data.initial_approval_role_ids : headResult.data.initial_approval_role_id ? [headResult.data.initial_approval_role_id] : []) as string[];
-      const finalApprovalRoleIds = (headResult.data.final_approval_role_ids?.length ? headResult.data.final_approval_role_ids : headResult.data.final_approval_role_id ? [headResult.data.final_approval_role_id] : []) as string[];
+      const initialApprovalRoleIds = configuredRoleIds(headResult.data.initial_approval_role_ids, headResult.data.initial_approval_role_id);
+      const finalApprovalRoleIds = configuredRoleIds(headResult.data.final_approval_role_ids, headResult.data.final_approval_role_id);
       if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
 
       const startsWithFinalApproval = !initialApprovalRoleIds.length;
@@ -826,8 +835,9 @@ export async function resubmitPaymentRequest(formData: FormData) {
         current_approver_role_ids: []
       }
       : {
-        status: "pending",
-        approval_status: "PENDING",
+        status: "resubmitted",
+        approval_status: "RESUBMITTED",
+        approval_cycle: nextApprovalCycle,
         current_step_order: currentApprovalStep,
         current_approver_user_id: approver.userId,
         current_approver_role_id: approver.roleId,
@@ -857,6 +867,18 @@ export async function resubmitPaymentRequest(formData: FormData) {
       .eq("id", request.id)
       .eq("company_id", companyId);
     if (updateError) throw new Error(updateError.message);
+
+    if (!wasReturnedAfterProcessing) {
+      await insertPaymentApprovalLog(withCompany({
+        payment_request_id: request.id,
+        request_id: request.id,
+        approver_user_id: authorization.userId,
+        approver_role_id: authorization.roleId,
+        approval_cycle: nextApprovalCycle,
+        action: "resubmitted",
+        comments: remarks
+      }, companyId), companyId);
+    }
 
     revalidatePath("/payments/requests");
     revalidatePath("/payments/approvals");

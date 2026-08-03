@@ -38,7 +38,10 @@ type RequestRow = {
   final_approval_role_id: string | null;
   final_approval_role_ids: string[] | null;
   requested_by: string | null;
+  approval_cycle: number | null;
   created_at: string;
+  updated_at: string | null;
+  processed_at: string | null;
   payment_heads?: { name: string; code: string } | null;
   profiles?: { full_name: string | null; email: string | null } | null;
 };
@@ -58,6 +61,7 @@ type ApprovalLogRow = {
   created_at: string;
   approver_user_id?: string | null;
   approver_role_id?: string | null;
+  approval_cycle?: number | null;
   profiles?: { full_name: string | null; email: string | null } | null;
   user_roles?: { name: string | null; code: string | null } | null;
 };
@@ -75,7 +79,7 @@ async function loadApprovalLogs(companyId: string, requestId: string) {
 
   const logsResult = await supabaseAdmin
     .from("payment_request_approvals")
-    .select("id, action, comments, created_at, approver_user_id, approver_role_id")
+    .select("id, action, comments, created_at, approver_user_id, approver_role_id, approval_cycle")
     .eq("company_id", companyId)
     .eq("payment_request_id", requestId)
     .order("created_at", { ascending: true });
@@ -144,7 +148,10 @@ async function loadApprovals(companyId: string, authorization: AuthorizationCont
       final_approval_role_id,
       final_approval_role_ids,
       requested_by,
+      approval_cycle,
       created_at,
+      updated_at,
+      processed_at,
       payment_heads ( name, code ),
       profiles:requested_by ( full_name, email )
     `)
@@ -246,7 +253,42 @@ export default async function PaymentApprovalsPage({
     payment_head_questions: firstRelation(answer.payment_head_questions)
   }));
   const logs = detailData?.[1].logs ?? [];
-  const currentUserAlreadyActed = logs.some((log) => log.approver_user_id === authorization.userId);
+  const currentApprovalCycle = Number(selectedRequest?.approval_cycle) || 1;
+  const currentUserAlreadyActed = logs.some(
+    (log) =>
+      log.approver_user_id === authorization.userId &&
+      (Number(log.approval_cycle) || 1) === currentApprovalCycle
+  );
+  const lifecycleRows = selectedRequest
+    ? [
+        {
+          id: `created-${selectedRequest.id}`,
+          action: "created",
+          comments: selectedRequest.remarks || "Payment request created.",
+          created_at: selectedRequest.created_at,
+          actor: selectedRequest.profiles?.full_name ?? selectedRequest.profiles?.email ?? "Requester",
+          role: "Requester"
+        },
+        ...logs.map((log) => ({
+          id: log.id,
+          action: log.action,
+          comments: log.comments,
+          created_at: log.created_at,
+          actor: log.profiles?.full_name ?? log.profiles?.email ?? "System",
+          role: log.user_roles?.name ?? log.user_roles?.code ?? "-"
+        })),
+        ...(selectedRequest.processed_at && !logs.some((log) => log.action.toLowerCase() === "processed")
+          ? [{
+              id: `processed-${selectedRequest.id}`,
+              action: "processed",
+              comments: "Payment processing completed.",
+              created_at: selectedRequest.processed_at,
+              actor: "System",
+              role: "Payment processing"
+            }]
+          : [])
+      ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    : [];
   const canShowApprovalActions =
     pagePermission.canEdit &&
     !currentUserAlreadyActed &&
@@ -390,20 +432,20 @@ export default async function PaymentApprovalsPage({
                   </div>
                 </>
               ) : null}
-              {logs.length ? (
+              {lifecycleRows.length ? (
                 <>
                   <div className="section-divider" />
-                  <h3>Approval history</h3>
+                  <h3>Request history</h3>
                   <div className="table-wrap">
                     <table>
                       <tbody>
-                        {logs.map((log) => (
-                          <tr key={log.id}>
-                            <td><StatusPill status={log.action} /></td>
-                            <td>{log.profiles?.full_name ?? log.profiles?.email ?? "-"}</td>
-                            <td>{log.user_roles?.name ?? log.user_roles?.code ?? "-"}</td>
-                            <td>{log.comments || "-"}</td>
-                            <td>{formatDashboardDateTime(log.created_at)}</td>
+                        {lifecycleRows.map((entry) => (
+                          <tr key={entry.id}>
+                            <td><StatusPill status={entry.action} /></td>
+                            <td>{entry.actor}</td>
+                            <td>{entry.role}</td>
+                            <td>{entry.comments || "-"}</td>
+                            <td>{formatDashboardDateTime(entry.created_at)}</td>
                           </tr>
                         ))}
                       </tbody>

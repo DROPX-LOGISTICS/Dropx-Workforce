@@ -19,123 +19,20 @@ function required(value: FormDataEntryValue | null, field: string) {
   return text;
 }
 
-async function nextApprover(companyId: string, currentUserId: string, finalRoleIds: string[]) {
-  if (!supabaseAdmin) return { userId: null, roleId: null };
-  const { data: currentUser } = await supabaseAdmin
-    .from("profiles")
-    .select("reports_to_user_id")
-    .eq("id", currentUserId)
-    .eq("company_id", companyId)
-    .maybeSingle();
-
-  if (currentUser?.reports_to_user_id) {
-    const { data: manager } = await supabaseAdmin
-      .from("profiles")
-      .select("id, role_id")
-      .eq("id", currentUser.reports_to_user_id)
-      .eq("company_id", companyId)
-      .eq("is_active", true)
-      .maybeSingle();
-    if (manager?.id) return { userId: manager.id, roleId: manager.role_id ?? null };
-  }
-
-  const { data: finalUser } = await supabaseAdmin
+async function nextApprover(companyId: string, finalRoleIds: string[]) {
+  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
+  const { data: finalUser, error } = await supabaseAdmin
     .from("profiles")
     .select("id, role_id")
     .eq("company_id", companyId)
     .in("role_id", finalRoleIds)
     .eq("is_active", true)
+    .order("full_name")
     .limit(1)
     .maybeSingle();
-  return { userId: finalUser?.id ?? null, roleId: finalUser?.role_id ?? finalRoleIds[0] ?? null };
-}
-
-async function isFinalOrAboveApprover(
-  companyId: string,
-  actorUserId: string | null,
-  actorRoleId: string | null | undefined,
-  request: {
-    location_id: string | null;
-    requested_by: string | null;
-    current_approver_user_id?: string | null;
-    final_approval_role_ids?: string[] | null;
-    final_approval_role_id?: string | null;
-  }
-) {
-  if (!supabaseAdmin || !actorUserId) return false;
-  const finalRoleIds = (request.final_approval_role_ids?.length
-    ? request.final_approval_role_ids
-    : request.final_approval_role_id
-      ? [request.final_approval_role_id]
-      : []) as string[];
-  if (actorRoleId && finalRoleIds.includes(actorRoleId)) return true;
-
-  const [profilesResult, locationResult] = await Promise.all([
-    supabaseAdmin
-      .from("profiles")
-      .select("id, email, role_id, reports_to_user_id")
-      .eq("company_id", companyId)
-      .eq("is_active", true),
-    request.location_id
-      ? supabaseAdmin
-          .from("stations")
-          .select("station_manager_email")
-          .eq("id", request.location_id)
-          .eq("company_id", companyId)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null })
-  ]);
-  if (profilesResult.error) return false;
-
-  const profiles = (profilesResult.data ?? []) as Array<{
-    id: string;
-    email: string | null;
-    role_id: string | null;
-    reports_to_user_id: string | null;
-  }>;
-  const profilesById = new Map(profiles.map((profile) => [profile.id, profile]));
-  const profilesByEmail = new Map(
-    profiles
-      .map((profile) => [String(profile.email ?? "").trim().toLowerCase(), profile] as const)
-      .filter(([email]) => Boolean(email))
-  );
-
-  if (request.current_approver_user_id && request.current_approver_user_id !== actorUserId) {
-    let currentUserId = profilesById.get(request.current_approver_user_id)?.reports_to_user_id ?? null;
-    const seenUsers = new Set<string>();
-    while (currentUserId && !seenUsers.has(currentUserId)) {
-      if (currentUserId === actorUserId) return true;
-      seenUsers.add(currentUserId);
-      currentUserId = profilesById.get(currentUserId)?.reports_to_user_id ?? null;
-    }
-  }
-
-  if (!finalRoleIds.length) return false;
-
-  const locationManagerEmail = String((locationResult.data as { station_manager_email?: string | null } | null)?.station_manager_email ?? "")
-    .trim()
-    .toLowerCase();
-  const chainStarts = [
-    request.requested_by,
-    locationManagerEmail ? profilesByEmail.get(locationManagerEmail)?.id ?? null : null
-  ].filter(Boolean) as string[];
-
-  for (const startUserId of chainStarts) {
-    let currentUserId: string | null = startUserId;
-    const seenUsers = new Set<string>();
-    let finalRoleReached = false;
-    while (currentUserId && !seenUsers.has(currentUserId)) {
-      const profile = profilesById.get(currentUserId);
-      if (!profile) break;
-      const isFinalRole = Boolean(profile.role_id && finalRoleIds.includes(profile.role_id));
-      if (profile.id === actorUserId && (finalRoleReached || isFinalRole)) return true;
-      if (isFinalRole) finalRoleReached = true;
-      seenUsers.add(currentUserId);
-      currentUserId = profile.reports_to_user_id;
-    }
-  }
-
-  return false;
+  if (error) throw new Error(error.message);
+  if (!finalUser) throw new Error("No active user is assigned to a configured final approval role.");
+  return { userId: finalUser.id, roleId: finalUser.role_id ?? finalRoleIds[0] ?? null };
 }
 
 async function ensureUserHasNotAlreadyActed(companyId: string, requestId: string, userId: string | null) {
@@ -431,10 +328,13 @@ export async function approvePaymentRequest(formData: FormData) {
   }, companyId);
 
   const finalRoleIds = (request.final_approval_role_ids?.length ? request.final_approval_role_ids : request.final_approval_role_id ? [request.final_approval_role_id] : []) as string[];
+  if (!finalRoleIds.length) throw new Error("Final approval role is not configured for this payment request.");
 
   const actorRoleCode = String(authorization.roleCode ?? "").trim().toUpperCase();
-  const isFinalApproval = actorRoleCode === "OWNER" ||
-    (await isFinalOrAboveApprover(companyId, authorization.userId, authorization.roleId, request));
+  const isFinalApproval =
+    actorRoleCode === "OWNER" ||
+    authorization.isMasterOwner ||
+    Boolean(authorization.roleId && finalRoleIds.includes(authorization.roleId));
 
   if (isFinalApproval) {
     await updatePaymentRequest(request.id, companyId, {
@@ -445,7 +345,7 @@ export async function approvePaymentRequest(formData: FormData) {
         updated_at: new Date().toISOString()
       });
   } else {
-    const target = await nextApprover(companyId, authorization.userId, finalRoleIds);
+    const target = await nextApprover(companyId, finalRoleIds);
     await updatePaymentRequest(request.id, companyId, {
         status: `${roleCode}_APPROVED`,
         approval_status: `${roleCode}_APPROVED`,

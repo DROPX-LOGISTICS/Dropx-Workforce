@@ -112,70 +112,22 @@ async function nextPaymentRequestNo(companyId: string) {
   throw new Error("Unable to generate a unique payment request ID.");
 }
 
-async function firstApproverTarget({
-  companyId,
-  finalApprovalRoleIds,
-  locationManagerEmail,
-  requesterRoleId,
-  requesterUserId
-}: {
-  companyId: string;
-  finalApprovalRoleIds: string[];
-  locationManagerEmail: string | null;
-  requesterRoleId: string | null;
-  requesterUserId: string;
-}): Promise<ApproverTarget> {
-  if (!supabaseAdmin) return { userId: null, roleId: null };
+async function approverForRole(companyId: string, roleId: string, label: string): Promise<ApproverTarget> {
+  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
 
-  if (requesterRoleId && finalApprovalRoleIds.includes(requesterRoleId)) {
-    const { data: requester } = await supabaseAdmin
-      .from("profiles")
-      .select("reports_to_user_id")
-      .eq("id", requesterUserId)
-      .eq("company_id", companyId)
-      .maybeSingle();
-    if (requester?.reports_to_user_id) {
-      const { data: manager } = await supabaseAdmin
-        .from("profiles")
-        .select("id, role_id")
-        .eq("id", requester.reports_to_user_id)
-        .eq("company_id", companyId)
-        .eq("is_active", true)
-        .maybeSingle();
-      return { userId: manager?.id ?? null, roleId: manager?.role_id ?? null };
-    }
-  }
-
-  if (locationManagerEmail) {
-    const { data: manager } = await supabaseAdmin
-      .from("profiles")
-      .select("id, role_id, reports_to_user_id")
-      .eq("company_id", companyId)
-      .eq("is_active", true)
-      .ilike("email", locationManagerEmail)
-      .maybeSingle();
-    if (manager?.id && manager.id !== requesterUserId) return { userId: manager.id, roleId: manager.role_id ?? null };
-    if (manager?.reports_to_user_id) {
-      const { data: reportingManager } = await supabaseAdmin
-        .from("profiles")
-        .select("id, role_id")
-        .eq("id", manager.reports_to_user_id)
-        .eq("company_id", companyId)
-        .eq("is_active", true)
-        .maybeSingle();
-      if (reportingManager?.id) return { userId: reportingManager.id, roleId: reportingManager.role_id ?? null };
-    }
-  }
-
-  const { data: finalUser } = await supabaseAdmin
+  const { data: approver, error } = await supabaseAdmin
     .from("profiles")
     .select("id, role_id")
     .eq("company_id", companyId)
-    .in("role_id", finalApprovalRoleIds)
+    .eq("role_id", roleId)
     .eq("is_active", true)
+    .order("full_name")
     .limit(1)
     .maybeSingle();
-  return { userId: finalUser?.id ?? null, roleId: finalUser?.role_id ?? finalApprovalRoleIds[0] ?? null };
+  if (error) throw new Error(error.message);
+  if (!approver) throw new Error(`No active user is assigned to the configured ${label}.`);
+
+  return { userId: approver.id, roleId: approver.role_id ?? roleId };
 }
 
 export async function createExpenseRequest(formData: FormData) {
@@ -194,7 +146,7 @@ export async function createExpenseRequest(formData: FormData) {
       admin.from("stations").select("id, station_code, station_email, station_manager_email").eq("id", locationId).eq("company_id", companyId).single(),
       admin
         .from("payment_heads")
-        .select("id, code, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, payment_head_questions (id, answer_type, dropdown_options, is_required, field_stage, sort_order)")
+        .select("id, code, initial_approval_role_id, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, payment_head_questions (id, answer_type, dropdown_options, is_required, field_stage, sort_order)")
         .eq("id", paymentHeadId)
         .eq("company_id", companyId)
         .single()
@@ -212,8 +164,10 @@ export async function createExpenseRequest(formData: FormData) {
       }
     }
 
+    const initialApprovalRoleId = headResult.data.initial_approval_role_id as string | null;
     const finalApprovalRoleIds = (headResult.data.final_approval_role_ids?.length ? headResult.data.final_approval_role_ids : headResult.data.final_approval_role_id ? [headResult.data.final_approval_role_id] : []) as string[];
     const paymentProcessRoleIds = (headResult.data.payment_process_role_ids ?? []) as string[];
+    if (!initialApprovalRoleId) throw new Error("Initial approver role is not configured for this payment head.");
     if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
     if (!paymentProcessRoleIds.length) throw new Error("Payment process role is not configured for this payment head.");
 
@@ -228,13 +182,7 @@ export async function createExpenseRequest(formData: FormData) {
 
     const requestNo = await nextPaymentRequestNo(companyId);
     const workDate = new Date().toISOString().slice(0, 10);
-    const approver = await firstApproverTarget({
-      companyId,
-      finalApprovalRoleIds,
-      locationManagerEmail: locationResult.data.station_manager_email,
-      requesterRoleId: authorization.roleId,
-      requesterUserId: authorization.userId
-    });
+    const approver = await approverForRole(companyId, initialApprovalRoleId, "initial approver role");
 
     const { data: request, error: requestError } = await admin
       .from("payment_requests")
@@ -367,7 +315,7 @@ export async function createPaymentRequest(formData: FormData) {
       admin.from("stations").select("id, station_code, station_email, station_manager_email").eq("id", locationId).eq("company_id", companyId).single(),
       admin
         .from("payment_heads")
-        .select("id, code, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, requires_supporting_document, request_expense_approval, expense_approval_threshold, payment_head_questions (id, answer_type, dropdown_options, is_required, field_stage, sort_order)")
+        .select("id, code, initial_approval_role_id, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, requires_supporting_document, request_expense_approval, expense_approval_threshold, payment_head_questions (id, answer_type, dropdown_options, is_required, field_stage, sort_order)")
         .eq("id", paymentHeadId)
         .eq("company_id", companyId)
         .single()
@@ -389,8 +337,10 @@ export async function createPaymentRequest(formData: FormData) {
         throw new Error("You can request payment only for your assigned locations.");
       }
     }
+    const initialApprovalRoleId = headResult.data.initial_approval_role_id as string | null;
     const finalApprovalRoleIds = (headResult.data.final_approval_role_ids?.length ? headResult.data.final_approval_role_ids : headResult.data.final_approval_role_id ? [headResult.data.final_approval_role_id] : []) as string[];
     const paymentProcessRoleIds = (headResult.data.payment_process_role_ids ?? []) as string[];
+    if (!initialApprovalRoleId) throw new Error("Initial approver role is not configured for this payment head.");
     if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
     if (!paymentProcessRoleIds.length) throw new Error("Payment process role is not configured for this payment head.");
 
@@ -399,13 +349,7 @@ export async function createPaymentRequest(formData: FormData) {
     const legacyAccountValue = bankAccountNo ?? paymentReference ?? paymentPortal ?? locationResult.data.station_code;
     const legacyIfscValue = ifsc ?? "ONLINE";
     const legacyHolderValue = accountHolderName ?? paymentPortal ?? "Online Payment";
-    const approver = await firstApproverTarget({
-      companyId,
-      finalApprovalRoleIds,
-      locationManagerEmail: locationResult.data.station_manager_email,
-      requesterRoleId: authorization.roleId,
-      requesterUserId: authorization.userId
-    });
+    const approver = await approverForRole(companyId, initialApprovalRoleId, "initial approver role");
     const paymentQuestions = questionsForStage(headResult.data.payment_head_questions, "payment");
     const fileQuestions = paymentQuestions.filter((question) => question.answer_type === "file");
     for (const question of fileQuestions) {
@@ -782,7 +726,7 @@ export async function resubmitPaymentRequest(formData: FormData) {
       admin.from("stations").select("id, station_code, station_manager_email").eq("id", request.location_id).eq("company_id", companyId).single(),
       admin
         .from("payment_heads")
-        .select("id, code, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, payment_head_questions (id, answer_type, is_required, field_stage, sort_order)")
+        .select("id, code, initial_approval_role_id, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, payment_head_questions (id, answer_type, is_required, field_stage, sort_order)")
         .eq("id", request.payment_head_id)
         .eq("company_id", companyId)
         .single()
@@ -792,16 +736,12 @@ export async function resubmitPaymentRequest(formData: FormData) {
 
     let approver: { userId: string | null; roleId: string | null } = { userId: null, roleId: null };
     if (!wasReturnedAfterProcessing) {
+      const initialApprovalRoleId = headResult.data.initial_approval_role_id as string | null;
       const finalApprovalRoleIds = (headResult.data.final_approval_role_ids?.length ? headResult.data.final_approval_role_ids : headResult.data.final_approval_role_id ? [headResult.data.final_approval_role_id] : []) as string[];
+      if (!initialApprovalRoleId) throw new Error("Initial approver role is not configured for this payment head.");
       if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
 
-      approver = await firstApproverTarget({
-        companyId,
-        finalApprovalRoleIds,
-        locationManagerEmail: locationResult.data.station_manager_email,
-        requesterRoleId: authorization.roleId,
-        requesterUserId: authorization.userId
-      });
+      approver = await approverForRole(companyId, initialApprovalRoleId, "initial approver role");
     }
 
     const { data: existingAnswers } = await admin

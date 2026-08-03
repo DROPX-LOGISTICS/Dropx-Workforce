@@ -22,6 +22,7 @@ type PaymentHeadFormProps = {
     code: string;
     name: string;
     external_id: string | null;
+    initial_approval_role_id?: string | null;
     final_approval_role_id?: string | null;
     final_approval_role_ids?: string[] | null;
     payment_process_role_ids?: string[] | null;
@@ -382,6 +383,15 @@ export function PaymentHeadForm({ action, initialHead, roleOptions = [], submitL
         <label>
           Payment Head External ID
           <input className="field" name="external_id" defaultValue={initialHead?.external_id ?? ""} placeholder="External accounting ID" />
+        </label>
+        <label>
+          Initial Approver Role
+          <select className="field" defaultValue={initialHead?.initial_approval_role_id ?? ""} name="initial_approval_role_id" required>
+            <option value="">Select initial approver role</option>
+            {(roleOptions ?? []).map((role) => (
+              <option key={role.value} value={role.value}>{role.label}{role.helper ? ` (${role.helper})` : ""}</option>
+            ))}
+          </select>
         </label>
         <label>
           Final Approval User Role

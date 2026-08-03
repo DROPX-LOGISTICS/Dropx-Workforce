@@ -6,6 +6,7 @@ create table if not exists public.payment_heads (
   code text not null,
   name text not null,
   external_id text,
+  initial_approval_role_id uuid references public.user_roles(id) on delete set null,
   final_approval_role_id uuid references public.user_roles(id),
   final_approval_role_ids uuid[] not null default '{}'::uuid[],
   payment_process_role_ids uuid[] not null default '{}'::uuid[],
@@ -119,6 +120,7 @@ alter table public.payment_heads add column if not exists company_id uuid;
 alter table public.payment_heads add column if not exists code text;
 alter table public.payment_heads add column if not exists name text;
 alter table public.payment_heads add column if not exists external_id text;
+alter table public.payment_heads add column if not exists initial_approval_role_id uuid references public.user_roles(id) on delete set null;
 alter table public.payment_heads add column if not exists final_approval_role_id uuid references public.user_roles(id);
 alter table public.payment_heads add column if not exists final_approval_role_ids uuid[] not null default '{}'::uuid[];
 alter table public.payment_heads add column if not exists payment_process_role_ids uuid[] not null default '{}'::uuid[];

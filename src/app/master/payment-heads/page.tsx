@@ -23,6 +23,7 @@ type PaymentHeadRow = {
   code: string;
   name: string;
   external_id: string | null;
+  initial_approval_role_id: string | null;
   final_approval_role_id: string | null;
   final_approval_role_ids: string[] | null;
   payment_process_role_ids: string[] | null;
@@ -51,7 +52,7 @@ async function loadPaymentHeads(companyId: string) {
   const [headsResult, rolesResult] = await Promise.all([
     supabaseAdmin
       .from("payment_heads")
-      .select("id, code, name, external_id, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, requires_supporting_document, request_expense_approval, expense_approval_threshold, is_active, payment_head_questions (id, question_text, answer_type, dropdown_options, field_stage, is_required, sort_order)")
+      .select("id, code, name, external_id, initial_approval_role_id, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, requires_supporting_document, request_expense_approval, expense_approval_threshold, is_active, payment_head_questions (id, question_text, answer_type, dropdown_options, field_stage, is_required, sort_order)")
       .eq("company_id", companyId)
       .order("code"),
     supabaseAdmin
@@ -147,6 +148,7 @@ export default async function PaymentHeadsPage({ searchParams }: { searchParams?
                   <th>Code</th>
                   <th>Payment Head</th>
                   <th>External ID</th>
+                  <th>Initial Approver</th>
                   <th>Final Approval</th>
                   <th>Payment Process</th>
                   <th>Expense Approval</th>
@@ -165,6 +167,7 @@ export default async function PaymentHeadsPage({ searchParams }: { searchParams?
                       <td><strong>{head.code}</strong></td>
                       <td>{head.name}</td>
                       <td>{head.external_id || "-"}</td>
+                      <td>{head.initial_approval_role_id ? roleById.get(head.initial_approval_role_id)?.name || "-" : "-"}</td>
                       <td>{(head.final_approval_role_ids?.length ? head.final_approval_role_ids : head.final_approval_role_id ? [head.final_approval_role_id] : []).map((roleId) => roleById.get(roleId)?.name).filter(Boolean).join(", ") || "-"}</td>
                       <td>{(head.payment_process_role_ids ?? []).map((roleId) => roleById.get(roleId)?.name).filter(Boolean).join(", ") || "-"}</td>
                       <td>{head.request_expense_approval ? (head.expense_approval_threshold == null ? "All requests" : `Above Rs ${Number(head.expense_approval_threshold).toLocaleString("en-IN")}`) : "-"}</td>
@@ -175,7 +178,7 @@ export default async function PaymentHeadsPage({ searchParams }: { searchParams?
                     </tr>
                   );
                 }) : (
-                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 10 : 9}>No payment heads added yet.</td></tr>
+                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 11 : 10}>No payment heads added yet.</td></tr>
                 )}
               </tbody>
             </table>
@@ -206,6 +209,7 @@ export default async function PaymentHeadsPage({ searchParams }: { searchParams?
                 code: editHead.code,
                 name: editHead.name,
                 external_id: editHead.external_id,
+                initial_approval_role_id: editHead.initial_approval_role_id,
                 final_approval_role_id: editHead.final_approval_role_id,
                 final_approval_role_ids: editHead.final_approval_role_ids,
                 payment_process_role_ids: editHead.payment_process_role_ids,

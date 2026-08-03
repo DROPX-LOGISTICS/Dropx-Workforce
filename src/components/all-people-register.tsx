@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, EllipsisVertical, Eye, Pencil, X } from "lucide-react";
+import { Download, EllipsisVertical, Eye, Pencil, Search, X } from "lucide-react";
 import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
 import { allPeopleExportColumns, type AllPeopleExportKey, type AllPeopleExportValues } from "@/lib/all-people-export";
@@ -150,6 +150,7 @@ export function AllPeopleRegister({ rows }: { rows: AllPeopleRow[] }) {
   const [page, setPage] = useState(1);
   const [exportOpen, setExportOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportColumnSearch, setExportColumnSearch] = useState("");
   const [selectedExportColumns, setSelectedExportColumns] = useState<AllPeopleExportKey[]>(() => allPeopleExportColumns.map((column) => column.key));
 
   const categoryOptions = useMemo(() => (
@@ -181,6 +182,10 @@ export function AllPeopleRegister({ rows }: { rows: AllPeopleRow[] }) {
   }, [page, totalPages]);
 
   const selectedExportSet = useMemo(() => new Set(selectedExportColumns), [selectedExportColumns]);
+  const visibleExportColumns = useMemo(() => {
+    const term = exportColumnSearch.trim().toLowerCase();
+    return allPeopleExportColumns.filter((column) => !term || column.label.toLowerCase().includes(term));
+  }, [exportColumnSearch]);
 
   function toggleExportColumn(key: AllPeopleExportKey) {
     setSelectedExportColumns((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
@@ -235,7 +240,10 @@ export function AllPeopleRegister({ rows }: { rows: AllPeopleRow[] }) {
           <MultiCheckFilter allLabel="All locations" label="Location" onChange={setLocations} options={locationOptions} selected={locations} />
           <MultiCheckFilter allLabel="All designations" label="Designation" onChange={setDesignations} options={designationOptions} selected={designations} />
           <MultiCheckFilter allLabel="All statuses" label="Status" onChange={setStatuses} options={statusOptions} selected={statuses} />
-          <button className="button secondary all-people-export-trigger" disabled={!filteredRows.length} onClick={() => setExportOpen(true)} type="button">
+          <button className="button secondary all-people-export-trigger" disabled={!filteredRows.length} onClick={() => {
+            setExportColumnSearch("");
+            setExportOpen(true);
+          }} type="button">
             <Download aria-hidden="true" size={16} /> Export
           </button>
         </div>
@@ -289,13 +297,27 @@ export function AllPeopleRegister({ rows }: { rows: AllPeopleRow[] }) {
                 </label>
                 <span className="subtle">{filteredRows.length} filtered record{filteredRows.length === 1 ? "" : "s"}</span>
               </div>
+              <label className="all-people-export-search">
+                <Search aria-hidden="true" size={17} />
+                <input
+                  autoComplete="off"
+                  className="field"
+                  onChange={(event) => setExportColumnSearch(event.target.value)}
+                  placeholder="Search titles"
+                  type="search"
+                  value={exportColumnSearch}
+                />
+              </label>
               <div className="all-people-export-columns">
-                {allPeopleExportColumns.map((column) => (
+                {visibleExportColumns.map((column) => (
                   <label key={column.key}>
                     <input checked={selectedExportSet.has(column.key)} onChange={() => toggleExportColumn(column.key)} type="checkbox" />
                     <span>{column.label}</span>
                   </label>
                 ))}
+                {!visibleExportColumns.length ? (
+                  <p className="all-people-export-empty subtle">No titles match your search.</p>
+                ) : null}
               </div>
             </div>
             <div className="all-people-export-actions">

@@ -7790,6 +7790,27 @@ tbody tr:hover td {
   gap: 9px;
 }
 
+.all-people-export-search {
+  display: block;
+  margin-top: 14px;
+  position: relative;
+}
+
+.all-people-export-search svg {
+  color: var(--muted);
+  left: 13px;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
+.all-people-export-search .field {
+  padding-left: 40px;
+  width: 100%;
+}
+
 .all-people-export-columns {
   display: grid;
   gap: 0;
@@ -7807,6 +7828,13 @@ tbody tr:hover td {
 
 .all-people-export-columns label:hover {
   background: #fff8f2;
+}
+
+.all-people-export-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 34px 12px;
+  text-align: center;
 }
 
 .all-people-export-actions {

@@ -108,7 +108,9 @@ async function createPaymentHeadUnsafe(formData: FormData) {
   const requestExpenseApproval = formData.get("request_expense_approval") === "yes";
   const expenseApprovalThreshold = parseOptionalAmount(formData.get("expense_approval_threshold"), "Threshold Limit");
   const questions = parseQuestions(formData);
-  await validateRoleIds(initialApprovalRoleIds, companyId, "Initial Approver Role");
+  if (initialApprovalRoleIds.length) {
+    await validateRoleIds(initialApprovalRoleIds, companyId, "Initial Approver Role");
+  }
   await validateRoleIds(finalApprovalRoleIds, companyId, "Final Approval User Role");
   await validateRoleIds(paymentProcessRoleIds, companyId, "Payment Process User Role");
   if (initialApprovalRoleIds.some((roleId) => finalApprovalRoleIds.includes(roleId))) {
@@ -121,7 +123,7 @@ async function createPaymentHeadUnsafe(formData: FormData) {
       code,
       name,
       external_id: externalId,
-      initial_approval_role_id: initialApprovalRoleIds[0],
+      initial_approval_role_id: initialApprovalRoleIds[0] ?? null,
       initial_approval_role_ids: initialApprovalRoleIds,
       final_approval_role_id: finalApprovalRoleIds[0],
       final_approval_role_ids: finalApprovalRoleIds,
@@ -175,7 +177,9 @@ async function updatePaymentHeadUnsafe(formData: FormData) {
   const expenseApprovalThreshold = parseOptionalAmount(formData.get("expense_approval_threshold"), "Threshold Limit");
   const isActive = formData.get("is_active") !== "false";
   const questions = parseQuestions(formData);
-  await validateRoleIds(initialApprovalRoleIds, companyId, "Initial Approver Role");
+  if (initialApprovalRoleIds.length) {
+    await validateRoleIds(initialApprovalRoleIds, companyId, "Initial Approver Role");
+  }
   await validateRoleIds(finalApprovalRoleIds, companyId, "Final Approval User Role");
   await validateRoleIds(paymentProcessRoleIds, companyId, "Payment Process User Role");
   if (initialApprovalRoleIds.some((roleId) => finalApprovalRoleIds.includes(roleId))) {
@@ -188,7 +192,7 @@ async function updatePaymentHeadUnsafe(formData: FormData) {
       code,
       name,
       external_id: externalId,
-      initial_approval_role_id: initialApprovalRoleIds[0],
+      initial_approval_role_id: initialApprovalRoleIds[0] ?? null,
       initial_approval_role_ids: initialApprovalRoleIds,
       final_approval_role_id: finalApprovalRoleIds[0],
       final_approval_role_ids: finalApprovalRoleIds,

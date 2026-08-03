@@ -386,11 +386,11 @@ export function PaymentHeadForm({ action, initialHead, roleOptions = [], submitL
           <input className="field" name="external_id" defaultValue={initialHead?.external_id ?? ""} placeholder="External accounting ID" />
         </label>
         <label>
-          Initial Approver Role
+          Initial Approver Role (Optional)
           <RoleMultiSelect
             name="initial_approval_role_ids"
             options={roleOptions}
-            placeholder="Select initial roles"
+            placeholder="Select initial roles (optional)"
             selectedValues={initialHead?.initial_approval_role_ids?.length ? initialHead.initial_approval_role_ids : (initialHead?.initial_approval_role_id ? [initialHead.initial_approval_role_id] : [])}
           />
         </label>

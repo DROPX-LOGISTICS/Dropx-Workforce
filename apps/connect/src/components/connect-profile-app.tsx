@@ -746,19 +746,34 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
 
   if (profile.agreement && !agreementGatePassed) {
     return <div className="dx-agreement-gate">
-      <div className="dx-agreement-gate-heading">
-        <small>STEP 1 OF 2 · CONTRACTOR REGISTRATION</small>
-        <h1>{profile.agreement.title}</h1>
-        <span>Version {profile.agreement.version}</span>
+      <div aria-label="Registration progress" className="dx-agreement-progress">
+        <div className="active"><b>1</b><span>Agreement</span></div><i /><div><b>2</b><span>Registration</span></div>
       </div>
-      <div className="dx-agreement-copy"><p>{profile.agreement.body}</p></div>
-      <label className="dx-agreement-accept">
-        <input checked={agreementAccepted} onChange={(event) => setAgreementAccepted(event.target.checked)} type="checkbox" />
-        <span>I have read and accept this agreement in my individual capacity as an independent contractor.</span>
-      </label>
-      <button className="dx-save" disabled={!agreementAccepted} onClick={() => setAgreementGatePassed(true)} type="button">
-        Accept and continue registration
-      </button>
+      <div className="dx-agreement-gate-heading">
+        <small>DROPX CONTRACTOR ONBOARDING</small>
+        <h1>{profile.agreement.title}</h1>
+        <p>Review the working, payment and custody terms before completing your profile.</p>
+        <span>Signing as <strong>{account.name || account.reference || "Delivery contractor"}</strong> · Version {profile.agreement.version}</span>
+      </div>
+      <div className="dx-agreement-highlights">
+        <div><WalletCards /><span><strong>Per-package payment</strong><small>Rate and payable amount are available through the app.</small></span></div>
+        <div><ShieldCheck /><span><strong>Shipment & cash custody</strong><small>Return pending shipments and cash to the hub the same day.</small></span></div>
+        <div><BriefcaseBusiness /><span><strong>Independent contractor</strong><small>Follow the assigned service metrics and operating rules.</small></span></div>
+      </div>
+      <div className="dx-agreement-copy dx-agreement-scroll">
+        <div><strong>Agreement terms</strong><small>Version {profile.agreement.version}</small></div>
+        <p>{profile.agreement.body}</p>
+      </div>
+      <div className="dx-agreement-action">
+        <label className="dx-agreement-accept">
+          <input checked={agreementAccepted} onChange={(event) => setAgreementAccepted(event.target.checked)} type="checkbox" />
+          <span>I have read and accept this agreement in my individual capacity as an independent contractor.</span>
+        </label>
+        <button className="dx-save" disabled={!agreementAccepted} onClick={() => setAgreementGatePassed(true)} type="button">
+          Accept and continue registration
+        </button>
+        <small>Registration will go to the HO Workforce team for verification and activation.</small>
+      </div>
     </div>;
   }
 

@@ -8121,11 +8121,30 @@ tr:last-child td {
 }
 .dx-agreement-copy small { color: #8b6335; }
 .dx-agreement-copy p { margin: 0; font-size: 13px; line-height: 1.55; white-space: pre-line; }
-.dx-agreement-gate { max-width: 720px; margin: 20px auto; padding: 20px; display: grid; gap: 16px; }
-.dx-agreement-gate-heading { display: grid; gap: 5px; }
+.dx-agreement-gate { max-width: 780px; margin: 18px auto 32px; padding: 24px; display: grid; gap: 18px; }
+.dx-agreement-progress { display: grid; grid-template-columns: max-content 1fr max-content; align-items: center; gap: 10px; color: #8a8d99; }
+.dx-agreement-progress div { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; }
+.dx-agreement-progress b { width: 27px; height: 27px; display: grid; place-items: center; border: 1px solid #d8dae3; border-radius: 50%; background: #fff; }
+.dx-agreement-progress i { height: 2px; background: #e3e4e9; border-radius: 999px; }
+.dx-agreement-progress .active { color: #c91e54; }
+.dx-agreement-progress .active b { color: #fff; border-color: #d8205b; background: #d8205b; box-shadow: 0 5px 14px rgba(216,32,91,.2); }
+.dx-agreement-gate-heading { display: grid; gap: 7px; padding: 20px; color: #fff; background: linear-gradient(130deg,#17233f 0%,#682554 64%,#d8205b 130%); border-radius: 18px; box-shadow: 0 14px 35px rgba(31,32,56,.15); }
 .dx-agreement-gate-heading small { color: #d8205b; font-weight: 800; letter-spacing: .08em; }
+.dx-agreement-gate-heading > small { color: #ffccd9; }
 .dx-agreement-gate-heading h1 { margin: 0; font-size: clamp(22px, 5vw, 32px); line-height: 1.12; }
-.dx-agreement-gate-heading span { color: #6b7280; font-size: 13px; }
+.dx-agreement-gate-heading p { margin: 0; color: #edf0f8; font-size: 14px; line-height: 1.5; }
+.dx-agreement-gate-heading span { color: #dfe4f1; font-size: 13px; }
+.dx-agreement-highlights { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.dx-agreement-highlights > div { min-width: 0; display: flex; gap: 10px; padding: 13px; background: #fff; border: 1px solid #e7e8ee; border-radius: 13px; box-shadow: 0 5px 18px rgba(31,32,56,.05); }
+.dx-agreement-highlights svg { width: 21px; height: 21px; flex: 0 0 auto; color: #d8205b; }
+.dx-agreement-highlights span { min-width: 0; display: grid; gap: 3px; }
+.dx-agreement-highlights strong { color: #252631; font-size: 12px; }
+.dx-agreement-highlights small { color: #747681; font-size: 11px; line-height: 1.35; }
+.dx-agreement-scroll { max-height: min(48vh,520px); overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; background: #fff; border-color: #e2e3e9; border-radius: 14px; }
+.dx-agreement-scroll > div { position: sticky; top: -14px; z-index: 1; display: flex; justify-content: space-between; gap: 12px; margin: -14px -14px 12px; padding: 13px 14px; background: #fff8ed; border-bottom: 1px solid #f2d4aa; }
+.dx-agreement-action { display: grid; gap: 10px; padding: 14px; background: #fff; border: 1px solid #e1e2e8; border-radius: 14px; box-shadow: 0 8px 24px rgba(31,32,56,.07); }
+.dx-agreement-action .dx-save { width: 100%; min-height: 50px; border-radius: 11px; font-size: 15px; }
+.dx-agreement-action > small { color: #747681; text-align: center; font-size: 11px; }
 .dx-agreement-accept {
   display: flex;
   gap: 10px;
@@ -8139,4 +8158,14 @@ tr:last-child td {
   line-height: 1.4;
 }
 .dx-agreement-accept input { width: 18px; height: 18px; flex: 0 0 auto; }
+@media (max-width: 680px) {
+  .dx-agreement-gate { margin: 0 auto; padding: 14px 12px calc(22px + env(safe-area-inset-bottom)); gap: 14px; }
+  .dx-agreement-progress div span { display: none; }
+  .dx-agreement-gate-heading { padding: 17px; border-radius: 15px; }
+  .dx-agreement-highlights { grid-template-columns: 1fr; gap: 8px; }
+  .dx-agreement-highlights > div { padding: 11px 12px; }
+  .dx-agreement-scroll { max-height: 43vh; }
+  .dx-agreement-action { position: sticky; bottom: 8px; z-index: 3; padding: 11px; box-shadow: 0 10px 32px rgba(31,32,56,.16); }
+  .dx-agreement-accept { padding: 10px; }
+}
 .dx-resignation-status,.dx-resignation-form{display:grid;gap:10px;padding:14px;background:#f7f8fb;border:1px solid #e2e3eb;border-radius:9px}.dx-resignation-status span,.dx-resignation-status small{color:#6b6d78}.dx-resignation-form p{margin:0;color:#656771;font-size:13px}.dx-resignation-form label{display:grid;gap:5px;color:#656771;font-size:12px}.dx-resignation-form input,.dx-resignation-form textarea{padding:10px;border:1px solid #dedfe7;border-radius:8px;background:#fff}.dx-resignation-form textarea{min-height:82px;resize:vertical}

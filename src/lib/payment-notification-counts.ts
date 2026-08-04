@@ -33,6 +33,7 @@ type PaymentNotificationRequest = {
   amount_requested: number | null;
   payment_mode: string | null;
   payment_portal: string | null;
+  payment_reference: string | null;
   bank_account_no: string | null;
   ifsc: string | null;
   account_holder_name: string | null;
@@ -99,6 +100,7 @@ function hasPaymentDetails(request: PaymentNotificationRequest) {
   const mode = normalizeStatus(request.payment_mode || "account_transfer");
   if (request.amount === null || request.amount === undefined) return false;
   if (mode === "ONLINE" || mode === "ONLINE_PAYMENT") return Boolean(request.payment_portal?.trim());
+  if (mode === "UPI" || mode === "UPI_PAYMENT") return Boolean(request.payment_reference?.trim());
   return Boolean(request.bank_account_no?.trim() && request.ifsc?.trim() && request.account_holder_name?.trim());
 }
 
@@ -177,6 +179,7 @@ export async function loadPaymentNotificationSnapshot(authorization: Authorizati
       amount_requested,
       payment_mode,
       payment_portal,
+      payment_reference,
       bank_account_no,
       ifsc,
       account_holder_name,

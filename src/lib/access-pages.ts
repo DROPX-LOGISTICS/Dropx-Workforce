@@ -72,6 +72,7 @@ export const accessPages = [
   { code: "payment_methods", name: "Payment Methods", sort_order: 123 },
   { code: "master_payment_banks", name: "Payment Banks", sort_order: 124 },
   { code: "master_payment_heads", name: "Payment Heads", sort_order: 125 },
+  { code: "master_contacts", name: "Contacts", sort_order: 126 },
   { code: "workforce_categories", name: "Workforce Categories", sort_order: 126 },
   { code: "workforce_whatsapp", name: "Workforce WhatsApp", sort_order: 127 },
   { code: "designations", name: "Designations", sort_order: 128 },

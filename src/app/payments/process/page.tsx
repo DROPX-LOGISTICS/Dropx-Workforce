@@ -23,6 +23,7 @@ type PaymentRequestRow = {
   amount_requested: number | null;
   payment_mode: string | null;
   payment_portal: string | null;
+  payment_reference: string | null;
   bank_account_no: string | null;
   ifsc: string | null;
   account_holder_name: string | null;
@@ -43,8 +44,11 @@ function isReadyForPaymentProcess(request: PaymentRequestRow) {
   const approvalStatus = String(request.approval_status ?? "").toUpperCase();
   const hasCurrentApprover = Boolean(request.current_approver_user_id || request.current_approver_role_id);
   const isOnlinePayment = (request.payment_mode ?? "account_transfer") === "online_payment";
+  const isUpiPayment = request.payment_mode === "upi_payment";
   const hasPaymentDetails = isOnlinePayment
     ? Boolean(request.amount != null && request.payment_portal?.trim())
+    : isUpiPayment
+      ? Boolean(request.amount != null && request.payment_reference?.trim())
     : Boolean(
       request.amount != null &&
       request.bank_account_no?.trim() &&
@@ -75,7 +79,7 @@ async function loadPaymentProcess(companyId: string, roleId: string | null, canS
 
   let requestsQuery = supabaseAdmin
     .from("payment_requests")
-    .select("id, request_no, location_code, payment_head_id, amount, amount_requested, payment_mode, payment_portal, bank_account_no, ifsc, account_holder_name, status, approval_status, current_approver_user_id, current_approver_role_id, created_at, payment_heads ( name, code )")
+    .select("id, request_no, location_code, payment_head_id, amount, amount_requested, payment_mode, payment_portal, payment_reference, bank_account_no, ifsc, account_holder_name, status, approval_status, current_approver_user_id, current_approver_role_id, created_at, payment_heads ( name, code )")
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
 
@@ -156,6 +160,7 @@ export default async function PaymentProcessPage({
             amount: request.amount,
             amount_requested: request.amount_requested,
             payment_mode: request.payment_mode,
+            payment_reference: request.payment_reference,
             status: request.status,
             approval_status: request.approval_status,
             created_at: request.created_at,

@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import { getAuthorization, hasPermission, isCompanyOwner } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { insertPaymentApprovalLog } from "@/app/payments/approvals/actions";
 
 type PaymentBankRow = {
   id: string;
@@ -88,7 +89,7 @@ function parseRequestIds(value: string | null) {
     .filter(Boolean)));
 }
 
-async function markRequestsProcessing(companyId: string, requestIds: string[]) {
+async function markRequestsProcessing(companyId: string, requestIds: string[], actorUserId: string | null) {
   if (!requestIds.length || !supabaseAdmin) return;
   const now = new Date().toISOString();
   const payload = {
@@ -102,17 +103,26 @@ async function markRequestsProcessing(companyId: string, requestIds: string[]) {
     .update(payload)
     .eq("company_id", companyId)
     .in("id", requestIds);
-  if (!error) return;
+  if (error) {
+    const fallback = await supabaseAdmin
+      .from("payment_requests")
+      .update({
+        approval_status: "PROCESSING",
+        updated_at: payload.updated_at
+      })
+      .eq("company_id", companyId)
+      .in("id", requestIds);
+    if (fallback.error) throw new Error(fallback.error.message);
+  }
 
-  const fallback = await supabaseAdmin
-    .from("payment_requests")
-    .update({
-      approval_status: "PROCESSING",
-      updated_at: payload.updated_at
-    })
-    .eq("company_id", companyId)
-    .in("id", requestIds);
-  if (fallback.error) throw new Error(fallback.error.message);
+  await Promise.all(requestIds.map((requestId) => insertPaymentApprovalLog({
+    company_id: companyId,
+    payment_request_id: requestId,
+    request_id: requestId,
+    approver_user_id: actorUserId,
+    action: "processing",
+    comments: "Bank transfer file generated; payment moved to processing."
+  }, companyId)));
 }
 
 export async function GET(request: Request) {
@@ -192,9 +202,9 @@ export async function GET(request: Request) {
       }));
     if (!requests.length) return Response.json({ error: "No approved payments available for processing." }, { status: 404 });
     if (requests.length !== requestIds.length) return Response.json({ error: "Some selected payments are no longer ready for processing." }, { status: 409 });
-    const onlineRequests = requests.filter((item) => (item.payment_mode ?? "account_transfer") === "online_payment");
-    if (onlineRequests.length) {
-      return Response.json({ error: "Online payment requests cannot be included in a bank transfer file." }, { status: 409 });
+    const incompatibleRequests = requests.filter((item) => (item.payment_mode ?? "account_transfer") !== "account_transfer");
+    if (incompatibleRequests.length) {
+      return Response.json({ error: "Only account transfer requests can be included in a bank transfer file." }, { status: 409 });
     }
 
     const workbook = XLSX.utils.book_new();
@@ -217,7 +227,7 @@ export async function GET(request: Request) {
     XLSX.utils.book_append_sheet(workbook, sheet, "Sheet1");
     const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
     const fileDate = valueDate.replace(/\//g, "");
-    await markRequestsProcessing(companyId, requests.map((item) => item.id));
+    await markRequestsProcessing(companyId, requests.map((item) => item.id), authorization.userId);
 
     return new Response(new Uint8Array(buffer), {
       headers: {

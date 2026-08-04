@@ -20,6 +20,7 @@ export type PaymentProcessRequest = {
   amount: number | null;
   amount_requested: number | null;
   payment_mode: string | null;
+  payment_reference: string | null;
   status: string | null;
   approval_status: string | null;
   created_at: string;
@@ -31,7 +32,7 @@ function amountValue(request: PaymentProcessRequest) {
 }
 
 function isAccountTransfer(request: PaymentProcessRequest) {
-  return (request.payment_mode ?? "account_transfer") !== "online_payment";
+  return (request.payment_mode ?? "account_transfer") === "account_transfer";
 }
 
 function statusLabel(request: PaymentProcessRequest) {
@@ -120,7 +121,7 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
     });
   }, [fromDate, requests, status, toDate]);
 
-  const visibleIds = filteredRequests.map((request) => request.id);
+  const visibleIds = filteredRequests.filter(isAccountTransfer).map((request) => request.id);
   const visibleSelected = visibleIds.filter((id) => selectedIds.includes(id));
   const allVisibleSelected = visibleIds.length > 0 && visibleSelected.length === visibleIds.length;
   const totalAmount = requests.reduce((sum, request) => sum + amountValue(request), 0);
@@ -272,7 +273,9 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
                     <input
                       aria-label={`Select payment request ${request.request_no}`}
                       checked={selectedIds.includes(request.id)}
+                      disabled={!isAccountTransfer(request)}
                       onChange={() => toggleOne(request.id)}
+                      title={isAccountTransfer(request) ? "Select payment request" : "Only account transfers are included in bank files"}
                       type="checkbox"
                     />
                   </td>

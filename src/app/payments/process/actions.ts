@@ -7,6 +7,7 @@ import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { sendPaymentNotification } from "@/lib/payment-email-notifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { insertPaymentApprovalLog } from "../approvals/actions";
 
 type BankFinalizeRow = {
   requestNo: string;
@@ -30,6 +31,7 @@ type PaymentRequestFinalizeRow = {
   ifsc: string | null;
   beneficiary_ifsc: string | null;
   current_approver_role_id: string | null;
+  approval_cycle?: number | null;
 };
 
 type PaymentProcessAction = "processing" | "processed" | "returned";
@@ -144,17 +146,23 @@ async function nextApprovalSequence(companyId: string, requestId: string) {
   return Math.max(0, ...(data ?? []).map((row) => Number((row as { sequence_no?: unknown }).sequence_no) || 0)) + 1;
 }
 
-async function insertBankReturnLog(companyId: string, request: Pick<PaymentRequestFinalizeRow, "id" | "current_approver_role_id">, comments: string) {
+async function insertBankReturnLog(
+  companyId: string,
+  request: Pick<PaymentRequestFinalizeRow, "id" | "current_approver_role_id" | "approval_cycle">,
+  comments: string,
+  actorUserId: string | null
+) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
   const payload: Record<string, unknown> = {
     company_id: companyId,
     payment_request_id: request.id,
     request_id: request.id,
-    approver_user_id: null,
+    approver_user_id: actorUserId,
     approver_role_id: request.current_approver_role_id,
     role_code: "BANK",
     action: "returned",
     comments,
+    approval_cycle: request.approval_cycle ?? 1,
     sequence_no: await nextApprovalSequence(companyId, request.id)
   };
 
@@ -202,7 +210,7 @@ export async function updatePaymentProcessStatus(formData: FormData) {
 
     const { data: request, error } = await supabaseAdmin
       .from("payment_requests")
-      .select("id, request_no, current_approver_role_id")
+      .select("id, request_no, current_approver_role_id, approval_cycle")
       .eq("company_id", companyId)
       .eq("id", requestId)
       .single();
@@ -215,6 +223,16 @@ export async function updatePaymentProcessStatus(formData: FormData) {
         approval_status: "PROCESSING",
         updated_at: now
       });
+      await insertPaymentApprovalLog({
+        company_id: companyId,
+        payment_request_id: request.id,
+        request_id: request.id,
+        approver_user_id: authorization.userId,
+        approver_role_id: request.current_approver_role_id,
+        approval_cycle: request.approval_cycle ?? 1,
+        action: "processing",
+        comments: remarks || "Payment processing started."
+      }, companyId);
       revalidatePath("/payments/process");
       revalidatePath("/payments/report");
       processRedirect({ processNotice: `${request.request_no} marked as processing.` });
@@ -230,6 +248,16 @@ export async function updatePaymentProcessStatus(formData: FormData) {
         processed_at: now,
         updated_at: now
       });
+      await insertPaymentApprovalLog({
+        company_id: companyId,
+        payment_request_id: request.id,
+        request_id: request.id,
+        approver_user_id: authorization.userId,
+        approver_role_id: request.current_approver_role_id,
+        approval_cycle: request.approval_cycle ?? 1,
+        action: "processed",
+        comments: `Processed. UTR/CIN: ${remarks}`
+      }, companyId);
       revalidatePath("/payments/process");
       revalidatePath("/payments/report");
       processRedirect({ processNotice: `${request.request_no} marked as processed.` });
@@ -244,7 +272,7 @@ export async function updatePaymentProcessStatus(formData: FormData) {
       current_approver_role_id: null,
       updated_at: now
     });
-    await insertBankReturnLog(companyId, request, `returned: ${remarks}`);
+    await insertBankReturnLog(companyId, request, `Returned: ${remarks}`, authorization.userId);
     await sendPaymentNotification({
       actorUserId: authorization.userId,
       companyId,
@@ -277,7 +305,7 @@ export async function finalizePaymentProcess(formData: FormData) {
     const requestNos = Array.from(new Set(bankRows.map((row) => row.requestNo).filter(Boolean)));
     const { data, error } = await supabaseAdmin
       .from("payment_requests")
-      .select("id, request_no, amount, amount_requested, payment_mode, bank_account_no, beneficiary_account_no, beneficiary_account_number, ifsc, beneficiary_ifsc, current_approver_role_id")
+      .select("id, request_no, amount, amount_requested, payment_mode, bank_account_no, beneficiary_account_no, beneficiary_account_number, ifsc, beneficiary_ifsc, current_approver_role_id, approval_cycle")
       .eq("company_id", companyId)
       .in("request_no", requestNos);
     if (error) throw new Error(error.message);
@@ -315,6 +343,16 @@ export async function finalizePaymentProcess(formData: FormData) {
           processed_at: now,
           updated_at: now
         });
+        await insertPaymentApprovalLog({
+          company_id: companyId,
+          payment_request_id: request.id,
+          request_id: request.id,
+          approver_user_id: authorization.userId,
+          approver_role_id: request.current_approver_role_id,
+          approval_cycle: request.approval_cycle ?? 1,
+          action: "processed",
+          comments: row.utrCin ? `Processed by bank. UTR/CIN: ${row.utrCin}` : "Processed by bank."
+        }, companyId);
         paidCount += 1;
       } else if (status === "CANCELLED" || status === "CANCELED") {
         const remarks = `Payment Failed - ${row.remarks || "Cancelled by bank"}`;
@@ -327,7 +365,7 @@ export async function finalizePaymentProcess(formData: FormData) {
           current_approver_role_id: null,
           updated_at: now
         });
-        await insertBankReturnLog(companyId, request, remarks);
+        await insertBankReturnLog(companyId, request, remarks, authorization.userId);
         await sendPaymentNotification({
           actorUserId: authorization.userId,
           companyId,

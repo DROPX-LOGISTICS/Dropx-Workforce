@@ -23,7 +23,7 @@ type PaymentHead = {
   payment_head_questions: PaymentQuestion[];
 };
 
-type PaymentMode = "online_payment" | "account_transfer";
+type PaymentMode = "online_payment" | "account_transfer" | "upi_payment";
 
 type PaymentRequestFormProps = {
   action: (formData: FormData) => void;
@@ -88,6 +88,14 @@ export function PaymentRequestForm({
   const [selectedHeadId, setSelectedHeadId] = useState("");
   const [amountText, setAmountText] = useState("");
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("account_transfer");
+  const [bankAccountNo, setBankAccountNo] = useState("");
+  const [ifsc, setIfsc] = useState("");
+  const [accountHolderName, setAccountHolderName] = useState("");
+  const [contactNo, setContactNo] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [bankVerified, setBankVerified] = useState(false);
+  const [bankVerificationMessage, setBankVerificationMessage] = useState("");
+  const [bankVerifying, setBankVerifying] = useState(false);
   const selectedHead = useMemo(() => heads.find((head) => head.id === selectedHeadId) ?? null, [heads, selectedHeadId]);
   const amount = Number(amountText);
   const hasAmount = amountText.trim().length > 0 && Number.isFinite(amount);
@@ -96,6 +104,36 @@ export function PaymentRequestForm({
     expenseApprovalThreshold == null || (hasAmount && amount > Number(expenseApprovalThreshold))
   );
   const isOnlinePayment = showBankDetails && paymentMode === "online_payment";
+  const isUpiPayment = showBankDetails && paymentMode === "upi_payment";
+
+  async function verifyBankAccount() {
+    setBankVerifying(true);
+    setBankVerificationMessage("");
+    try {
+      const response = await fetch("/api/payments/bank-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bankAccountNo, ifsc, contactNo, email: contactEmail })
+      });
+      const result = await response.json();
+      if (!response.ok || !result.verified) throw new Error(result.error || result.message || "Bank verification failed.");
+      setAccountHolderName(result.accountHolderName || "");
+      setBankVerified(true);
+      setBankVerificationMessage(result.source === "contact" ? "Verified account found in Contacts." : "Bank account verified.");
+    } catch (error) {
+      setBankVerified(false);
+      setAccountHolderName("");
+      setBankVerificationMessage(error instanceof Error ? error.message : "Bank verification failed.");
+    } finally {
+      setBankVerifying(false);
+    }
+  }
+
+  function invalidateBankVerification() {
+    setBankVerified(false);
+    setAccountHolderName("");
+    setBankVerificationMessage("");
+  }
 
   return (
     <form action={action} className="panel-body" encType="multipart/form-data">
@@ -119,7 +157,8 @@ export function PaymentRequestForm({
           <div className="payment-mode-switch" role="radiogroup" aria-label="Payment mode">
             {[
               { value: "account_transfer" as PaymentMode, label: "Account Transfer" },
-              { value: "online_payment" as PaymentMode, label: "Online Payment" }
+              { value: "online_payment" as PaymentMode, label: "Online Payment" },
+              { value: "upi_payment" as PaymentMode, label: "UPI Payment" }
             ].map((option) => (
               <label key={option.value} className={paymentMode === option.value ? "active" : undefined}>
                 <input
@@ -146,34 +185,54 @@ export function PaymentRequestForm({
               </label>
               <label>
                 Contact No
-                <input className="field" disabled={blockedByExpenseApproval} name="contact_no" placeholder="Optional" type="tel" />
+                <input className="field" disabled={blockedByExpenseApproval} name="contact_no" onChange={(event) => setContactNo(event.target.value)} placeholder="Optional" type="tel" value={contactNo} />
               </label>
               <label>
                 Email
-                <input className="field" disabled={blockedByExpenseApproval} name="email" placeholder="Optional" type="email" />
+                <input className="field" disabled={blockedByExpenseApproval} name="email" onChange={(event) => setContactEmail(event.target.value)} placeholder="Optional" type="email" value={contactEmail} />
+              </label>
+            </div>
+          ) : isUpiPayment ? (
+            <div className="form-grid two">
+              <label>
+                UPI ID *
+                <input className="field" disabled={blockedByExpenseApproval} name="upi_id" required placeholder="name@bank" />
+              </label>
+              <label>
+                Contact No
+                <input className="field" disabled={blockedByExpenseApproval} name="contact_no" onChange={(event) => setContactNo(event.target.value)} placeholder="Optional" type="tel" value={contactNo} />
+              </label>
+              <label>
+                Email
+                <input className="field" disabled={blockedByExpenseApproval} name="email" onChange={(event) => setContactEmail(event.target.value)} placeholder="Optional" type="email" value={contactEmail} />
               </label>
             </div>
           ) : (
             <div className="form-grid three">
               <label>
                 Bank Account No *
-                <input className="field" disabled={blockedByExpenseApproval} name="bank_account_no" required />
+                <input className="field" disabled={blockedByExpenseApproval} name="bank_account_no" onChange={(event) => { setBankAccountNo(event.target.value.toUpperCase()); invalidateBankVerification(); }} required value={bankAccountNo} />
               </label>
               <label>
                 IFSC *
-                <input className="field" disabled={blockedByExpenseApproval} name="ifsc" required />
+                <span className="field-with-action">
+                  <input className="field" disabled={blockedByExpenseApproval} name="ifsc" onChange={(event) => { setIfsc(event.target.value.toUpperCase()); invalidateBankVerification(); }} required value={ifsc} />
+                  <button className="button secondary compact" disabled={blockedByExpenseApproval || bankVerifying || !bankAccountNo || !ifsc} onClick={verifyBankAccount} type="button">{bankVerifying ? "Verifying..." : bankVerified ? "Verified" : "Verify"}</button>
+                </span>
+                {bankVerificationMessage ? <span className={bankVerified ? "verification-message success" : "verification-message error"}>{bankVerificationMessage}</span> : null}
               </label>
               <label>
                 Acc Holder Name *
-                <input className="field" disabled={blockedByExpenseApproval} name="account_holder_name" required />
+                <input className="field" name="account_holder_name" readOnly required value={accountHolderName} />
+                <input name="bank_verified" type="hidden" value={bankVerified ? "1" : "0"} />
               </label>
               <label>
                 Contact No
-                <input className="field" disabled={blockedByExpenseApproval} name="contact_no" placeholder="Optional" type="tel" />
+                <input className="field" disabled={blockedByExpenseApproval} name="contact_no" onChange={(event) => setContactNo(event.target.value)} placeholder="Optional" type="tel" value={contactNo} />
               </label>
               <label>
                 Email
-                <input className="field" disabled={blockedByExpenseApproval} name="email" placeholder="Optional" type="email" />
+                <input className="field" disabled={blockedByExpenseApproval} name="email" onChange={(event) => setContactEmail(event.target.value)} placeholder="Optional" type="email" value={contactEmail} />
               </label>
             </div>
           )}

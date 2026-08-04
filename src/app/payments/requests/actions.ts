@@ -236,6 +236,16 @@ export async function createExpenseRequest(formData: FormData) {
       .single();
     if (requestError) throw new Error(requestError.message);
 
+    await insertPaymentApprovalLog(withCompany({
+      payment_request_id: request.id,
+      request_id: request.id,
+      approver_user_id: authorization.userId,
+      approver_role_id: authorization.roleId,
+      approval_cycle: 1,
+      action: "created",
+      comments: remarks || "Expense request created."
+    }, companyId), companyId);
+
     const questionIds = formData.getAll("question_ids").map((value) => String(value));
     if (questionIds.length) {
       const questionById = new Map(expenseQuestions.map((question) => [question.id, question]));
@@ -315,13 +325,26 @@ export async function createPaymentRequest(formData: FormData) {
     const paymentHeadId = required(formData.get("payment_head_id"), "Payment Head");
     const amountText = required(formData.get("amount"), "Amount");
     const paymentModeValue = clean(formData.get("payment_mode"));
-    const paymentMode = paymentModeValue === "online_payment" ? "online_payment" : "account_transfer";
+    const paymentMode = paymentModeValue === "online_payment"
+      ? "online_payment"
+      : paymentModeValue === "upi_payment"
+        ? "upi_payment"
+        : "account_transfer";
     const isOnlinePayment = paymentMode === "online_payment";
-    const bankAccountNo = isOnlinePayment ? null : required(formData.get("bank_account_no"), "Bank Account No");
-    const ifsc = isOnlinePayment ? null : required(formData.get("ifsc"), "IFSC");
-    const accountHolderName = isOnlinePayment ? null : required(formData.get("account_holder_name"), "Acc Holder Name");
+    const isUpiPayment = paymentMode === "upi_payment";
+    const isAccountTransfer = paymentMode === "account_transfer";
+    const bankAccountNo = isAccountTransfer ? required(formData.get("bank_account_no"), "Bank Account No") : null;
+    const ifsc = isAccountTransfer ? required(formData.get("ifsc"), "IFSC") : null;
+    const accountHolderName = isAccountTransfer ? required(formData.get("account_holder_name"), "Acc Holder Name") : null;
+    if (isAccountTransfer && clean(formData.get("bank_verified")) !== "1") {
+      throw new Error("Verify the bank account before submitting the payment request.");
+    }
     const paymentPortal = isOnlinePayment ? required(formData.get("payment_portal"), "Payment Portal") : null;
-    const paymentReference = isOnlinePayment ? clean(formData.get("payment_reference")) : null;
+    const paymentReference = isOnlinePayment
+      ? clean(formData.get("payment_reference"))
+      : isUpiPayment
+        ? required(formData.get("upi_id"), "UPI ID")
+        : null;
     const contactNo = clean(formData.get("contact_no"));
     const email = clean(formData.get("email"));
     const remarks = clean(formData.get("remarks"));
@@ -361,8 +384,8 @@ export async function createPaymentRequest(formData: FormData) {
     const requestNo = await nextPaymentRequestNo(companyId);
     const workDate = new Date().toISOString().slice(0, 10);
     const legacyAccountValue = bankAccountNo ?? paymentReference ?? paymentPortal ?? locationResult.data.station_code;
-    const legacyIfscValue = ifsc ?? "ONLINE";
-    const legacyHolderValue = accountHolderName ?? paymentPortal ?? "Online Payment";
+    const legacyIfscValue = ifsc ?? (isUpiPayment ? "UPI" : "ONLINE");
+    const legacyHolderValue = accountHolderName ?? paymentPortal ?? (isUpiPayment ? "UPI Payment" : "Online Payment");
     const startsWithFinalApproval = !initialApprovalRoleIds.length;
     const currentApprovalRoleIds = startsWithFinalApproval ? finalApprovalRoleIds : initialApprovalRoleIds;
     const approver = await approverForRoles(
@@ -497,6 +520,16 @@ export async function createPaymentRequest(formData: FormData) {
       requestPayload[missingColumn] = legacyColumnValues[missingColumn] ?? legacyValueForMissingColumn(missingColumn);
     }
     if (!request) throw new Error("Unable to save payment request after filling legacy required fields.");
+
+    await insertPaymentApprovalLog(withCompany({
+      payment_request_id: request.id,
+      request_id: request.id,
+      approver_user_id: authorization.userId,
+      approver_role_id: authorization.roleId,
+      approval_cycle: 1,
+      action: "created",
+      comments: remarks || "Payment request created."
+    }, companyId), companyId);
 
     const questionIds = formData.getAll("question_ids").map((value) => String(value));
     if (questionIds.length) {
@@ -744,14 +777,23 @@ export async function resubmitPaymentRequest(formData: FormData) {
     );
     const nextApprovalCycle = (Number(request.approval_cycle) || 1) + 1;
 
-    const [locationResult, headResult] = await Promise.all([
+    const [locationResult, headResult, returnedApprovalResult] = await Promise.all([
       admin.from("stations").select("id, station_code, station_manager_email").eq("id", request.location_id).eq("company_id", companyId).single(),
       admin
         .from("payment_heads")
         .select("id, code, initial_approval_role_id, initial_approval_role_ids, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, payment_head_questions (id, answer_type, is_required, field_stage, sort_order)")
         .eq("id", request.payment_head_id)
         .eq("company_id", companyId)
-        .single()
+        .single(),
+      admin
+        .from("payment_request_approvals")
+        .select("approver_user_id, approver_role_id, approval_cycle, created_at")
+        .eq("company_id", companyId)
+        .or(`payment_request_id.eq.${request.id},request_id.eq.${request.id}`)
+        .eq("action", "returned")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
     ]);
     if (locationResult.error) throw new Error("Location not found for this company.");
     if (headResult.error) throw new Error("Payment head not found for this company.");
@@ -764,14 +806,24 @@ export async function resubmitPaymentRequest(formData: FormData) {
       const finalApprovalRoleIds = configuredRoleIds(headResult.data.final_approval_role_ids, headResult.data.final_approval_role_id);
       if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
 
-      const startsWithFinalApproval = !initialApprovalRoleIds.length;
-      currentApprovalRoleIds = startsWithFinalApproval ? finalApprovalRoleIds : initialApprovalRoleIds;
-      currentApprovalStep = startsWithFinalApproval ? 2 : 1;
-      approver = await approverForRoles(
-        companyId,
-        currentApprovalRoleIds,
-        startsWithFinalApproval ? "final approver roles" : "initial approver roles"
-      );
+      const returnedApproval = returnedApprovalResult.data;
+      if (returnedApproval?.approver_user_id) {
+        approver = {
+          userId: returnedApproval.approver_user_id,
+          roleId: returnedApproval.approver_role_id ?? null
+        };
+        currentApprovalRoleIds = returnedApproval.approver_role_id ? [returnedApproval.approver_role_id] : [];
+        currentApprovalStep = initialApprovalRoleIds.includes(returnedApproval.approver_role_id ?? "") ? 1 : 2;
+      } else {
+        const startsWithFinalApproval = !initialApprovalRoleIds.length;
+        currentApprovalRoleIds = startsWithFinalApproval ? finalApprovalRoleIds : initialApprovalRoleIds;
+        currentApprovalStep = startsWithFinalApproval ? 2 : 1;
+        approver = await approverForRoles(
+          companyId,
+          currentApprovalRoleIds,
+          startsWithFinalApproval ? "final approver roles" : "initial approver roles"
+        );
+      }
     }
 
     const { data: existingAnswers } = await admin

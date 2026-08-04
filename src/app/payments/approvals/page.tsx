@@ -254,7 +254,10 @@ export default async function PaymentApprovalsPage({
   }));
   const logs = detailData?.[1].logs ?? [];
   const currentApprovalCycle = Number(selectedRequest?.approval_cycle) || 1;
-  const currentUserAlreadyActed = logs.some(
+  const isResubmitted =
+    selectedRequest?.status.toLowerCase() === "resubmitted" ||
+    String(selectedRequest?.approval_status ?? "").toUpperCase() === "RESUBMITTED";
+  const currentUserAlreadyActed = !isResubmitted && logs.some(
     (log) =>
       log.approver_user_id === authorization.userId &&
       (Number(log.approval_cycle) || 1) === currentApprovalCycle

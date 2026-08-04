@@ -40,7 +40,7 @@ const groupDefinitions: PermissionGroup[] = [
     codes: ["people_all", "people_review", "executive_id_onboarding"],
     matches: (page) => workforceCategoryCodes.has(page.code) || page.code.startsWith("workforce_category_")
   },
-  { key: "master_data", label: "Master Data", codes: ["master_locations", "master_providers", "master_models", "payment_methods", "master_payment_banks", "master_payment_heads", "workforce_categories", "workforce_whatsapp", "designations", "biometric_devices", "cod_master", "master_documents", "master_imports"] },
+  { key: "master_data", label: "Master Data", codes: ["master_locations", "master_providers", "master_models", "payment_methods", "master_payment_banks", "master_payment_heads", "master_contacts", "workforce_categories", "workforce_whatsapp", "designations", "biometric_devices", "cod_master", "master_documents", "master_imports"] },
   { key: "settings", label: "Settings", codes: ["app_settings", "ai_connector", "amazon_connector", "developer_mode"] }
 ];
 

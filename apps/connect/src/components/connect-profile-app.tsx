@@ -342,6 +342,7 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
   const [draftSaving, setDraftSaving] = useState(false);
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [agreementAccepted, setAgreementAccepted] = useState(false);
+  const [agreementGatePassed, setAgreementGatePassed] = useState(false);
   const [resignationCases, setResignationCases] = useState<ResignationCase[]>([]);
   const [resignationDate, setResignationDate] = useState("");
   const [resignationReason, setResignationReason] = useState("");
@@ -374,7 +375,9 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
       const editable = { ...(next.editable ?? {}), ...(draft ? draftEditableValues(draft.data) : {}) };
       const draftChecks = draft?.verificationResults?.length ? draft.verificationResults : null;
       setProfile({ ...next, uploads, uploadUrls });
-      setAgreementAccepted(Boolean(next.agreement?.acceptedAt));
+      const agreementAlreadyAccepted = Boolean(next.agreement?.acceptedAt);
+      setAgreementAccepted(agreementAlreadyAccepted);
+      setAgreementGatePassed(agreementAlreadyAccepted);
       setValues(editable);
       setPfAnswer(draft?.data?.has_pf_uan ?? (editable.pfUan ? "yes" : ""));
       setEsiAnswer(draft?.data?.has_esi_no ?? (editable.esiNo ? "yes" : ""));
@@ -741,6 +744,24 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
     </div>;
   }
 
+  if (profile.agreement && !agreementGatePassed) {
+    return <div className="dx-agreement-gate">
+      <div className="dx-agreement-gate-heading">
+        <small>STEP 1 OF 2 · CONTRACTOR REGISTRATION</small>
+        <h1>{profile.agreement.title}</h1>
+        <span>Version {profile.agreement.version}</span>
+      </div>
+      <div className="dx-agreement-copy"><p>{profile.agreement.body}</p></div>
+      <label className="dx-agreement-accept">
+        <input checked={agreementAccepted} onChange={(event) => setAgreementAccepted(event.target.checked)} type="checkbox" />
+        <span>I have read and accept this agreement in my individual capacity as an independent contractor.</span>
+      </label>
+      <button className="dx-save" disabled={!agreementAccepted} onClick={() => setAgreementGatePassed(true)} type="button">
+        Accept and continue registration
+      </button>
+    </div>;
+  }
+
   const input = (field: string, label: string, options?: { choices?: Array<string | { value: string; label: string }>; readOnly?: boolean }) => {
     if (!enabled.has(field)) return null;
     const valueKey = fieldValueKeys[field] ?? field.replace(/_([a-z])/g, (_, character) => character.toUpperCase());
@@ -895,17 +916,9 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
       <div className="dx-agreement-copy">
         <strong>{profile.agreement.title}</strong>
         <small>Version {profile.agreement.version}</small>
-        <p>{profile.agreement.body}</p>
+        <p>Accepted for this registration. The signed acceptance is recorded when you submit the completed registration.</p>
       </div>
-      <label className="dx-agreement-accept">
-        <input
-          checked={agreementAccepted}
-          disabled={Boolean(profile.agreement.acceptedAt)}
-          onChange={(event) => setAgreementAccepted(event.target.checked)}
-          type="checkbox"
-        />
-        <span>I have read and accept this agreement in my individual capacity as an independent contractor. I understand that activation happens only after HO verification.</span>
-      </label>
+      <button className="dx-draft-save" onClick={() => setAgreementGatePassed(false)} type="button">Review agreement</button>
     </ProfileSection> : null}
     {error ? <div className="dx-alert error">{error}</div> : null}
     {notice ? <div className="dx-alert success">{notice}</div> : null}

@@ -8,6 +8,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission, type AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { formatDashboardDate, formatDashboardDateTime } from "@/lib/date-format";
+import { paymentFileAccept, paymentFileGroupLabels } from "@/lib/payment-file-types";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import { createPaymentRequest, resubmitPaymentRequest, submitPaymentBankDetails } from "./actions";
 
@@ -117,7 +118,14 @@ function resubmitInputForQuestion(question: QuestionRow, answer?: AnswerRow) {
     return (
       <>
         {answer?.file_name ? <p className="subtle" style={{ margin: "4px 0 8px" }}>Current file: {answer.file_name}</p> : null}
-        <input className="field" name={`files[${question.id}]`} required={question.is_required && !answer?.file_name} type="file" />
+        <input
+          accept={paymentFileAccept(question.dropdown_options)}
+          className="field"
+          name={`files[${question.id}]`}
+          required={question.is_required && !answer?.file_name}
+          type="file"
+        />
+        <p className="subtle" style={{ margin: "4px 0 0" }}>Allowed: {paymentFileGroupLabels(question.dropdown_options).join(", ")}</p>
       </>
     );
   }

@@ -9,6 +9,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission, type AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { formatDashboardDate } from "@/lib/date-format";
+import { paymentFileAccept, paymentFileGroupLabels } from "@/lib/payment-file-types";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import { createExpenseRequest, resubmitExpenseRequest, submitPaymentBankDetails } from "@/app/payments/requests/actions";
 
@@ -126,7 +127,18 @@ function paymentDetailInputForQuestion(question: QuestionRow) {
     );
   }
   if (question.answer_type === "file") {
-    return <input className="field" name={`files[${question.id}]`} required={question.is_required} type="file" />;
+    return (
+      <>
+        <input
+          accept={paymentFileAccept(question.dropdown_options)}
+          className="field"
+          name={`files[${question.id}]`}
+          required={question.is_required}
+          type="file"
+        />
+        <p className="subtle" style={{ margin: "4px 0 0" }}>Allowed: {paymentFileGroupLabels(question.dropdown_options).join(", ")}</p>
+      </>
+    );
   }
   return (
     <input
@@ -165,7 +177,14 @@ function resubmitInputForQuestion(question: QuestionRow, answer?: AnswerRow) {
     return (
       <>
         {answer?.file_name ? <p className="subtle" style={{ margin: "4px 0 8px" }}>Current file: {answer.file_name}</p> : null}
-        <input className="field" name={`files[${question.id}]`} required={question.is_required && !answer?.file_name} type="file" />
+        <input
+          accept={paymentFileAccept(question.dropdown_options)}
+          className="field"
+          name={`files[${question.id}]`}
+          required={question.is_required && !answer?.file_name}
+          type="file"
+        />
+        <p className="subtle" style={{ margin: "4px 0 0" }}>Allowed: {paymentFileGroupLabels(question.dropdown_options).join(", ")}</p>
       </>
     );
   }

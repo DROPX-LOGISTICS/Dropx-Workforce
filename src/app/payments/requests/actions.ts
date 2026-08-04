@@ -7,6 +7,7 @@ import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { sendPaymentNotification } from "@/lib/payment-email-notifications";
 import { canAccessPaymentLocation } from "@/lib/payment-approval-scope";
+import { validatePaymentFile } from "@/lib/payment-file-types";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { insertPaymentApprovalLog } from "../approvals/actions";
 
@@ -74,12 +75,18 @@ type ApproverTarget = {
 
 type PaymentQuestionForAction = {
   id: string;
+  question_text?: string | null;
   answer_type: string;
   dropdown_options?: string | null;
   is_required: boolean;
   field_stage?: string | null;
   sort_order?: number | null;
 };
+
+function validateQuestionFile(file: File, question: PaymentQuestionForAction) {
+  const error = validatePaymentFile(file, question.dropdown_options);
+  if (error) throw new Error(`${question.question_text || "File upload"}: ${error}`);
+}
 
 function questionStage(question: PaymentQuestionForAction) {
   return question.field_stage === "payment" ? "payment" : "expense";
@@ -156,7 +163,7 @@ export async function createExpenseRequest(formData: FormData) {
       admin.from("stations").select("id, station_code, station_email, station_manager_email").eq("id", locationId).eq("company_id", companyId).single(),
       admin
         .from("payment_heads")
-        .select("id, code, initial_approval_role_id, initial_approval_role_ids, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, payment_head_questions (id, answer_type, dropdown_options, is_required, field_stage, sort_order)")
+        .select("id, code, initial_approval_role_id, initial_approval_role_ids, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, payment_head_questions (id, question_text, answer_type, dropdown_options, is_required, field_stage, sort_order)")
         .eq("id", paymentHeadId)
         .eq("company_id", companyId)
         .single()
@@ -184,6 +191,7 @@ export async function createExpenseRequest(formData: FormData) {
     const fileQuestions = expenseQuestions.filter((question) => question.answer_type === "file");
     for (const question of fileQuestions) {
       const file = formData.get(`files[${question.id}]`);
+      if (file instanceof File && file.size > 0) validateQuestionFile(file, question);
       if (question.is_required && !(file instanceof File && file.size > 0)) {
         throw new Error("Required file upload is missing.");
       }
@@ -255,6 +263,7 @@ export async function createExpenseRequest(formData: FormData) {
         if (question?.answer_type === "file") {
           const file = formData.get(`files[${questionId}]`);
           if (file instanceof File && file.size > 0) {
+            validateQuestionFile(file, question);
             const path = `${companyId}/${request.id}/${questionId}/${Date.now()}-${safeFileName(file.name)}`;
             const { error: uploadError } = await admin.storage.from("payment-request-documents").upload(path, file, { upsert: false });
             if (uploadError) throw new Error(uploadError.message);
@@ -354,7 +363,7 @@ export async function createPaymentRequest(formData: FormData) {
       admin.from("stations").select("id, station_code, station_email, station_manager_email").eq("id", locationId).eq("company_id", companyId).single(),
       admin
         .from("payment_heads")
-        .select("id, code, initial_approval_role_id, initial_approval_role_ids, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, requires_supporting_document, request_expense_approval, expense_approval_threshold, payment_head_questions (id, answer_type, dropdown_options, is_required, field_stage, sort_order)")
+        .select("id, code, initial_approval_role_id, initial_approval_role_ids, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, requires_supporting_document, request_expense_approval, expense_approval_threshold, payment_head_questions (id, question_text, answer_type, dropdown_options, is_required, field_stage, sort_order)")
         .eq("id", paymentHeadId)
         .eq("company_id", companyId)
         .single()
@@ -398,6 +407,7 @@ export async function createPaymentRequest(formData: FormData) {
     const fileQuestions = paymentQuestions.filter((question) => question.answer_type === "file");
     for (const question of fileQuestions) {
       const file = formData.get(`files[${question.id}]`);
+      if (file instanceof File && file.size > 0) validateQuestionFile(file, question);
       if (question.is_required && !(file instanceof File && file.size > 0)) {
         throw new Error("Required file upload is missing.");
       }
@@ -540,6 +550,7 @@ export async function createPaymentRequest(formData: FormData) {
         if (question?.answer_type === "file") {
           const file = formData.get(`files[${questionId}]`);
           if (file instanceof File && file.size > 0) {
+            validateQuestionFile(file, question);
             const path = `${companyId}/${request.id}/${questionId}/${Date.now()}-${safeFileName(file.name)}`;
             const { error: uploadError } = await admin.storage.from("payment-request-documents").upload(path, file, { upsert: false });
             if (uploadError) throw new Error(uploadError.message);
@@ -674,7 +685,7 @@ export async function submitPaymentBankDetails(formData: FormData) {
 
     const { data: headData, error: headError } = await admin
       .from("payment_heads")
-      .select("id, payment_head_questions (id, answer_type, is_required, field_stage, sort_order)")
+      .select("id, payment_head_questions (id, question_text, answer_type, dropdown_options, is_required, field_stage, sort_order)")
       .eq("id", request.payment_head_id)
       .eq("company_id", companyId)
       .single();
@@ -689,6 +700,7 @@ export async function submitPaymentBankDetails(formData: FormData) {
       if (question.answer_type === "file") {
         const file = formData.get(`files[${questionId}]`);
         if (file instanceof File && file.size > 0) {
+          validateQuestionFile(file, question);
           const path = `${companyId}/${request.id}/${questionId}/${Date.now()}-${safeFileName(file.name)}`;
           const { error: uploadError } = await admin.storage.from("payment-request-documents").upload(path, file, { upsert: false });
           if (uploadError) throw new Error(uploadError.message);
@@ -810,7 +822,7 @@ export async function resubmitExpenseRequest(formData: FormData) {
       admin.from("stations").select("id, station_code").eq("id", request.location_id).eq("company_id", companyId).single(),
       admin
         .from("payment_heads")
-        .select("id, initial_approval_role_id, initial_approval_role_ids, final_approval_role_id, final_approval_role_ids, payment_head_questions (id, answer_type, is_required, field_stage, sort_order)")
+        .select("id, initial_approval_role_id, initial_approval_role_ids, final_approval_role_id, final_approval_role_ids, payment_head_questions (id, question_text, answer_type, dropdown_options, is_required, field_stage, sort_order)")
         .eq("id", request.payment_head_id)
         .eq("company_id", companyId)
         .single(),
@@ -883,6 +895,7 @@ export async function resubmitExpenseRequest(formData: FormData) {
       if (question.answer_type === "file") {
         const file = formData.get(`files[${questionId}]`);
         if (file instanceof File && file.size > 0) {
+          validateQuestionFile(file, question);
           const path = `${companyId}/${request.id}/${questionId}/${Date.now()}-${safeFileName(file.name)}`;
           const { error: uploadError } = await admin.storage.from("payment-request-documents").upload(path, file, { upsert: false });
           if (uploadError) throw new Error(uploadError.message);
@@ -988,7 +1001,7 @@ export async function resubmitPaymentRequest(formData: FormData) {
       admin.from("stations").select("id, station_code, station_manager_email").eq("id", request.location_id).eq("company_id", companyId).single(),
       admin
         .from("payment_heads")
-        .select("id, code, initial_approval_role_id, initial_approval_role_ids, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, payment_head_questions (id, answer_type, is_required, field_stage, sort_order)")
+        .select("id, code, initial_approval_role_id, initial_approval_role_ids, final_approval_role_id, final_approval_role_ids, payment_process_role_ids, payment_head_questions (id, question_text, answer_type, dropdown_options, is_required, field_stage, sort_order)")
         .eq("id", request.payment_head_id)
         .eq("company_id", companyId)
         .single(),
@@ -1070,6 +1083,7 @@ export async function resubmitPaymentRequest(formData: FormData) {
         if (question.answer_type === "file") {
           const file = formData.get(`files[${questionId}]`);
           if (file instanceof File && file.size > 0) {
+            validateQuestionFile(file, question);
             const path = `${companyId}/${request.id}/${questionId}/${Date.now()}-${safeFileName(file.name)}`;
             const { error: uploadError } = await admin.storage.from("payment-request-documents").upload(path, file, { upsert: false });
             if (uploadError) throw new Error(uploadError.message);

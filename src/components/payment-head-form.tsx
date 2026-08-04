@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { SearchableSelectOption } from "@/components/searchable-select";
 import { SubmitButton } from "@/components/submit-button";
+import { DEFAULT_PAYMENT_FILE_GROUPS, PAYMENT_FILE_GROUPS, normalizePaymentFileGroups } from "@/lib/payment-file-types";
 
 type Question = {
   id?: string | null;
   question_text: string;
   answer_type: string;
   dropdown_options?: string | null;
+  allowed_file_types?: string[] | null;
   is_required: boolean;
   field_stage?: FieldStage | null;
 };
@@ -52,12 +54,23 @@ function normalizeFieldStage(value?: string | null): FieldStage {
 }
 
 function emptyQuestion(fieldStage: FieldStage = "expense"): Question {
-  return { question_text: "", answer_type: "text", dropdown_options: "", is_required: true, field_stage: fieldStage };
+  return {
+    question_text: "",
+    answer_type: "text",
+    dropdown_options: "",
+    allowed_file_types: [...DEFAULT_PAYMENT_FILE_GROUPS],
+    is_required: true,
+    field_stage: fieldStage,
+  };
 }
 
 function initialQuestionsWithStages(questions?: Question[] | null): Question[] {
   const normalized: Question[] = questions?.length
-    ? questions.map((question) => ({ ...question, field_stage: normalizeFieldStage(question.field_stage) }))
+    ? questions.map((question) => ({
+        ...question,
+        allowed_file_types: normalizePaymentFileGroups(question.allowed_file_types ?? question.dropdown_options),
+        field_stage: normalizeFieldStage(question.field_stage),
+      }))
     : [];
   if (!normalized.some((question) => normalizeFieldStage(question.field_stage) === "expense")) {
     normalized.push(emptyQuestion("expense"));
@@ -326,7 +339,12 @@ export function PaymentHeadForm({ action, initialHead, roleOptions = [], submitL
                 <select
                   className="field"
                   name={`questions[${index}][answer_type]`}
-                  onChange={(event) => updateQuestion(index, { answer_type: event.target.value })}
+                  onChange={(event) => updateQuestion(index, {
+                    answer_type: event.target.value,
+                    allowed_file_types: event.target.value === "file"
+                      ? normalizePaymentFileGroups(question.allowed_file_types)
+                      : question.allowed_file_types,
+                  })}
                   value={question.answer_type}
                 >
                   {answerTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
@@ -362,6 +380,33 @@ export function PaymentHeadForm({ action, initialHead, roleOptions = [], submitL
               ) : (
                 <input type="hidden" name={`questions[${index}][dropdown_options]`} value={question.dropdown_options ?? ""} />
               )}
+              {question.answer_type === "file" ? (
+                <div className="span-4 form-field-block">
+                  <span className="field-label">Supported files</span>
+                  <div className="question-file-type-options">
+                    {PAYMENT_FILE_GROUPS.map((group) => {
+                      const selected = normalizePaymentFileGroups(question.allowed_file_types);
+                      return (
+                        <label className="check-row" key={group.value}>
+                          <input
+                            checked={selected.includes(group.value)}
+                            name={`questions[${index}][allowed_file_types]`}
+                            onChange={(event) => {
+                              const next = event.target.checked
+                                ? [...selected, group.value]
+                                : selected.filter((value) => value !== group.value);
+                              updateQuestion(index, { allowed_file_types: next });
+                            }}
+                            type="checkbox"
+                            value={group.value}
+                          />
+                          <span>{group.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

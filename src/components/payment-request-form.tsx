@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { AutoGrowTextarea } from "@/components/auto-grow-textarea";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/searchable-select";
 import { SubmitButton } from "@/components/submit-button";
+import { paymentFileAccept, paymentFileGroupLabels } from "@/lib/payment-file-types";
 
 type PaymentQuestion = {
   id: string;
@@ -62,7 +63,19 @@ function inputForQuestion(question: PaymentQuestion, disabled = false) {
     );
   }
   if (question.answer_type === "file") {
-    return <input className="field" disabled={disabled} name={`files[${question.id}]`} required={question.is_required} type="file" />;
+    return (
+      <>
+        <input
+          accept={paymentFileAccept(question.dropdown_options)}
+          className="field"
+          disabled={disabled}
+          name={`files[${question.id}]`}
+          required={question.is_required}
+          type="file"
+        />
+        <span className="helper-text">Allowed: {paymentFileGroupLabels(question.dropdown_options).join(", ")}</span>
+      </>
+    );
   }
   return (
     <input

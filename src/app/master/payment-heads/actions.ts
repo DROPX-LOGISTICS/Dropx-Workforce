@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
+import { serializePaymentFileGroups } from "@/lib/payment-file-types";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 function clean(value: FormDataEntryValue | null) {
@@ -65,6 +66,10 @@ function parseQuestions(formData: FormData) {
     const questionText = clean(formData.get(`questions[${index}][question_text]`));
     const answerType = clean(formData.get(`questions[${index}][answer_type]`)) ?? "text";
     const dropdownOptions = clean(formData.get(`questions[${index}][dropdown_options]`));
+    const allowedFileTypes = formData
+      .getAll(`questions[${index}][allowed_file_types]`)
+      .map((value) => String(value))
+      .filter((value) => ["image", "video", "document"].includes(value));
     const fieldStage = clean(formData.get(`questions[${index}][field_stage]`)) === "payment" ? "payment" : "expense";
     const isRequired = formData.get(`questions[${index}][is_required]`) === "yes";
     if (!questionText) return null;
@@ -74,11 +79,18 @@ function parseQuestions(formData: FormData) {
     if (answerType === "dropdown" && !dropdownOptions) {
       throw new Error("Dropdown options are required.");
     }
+    if (answerType === "file" && !allowedFileTypes.length) {
+      throw new Error(`${questionText}: select at least one supported file type.`);
+    }
     return {
       id,
       question_text: questionText,
       answer_type: answerType,
-      dropdown_options: answerType === "dropdown" ? dropdownOptions : null,
+      dropdown_options: answerType === "dropdown"
+        ? dropdownOptions
+        : answerType === "file"
+          ? serializePaymentFileGroups(allowedFileTypes)
+          : null,
       field_stage: fieldStage,
       is_required: isRequired,
       sort_order: index + 1

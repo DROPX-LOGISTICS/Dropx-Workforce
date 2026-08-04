@@ -20,6 +20,7 @@ export function PaymentBeneficiaryFields({
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("account_transfer");
   const [bankAccountNo, setBankAccountNo] = useState((defaultBankAccountNo ?? "").toUpperCase());
   const [ifsc, setIfsc] = useState((defaultIfsc ?? "").toUpperCase());
+  const [upiId, setUpiId] = useState("");
   const [accountHolderName, setAccountHolderName] = useState("");
   const [contactNo, setContactNo] = useState(defaultContactNo ?? "");
   const [contactEmail, setContactEmail] = useState(defaultEmail ?? "");
@@ -79,10 +80,18 @@ export function PaymentBeneficiaryFields({
       </div>
 
       {paymentMode === "upi_payment" ? (
-        <div className="form-grid three">
+        <div className="form-grid three" key="upi-payment-fields">
           <label>
             UPI ID *
-            <input className="field" name="upi_id" placeholder="name@bank" required />
+            <input
+              autoComplete="off"
+              className="field"
+              name="upi_id"
+              onChange={(event) => setUpiId(event.target.value.replace(/\s/g, ""))}
+              placeholder="name@bank"
+              required
+              value={upiId}
+            />
           </label>
           <label>
             Contact No
@@ -94,7 +103,7 @@ export function PaymentBeneficiaryFields({
           </label>
         </div>
       ) : (
-        <div className="form-grid three">
+        <div className="form-grid three" key="account-transfer-fields">
           <label>
             Bank Account No *
             <input

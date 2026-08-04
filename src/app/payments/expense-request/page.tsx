@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { AutoGrowTextarea } from "@/components/auto-grow-textarea";
 import { PageHead } from "@/components/page-head";
+import { PaymentBeneficiaryFields } from "@/components/payment-beneficiary-fields";
 import { PaymentRequestForm } from "@/components/payment-request-form";
 import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
@@ -460,7 +461,7 @@ export default async function ExpenseRequestPage({
             <div className="panel-head">
               <div>
                 <h2 id="expense-bank-payment-title">Submit payment details</h2>
-                <p className="subtle">{bankRequest.request_no} - Enter actual amount and beneficiary bank details.</p>
+                <p className="subtle">{bankRequest.request_no} - Enter the actual amount and choose one payment method.</p>
               </div>
               <PendingLink className="icon-button" href="/payments/expense-request" scroll={false} aria-label="Close">x</PendingLink>
             </div>
@@ -484,27 +485,13 @@ export default async function ExpenseRequestPage({
                   Actual Amount *
                   <input className="field" min="0" name="amount" placeholder="0.00" required step="0.01" type="number" defaultValue={bankRequest.amount_requested ?? ""} />
                 </label>
-                <label>
-                  Bank Account No *
-                  <input className="field" name="bank_account_no" required defaultValue={bankRequest.bank_account_no ?? ""} />
-                </label>
-                <label>
-                  IFSC *
-                  <input className="field" name="ifsc" required defaultValue={bankRequest.ifsc ?? ""} />
-                </label>
-                <label>
-                  Acc Holder Name *
-                  <input className="field" name="account_holder_name" required defaultValue={bankRequest.account_holder_name ?? ""} />
-                </label>
-                <label>
-                  Contact No
-                  <input className="field" name="contact_no" placeholder="Optional" type="tel" defaultValue={bankRequest.contact_no ?? ""} />
-                </label>
-                <label>
-                  Email
-                  <input className="field" name="email" placeholder="Optional" type="email" defaultValue={bankRequest.email ?? ""} />
-                </label>
               </div>
+              <PaymentBeneficiaryFields
+                defaultBankAccountNo={bankRequest.bank_account_no}
+                defaultContactNo={bankRequest.contact_no}
+                defaultEmail={bankRequest.email}
+                defaultIfsc={bankRequest.ifsc}
+              />
               {bankQuestions.length ? (
                 <>
                   <div className="section-divider" />

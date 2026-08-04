@@ -608,9 +608,22 @@ export async function submitPaymentBankDetails(formData: FormData) {
     const admin = supabaseAdmin;
     const requestId = required(formData.get("request_id"), "Payment request");
     const amountText = required(formData.get("amount"), "Actual Amount");
-    const bankAccountNo = required(formData.get("bank_account_no"), "Bank Account No");
-    const ifsc = required(formData.get("ifsc"), "IFSC");
-    const accountHolderName = required(formData.get("account_holder_name"), "Acc Holder Name");
+    const paymentModeValue = clean(formData.get("payment_mode"));
+    if (paymentModeValue !== "account_transfer" && paymentModeValue !== "upi_payment") {
+      throw new Error("Select either Account Transfer or UPI Payment.");
+    }
+    const paymentMode = paymentModeValue as "account_transfer" | "upi_payment";
+    const isAccountTransfer = paymentMode === "account_transfer";
+    const bankAccountNo = isAccountTransfer ? required(formData.get("bank_account_no"), "Bank Account No").toUpperCase() : null;
+    const ifsc = isAccountTransfer ? required(formData.get("ifsc"), "IFSC").toUpperCase() : null;
+    const submittedHolderName = isAccountTransfer ? required(formData.get("account_holder_name"), "Acc Holder Name") : null;
+    const upiId = paymentMode === "upi_payment" ? required(formData.get("upi_id"), "UPI ID") : null;
+    if (isAccountTransfer && clean(formData.get("bank_verified")) !== "1") {
+      throw new Error("Verify the bank account before submitting payment details.");
+    }
+    if (bankAccountNo && !/^[A-Z0-9]{4,30}$/.test(bankAccountNo)) throw new Error("Invalid bank account number.");
+    if (ifsc && !/^[A-Z0-9]{11}$/.test(ifsc)) throw new Error("Invalid IFSC.");
+    if (upiId && !/^[A-Z0-9._-]{2,256}@[A-Z0-9.-]{2,64}$/i.test(upiId)) throw new Error("Invalid UPI ID.");
     const contactNo = clean(formData.get("contact_no"));
     const email = clean(formData.get("email"));
     const remarks = clean(formData.get("remarks"));
@@ -626,6 +639,25 @@ export async function submitPaymentBankDetails(formData: FormData) {
       throw new Error("You do not have access to this request location.");
     }
     if (request.requested_by !== authorization.userId) throw new Error("Only the initiator can submit bank details.");
+
+    let accountHolderName: string | null = null;
+    if (isAccountTransfer && bankAccountNo && ifsc) {
+      const verifiedContact = await admin
+        .from("payment_contacts")
+        .select("account_holder_name")
+        .eq("company_id", companyId)
+        .ilike("bank_account_no", bankAccountNo)
+        .ilike("ifsc", ifsc)
+        .maybeSingle();
+      if (verifiedContact.error) throw new Error(verifiedContact.error.message);
+      if (!verifiedContact.data?.account_holder_name) {
+        throw new Error("Verify the bank account before submitting payment details.");
+      }
+      accountHolderName = String(verifiedContact.data.account_holder_name).trim();
+      if (!accountHolderName || accountHolderName.toUpperCase() !== submittedHolderName?.trim().toUpperCase()) {
+        throw new Error("Bank verification has changed. Verify the account again.");
+      }
+    }
 
     const status = String(request.status ?? "").toUpperCase();
     const approvalStatus = String(request.approval_status ?? "").toUpperCase();
@@ -708,6 +740,9 @@ export async function submitPaymentBankDetails(formData: FormData) {
       .from("payment_requests")
       .update({
         amount: Number(amountText),
+        payment_mode: paymentMode,
+        payment_portal: paymentMode === "upi_payment" ? "UPI" : null,
+        payment_reference: upiId,
         bank_account_no: bankAccountNo,
         ifsc,
         account_holder_name: accountHolderName,
@@ -742,9 +777,9 @@ export async function submitPaymentBankDetails(formData: FormData) {
   }
 
   if (returnToExpense) {
-    expenseRequestsRedirect({ expenseNotice: "Bank details submitted for payment processing." });
+    expenseRequestsRedirect({ expenseNotice: "Payment details submitted for payment processing." });
   }
-  paymentRequestsRedirect({ paymentNotice: "Bank details submitted for payment processing." });
+  paymentRequestsRedirect({ paymentNotice: "Payment details submitted for payment processing." });
 }
 
 export async function resubmitExpenseRequest(formData: FormData) {

@@ -183,13 +183,13 @@ async function loadApprovals(companyId: string, authorization: AuthorizationCont
   const eligibleIds = await getPaymentApprovalEligibility(companyId, authorization, unscopedRequests);
   const normalizedFilter = statusFilter || "pending";
   const normalizedSearch = String(searchTerm ?? "").trim().toLowerCase();
-  const closedStatuses = new Set(["approved", "rejected", "cancelled", "returned"]);
+  const pendingApprovalStatuses = new Set(["pending", "resubmitted"]);
   const requests = unscopedRequests.filter((request) => {
     if (!eligibleIds.has(request.id)) return false;
-    const requestStatus = String(request.status ?? "").toLowerCase();
+    const requestStatus = String(request.status ?? "").trim().toLowerCase();
     const approvalStatus = String(request.approval_status ?? "").toUpperCase();
     if (normalizedFilter === "pending") {
-      if (closedStatuses.has(requestStatus) || approvalStatus === "RETURNED" || approvalStatus === "REJECTED") return false;
+      if (!pendingApprovalStatuses.has(requestStatus)) return false;
     } else if (normalizedFilter === "returned") {
       if (requestStatus !== "returned" && approvalStatus !== "RETURNED") return false;
     } else if (normalizedFilter === "rejected") {
@@ -372,7 +372,7 @@ export default async function PaymentApprovalsPage({
                     <td>{request.payment_heads?.name ?? "-"}</td>
                     <td>{request.amount == null ? "-" : `Rs ${Number(request.amount).toLocaleString("en-IN")}`}</td>
                     <td>{request.profiles?.full_name ?? request.profiles?.email ?? "-"}</td>
-                    <td><StatusPill status={request.approval_status || request.status} /></td>
+                    <td><StatusPill status={request.status} /></td>
                     <td>{formatDashboardDate(request.created_at)}</td>
                     {pagePermission.canEdit ? <td><PendingLink className="button secondary compact" href={`/payments/approvals?${new URLSearchParams({ ...Object.fromEntries(currentParams), manage: request.id }).toString()}`} scroll={false}>Manage</PendingLink></td> : null}
                   </tr>

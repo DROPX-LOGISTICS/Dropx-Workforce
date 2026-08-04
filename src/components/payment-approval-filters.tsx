@@ -43,7 +43,7 @@ export function PaymentApprovalFilters({
         onChange={(event) => updateParams(router, pathname, searchParams, { status: event.target.value, manage: "" })}
         value={status}
       >
-        <option value="pending">Pending</option>
+        <option value="pending">Pending / Resubmitted</option>
         <option value="returned">Returned</option>
         <option value="rejected">Rejected</option>
         <option value="all">All</option>

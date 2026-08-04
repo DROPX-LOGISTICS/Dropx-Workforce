@@ -1,7 +1,8 @@
 export const designationPortalOptions = [
   { code: "dashboard", label: "Dashboard" },
   { code: "hrms", label: "HRMS" },
-  { code: "ops", label: "OPS" }
+  { code: "ops", label: "OPS" },
+  { code: "recruitment", label: "Recruitment" }
 ] as const;
 
 export type DesignationPortalCode = typeof designationPortalOptions[number]["code"];
@@ -12,7 +13,8 @@ export type DesignationPortalPermissions = Record<DesignationPortalCode, Designa
 export const defaultDesignationPortalPermissions: DesignationPortalPermissions = {
   dashboard: { add: true, view: true, edit: true },
   hrms: { add: false, view: false, edit: false },
-  ops: { add: false, view: false, edit: false }
+  ops: { add: false, view: false, edit: false },
+  recruitment: { add: false, view: false, edit: false }
 };
 
 export type DesignationPortalAccess = {

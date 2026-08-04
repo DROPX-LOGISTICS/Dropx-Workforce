@@ -18,7 +18,8 @@ export type AllPeopleRow = {
   location: string;
   designation: string;
   status: string;
-  actionBasePath: string;
+  viewHref: string;
+  editHref: string;
   canEdit: boolean;
   exportValues: AllPeopleExportValues;
 };
@@ -127,11 +128,11 @@ function AllPeopleActionMenu({ row }: { row: AllPeopleRow }) {
       </button>
       {open ? (
         <div className="row-action-popover">
-          <PendingLink className="row-action-item" href={`${row.actionBasePath}?view=${row.id}`} scroll={false}>
+          <PendingLink className="row-action-item" href={row.viewHref}>
             <Eye aria-hidden="true" size={15} /> View
           </PendingLink>
           {row.canEdit ? (
-            <PendingLink className="row-action-item" href={`${row.actionBasePath}?edit=${row.id}`} scroll={false}>
+            <PendingLink className="row-action-item" href={row.editHref}>
               <Pencil aria-hidden="true" size={15} /> Edit
             </PendingLink>
           ) : null}

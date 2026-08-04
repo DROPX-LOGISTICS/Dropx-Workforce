@@ -28,6 +28,10 @@ function displayStatus(value: unknown, active: boolean) {
   return text.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function profileActionHref(basePath: string, action: "view" | "edit", profileId: unknown) {
+  return `${basePath}?${action}=${encodeURIComponent(String(profileId ?? ""))}`;
+}
+
 const sharedProfileColumns = [
   "full_name", "mobile_country_code", "mobile", "email", "date_of_join", "is_active", "statutory_applicability",
   "gender", "date_of_birth", "aadhaar_number", "pan_number", "eshram_uan", "father_name", "blood_group",
@@ -156,7 +160,7 @@ async function loadPeople(
       table: dynamicWorkforceTable(category.code),
       codeField: "dropx_id",
       statusField: "onboarding_status",
-      basePath: `/people/category/${category.code}`,
+      basePath: `/people/category/${encodeURIComponent(category.code)}`,
       canEdit: hasPermission(authorization, workforceCategoryPageCode(category.code), "edit")
     }));
   const results = await Promise.all(currentSources.map(async (source) => {
@@ -189,7 +193,8 @@ async function loadPeople(
             location,
             designation,
             status,
-            actionBasePath: source.basePath,
+            viewHref: profileActionHref(source.basePath, "view", row.id),
+            editHref: profileActionHref(source.basePath, "edit", row.id),
             canEdit: source.canEdit,
             exportValues: buildExportValues(row, source.codeField, source.category, location, designation, status, source.employeeDesignation)
           };
@@ -224,7 +229,8 @@ async function loadPeople(
             location,
             designation,
             status,
-            actionBasePath: source.basePath,
+            viewHref: profileActionHref(source.basePath, "view", row.id),
+            editHref: profileActionHref(source.basePath, "edit", row.id),
             canEdit: source.canEdit,
             exportValues: buildExportValues(row, source.codeField, source.category, location, designation, status, false)
           };

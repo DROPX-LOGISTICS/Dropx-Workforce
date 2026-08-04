@@ -25,34 +25,26 @@ select
   'DA_SERVICE_AGREEMENT',
   'Individual Contractor Agreement - Delivery Services',
   2,
-  $agreement$1. INDEPENDENT CONTRACTOR STATUS
-I voluntarily engage with DropX as an independent individual contractor for delivery and related logistics services. I understand that this is a contract-for-services arrangement and does not by itself create an employer-employee relationship or an automatic entitlement to salary, employment benefits or a permanent position. I am responsible for the personal statutory and tax obligations that apply to me.
+  $agreement$1. CONTRACTOR STATUS
+I am joining DropX in my individual capacity as an independent contractor for delivery and related logistics services. This is a contract-for-services arrangement and does not by itself create permanent employment, salary or employee-benefit entitlement.
 
-2. REPORTING, ATTENDANCE AND DISCIPLINE
-After accepting a duty, route or assignment, I will report to the assigned station, hub or work location on time, record attendance through the authorised method, remain available for the agreed duty period and complete assigned work responsibly. I will follow DropX and client operating procedures, safety requirements, code of conduct, lawful instructions, performance metrics, service standards and workplace discipline communicated for my assignment.
+2. WORK, ATTENDANCE AND DISCIPLINE
+After accepting duty, I will report to the assigned station, hub or location on time, record attendance through the authorised method and follow applicable DropX and client rules, safety requirements, lawful instructions, service standards, performance metrics and workplace discipline.
 
-3. SHIPMENT, CASH AND ASSET CUSTODY
-From the time shipments, collected cash, devices, documents or other assets are handed to me until they are delivered or formally returned, they remain in my custody and I am responsible for protecting, accounting for and handling them only for authorised work. Every undelivered, failed or unattempted shipment and the full amount of cash collected must be returned to the assigned delivery station or hub on the same day and acknowledged through the prescribed process. I will not retain shipments or cash overnight unless a specifically authorised and recorded exception is given.
+3. SHIPMENT AND CASH RESPONSIBILITY
+Shipments, collected cash, devices and other assets remain in my custody until delivered or formally returned. Every undelivered or failed shipment and all collected cash must be returned to the assigned delivery station or hub on the same day and acknowledged through the prescribed process. I will not retain them overnight without a recorded authorised exception. A verified loss, shortage, damage, misuse or failure to return caused by my act, omission, negligence, misconduct, fraud or breach may make me financially responsible after reconciliation or investigation, subject to applicable law. Non-return may lead to penalty, suspension, removal or deactivation from the system and legal action where warranted.
 
-Any shortage, loss, damage, unauthorised retention, misappropriation or failure to return shipments, cash or assets that is attributable to my act, omission, negligence, misconduct, fraud or breach may make me financially responsible after documented reconciliation or investigation, subject to applicable law. Failure to make the required same-day return may result in a penalty, suspension, disciplinary action, removal or deactivation from the system and, where warranted, civil, criminal or other legal action.
+4. DELIVERY PAYMENT AND RATE CARD
+Payment is calculated per eligible and verified package delivered, according to the station-, route-, service- and client-specific rate card shown or communicated through the app or authorised channel. Approved payable amounts will be credited to my registered bank account after operational reconciliation. There is no guaranteed minimum volume, earning or automatic increment. The rate card is final for its stated period and may be reviewed at three-month intervals. It may be reduced prospectively based on shipment volume or density, route productivity, station conditions, client pricing or operating requirements after the revised rate and effective period are communicated.
 
-4. HONESTY, CONDUCT AND COMPLIANCE
-I will not commit fraud, falsify records, misuse customer or company information, misbehave with customers or colleagues, manipulate attendance or delivery events, substitute another person, carry prohibited items or use shipments, cash, credentials or assets for an unauthorised purpose. A verified breach may lead to warning, penalty, recovery, suspension, removal from duty, deactivation or termination of this agreement, and legal or police action where appropriate.
+5. PENALTIES AND INCENTIVES
+Documented performance, service-quality, shortage and non-compliance penalties or recoveries may be introduced or revised from time to time. Incentives may also be offered for a defined period. The applicable metric, conditions and validity period will be communicated through the app or an authorised channel. A time-bound incentive does not create a continuing entitlement after its stated period.
 
-5. RATE CARD AND PERIODIC REVIEW
-The station-, route-, service- and client-specific rate card communicated for an applicable period is final for that period. I understand that there is no automatic right to an increment. The rate card may be reviewed at three-month intervals and may be reduced prospectively based on shipment volume or density, route productivity, station conditions, client pricing, service requirements or other operating economics applicable at that time. A revised rate card will apply after it is communicated for the relevant station, route, client, service and effective period.
+6. CONDUCT AND ACTION
+I will not commit fraud, falsify records, manipulate attendance or delivery events, misuse customer or company information, substitute another person, misbehave or use shipments, cash, credentials or assets for an unauthorised purpose. A verified breach may result in warning, penalty, recovery, suspension, deactivation, termination and civil, criminal or police action where appropriate. On exit I will return all cash, shipments, documents and assets before final settlement.
 
-6. PERFORMANCE PENALTIES AND INCENTIVES
-DropX or the applicable client may introduce or revise documented performance standards, service-quality penalties, shortage or non-compliance recoveries and incentive schemes from time to time. Each applicable penalty or incentive will be communicated with its metric, conditions and defined validity period. A time-bound incentive does not create a continuing entitlement after that period. Any penalty, deduction or recovery will be supported by the applicable record or validation and handled subject to applicable law.
-
-7. INFORMATION, VERIFICATION AND OPERATIONAL RECORDS
-I confirm that the information and documents submitted by me are correct. I consent to verification of my identity, address, bank account, licence, vehicle, attendance, location, delivery, cash-handling and work records for onboarding, safety, payment, investigation and operational compliance. Deliberate false information may result in rejection or deactivation and legal action.
-
-8. SUSPENSION, EXIT AND SETTLEMENT
-DropX may suspend assignments or deactivate or terminate my access for operational, performance, safety, disciplinary, fraud, client or compliance reasons, following the applicable review process. On exit I will immediately return all shipments, cash, identity cards, uniforms, devices, documents and other assets. Final settlement is subject to completed reconciliation, approved payable amounts and lawful recoveries or deductions.
-
-9. ELECTRONIC ACCEPTANCE
-By selecting acceptance and submitting my registration, I confirm that I have read and understood this agreement, am signing it in my individual capacity as an independent contractor, and agree to be bound by its current version. My acceptance time, agreement version, content hash, IP address and device or browser information may be retained as the electronic audit record.$agreement$,
+7. DECLARATION AND ELECTRONIC ACCEPTANCE
+I confirm that my submitted information and documents are correct and consent to verification of my identity, bank, licence, vehicle, attendance, location, delivery and cash-handling records. By accepting and submitting, I confirm that I have read and understood this agreement and agree to its current version. DropX may retain the acceptance time, version, content hash, IP address and device or browser information as the electronic audit record.$agreement$,
   array['DA','DCD','ODCD','PTDA']::text[],
   true,
   current_date

@@ -62,8 +62,11 @@ export function ScopedDesignationFields({
     ? [{ value: selectedDesignation, label: selectedDesignation, helper: "Current", modelIds: [] }, ...filteredDesignationOptions]
     : filteredDesignationOptions;
   const designationDisabled = !selectedLocationId || !effectiveDesignationOptions.length;
-  const selectedDesignationCode = effectiveDesignationOptions.find((option) => option.value === selectedDesignation)?.code ?? "";
-  const vehicleTypeRequired = ["DA", "PTDA"].includes(selectedDesignationCode.toUpperCase());
+  const selectedDesignationOption = effectiveDesignationOptions.find((option) => option.value === selectedDesignation);
+  const selectedDesignationCode = selectedDesignationOption?.code?.trim().toUpperCase() ?? "";
+  const selectedDesignationName = (selectedDesignationOption?.value || selectedDesignation).trim().toLowerCase();
+  const vehicleTypeRequired = ["DA", "PTDA"].includes(selectedDesignationCode)
+    || ["delivery associate", "part time delivery associate"].includes(selectedDesignationName);
 
   return (
     <>

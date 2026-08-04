@@ -8120,7 +8120,7 @@ tr:last-child td {
   border-radius: 9px;
 }
 .dx-agreement-copy small { color: #8b6335; }
-.dx-agreement-copy p { margin: 0; font-size: 13px; line-height: 1.55; }
+.dx-agreement-copy p { margin: 0; font-size: 13px; line-height: 1.55; white-space: pre-line; }
 .dx-agreement-accept {
   display: flex;
   gap: 10px;

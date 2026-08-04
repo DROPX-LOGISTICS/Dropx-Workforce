@@ -904,7 +904,7 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
           onChange={(event) => setAgreementAccepted(event.target.checked)}
           type="checkbox"
         />
-        <span>I have read and accept this agreement. I understand that activation happens only after HO verification.</span>
+        <span>I have read and accept this agreement in my individual capacity as an independent contractor. I understand that activation happens only after HO verification.</span>
       </label>
     </ProfileSection> : null}
     {error ? <div className="dx-alert error">{error}</div> : null}

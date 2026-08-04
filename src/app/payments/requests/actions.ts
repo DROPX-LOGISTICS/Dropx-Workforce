@@ -766,11 +766,6 @@ export async function resubmitPaymentRequest(formData: FormData) {
       .single();
     if (requestError || !request) throw new Error("Payment request not found.");
     if (request.requested_by !== authorization.userId) throw new Error("Only the initiator can resubmit a returned request.");
-    const normalizedApprovalStatus = String(request.approval_status ?? "").toUpperCase();
-    const normalizedStatus = String(request.status ?? "").toLowerCase();
-    if (normalizedApprovalStatus !== "RETURNED" && normalizedStatus !== "returned") {
-      throw new Error("Only returned requests can be resubmitted.");
-    }
     const wasReturnedAfterProcessing = Boolean(
       (request as { processed_at?: string | null; utr_cin?: string | null }).processed_at ||
       (request as { utr_cin?: string | null }).utr_cin
@@ -787,16 +782,29 @@ export async function resubmitPaymentRequest(formData: FormData) {
         .single(),
       admin
         .from("payment_request_approvals")
-        .select("approver_user_id, approver_role_id, approval_cycle, created_at")
+        .select("action, approver_user_id, approver_role_id, approval_cycle, created_at")
         .eq("company_id", companyId)
         .or(`payment_request_id.eq.${request.id},request_id.eq.${request.id}`)
-        .eq("action", "returned")
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle()
     ]);
     if (locationResult.error) throw new Error("Location not found for this company.");
     if (headResult.error) throw new Error("Payment head not found for this company.");
+
+    const normalizedApprovalStatus = String(request.approval_status ?? "").toUpperCase();
+    const normalizedStatus = String(request.status ?? "").toLowerCase();
+    const latestReturnedApproval =
+      String(returnedApprovalResult.data?.action ?? "").toLowerCase() === "returned"
+        ? returnedApprovalResult.data
+        : null;
+    if (
+      normalizedApprovalStatus !== "RETURNED" &&
+      normalizedStatus !== "returned" &&
+      !latestReturnedApproval
+    ) {
+      throw new Error("Only returned requests can be resubmitted.");
+    }
 
     let approver: { userId: string | null; roleId: string | null } = { userId: null, roleId: null };
     let currentApprovalRoleIds: string[] = [];
@@ -806,7 +814,7 @@ export async function resubmitPaymentRequest(formData: FormData) {
       const finalApprovalRoleIds = configuredRoleIds(headResult.data.final_approval_role_ids, headResult.data.final_approval_role_id);
       if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
 
-      const returnedApproval = returnedApprovalResult.data;
+      const returnedApproval = latestReturnedApproval;
       if (returnedApproval?.approver_user_id) {
         approver = {
           userId: returnedApproval.approver_user_id,

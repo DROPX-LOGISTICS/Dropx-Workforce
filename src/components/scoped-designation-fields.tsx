@@ -13,6 +13,7 @@ export type ScopedLocationOption = {
 export type ScopedDesignationOption = {
   value: string;
   label: string;
+  code?: string;
   helper?: string;
   modelIds?: string[];
   dashboardRules?: { enabled: string[]; required: string[] };
@@ -39,7 +40,9 @@ export function ScopedDesignationFields({
   locationName,
   locationOptions,
   onDesignationChange,
-  required = true
+  required = true,
+  vehicleTypeName = "vehicle_type",
+  initialVehicleType = ""
 }: {
   designationName: string;
   designationOptions: ScopedDesignationOption[];
@@ -49,6 +52,8 @@ export function ScopedDesignationFields({
   locationOptions: ScopedLocationOption[];
   onDesignationChange?: (value: string) => void;
   required?: boolean;
+  vehicleTypeName?: string;
+  initialVehicleType?: string | null;
 }) {
   const [selectedLocationId, setSelectedLocationId] = useState(initialLocationId ?? "");
   const [selectedDesignation, setSelectedDesignation] = useState(initialDesignation ?? "");
@@ -57,6 +62,8 @@ export function ScopedDesignationFields({
     ? [{ value: selectedDesignation, label: selectedDesignation, helper: "Current", modelIds: [] }, ...filteredDesignationOptions]
     : filteredDesignationOptions;
   const designationDisabled = !selectedLocationId || !effectiveDesignationOptions.length;
+  const selectedDesignationCode = effectiveDesignationOptions.find((option) => option.value === selectedDesignation)?.code ?? "";
+  const vehicleTypeRequired = ["DA", "PTDA"].includes(selectedDesignationCode.toUpperCase());
 
   return (
     <>
@@ -88,6 +95,15 @@ export function ScopedDesignationFields({
           value={selectedDesignation}
         />
       </label>
+      {vehicleTypeRequired ? <label>Vehicle type
+        <SearchableSelect
+          name={vehicleTypeName}
+          options={[{ value: "bike", label: "Bike" }, { value: "van", label: "Van" }]}
+          placeholder="Select Bike or Van"
+          required
+          defaultValue={initialVehicleType ?? ""}
+        />
+      </label> : null}
     </>
   );
 }

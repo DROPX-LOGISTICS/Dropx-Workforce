@@ -26,6 +26,7 @@ export type AppAccount = {
 type Profile = {
   readOnly: Record<string, string>;
   editable: Record<string, string>;
+  designationCode?: string;
   statutoryApplicability: string[];
   fieldRules?: { enabled?: string[]; required?: string[] };
   uploads: Record<string, boolean>;
@@ -425,6 +426,7 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
   }, [executive, profile]);
   const required = useMemo(() => new Set(profile?.fieldRules?.required ?? []), [profile]);
   const completed = statusReadOnly(profile?.status);
+  const vehicleTypeRequired = ["DA", "PTDA"].includes(String(profile?.designationCode ?? "").toUpperCase());
 
   const set = (key: string, value: string, clear: string[] = []) => {
     setValues((current) => ({
@@ -698,7 +700,8 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
         ...(enabled.has("pf_account_no") ? { "PF Account No": values.pfAccountNo } : {}),
         ...(enabled.has("esi_no") ? { "ESI No": values.esiNo } : {})
       }}] : []),
-      ...((enabled.has("driving_license_no") || enabled.has("vehicle_reg_no")) ? [{ name: "Driving and vehicle", values: {
+      ...((vehicleTypeRequired || enabled.has("driving_license_no") || enabled.has("vehicle_reg_no")) ? [{ name: "Driving and vehicle", values: {
+        ...(vehicleTypeRequired ? { "Vehicle type": title(values.vehicleType) } : {}),
         ...(enabled.has("driving_license_no") ? { "Driving license no": values.drivingLicenseNo } : {}),
         ...(enabled.has("driving_license_exp_date") ? { "DL expiry date": values.drivingLicenseExpiry } : {}),
         ...(enabled.has("vehicle_reg_no") ? { "Vehicle reg no": values.vehicleRegistrationNo } : {}),
@@ -823,7 +826,7 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
 
   const dlCheck = currentCheck("dl");
   const vehicleCheck = currentCheck("vehicle");
-  const drivingEnabled = ["driving_license_no","driving_license_exp_date","vehicle_reg_no","vehicle_reg_exp_date","vehicle_insurance_exp_date","vehicle_pollution_exp_date"].some((field) => enabled.has(field));
+  const drivingEnabled = vehicleTypeRequired || ["driving_license_no","driving_license_exp_date","vehicle_reg_no","vehicle_reg_exp_date","vehicle_insurance_exp_date","vehicle_pollution_exp_date"].some((field) => enabled.has(field));
 
   return <form className="dx-profile-form" onSubmit={prepareSubmit} ref={formRef}>
     <p className="dx-company">{account.companyName}</p>
@@ -908,6 +911,7 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
       </> : null}
     </ProfileSection> : null}
     {drivingEnabled ? <ProfileSection title="Driving and vehicle">
+      {vehicleTypeRequired ? <label className="dx-field"><span>Vehicle type *</span><select name="vehicle_type" onChange={(event) => set("vehicleType", event.target.value)} required value={values.vehicleType || ""}><option value="">Select Bike or Van</option><option value="bike">Bike</option><option value="van">Van</option></select></label> : null}
       {enabled.has("driving_license_no") ? <>
         <VerifyField label={`Driving license no${required.has("driving_license_no") ? " *" : ""}`} name="driving_license_no" onChange={(value) => set("drivingLicenseNo", value, ["dl"])} onVerify={() => verify("dl")} running={running === "dl"} value={values.drivingLicenseNo || ""} checked={attempted("dl")} verified={verified("dl")} error={verificationErrors.dl || verificationInputError("dl", values)} required={required.has("driving_license_no")} />
         <VerificationText checks={[dlCheck]} />

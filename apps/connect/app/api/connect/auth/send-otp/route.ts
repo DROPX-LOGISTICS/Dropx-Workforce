@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
+import { findConnectAccounts } from "@/lib/connect-auth";
 import { createOtpSecretHash, clampOtpExpiryMinutes, generateOtp, normalizeMobile } from "@/lib/connect-otp";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { extractWhatsAppTemplateVariables, type WhatsAppTemplateComponent } from "@/lib/whatsapp-template";
-import { workforceTable, type NonEmployeeProfileType } from "@/lib/workforce-profiles";
 
 type NotificationConfigRow = {
   company_id: string;
@@ -14,11 +14,6 @@ type NotificationConfigRow = {
   variable_mappings: Record<string, string> | null;
 };
 
-type AccountMatchResult = {
-  data: Array<{ company_id?: string | null }> | null;
-  error: { message?: string } | null;
-};
-
 function requestIp(request: Request) {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     request.headers.get("x-real-ip") ||
@@ -28,20 +23,6 @@ function requestIp(request: Request) {
 function messageValue(source: string | undefined, values: Record<string, string>) {
   if (!source) return "";
   return values[source] ?? source;
-}
-
-function isMissingColumnError(error: unknown) {
-  const message = String((error as { message?: unknown })?.message ?? "").toLowerCase();
-  return (message.includes("column") || message.includes("relation")) &&
-    (message.includes("does not exist") || message.includes("schema cache"));
-}
-
-function ignoreMissingOptionalWorkforceTables(results: AccountMatchResult[]) {
-  return results.map((result, index) =>
-    index > 0 && isMissingColumnError(result.error)
-      ? { data: [], error: null }
-      : result
-  );
 }
 
 function buildTemplateComponents(components: WhatsAppTemplateComponent[], mappings: Record<string, string>, values: Record<string, string>) {
@@ -85,61 +66,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Enter a valid mobile number." }, { status: 400 });
     }
 
-    const localMobile = to.startsWith(countryCode) ? to.slice(countryCode.length) : to;
-    let [profileMatches, employeeMatches]: [AccountMatchResult, AccountMatchResult] = await Promise.all([
-      supabaseAdmin
-        .from("profiles")
-        .select("id, company_id, is_active, mobile_country_code")
-        .eq("is_active", true)
-        .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
-        .or(`mobile.eq.${to},mobile.eq.${localMobile}`),
-      supabaseAdmin
-        .from("employees")
-        .select("id, company_id, is_active, mobile_country_code")
-        .eq("is_active", true)
-        .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
-        .or(`mobile.eq.${to},mobile.eq.${localMobile}`)
-    ]);
-    const nonEmployeeTypes: NonEmployeeProfileType[] = ["field_executive", "contractor", "vendor", "worker"];
-    let nonEmployeeMatches: AccountMatchResult[] = ignoreMissingOptionalWorkforceTables(await Promise.all(nonEmployeeTypes.map((profileType) =>
-      supabaseAdmin!
-        .from(workforceTable(profileType))
-        .select("id, company_id, is_active, mobile_country_code")
-        .eq("is_active", true)
-        .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
-        .or(`mobile.eq.${to},mobile.eq.${localMobile}`)
-    )));
-    if (isMissingColumnError(profileMatches.error) || isMissingColumnError(employeeMatches.error) || nonEmployeeMatches.some((result) => isMissingColumnError(result.error))) {
-      [profileMatches, employeeMatches] = await Promise.all([
-        supabaseAdmin
-          .from("profiles")
-          .select("id, company_id, is_active")
-          .eq("is_active", true)
-          .or(`mobile.eq.${to},mobile.eq.${localMobile}`),
-        supabaseAdmin
-          .from("employees")
-          .select("id, company_id, is_active")
-          .eq("is_active", true)
-          .or(`mobile.eq.${to},mobile.eq.${localMobile}`)
-      ]);
-      nonEmployeeMatches = ignoreMissingOptionalWorkforceTables(await Promise.all(nonEmployeeTypes.map((profileType) =>
-        supabaseAdmin!
-          .from(workforceTable(profileType))
-          .select("id, company_id, is_active")
-          .eq("is_active", true)
-          .or(`mobile.eq.${to},mobile.eq.${localMobile}`)
-      )));
-    }
-    if (profileMatches.error) throw new Error(profileMatches.error.message);
-    if (employeeMatches.error) throw new Error(employeeMatches.error.message);
-    for (const result of nonEmployeeMatches) {
-      if (result.error) throw new Error(result.error.message);
-    }
-    const companyIds = Array.from(new Set([
-      ...(profileMatches.data ?? []).map((profile) => profile.company_id),
-      ...(employeeMatches.data ?? []).map((employee) => employee.company_id),
-      ...nonEmployeeMatches.flatMap((result) => (result.data ?? []).map((profile) => profile.company_id))
-    ].filter(Boolean)));
+    const accounts = await findConnectAccounts(countryCode, to);
+    const companyIds = Array.from(new Set(accounts.map((account) => account.companyId).filter(Boolean)));
     if (!companyIds.length) {
       return NextResponse.json({ error: "No active account found for this mobile number." }, { status: 404 });
     }

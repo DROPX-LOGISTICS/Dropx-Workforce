@@ -11,6 +11,7 @@ import { saveProfileVerifications } from "../../../../src/lib/profile-verificati
 import { supabaseAdmin } from "../../../../src/lib/supabase-admin";
 import { loadWorkforceCategoryRules } from "../../../../src/lib/workforce-category-rules";
 import { assertMinimumProfileAge } from "../../../../src/lib/profile-age";
+import { normalizeFieldExecutiveVehicleType } from "../../../../src/lib/field-executive-vehicle";
 import { createProfileSubmittedNotification } from "../../../../src/lib/app-notifications";
 import {
   isNonEmployeeProfileType,
@@ -51,6 +52,7 @@ type FieldExecutiveRow = {
   driving_license_no: string | null;
   driving_license_exp_date: string | null;
   vehicle_reg_no: string | null;
+  vehicle_type?: string | null;
   vehicle_reg_exp_date: string | null;
   vehicle_insurance_exp_date: string | null;
   vehicle_pollution_exp_date: string | null;
@@ -223,14 +225,14 @@ async function loadExecutive(executiveId: string, companyId: string, profileType
   const table = workforceTable(profileType);
   const result = await supabaseAdmin
     .from(table)
-    .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, eshram_uan, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, pf_uan, pf_account_no, esi_no, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, profile_return_remarks, stations (station_code, station_name)")
+    .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, vehicle_type, gender, date_of_birth, aadhaar_number, pan_number, eshram_uan, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, pf_uan, pf_account_no, esi_no, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, profile_return_remarks, stations (station_code, station_name)")
     .eq("id", executiveId)
     .eq("company_id", companyId)
     .maybeSingle();
   if (result.error && /eshram_uan|column/i.test(result.error.message)) {
     const fallbackResult = await supabaseAdmin
       .from(table)
-      .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, profile_return_remarks, stations (station_code, station_name)")
+      .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, vehicle_type, gender, date_of_birth, aadhaar_number, pan_number, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, profile_return_remarks, stations (station_code, station_name)")
       .eq("id", executiveId)
       .eq("company_id", companyId)
       .maybeSingle();
@@ -303,7 +305,7 @@ async function serializeExecutive(row: FieldExecutiveRow, profileType: NonEmploy
   const designationResult = row.designation && supabaseAdmin
     ? await supabaseAdmin
       .from("designations")
-      .select("profile_field_rules")
+      .select("code, profile_field_rules")
       .eq("company_id", row.company_id)
       .eq("name", row.designation)
       .maybeSingle()
@@ -316,6 +318,7 @@ async function serializeExecutive(row: FieldExecutiveRow, profileType: NonEmploy
     categoryCode
   )).dropx_one;
   const agreement = profileType === "field_executive" ? await loadApplicableAgreement(row) : null;
+  const designationCode = String(designationResult?.data?.code ?? "").trim().toUpperCase();
   return {
     id: row.id,
     readOnly: {
@@ -329,6 +332,7 @@ async function serializeExecutive(row: FieldExecutiveRow, profileType: NonEmploy
       mobile: `+${row.mobile_country_code ?? "91"} ${row.mobile}`
     },
     editable: {
+      vehicleType: row.vehicle_type ?? "",
       gender: row.gender ?? "",
       dateOfBirth: formatDisplayDate(row.date_of_birth) === "-" ? "" : formatDisplayDate(row.date_of_birth),
       aadhaarNumber: row.aadhaar_number ?? "",
@@ -356,6 +360,7 @@ async function serializeExecutive(row: FieldExecutiveRow, profileType: NonEmploy
       insuranceExpiry: formatDisplayDate(row.vehicle_insurance_exp_date) === "-" ? "" : formatDisplayDate(row.vehicle_insurance_exp_date),
       pollutionExpiry: formatDisplayDate(row.vehicle_pollution_exp_date) === "-" ? "" : formatDisplayDate(row.vehicle_pollution_exp_date)
     },
+    designationCode,
     statutoryApplicability: ["pf", "esi"],
     fieldRules,
     uploads: {
@@ -442,7 +447,7 @@ export async function POST(request: Request) {
     const designationResult = currentExecutive.designation
       ? await supabaseAdmin
         .from("designations")
-        .select("profile_field_rules")
+        .select("code, profile_field_rules")
         .eq("company_id", account.companyId)
         .eq("name", currentExecutive.designation)
         .maybeSingle()
@@ -472,6 +477,9 @@ export async function POST(request: Request) {
     const esiValue = alphaNumValue(formData.get("esi_no"), "ESI No", isRequired("esi_no"));
     const dateOfBirth = dateValue("date_of_birth", "Date of birth");
     assertMinimumProfileAge(dateOfBirth);
+    const vehicleType = account.profileType === "field_executive"
+      ? normalizeFieldExecutiveVehicleType(formData.get("vehicle_type"), designationResult?.data?.code)
+      : null;
 
     const updatePayload: Record<string, unknown> = {
       gender: textValue("gender", "Gender"),
@@ -497,6 +505,7 @@ export async function POST(request: Request) {
       driving_license_no: alphaNumLengthValue(formData.get("driving_license_no"), "Driving license number", 4, 30, isRequired("driving_license_no")),
       driving_license_exp_date: dateValue("driving_license_exp_date", "DL expiry date"),
       vehicle_reg_no: alphaNumLengthValue(formData.get("vehicle_reg_no"), "Vehicle registration number", 4, 30, isRequired("vehicle_reg_no")),
+      ...(account.profileType === "field_executive" ? { vehicle_type: vehicleType } : {}),
       vehicle_reg_exp_date: dateValue("vehicle_reg_exp_date", "Reg expiry date"),
       vehicle_insurance_exp_date: dateValue("vehicle_insurance_exp_date", "Vehicle Insurance expiry"),
       vehicle_pollution_exp_date: dateValue("vehicle_pollution_exp_date", "Pollution expiry date"),

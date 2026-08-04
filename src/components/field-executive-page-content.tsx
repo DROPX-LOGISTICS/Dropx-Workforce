@@ -63,6 +63,7 @@ type ExecutiveRow = {
   statutory_applicability?: string[] | null;
   location_id: string;
   designation: string | null;
+  vehicle_type?: string | null;
   gender: string | null;
   date_of_birth: string | null;
   aadhaar_number: string | null;
@@ -118,6 +119,7 @@ type FieldExecutiveAddFormValues = {
   dateOfJoin?: string;
   locationId?: string;
   designation?: string;
+  vehicleType?: string;
 };
 
 function firstRelation<T>(value: T | T[] | null | undefined) {
@@ -257,6 +259,7 @@ function FieldExecutiveDetails({
           <ExecutiveDetail label="ID" value={executive.dropx_id} />
           <ExecutiveDetail label="Full name" value={executive.full_name} />
           <ExecutiveDetail label="Designation" value={executive.designation} />
+          <ExecutiveDetail label="Vehicle type" value={executive.vehicle_type ? executive.vehicle_type[0].toUpperCase() + executive.vehicle_type.slice(1) : null} />
           <ExecutiveDetail label="Date of join" value={formatDashboardDate(executive.date_of_join)} />
           <ExecutiveDetail label="Location" value={location?.station_name || location?.station_code} />
           <ExecutiveDetail label="Status" value={fieldExecutiveStatus(executive)} />
@@ -384,6 +387,7 @@ function FieldExecutiveForm({
         designationOptions={designationOptions}
         initialDesignation={executive?.designation}
         initialLocationId={executive?.location_id}
+        initialVehicleType={executive?.vehicle_type}
         locationName="location_id"
         locationOptions={locationOptions}
         required={!optionalEditFields}
@@ -513,6 +517,7 @@ function AddFieldExecutiveForm({
         initialLocationId={values?.locationId}
         locationName="location_id"
         locationOptions={locationOptions}
+        initialVehicleType={values?.vehicleType}
       />
       {statutoryEnabled ? (
         <fieldset className="span-3 statutory-fieldset">
@@ -569,7 +574,7 @@ function FieldExecutiveBulkImportPanel({
         <input type="hidden" name="return_path" value={returnPath} />
         <div className="workforce-template-note">
           <strong>Excel columns</strong>
-          <span>DropX ID, Biometric ID, Full name, Mob country code, Mob no, Email, Date of join (DD/MM/YYYY), Location, Designation code</span>
+          <span>DropX ID, Biometric ID, Full name, Mob country code, Mob no, Email, Date of join (DD/MM/YYYY), Location, Designation code, Vehicle type (Bike/Van for DA/PTDA)</span>
         </div>
         <input accept=".xlsx,.xls,.csv" className="field" name="bulk_file" required type="file" />
         <SubmitButton
@@ -655,6 +660,7 @@ async function loadFieldExecutiveData(
         statutory_applicability,
         location_id,
         designation,
+        vehicle_type,
         gender,
         date_of_birth,
         aadhaar_number,
@@ -858,6 +864,7 @@ export async function FieldExecutivePageContent({
     value: designation.name,
     label: designation.name,
     helper: designation.code,
+    code: designation.code,
     modelIds: designation.model_ids ?? [],
       canAdd: canAccessDesignationPortal(designation, accessSurface, "add", { isOwner: ownerAccess }),
       canEdit: canAccessDesignationPortal(designation, accessSurface, "edit", { isOwner: ownerAccess }),

@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
 type Applicant = {
   id: string; full_name: string; dropx_id: string | null; biometric_id: string | null;
   mobile_country_code: string | null; mobile: string; email: string | null; designation: string | null;
+  vehicle_type: string | null;
   location_id: string | null; date_of_join: string | null; onboarding_status: string; lifecycle_status: string;
   onboarding_application_source: string | null; onboarding_submitted_at: string | null; provider_id_status: string | null;
   provider_employee_id: string | null; onboarding_review_remarks: string | null; updated_at: string;
@@ -44,7 +45,7 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
     error = "Supabase service role key is not configured.";
   } else {
     let applicantQuery = supabaseAdmin.from("field_executives")
-      .select("id, full_name, dropx_id, biometric_id, mobile_country_code, mobile, email, designation, location_id, date_of_join, onboarding_status, lifecycle_status, onboarding_application_source, onboarding_submitted_at, provider_id_status, provider_employee_id, onboarding_review_remarks, updated_at, stations(station_code, station_name)")
+      .select("id, full_name, dropx_id, biometric_id, mobile_country_code, mobile, email, designation, vehicle_type, location_id, date_of_join, onboarding_status, lifecycle_status, onboarding_application_source, onboarding_submitted_at, provider_id_status, provider_employee_id, onboarding_review_remarks, updated_at, stations(station_code, station_name)")
       .eq("company_id", companyId).order("updated_at", { ascending: false });
     if (!authorization.hasAllLocationAccess) applicantQuery = applicantQuery.in("location_id", authorization.locationScopeIds.length ? authorization.locationScopeIds : ["00000000-0000-0000-0000-000000000000"]);
     const [applicantResult, checklistResult, resultResult, acceptanceResult, exitResult, exitMasterResult, designationResult] = await Promise.all([
@@ -97,7 +98,7 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
         const applicable = checklist.filter((check) => !check.applicable_designation_codes?.length || check.applicable_designation_codes.map((code) => code.toUpperCase()).includes(applicantDesignationCode));
         return <article className="card workforce-lifecycle-card" key={item.id}>
           <header><div><small>{title(item.onboarding_application_source)} request</small><h2>{item.full_name}</h2><p>{item.dropx_id || "ID reserved"} · {station?.station_code || "No station"} · {item.designation || "No designation"}</p></div><span className={`status ${item.onboarding_status}`}>{title(item.onboarding_status)}</span></header>
-          <div className="workforce-lifecycle-facts"><span>Mobile<strong>+{item.mobile_country_code || "91"} {item.mobile}</strong></span><span>Submitted<strong>{when(item.onboarding_submitted_at || item.updated_at)}</strong></span><span>Agreement<strong>{acceptedIds.has(item.id) ? "Accepted" : "Pending"}</strong></span><span>Provider ID<strong>{item.provider_employee_id || title(item.provider_id_status)}</strong></span></div>
+          <div className="workforce-lifecycle-facts"><span>Mobile<strong>+{item.mobile_country_code || "91"} {item.mobile}</strong></span><span>Vehicle type<strong>{title(item.vehicle_type)}</strong></span><span>Submitted<strong>{when(item.onboarding_submitted_at || item.updated_at)}</strong></span><span>Agreement<strong>{acceptedIds.has(item.id) ? "Accepted" : "Pending"}</strong></span><span>Provider ID<strong>{item.provider_employee_id || title(item.provider_id_status)}</strong></span></div>
           {canEdit && ["under_review", "returned"].includes(item.onboarding_status) ? <form action={reviewWorkforceOnboarding} className="workforce-review-form">
             <input name="id" type="hidden" value={item.id} />
             <h3>HO activation checklist</h3>
@@ -116,7 +117,7 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
     {tab === "active" ? <section className="workforce-lifecycle-grid">
       {active.length ? active.map((item) => { const station = first(item.stations); return <article className="card workforce-lifecycle-card" key={item.id}>
         <header><div><small>Active workforce</small><h2>{item.full_name}</h2><p>{item.dropx_id || "-"} · {station?.station_code || "-"} · {item.designation || "-"}</p></div><span className="status active">Active</span></header>
-        <div className="workforce-lifecycle-facts"><span>Biometric<strong>{item.biometric_id || "-"}</strong></span><span>Provider ID<strong>{item.provider_employee_id || "Not required"}</strong></span><span>Date of join<strong>{item.date_of_join || "-"}</strong></span><span>Mobile<strong>+{item.mobile_country_code || "91"} {item.mobile}</strong></span></div>
+        <div className="workforce-lifecycle-facts"><span>Biometric<strong>{item.biometric_id || "-"}</strong></span><span>Vehicle type<strong>{title(item.vehicle_type)}</strong></span><span>Provider ID<strong>{item.provider_employee_id || "Not required"}</strong></span><span>Date of join<strong>{item.date_of_join || "-"}</strong></span><span>Mobile<strong>+{item.mobile_country_code || "91"} {item.mobile}</strong></span></div>
         {canEdit ? <form action={startWorkforceExit} className="workforce-exit-start"><input name="id" type="hidden" value={item.id} /><label>Exit type<select name="case_type" required><option value="">Select</option><option value="resignation">Resignation</option><option value="termination">Termination</option></select></label><label>Effective date<input name="effective_date" required type="date" /></label><label>Reason<select name="reason_code" required><option value="">Select</option><option value="voluntary">Voluntary resignation</option><option value="attendance">Attendance / abandonment</option><option value="performance">Performance</option><option value="conduct">Conduct / compliance</option><option value="business">Business requirement</option><option value="other">Other</option></select></label><label>Details<textarea name="reason_details" /></label><SubmitButton confirmMessage="This creates a formal workforce exit case and starts the settlement workflow." confirmTitle="Start exit process?">Start exit process</SubmitButton></form> : null}
       </article>; }) : <div className="card workforce-empty"><BriefcaseBusiness /><h2>No active workforce in scope</h2></div>}
     </section> : null}

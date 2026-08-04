@@ -56,7 +56,17 @@ export type OnboardingRoleOption = {
 };
 
 function PortalAccessMatrix({ initialValue }: { initialValue?: unknown }) {
-  const initial = normalizeDesignationPortalPermissions(initialValue);
+  const [permissions, setPermissions] = useState(() => normalizeDesignationPortalPermissions(initialValue));
+
+  function updatePermission(portal: typeof designationPortalOptions[number]["code"], action: "add" | "view" | "edit", checked: boolean) {
+    setPermissions((current) => {
+      const portalPermissions = { ...current[portal], [action]: checked };
+      if (action === "edit" && checked) portalPermissions.view = true;
+      if (action === "view" && !checked) portalPermissions.edit = false;
+      return { ...current, [portal]: portalPermissions };
+    });
+  }
+
   return (
     <div className="designation-portal-matrix">
       <div className="designation-portal-head" aria-hidden="true">
@@ -68,8 +78,9 @@ function PortalAccessMatrix({ initialValue }: { initialValue?: unknown }) {
           {(["add", "view", "edit"] as const).map((action) => (
             <label key={action} title={`${action} People in ${portal.label}`}>
               <input
-                defaultChecked={initial[portal.code][action]}
+                checked={permissions[portal.code][action]}
                 name={`portal_${portal.code}_${action}`}
+                onChange={(event) => updatePermission(portal.code, action, event.target.checked)}
                 type="checkbox"
               />
               <span className="sr-only">{action}</span>

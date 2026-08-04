@@ -19,6 +19,10 @@ export type DesignationPortalAccess = {
   portal_permissions?: unknown;
 };
 
+export type DesignationPortalAccessOptions = {
+  isOwner?: boolean;
+};
+
 export function normalizeDesignationPortalPermissions(value: unknown): DesignationPortalPermissions {
   let parsed = value;
   if (typeof value === "string") {
@@ -40,10 +44,11 @@ export function normalizeDesignationPortalPermissions(value: unknown): Designati
       ? portal as Record<string, unknown>
       : {};
     const fallback = defaultDesignationPortalPermissions[code];
+    const edit = typeof permissions.edit === "boolean" ? permissions.edit : fallback.edit;
     return [code, {
       add: typeof permissions.add === "boolean" ? permissions.add : fallback.add,
-      view: typeof permissions.view === "boolean" ? permissions.view : fallback.view,
-      edit: typeof permissions.edit === "boolean" ? permissions.edit : fallback.edit
+      view: (typeof permissions.view === "boolean" ? permissions.view : fallback.view) || edit,
+      edit
     }];
   })) as DesignationPortalPermissions;
 }
@@ -51,17 +56,20 @@ export function normalizeDesignationPortalPermissions(value: unknown): Designati
 export function canAccessDesignationPortal(
   designation: DesignationPortalAccess | null | undefined,
   portal: DesignationPortalCode,
-  action: DesignationPortalAction
+  action: DesignationPortalAction,
+  options?: DesignationPortalAccessOptions
 ) {
+  if (options?.isOwner) return true;
   return normalizeDesignationPortalPermissions(designation?.portal_permissions)[portal][action];
 }
 
 export function requireDesignationPortalAccess(
   designation: DesignationPortalAccess | null | undefined,
   portal: DesignationPortalCode,
-  action: DesignationPortalAction
+  action: DesignationPortalAction,
+  options?: DesignationPortalAccessOptions
 ) {
-  if (!canAccessDesignationPortal(designation, portal, action)) {
+  if (!canAccessDesignationPortal(designation, portal, action, options)) {
     throw new Error(`This designation does not allow ${action} access from ${designationPortalOptions.find((item) => item.code === portal)?.label ?? portal}.`);
   }
 }

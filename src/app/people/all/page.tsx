@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { AllPeopleRegister, type AllPeopleRow } from "@/components/all-people-register";
 import { PageHead } from "@/components/page-head";
-import { getAuthorization, hasPermission, type AuthorizationContext } from "@/lib/authorization";
+import { getAuthorization, hasPermission, isCompanyOwner, type AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { dynamicWorkforceTable, isCustomWorkforceCategoryCode, workforceCategoryPageCode } from "@/lib/dynamic-workforce";
 import { canAccessDesignationPortal } from "@/lib/designation-portal-access";
@@ -159,6 +159,7 @@ async function loadPeople(
   const designations = (designationResult.data ?? []) as Array<{ id: string; name: string; portal_permissions: unknown }>;
   const designationById = new Map(designations.map((designation) => [designation.id, designation]));
   const designationByName = new Map(designations.map((designation) => [designation.name.trim().toLowerCase(), designation]));
+  const ownerAccess = isCompanyOwner(authorization);
   const activeCategoryCodes = new Set(categories.map((category) => category.code));
   const currentSources = allowedSources.filter((source) => activeCategoryCodes.has(source.categoryCode));
   const customSources = categories
@@ -191,7 +192,7 @@ async function loadPeople(
           const designation = source.employeeDesignation
             ? designationById.get(String(row.designation_id ?? joinedDesignation?.id ?? ""))
             : designationByName.get(String(row.designation ?? "").trim().toLowerCase());
-          return canAccessDesignationPortal(designation, "dashboard", "view");
+          return canAccessDesignationPortal(designation, "dashboard", "view", { isOwner: ownerAccess });
         })
         .map((row: Record<string, unknown>) => {
           const location = String((first(row.stations as { station_code?: string } | Array<{ station_code?: string }> | null) ?? {}).station_code ?? "-");
@@ -215,7 +216,7 @@ async function loadPeople(
             status,
             viewHref: profileActionHref(source.basePath, "view", row.id),
             editHref: profileActionHref(source.basePath, "edit", row.id),
-            canEdit: source.canEdit && canAccessDesignationPortal(designationRecord, "dashboard", "edit"),
+            canEdit: source.canEdit && canAccessDesignationPortal(designationRecord, "dashboard", "edit", { isOwner: ownerAccess }),
             exportValues: buildExportValues(row, source.codeField, source.category, location, designation, status, source.employeeDesignation)
           };
         })
@@ -235,7 +236,7 @@ async function loadPeople(
         .filter((row: Record<string, unknown>) => {
           if (!hasAllLocationAccess && !locationScopeIds.includes(String(row.location_id ?? ""))) return false;
           const designation = designationByName.get(String(row.designation ?? "").trim().toLowerCase());
-          return canAccessDesignationPortal(designation, "dashboard", "view");
+          return canAccessDesignationPortal(designation, "dashboard", "view", { isOwner: ownerAccess });
         })
         .map((row: Record<string, unknown>) => {
           const location = String((first(row.stations as { station_code?: string } | Array<{ station_code?: string }> | null) ?? {}).station_code ?? "-");
@@ -256,7 +257,7 @@ async function loadPeople(
             status,
             viewHref: profileActionHref(source.basePath, "view", row.id),
             editHref: profileActionHref(source.basePath, "edit", row.id),
-            canEdit: source.canEdit && canAccessDesignationPortal(designationRecord, "dashboard", "edit"),
+            canEdit: source.canEdit && canAccessDesignationPortal(designationRecord, "dashboard", "edit", { isOwner: ownerAccess }),
             exportValues: buildExportValues(row, source.codeField, source.category, location, designation, status, false)
           };
         })

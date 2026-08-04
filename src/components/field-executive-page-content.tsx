@@ -7,7 +7,7 @@ import { ProfileVerificationPanel } from "@/components/profile-verification-pane
 import { ScopedDesignationFields, type ScopedDesignationOption, type ScopedLocationOption } from "@/components/scoped-designation-fields";
 import { SearchableSelect } from "@/components/searchable-select";
 import { SubmitButton } from "@/components/submit-button";
-import { type AuthorizationContext, requirePagePermission } from "@/lib/authorization";
+import { isCompanyOwner, type AuthorizationContext, requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { countryCodeOptions } from "@/lib/country-codes";
 import { formatDashboardDate } from "@/lib/date-format";
@@ -592,6 +592,7 @@ async function loadFieldExecutiveData(
   editId?: string,
   viewId?: string
 ) {
+  const ownerAccess = isCompanyOwner(authorization);
   if (!supabaseAdmin) {
     return {
       executives: [] as FieldExecutiveListRow[],
@@ -713,7 +714,7 @@ async function loadFieldExecutiveData(
   });
   const allowedLocationIds = new Set(locations.map((location) => location.id));
   const allowedDesignationNames = new Set(designations
-    .filter((designation) => canAccessDesignationPortal(designation, "dashboard", "view"))
+    .filter((designation) => canAccessDesignationPortal(designation, "dashboard", "view", { isOwner: ownerAccess }))
     .map((designation) => designation.name));
   const visibleExecutiveRows = ((executivesResult.data ?? []) as unknown as ExecutiveRow[])
     .filter((executive) => authorization.hasAllLocationAccess || allowedLocationIds.has(executive.location_id))
@@ -736,7 +737,8 @@ async function loadFieldExecutiveData(
       canEdit: canAccessDesignationPortal(
         designations.find((designation) => designation.name === executive.designation),
         "dashboard",
-        "edit"
+          "edit",
+          { isOwner: ownerAccess }
       ),
       isActive: executive.is_active,
       status: fieldExecutiveStatus(executive)
@@ -815,6 +817,7 @@ export async function FieldExecutivePageContent({
   viewId?: string;
 }) {
   const authorization = await requirePagePermission(pageCode, "access");
+  const ownerAccess = isCompanyOwner(authorization);
   const permission = authorization.permissions[pageCode] ?? {
     canView: false,
     canAdd: false,
@@ -852,8 +855,8 @@ export async function FieldExecutivePageContent({
     label: designation.name,
     helper: designation.code,
     modelIds: designation.model_ids ?? [],
-    canAdd: canAccessDesignationPortal(designation, "dashboard", "add"),
-    canEdit: canAccessDesignationPortal(designation, "dashboard", "edit"),
+      canAdd: canAccessDesignationPortal(designation, "dashboard", "add", { isOwner: ownerAccess }),
+      canEdit: canAccessDesignationPortal(designation, "dashboard", "edit", { isOwner: ownerAccess }),
     dashboardRules: (await loadWorkforceCategoryRules(
       requireCompanyId(authorization),
       workforceConfig.designationCategory,

@@ -5,7 +5,7 @@ import { EmployeeList } from "@/components/employee-list";
 import { PageHead } from "@/components/page-head";
 import { PendingLink } from "@/components/pending-link";
 import { SubmitButton } from "@/components/submit-button";
-import { type AuthorizationContext, requirePagePermission } from "@/lib/authorization";
+import { isCompanyOwner, type AuthorizationContext, requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { formatDashboardDate } from "@/lib/date-format";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
@@ -320,6 +320,7 @@ async function signedDocumentUrl(path: string | null | undefined) {
 }
 
 async function loadEmployees(companyId: string, authorization: AuthorizationContext, editId?: string, viewId?: string) {
+  const ownerAccess = isCompanyOwner(authorization);
   if (!supabaseAdmin) {
     return {
       employees: [] as EmployeeRow[],
@@ -396,7 +397,7 @@ async function loadEmployees(companyId: string, authorization: AuthorizationCont
   const employeeDesignations = new Map((designationRows as DesignationRow[]).map((designation) => [designation.id, designation]));
   const visibleEmployees = (employees as EmployeeRow[]).filter((employee) => {
     const designation = employee.designation_id ? employeeDesignations.get(employee.designation_id) : null;
-    return canAccessDesignationPortal(designation, "dashboard", "view");
+        return canAccessDesignationPortal(designation, "dashboard", "view", { isOwner: ownerAccess });
   });
 
   const employeesWithUrls = await Promise.all(visibleEmployees.map(async (employee) => ({
@@ -426,6 +427,7 @@ export const dynamic = "force-dynamic";
 
 export default async function EmployeesPage({ searchParams }: { searchParams?: { edit?: string; view?: string } }) {
   const authorization = await requirePagePermission("employees", "access");
+  const ownerAccess = isCompanyOwner(authorization);
   const companyId = requireCompanyId(authorization);
   const pagePermission = authorization.permissions.employees ?? {
     canView: false,
@@ -453,7 +455,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
     label: designation.name,
     helper: designation.code,
     modelIds: designation.model_ids ?? [],
-    canEdit: canAccessDesignationPortal(designation, "dashboard", "edit"),
+      canEdit: canAccessDesignationPortal(designation, "dashboard", "edit", { isOwner: ownerAccess }),
     dashboardRules: (await loadWorkforceCategoryRules(
       companyId,
       "employees",
@@ -464,7 +466,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
   const onboardingDesignationOptions = designationOptions.filter((option) => {
     const designation = designations.find((row) => row.id === option.value);
     return designation
-      ? canAccessDesignationPortal(designation, "dashboard", "add") && canOnboardDesignation(designation, authorization)
+        ? canAccessDesignationPortal(designation, "dashboard", "add", { isOwner: ownerAccess }) && canOnboardDesignation(designation, authorization)
       : false;
   });
   const editDesignationOptions = designationOptions.filter((option) => option.canEdit);

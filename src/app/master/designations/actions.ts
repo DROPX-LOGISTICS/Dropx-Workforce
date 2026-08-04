@@ -74,11 +74,14 @@ function onboardingRoleIds(formData: FormData) {
 }
 
 function portalPermissions(formData: FormData) {
-  return Object.fromEntries(designationPortalOptions.map(({ code }) => [code, {
-    add: formData.has(`portal_${code}_add`),
-    view: formData.has(`portal_${code}_view`),
-    edit: formData.has(`portal_${code}_edit`)
-  }]));
+  return Object.fromEntries(designationPortalOptions.map(({ code }) => {
+    const edit = formData.has(`portal_${code}_edit`);
+    return [code, {
+      add: formData.has(`portal_${code}_add`),
+      view: formData.has(`portal_${code}_view`) || edit,
+      edit
+    }];
+  }));
 }
 
 async function validateOnboardingRoles(companyId: string, roleIds: string[]) {

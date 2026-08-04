@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import * as XLSX from "xlsx";
 import { waitUntil } from "@vercel/functions";
-import { requirePagePermission } from "@/lib/authorization";
+import { isCompanyOwner, requirePagePermission } from "@/lib/authorization";
 import { syncBiometricEnrolment } from "@/lib/biometric/enrolments";
 import { generateBiometricEnrolmentId } from "@/lib/biometric/ids";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
@@ -140,7 +140,7 @@ export async function createEmployee(formData: FormData) {
     if (!locationResult.data) throw new Error("Selected location is not available for this company.");
     if (!designationResult.data) throw new Error("Selected designation is not available.");
     requireDesignationOnboardingAccess(designationResult.data, authorization);
-    requireDesignationPortalAccess(designationResult.data, "dashboard", "add");
+  requireDesignationPortalAccess(designationResult.data, "dashboard", "add", { isOwner: isCompanyOwner(authorization) });
     const directActivate = await loadWorkforceCategoryDirectActivate(companyId, "employees");
     const dashboardRules = (await loadWorkforceCategoryRules(
       companyId,
@@ -335,7 +335,7 @@ export async function updateEmployee(formData: FormData) {
     if (designationResult.error) throw new Error(designationResult.error.message);
     if (!locationResult.data) throw new Error("Selected location is not available for this company.");
     if (!designationResult.data) throw new Error("Selected designation is not available.");
-    requireDesignationPortalAccess(designationResult.data, "dashboard", "edit");
+  requireDesignationPortalAccess(designationResult.data, "dashboard", "edit", { isOwner: isCompanyOwner(authorization) });
     const dashboardRules = (await loadWorkforceCategoryRules(
       companyId,
       "employees",
@@ -362,7 +362,7 @@ export async function updateEmployee(formData: FormData) {
         .eq("company_id", companyId)
         .maybeSingle();
       if (currentDesignation.error) throw new Error(currentDesignation.error.message);
-      requireDesignationPortalAccess(currentDesignation.data, "dashboard", "edit");
+  requireDesignationPortalAccess(currentDesignation.data, "dashboard", "edit", { isOwner: isCompanyOwner(authorization) });
     }
     const biometricId = String((existingResult.data as { biometric_id?: string | null } | null)?.biometric_id ?? "").replace(/\D/g, "") || null;
 
@@ -464,7 +464,7 @@ export async function reviewEmployeeProfile(formData: FormData) {
       .eq("company_id", companyId)
       .maybeSingle();
     if (designation.error) throw new Error(designation.error.message);
-    requireDesignationPortalAccess(designation.data, "dashboard", "edit");
+  requireDesignationPortalAccess(designation.data, "dashboard", "edit", { isOwner: isCompanyOwner(authorization) });
     if (String(current.data.profile_completion_status ?? "").toLowerCase() !== "under_review") {
       throw new Error("Only profiles under review can be approved or returned.");
     }
@@ -626,7 +626,7 @@ export async function bulkImportEmployees(formData: FormData) {
       if (!locationId) throw new Error(`Row ${rowNumber}: Location ${row.locationCode} not found.`);
       if (!designation) throw new Error(`Row ${rowNumber}: Designation code ${row.designationCode} not found.`);
       requireDesignationOnboardingAccess(designation, authorization);
-      requireDesignationPortalAccess(designation, "dashboard", "add");
+  requireDesignationPortalAccess(designation, "dashboard", "add", { isOwner: isCompanyOwner(authorization) });
       const designationId = String(designation.id);
       if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
         throw new Error(`Row ${rowNumber}: You do not have access to location ${row.locationCode}.`);

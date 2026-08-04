@@ -12,6 +12,7 @@ import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
 import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { requireDesignationOnboardingAccess } from "@/lib/designation-onboarding-access";
+import { requireDesignationPortalAccess } from "@/lib/designation-portal-access";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
 import { saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -229,7 +230,7 @@ export async function createFieldExecutive(formData: FormData) {
     const directActivate = await loadWorkforceCategoryDirectActivate(companyId, config.designationCategory);
     const directPayload = directActivate ? normalizeFieldExecutivePayload(formData).payload : null;
     const designationRuleResult = await supabaseAdmin.from("designations")
-      .select("id, profile_field_rules, onboarding_role_ids")
+      .select("id, profile_field_rules, onboarding_role_ids, portal_permissions")
       .eq("company_id", companyId)
       .eq("name", designation)
       .eq("is_active", true)
@@ -237,6 +238,7 @@ export async function createFieldExecutive(formData: FormData) {
     if (designationRuleResult.error) throw new Error(designationRuleResult.error.message);
     if (!designationRuleResult.data) throw new Error("Selected designation is not available.");
     requireDesignationOnboardingAccess(designationRuleResult.data, authorization);
+    requireDesignationPortalAccess(designationRuleResult.data, "dashboard", "add");
     const dashboardRules = directActivate
       ? (await loadWorkforceCategoryRules(
         companyId,
@@ -442,12 +444,14 @@ export async function updateFieldExecutive(formData: FormData) {
 
     const designationResult = await supabaseAdmin
       .from("designations")
-      .select("profile_field_rules")
+      .select("profile_field_rules, portal_permissions")
       .eq("company_id", companyId)
       .eq("name", payload.designation)
       .eq("is_active", true)
       .maybeSingle();
     if (designationResult.error) throw new Error(designationResult.error.message);
+    if (!designationResult.data) throw new Error("Selected designation is not available.");
+    requireDesignationPortalAccess(designationResult.data, "dashboard", "edit");
     const dashboardRules = (await loadWorkforceCategoryRules(
       companyId,
       config.designationCategory,
@@ -603,12 +607,22 @@ export async function reviewFieldExecutiveProfile(formData: FormData) {
 
     const current = await supabaseAdmin
       .from(table)
-      .select("onboarding_status")
+      .select("onboarding_status, designation")
       .eq("id", id)
       .eq("company_id", companyId)
       .maybeSingle();
     if (current.error) throw new Error(current.error.message);
     if (!current.data) throw new Error(`${entityLabel} was not found.`);
+    const reviewDesignation = await supabaseAdmin
+      .from("designations")
+      .select("portal_permissions")
+      .eq("company_id", companyId)
+      .eq("name", String(current.data.designation ?? ""))
+      .eq("is_active", true)
+      .maybeSingle();
+    if (reviewDesignation.error) throw new Error(reviewDesignation.error.message);
+    if (!reviewDesignation.data) throw new Error("Selected designation is not available.");
+    requireDesignationPortalAccess(reviewDesignation.data, "dashboard", "edit");
     if (String(current.data.onboarding_status ?? "").toLowerCase() !== "under_review") {
       throw new Error("Only profiles under review can be approved or returned.");
     }
@@ -782,7 +796,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
     const designationCodes = Array.from(new Set(rows.map((row) => row.designationCode)));
     const [locationsResult, designationsResult] = await Promise.all([
       supabaseAdmin.from("stations").select("id, station_code").eq("company_id", companyId).in("station_code", locationCodes),
-      supabaseAdmin.from("designations").select("id, code, name, onboarding_categories, onboarding_role_ids").eq("company_id", companyId).eq("is_active", true).in("code", designationCodes)
+      supabaseAdmin.from("designations").select("id, code, name, onboarding_categories, onboarding_role_ids, portal_permissions").eq("company_id", companyId).eq("is_active", true).in("code", designationCodes)
     ]);
     if (locationsResult.error) throw new Error(locationsResult.error.message);
     if (designationsResult.error) throw new Error(designationsResult.error.message);
@@ -792,6 +806,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
       id: String(designation.id),
       name: String(designation.name),
       onboarding_role_ids: designation.onboarding_role_ids,
+      portal_permissions: designation.portal_permissions,
       workerCategory: config.category
     }]));
 
@@ -802,6 +817,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
       if (!locationId) throw new Error(`Row ${rowNumber}: Location ${row.locationCode} not found.`);
       if (!designation) throw new Error(`Row ${rowNumber}: Designation code ${row.designationCode} not found.`);
       requireDesignationOnboardingAccess(designation, authorization);
+      requireDesignationPortalAccess(designation, "dashboard", "add");
       if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
         throw new Error(`Row ${rowNumber}: You do not have access to location ${row.locationCode}.`);
       }

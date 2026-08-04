@@ -10,6 +10,7 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { formatDashboardDate } from "@/lib/date-format";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { canOnboardDesignation } from "@/lib/designation-onboarding-access";
+import { canAccessDesignationPortal } from "@/lib/designation-portal-access";
 import { filterOnboardingLocations } from "@/lib/onboarding-location-access";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import { loadWorkforceCategoryDirectActivate, loadWorkforceCategoryRules, loadWorkforceCategoryStatutoryEnabled } from "@/lib/workforce-category-rules";
@@ -31,6 +32,7 @@ type DesignationRow = {
   onboarding_categories?: string[] | null;
   profile_field_rules?: unknown;
   onboarding_role_ids?: string[] | null;
+  portal_permissions?: unknown;
   is_active: boolean;
 };
 
@@ -341,7 +343,7 @@ async function loadEmployees(companyId: string, authorization: AuthorizationCont
       .order("station_code"),
     supabaseAdmin
       .from("designations")
-      .select("id, code, name, model_ids, onboarding_categories, profile_field_rules, onboarding_role_ids, is_active")
+      .select("id, code, name, model_ids, onboarding_categories, profile_field_rules, onboarding_role_ids, portal_permissions, is_active")
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("name")
@@ -374,7 +376,7 @@ async function loadEmployees(companyId: string, authorization: AuthorizationCont
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("name");
-    designationRows = (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...designation, model_ids: [], onboarding_categories: ["employees"], profile_field_rules: {}, onboarding_role_ids: [] }));
+    designationRows = (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...designation, model_ids: [], onboarding_categories: ["employees"], profile_field_rules: {}, onboarding_role_ids: [], portal_permissions: null }));
     designationError = fallbackDesignationsResult.error;
   }
 
@@ -391,7 +393,13 @@ async function loadEmployees(companyId: string, authorization: AuthorizationCont
       return location?.station_code ? allowedCodes.has(location.station_code) : false;
     });
 
-  const employeesWithUrls = await Promise.all((employees as EmployeeRow[]).map(async (employee) => ({
+  const employeeDesignations = new Map((designationRows as DesignationRow[]).map((designation) => [designation.id, designation]));
+  const visibleEmployees = (employees as EmployeeRow[]).filter((employee) => {
+    const designation = employee.designation_id ? employeeDesignations.get(employee.designation_id) : null;
+    return canAccessDesignationPortal(designation, "dashboard", "view");
+  });
+
+  const employeesWithUrls = await Promise.all(visibleEmployees.map(async (employee) => ({
     ...employee,
     upload_urls: {
       aadhaarFront: await signedDocumentUrl(employee.aadhaar_front_path),
@@ -445,6 +453,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
     label: designation.name,
     helper: designation.code,
     modelIds: designation.model_ids ?? [],
+    canEdit: canAccessDesignationPortal(designation, "dashboard", "edit"),
     dashboardRules: (await loadWorkforceCategoryRules(
       companyId,
       "employees",
@@ -454,8 +463,11 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
   })));
   const onboardingDesignationOptions = designationOptions.filter((option) => {
     const designation = designations.find((row) => row.id === option.value);
-    return designation ? canOnboardDesignation(designation, authorization) : false;
+    return designation
+      ? canAccessDesignationPortal(designation, "dashboard", "add") && canOnboardDesignation(designation, authorization)
+      : false;
   });
+  const editDesignationOptions = designationOptions.filter((option) => option.canEdit);
   const viewRules = designationOptions.find((option) => option.value === viewEmployee?.designation_id)?.dashboardRules
     ?? employeeCategoryRules.dashboard;
 
@@ -519,6 +531,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
               designation: designation?.name ?? "-",
               statutory: statutoryLabel(employee.statutory_applicability),
               status: employeeStatus(employee),
+              canEdit: designationOptions.find((option) => option.value === employee.designation_id)?.canEdit ?? true,
               profilePhotoUrl: employee.upload_urls?.profilePhoto ?? null
             };
           })}
@@ -550,7 +563,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
               </div>
               <PendingLink className="icon-button" href="/employees" scroll={false} aria-label="Close edit employee">x</PendingLink>
             </div>
-            <EmployeeForm action={updateEmployee} dashboardRules={employeeCategoryRules.dashboard} designationOptions={designationOptions} employee={editEmployee} locationOptions={locationOptions} mode="edit" statutoryEnabled={employeeStatutoryEnabled} />
+            <EmployeeForm action={updateEmployee} dashboardRules={employeeCategoryRules.dashboard} designationOptions={editDesignationOptions} employee={editEmployee} locationOptions={locationOptions} mode="edit" statutoryEnabled={employeeStatutoryEnabled} />
             {editEmployee.profile_completion_status === "under_review" ? (
               <section className="profile-review-panel">
                 <div className="profile-review-head">

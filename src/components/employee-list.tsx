@@ -21,6 +21,7 @@ export type EmployeeListRow = {
   statutory: string;
   status: string;
   profilePhotoUrl?: string | null;
+  canEdit?: boolean;
 };
 
 type FilterOption = {
@@ -207,7 +208,7 @@ export function EmployeeList({
                 <td>{row.statutory}</td>
                 <td><StatusPill status={row.status} /></td>
                 <td className="action-cell">
-                  <EmployeeActionMenu canEdit={canEdit} employeeId={row.id} fullName={row.fullName} />
+                  <EmployeeActionMenu canEdit={canEdit && row.canEdit !== false} employeeId={row.id} fullName={row.fullName} />
                 </td>
               </tr>
             )) : (

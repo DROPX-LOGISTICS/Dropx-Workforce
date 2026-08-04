@@ -4,6 +4,7 @@ import { PageHead } from "@/components/page-head";
 import { getAuthorization, hasPermission, type AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { dynamicWorkforceTable, isCustomWorkforceCategoryCode, workforceCategoryPageCode } from "@/lib/dynamic-workforce";
+import { canAccessDesignationPortal } from "@/lib/designation-portal-access";
 import type { AllPeopleExportValues } from "@/lib/all-people-export";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { redirect } from "next/navigation";
@@ -150,6 +151,14 @@ async function loadPeople(
     .order("sort_order")
     .order("name");
   const categories = (categoryResult.data ?? []) as Array<{ code: string; name: string }>;
+  const designationResult = await supabaseAdmin
+    .from("designations")
+    .select("id, name, portal_permissions")
+    .eq("company_id", companyId)
+    .eq("is_active", true);
+  const designations = (designationResult.data ?? []) as Array<{ id: string; name: string; portal_permissions: unknown }>;
+  const designationById = new Map(designations.map((designation) => [designation.id, designation]));
+  const designationByName = new Map(designations.map((designation) => [designation.name.trim().toLowerCase(), designation]));
   const activeCategoryCodes = new Set(categories.map((category) => category.code));
   const currentSources = allowedSources.filter((source) => activeCategoryCodes.has(source.categoryCode));
   const customSources = categories
@@ -164,7 +173,7 @@ async function loadPeople(
       canEdit: hasPermission(authorization, workforceCategoryPageCode(category.code), "edit")
     }));
   const results = await Promise.all(currentSources.map(async (source) => {
-    const designationFields = source.employeeDesignation ? ", designations (name)" : ", designation";
+    const designationFields = source.employeeDesignation ? ", designation_id, designations (id, name)" : ", designation";
     const sourceSpecificFields = source.employeeDesignation ? ", pincode, ifsc" : ", postal_pin, ifsc_code";
     const result = await supabaseAdmin!
       .from(source.table)
@@ -176,10 +185,21 @@ async function loadPeople(
     return {
       error: null,
       rows: sourceRows
-        .filter((row: Record<string, unknown>) => hasAllLocationAccess || locationScopeIds.includes(String(row.location_id ?? "")))
+        .filter((row: Record<string, unknown>) => {
+          if (!hasAllLocationAccess && !locationScopeIds.includes(String(row.location_id ?? ""))) return false;
+          const joinedDesignation = first(row.designations as { id?: string; name?: string } | Array<{ id?: string; name?: string }> | null);
+          const designation = source.employeeDesignation
+            ? designationById.get(String(row.designation_id ?? joinedDesignation?.id ?? ""))
+            : designationByName.get(String(row.designation ?? "").trim().toLowerCase());
+          return canAccessDesignationPortal(designation, "dashboard", "view");
+        })
         .map((row: Record<string, unknown>) => {
           const location = String((first(row.stations as { station_code?: string } | Array<{ station_code?: string }> | null) ?? {}).station_code ?? "-");
-          const designation = String(row.designation ?? (first(row.designations as { name?: string } | Array<{ name?: string }> | null) ?? {}).name ?? "-");
+          const joinedDesignation = first(row.designations as { id?: string; name?: string } | Array<{ id?: string; name?: string }> | null);
+          const designationRecord = source.employeeDesignation
+            ? designationById.get(String(row.designation_id ?? joinedDesignation?.id ?? ""))
+            : designationByName.get(String(row.designation ?? "").trim().toLowerCase());
+          const designation = String(row.designation ?? joinedDesignation?.name ?? "-");
           const status = displayStatus(row[source.statusField], row.is_active !== false);
           return {
             id: String(row.id),
@@ -195,7 +215,7 @@ async function loadPeople(
             status,
             viewHref: profileActionHref(source.basePath, "view", row.id),
             editHref: profileActionHref(source.basePath, "edit", row.id),
-            canEdit: source.canEdit,
+            canEdit: source.canEdit && canAccessDesignationPortal(designationRecord, "dashboard", "edit"),
             exportValues: buildExportValues(row, source.codeField, source.category, location, designation, status, source.employeeDesignation)
           };
         })
@@ -212,10 +232,15 @@ async function loadPeople(
     return {
       error: null,
       rows: sourceRows
-        .filter((row: Record<string, unknown>) => hasAllLocationAccess || locationScopeIds.includes(String(row.location_id ?? "")))
+        .filter((row: Record<string, unknown>) => {
+          if (!hasAllLocationAccess && !locationScopeIds.includes(String(row.location_id ?? ""))) return false;
+          const designation = designationByName.get(String(row.designation ?? "").trim().toLowerCase());
+          return canAccessDesignationPortal(designation, "dashboard", "view");
+        })
         .map((row: Record<string, unknown>) => {
           const location = String((first(row.stations as { station_code?: string } | Array<{ station_code?: string }> | null) ?? {}).station_code ?? "-");
           const designation = String(row.designation ?? "-");
+          const designationRecord = designationByName.get(designation.trim().toLowerCase());
           const status = displayStatus(row[source.statusField], row.is_active !== false);
           return {
             id: String(row.id),
@@ -231,7 +256,7 @@ async function loadPeople(
             status,
             viewHref: profileActionHref(source.basePath, "view", row.id),
             editHref: profileActionHref(source.basePath, "edit", row.id),
-            canEdit: source.canEdit,
+            canEdit: source.canEdit && canAccessDesignationPortal(designationRecord, "dashboard", "edit"),
             exportValues: buildExportValues(row, source.codeField, source.category, location, designation, status, false)
           };
         })
@@ -241,7 +266,7 @@ async function loadPeople(
   return {
     categories,
     rows: allResults.flatMap((result) => result.rows),
-    error: categoryResult.error?.message ?? allResults.find((result) => result.error)?.error ?? null
+    error: categoryResult.error?.message ?? designationResult.error?.message ?? allResults.find((result) => result.error)?.error ?? null
   };
 }
 

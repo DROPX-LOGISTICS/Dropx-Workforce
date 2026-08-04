@@ -10,6 +10,10 @@ import {
 import { SubmitButton } from "@/components/submit-button";
 import { normalizeDesignationCategories, type DesignationCategory } from "@/lib/designation-categories";
 import {
+  designationPortalOptions,
+  normalizeDesignationPortalPermissions
+} from "@/lib/designation-portal-access";
+import {
   profileFieldRulesForCategory,
   type ProfileFieldChannelRules,
   type ProfileFieldRule,
@@ -40,6 +44,7 @@ type DesignationInitial = {
   onboarding_categories?: string[] | null;
   app_page_access?: string[] | null;
   onboarding_role_ids?: string[] | null;
+  portal_permissions?: unknown;
   profile_field_rules?: unknown;
   is_active: boolean;
 };
@@ -49,6 +54,32 @@ export type OnboardingRoleOption = {
   code: string;
   name: string;
 };
+
+function PortalAccessMatrix({ initialValue }: { initialValue?: unknown }) {
+  const initial = normalizeDesignationPortalPermissions(initialValue);
+  return (
+    <div className="designation-portal-matrix">
+      <div className="designation-portal-head" aria-hidden="true">
+        <span>Portal</span><span>Add</span><span>View</span><span>Edit</span>
+      </div>
+      {designationPortalOptions.map((portal) => (
+        <div className="designation-portal-row" key={portal.code}>
+          <strong>{portal.label}</strong>
+          {(["add", "view", "edit"] as const).map((action) => (
+            <label key={action} title={`${action} People in ${portal.label}`}>
+              <input
+                defaultChecked={initial[portal.code][action]}
+                name={`portal_${portal.code}_${action}`}
+                type="checkbox"
+              />
+              <span className="sr-only">{action}</span>
+            </label>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function OnboardingRoleMultiSelect({ options, selectedValues }: { options: OnboardingRoleOption[]; selectedValues: string[] }) {
   const [open, setOpen] = useState(false);
@@ -478,6 +509,13 @@ export function DesignationForm({
           <p className="subtle">Only users with the selected roles can onboard this designation. If no role is selected, only Owner or Master Owner can onboard it.</p>
         </div>
         <OnboardingRoleMultiSelect options={roles} selectedValues={initial?.onboarding_role_ids ?? []} />
+      </section>
+      <section className="workforce-category-page-access designation-portal-access">
+        <div>
+          <strong>Portal Access</strong>
+          <p className="subtle">Choose which portals can add, view, or edit people assigned to this designation.</p>
+        </div>
+        <PortalAccessMatrix initialValue={initial?.portal_permissions} />
       </section>
       {!selectedCategories.length ? (
         <div className="designation-field-rule-empty">Select one or more workforce categories.</div>

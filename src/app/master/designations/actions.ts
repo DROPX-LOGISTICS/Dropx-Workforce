@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
+import { designationPortalOptions } from "@/lib/designation-portal-access";
 import { normalizeCategoryProfileFieldRules } from "@/lib/profile-field-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
@@ -46,6 +47,9 @@ function friendlyError(error: unknown, fallback: string) {
   if (message.toLowerCase().includes("onboarding_role_ids")) {
     return "Designation onboarding access setup is pending. Run scripts/designations_onboarding_role_access_v1.sql in Supabase SQL Editor, then try again.";
   }
+  if (message.toLowerCase().includes("portal_permissions")) {
+    return "Designation portal access setup is pending. Run scripts/designations_portal_permissions_v1.sql in Supabase SQL Editor, then try again.";
+  }
   return message;
 }
 
@@ -67,6 +71,14 @@ function modelIds(formData: FormData) {
 
 function onboardingRoleIds(formData: FormData) {
   return Array.from(new Set(formData.getAll("onboarding_role_ids").map((value) => String(value ?? "").trim()).filter(Boolean)));
+}
+
+function portalPermissions(formData: FormData) {
+  return Object.fromEntries(designationPortalOptions.map(({ code }) => [code, {
+    add: formData.has(`portal_${code}_add`),
+    view: formData.has(`portal_${code}_view`),
+    edit: formData.has(`portal_${code}_edit`)
+  }]));
 }
 
 async function validateOnboardingRoles(companyId: string, roleIds: string[]) {
@@ -141,6 +153,7 @@ export async function createDesignation(formData: FormData) {
       profile_field_rules: profileFieldRules(formData, categories),
       app_page_access: appPageAccess(formData),
       onboarding_role_ids: roleIds,
+      portal_permissions: portalPermissions(formData),
       is_active: true
     }, companyId));
     if (error) throw new Error(error.message);
@@ -180,6 +193,7 @@ export async function updateDesignation(formData: FormData) {
         profile_field_rules: profileFieldRules(formData, categories),
         app_page_access: appPageAccess(formData),
         onboarding_role_ids: roleIds,
+        portal_permissions: portalPermissions(formData),
         is_active: status,
         updated_at: new Date().toISOString()
       })

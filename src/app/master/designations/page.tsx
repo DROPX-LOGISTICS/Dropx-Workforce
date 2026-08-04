@@ -44,6 +44,7 @@ type DesignationRow = {
   onboarding_categories: string[];
   app_page_access?: string[] | null;
   onboarding_role_ids?: string[] | null;
+  portal_permissions?: unknown;
   profile_field_rules?: unknown;
   is_active: boolean;
 };
@@ -89,7 +90,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
   }
 
   const [designationsResult, providersResult, locationsResult, modelsResult, categoriesResult, rolesResult] = await Promise.all([
-    supabaseAdmin.from("designations").select("id, code, name, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, is_active").eq("company_id", companyId).order("code"),
+    supabaseAdmin.from("designations").select("id, code, name, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("providers").select("id, code, name, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("stations").select("id, station_code, station_name, hide_from_location_list").eq("company_id", companyId).eq("is_active", true).order("station_code"),
     supabaseAdmin.from("location_models").select("id, provider_id, code, name, is_active, providers (code, name)").eq("company_id", companyId).eq("is_active", true).order("code"),
@@ -117,7 +118,8 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
       onboarding_categories: Array.isArray((row as { onboarding_categories?: unknown }).onboarding_categories) ? (row as { onboarding_categories: string[] }).onboarding_categories : ["employees"],
       app_page_access: ["dashboard", "attendance", "leave"],
       profile_field_rules: {},
-      onboarding_role_ids: []
+      onboarding_role_ids: [],
+      portal_permissions: null,
     }));
     designationError = fallbackError;
   }

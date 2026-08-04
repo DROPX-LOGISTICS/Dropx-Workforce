@@ -19,6 +19,7 @@ export type FieldExecutiveListRow = {
   profilePhotoUrl?: string | null;
   isActive: boolean;
   status: string;
+  canEdit?: boolean;
 };
 
 const pageSize = 20;
@@ -305,7 +306,7 @@ export function FieldExecutiveList({
                         <PendingLink className="row-action-item" href={`${basePath}?view=${row.id}`} scroll={false}>
                           <Eye size={15} aria-hidden="true" /> View
                         </PendingLink>
-                        {canEdit ? (
+                        {canEdit && row.canEdit !== false ? (
                           <PendingLink className="row-action-item" href={`${basePath}?edit=${row.id}`} scroll={false}>
                             <Pencil size={15} aria-hidden="true" /> Edit
                           </PendingLink>

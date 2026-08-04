@@ -14855,6 +14855,60 @@ td strong,
   background: #ffffff;
 }
 
+.designation-portal-access {
+  align-items: start;
+}
+
+.designation-portal-matrix {
+  width: min(520px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.designation-portal-head,
+.designation-portal-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) repeat(3, 64px);
+  align-items: center;
+  min-height: 42px;
+}
+
+.designation-portal-head {
+  background: #f7f8fa;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.designation-portal-head span,
+.designation-portal-row > strong {
+  padding: 0 14px;
+}
+
+.designation-portal-head span:not(:first-child),
+.designation-portal-row label {
+  display: grid;
+  place-items: center;
+}
+
+.designation-portal-row + .designation-portal-row {
+  border-top: 1px solid var(--line);
+}
+
+.designation-portal-row label {
+  min-height: 42px;
+  cursor: pointer;
+}
+
+.designation-portal-row input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--orange);
+}
+
 .event-log-filters {
   display: grid;
   grid-template-columns: repeat(5, minmax(130px, 1fr));

@@ -12,6 +12,7 @@ import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
 import { generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { requireDesignationOnboardingAccess } from "@/lib/designation-onboarding-access";
+import { requireDesignationPortalAccess } from "@/lib/designation-portal-access";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
 import { saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -132,13 +133,14 @@ export async function createEmployee(formData: FormData) {
 
     const [locationResult, designationResult] = await Promise.all([
       supabaseAdmin.from("stations").select("id, station_code, station_name").eq("id", locationId).eq("company_id", companyId).maybeSingle(),
-      supabaseAdmin.from("designations").select("id, name, profile_field_rules, onboarding_role_ids").eq("id", designationId).eq("company_id", companyId).eq("is_active", true).maybeSingle()
+      supabaseAdmin.from("designations").select("id, name, profile_field_rules, onboarding_role_ids, portal_permissions").eq("id", designationId).eq("company_id", companyId).eq("is_active", true).maybeSingle()
     ]);
     if (locationResult.error) throw new Error(locationResult.error.message);
     if (designationResult.error) throw new Error(designationResult.error.message);
     if (!locationResult.data) throw new Error("Selected location is not available for this company.");
     if (!designationResult.data) throw new Error("Selected designation is not available.");
     requireDesignationOnboardingAccess(designationResult.data, authorization);
+    requireDesignationPortalAccess(designationResult.data, "dashboard", "add");
     const directActivate = await loadWorkforceCategoryDirectActivate(companyId, "employees");
     const dashboardRules = (await loadWorkforceCategoryRules(
       companyId,
@@ -327,12 +329,13 @@ export async function updateEmployee(formData: FormData) {
 
     const [locationResult, designationResult] = await Promise.all([
       supabaseAdmin.from("stations").select("id, station_code, station_name").eq("id", locationId).eq("company_id", companyId).maybeSingle(),
-      supabaseAdmin.from("designations").select("id, name, profile_field_rules").eq("id", designationId).eq("company_id", companyId).eq("is_active", true).maybeSingle()
+      supabaseAdmin.from("designations").select("id, name, profile_field_rules, portal_permissions").eq("id", designationId).eq("company_id", companyId).eq("is_active", true).maybeSingle()
     ]);
     if (locationResult.error) throw new Error(locationResult.error.message);
     if (designationResult.error) throw new Error(designationResult.error.message);
     if (!locationResult.data) throw new Error("Selected location is not available for this company.");
     if (!designationResult.data) throw new Error("Selected designation is not available.");
+    requireDesignationPortalAccess(designationResult.data, "dashboard", "edit");
     const dashboardRules = (await loadWorkforceCategoryRules(
       companyId,
       "employees",
@@ -345,11 +348,22 @@ export async function updateEmployee(formData: FormData) {
     );
     const existingResult = await supabaseAdmin
       .from("employees")
-      .select("biometric_id, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path")
+      .select("designation_id, biometric_id, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path")
       .eq("id", id)
       .eq("company_id", companyId)
       .maybeSingle();
     if (existingResult.error) throw new Error(existingResult.error.message);
+    if (!existingResult.data) throw new Error("Employee was not found.");
+    if (String(existingResult.data.designation_id ?? "") !== designationId) {
+      const currentDesignation = await supabaseAdmin
+        .from("designations")
+        .select("id, portal_permissions")
+        .eq("id", existingResult.data.designation_id)
+        .eq("company_id", companyId)
+        .maybeSingle();
+      if (currentDesignation.error) throw new Error(currentDesignation.error.message);
+      requireDesignationPortalAccess(currentDesignation.data, "dashboard", "edit");
+    }
     const biometricId = String((existingResult.data as { biometric_id?: string | null } | null)?.biometric_id ?? "").replace(/\D/g, "") || null;
 
     const documentPayload: Record<string, string> = {};
@@ -437,12 +451,20 @@ export async function reviewEmployeeProfile(formData: FormData) {
 
     const current = await supabaseAdmin
       .from("employees")
-      .select("profile_completion_status")
+      .select("profile_completion_status, designation_id")
       .eq("id", id)
       .eq("company_id", companyId)
       .maybeSingle();
     if (current.error) throw new Error(current.error.message);
     if (!current.data) throw new Error("Employee was not found.");
+    const designation = await supabaseAdmin
+      .from("designations")
+      .select("id, portal_permissions")
+      .eq("id", current.data.designation_id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (designation.error) throw new Error(designation.error.message);
+    requireDesignationPortalAccess(designation.data, "dashboard", "edit");
     if (String(current.data.profile_completion_status ?? "").toLowerCase() !== "under_review") {
       throw new Error("Only profiles under review can be approved or returned.");
     }
@@ -588,7 +610,7 @@ export async function bulkImportEmployees(formData: FormData) {
     const designationCodes = Array.from(new Set(rows.map((row) => row.designationCode)));
     const [locationsResult, designationsResult] = await Promise.all([
       supabaseAdmin.from("stations").select("id, station_code").eq("company_id", companyId).in("station_code", locationCodes),
-      supabaseAdmin.from("designations").select("id, code, onboarding_role_ids").eq("company_id", companyId).eq("is_active", true).in("code", designationCodes)
+      supabaseAdmin.from("designations").select("id, code, onboarding_role_ids, portal_permissions").eq("company_id", companyId).eq("is_active", true).in("code", designationCodes)
     ]);
     if (locationsResult.error) throw new Error(locationsResult.error.message);
     if (designationsResult.error) throw new Error(designationsResult.error.message);
@@ -604,6 +626,7 @@ export async function bulkImportEmployees(formData: FormData) {
       if (!locationId) throw new Error(`Row ${rowNumber}: Location ${row.locationCode} not found.`);
       if (!designation) throw new Error(`Row ${rowNumber}: Designation code ${row.designationCode} not found.`);
       requireDesignationOnboardingAccess(designation, authorization);
+      requireDesignationPortalAccess(designation, "dashboard", "add");
       const designationId = String(designation.id);
       if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
         throw new Error(`Row ${rowNumber}: You do not have access to location ${row.locationCode}.`);

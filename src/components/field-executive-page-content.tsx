@@ -13,6 +13,7 @@ import { countryCodeOptions } from "@/lib/country-codes";
 import { formatDashboardDate } from "@/lib/date-format";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { canOnboardDesignation } from "@/lib/designation-onboarding-access";
+import { canAccessDesignationPortal } from "@/lib/designation-portal-access";
 import { filterOnboardingLocations } from "@/lib/onboarding-location-access";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { loadWorkforceCategoryDirectActivate, loadWorkforceCategoryRules, loadWorkforceCategoryStatutoryEnabled } from "@/lib/workforce-category-rules";
@@ -39,6 +40,7 @@ type DesignationRow = {
   onboarding_categories?: string[] | null;
   profile_field_rules?: unknown;
   onboarding_role_ids?: string[] | null;
+  portal_permissions?: unknown;
   is_active: boolean;
 };
 
@@ -619,7 +621,7 @@ async function loadFieldExecutiveData(
 
   let designationsResult: { data: unknown[] | null; error: { message?: string } | null } = await supabaseAdmin
     .from("designations")
-    .select("id, code, name, model_ids, onboarding_categories, profile_field_rules, onboarding_role_ids, is_active")
+    .select("id, code, name, model_ids, onboarding_categories, profile_field_rules, onboarding_role_ids, portal_permissions, is_active")
     .eq("company_id", companyId)
     .eq("is_active", true)
     .order("name");
@@ -632,7 +634,7 @@ async function loadFieldExecutiveData(
       .order("name");
     designationsResult = {
       ...fallbackDesignationsResult,
-      data: (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...(designation as Record<string, unknown>), model_ids: [], onboarding_categories: ["employees"], profile_field_rules: {}, onboarding_role_ids: [] }))
+      data: (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...(designation as Record<string, unknown>), model_ids: [], onboarding_categories: ["employees"], profile_field_rules: {}, onboarding_role_ids: [], portal_permissions: null }))
     };
   }
 
@@ -710,7 +712,9 @@ async function loadFieldExecutiveData(
     return designationCategoryFilter.some((category) => categories.includes(category));
   });
   const allowedLocationIds = new Set(locations.map((location) => location.id));
-  const allowedDesignationNames = new Set(designations.map((designation) => designation.name));
+  const allowedDesignationNames = new Set(designations
+    .filter((designation) => canAccessDesignationPortal(designation, "dashboard", "view"))
+    .map((designation) => designation.name));
   const visibleExecutiveRows = ((executivesResult.data ?? []) as unknown as ExecutiveRow[])
     .filter((executive) => authorization.hasAllLocationAccess || allowedLocationIds.has(executive.location_id))
     .filter((executive) => allowedDesignationNames.has(String(executive.designation ?? "")));
@@ -729,6 +733,11 @@ async function loadFieldExecutiveData(
       provider: firstRelation(location?.providers)?.name || "-",
       model: model?.code || model?.name || "-",
       designation: executive.designation || "-",
+      canEdit: canAccessDesignationPortal(
+        designations.find((designation) => designation.name === executive.designation),
+        "dashboard",
+        "edit"
+      ),
       isActive: executive.is_active,
       status: fieldExecutiveStatus(executive)
     };
@@ -843,6 +852,8 @@ export async function FieldExecutivePageContent({
     label: designation.name,
     helper: designation.code,
     modelIds: designation.model_ids ?? [],
+    canAdd: canAccessDesignationPortal(designation, "dashboard", "add"),
+    canEdit: canAccessDesignationPortal(designation, "dashboard", "edit"),
     dashboardRules: (await loadWorkforceCategoryRules(
       requireCompanyId(authorization),
       workforceConfig.designationCategory,
@@ -852,8 +863,9 @@ export async function FieldExecutivePageContent({
   })));
   const onboardingDesignationOptions = designationOptions.filter((option) => {
     const designation = designations.find((row) => row.name === option.value);
-    return designation ? canOnboardDesignation(designation, authorization) : false;
+    return designation ? option.canAdd && canOnboardDesignation(designation, authorization) : false;
   });
+  const editDesignationOptions = designationOptions.filter((option) => option.canEdit);
   const viewRules = designationOptions.find((option) => option.value === viewExecutive?.designation)?.dashboardRules
     ?? categoryRules.dashboard;
   const editRules = designationOptions.find((option) => option.value === editExecutive?.designation)?.dashboardRules
@@ -923,7 +935,7 @@ export async function FieldExecutivePageContent({
         </div>
       ) : null}
 
-      {permission.canEdit && editExecutive ? (
+      {permission.canEdit && editExecutive && editDesignationOptions.some((option) => option.value === editExecutive.designation) ? (
         <div className="modal-backdrop">
           <section className="modal-panel wide" aria-label="Edit field executive">
             <div className="panel-head">
@@ -936,7 +948,7 @@ export async function FieldExecutivePageContent({
             <FieldExecutiveForm
               action={updateFieldExecutive}
               dashboardRules={editRules}
-              designationOptions={designationOptions}
+              designationOptions={editDesignationOptions}
               executive={editExecutive}
               locationOptions={locationOptions}
               mode="edit"

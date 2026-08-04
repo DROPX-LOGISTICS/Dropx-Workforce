@@ -7,6 +7,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { waitUntil } from "@vercel/functions";
 import * as XLSX from "xlsx";
 import { isCompanyOwner, requirePagePermission } from "@/lib/authorization";
+import { currentAccessSurface } from "@/lib/access-surface";
 import { syncBiometricEnrolment } from "@/lib/biometric/enrolments";
 import { generateBiometricEnrolmentId } from "@/lib/biometric/ids";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
@@ -243,7 +244,7 @@ export async function createFieldExecutive(formData: FormData) {
     if (designationRuleResult.error) throw new Error(designationRuleResult.error.message);
     if (!designationRuleResult.data) throw new Error("Selected designation is not available.");
     requireDesignationOnboardingAccess(designationRuleResult.data, authorization);
-  requireDesignationPortalAccess(designationRuleResult.data, "dashboard", "add", { isOwner: isCompanyOwner(authorization) });
+    requireDesignationPortalAccess(designationRuleResult.data, currentAccessSurface(), "add", { isOwner: isCompanyOwner(authorization) });
     const dashboardRules = directActivate
       ? (await loadWorkforceCategoryRules(
         companyId,
@@ -487,7 +488,7 @@ export async function updateFieldExecutive(formData: FormData) {
       .maybeSingle();
     if (designationResult.error) throw new Error(designationResult.error.message);
     if (!designationResult.data) throw new Error("Selected designation is not available.");
-  requireDesignationPortalAccess(designationResult.data, "dashboard", "edit", { isOwner: isCompanyOwner(authorization) });
+    requireDesignationPortalAccess(designationResult.data, currentAccessSurface(), "edit", { isOwner: isCompanyOwner(authorization) });
     const dashboardRules = (await loadWorkforceCategoryRules(
       companyId,
       config.designationCategory,
@@ -664,7 +665,7 @@ export async function reviewFieldExecutiveProfile(formData: FormData) {
       .maybeSingle();
     if (reviewDesignation.error) throw new Error(reviewDesignation.error.message);
     if (!reviewDesignation.data) throw new Error("Selected designation is not available.");
-  requireDesignationPortalAccess(reviewDesignation.data, "dashboard", "edit", { isOwner: isCompanyOwner(authorization) });
+    requireDesignationPortalAccess(reviewDesignation.data, currentAccessSurface(), "edit", { isOwner: isCompanyOwner(authorization) });
     if (String(current.data.onboarding_status ?? "").toLowerCase() !== "under_review") {
       throw new Error("Only profiles under review can be approved or returned.");
     }
@@ -815,6 +816,9 @@ export async function bulkImportFieldExecutives(formData: FormData) {
     : "dashboard";
 
   try {
+    if (currentAccessSurface() === "ops") {
+      throw new Error("Bulk workforce onboarding is not available in OpsPulse. Submit one onboarding request at a time.");
+    }
     const rows = await parseBulkWorkbook(formData.get("bulk_file"));
     const explicitDropxIds = new Map<string, number>();
     for (const [index, row] of rows.entries()) {
@@ -863,7 +867,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
       if (!locationId) throw new Error(`Row ${rowNumber}: Location ${row.locationCode} not found.`);
       if (!designation) throw new Error(`Row ${rowNumber}: Designation code ${row.designationCode} not found.`);
       requireDesignationOnboardingAccess(designation, authorization);
-  requireDesignationPortalAccess(designation, "dashboard", "add", { isOwner: isCompanyOwner(authorization) });
+      requireDesignationPortalAccess(designation, currentAccessSurface(), "add", { isOwner: isCompanyOwner(authorization) });
       if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
         throw new Error(`Row ${rowNumber}: You do not have access to location ${row.locationCode}.`);
       }

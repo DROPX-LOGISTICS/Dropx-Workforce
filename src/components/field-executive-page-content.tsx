@@ -8,6 +8,7 @@ import { ScopedDesignationFields, type ScopedDesignationOption, type ScopedLocat
 import { SearchableSelect } from "@/components/searchable-select";
 import { SubmitButton } from "@/components/submit-button";
 import { isCompanyOwner, type AuthorizationContext, requirePagePermission } from "@/lib/authorization";
+import { currentAccessSurface, type AccessSurface } from "@/lib/access-surface";
 import { requireCompanyId } from "@/lib/company-scope";
 import { countryCodeOptions } from "@/lib/country-codes";
 import { formatDashboardDate } from "@/lib/date-format";
@@ -589,6 +590,7 @@ async function loadFieldExecutiveData(
   authorization: AuthorizationContext,
   designationCategoryFilter: DesignationCategoryFilter[],
   table: "field_executives" | "contractors" | "vendors" | "workers",
+  accessSurface: AccessSurface,
   editId?: string,
   viewId?: string
 ) {
@@ -714,7 +716,7 @@ async function loadFieldExecutiveData(
   });
   const allowedLocationIds = new Set(locations.map((location) => location.id));
   const allowedDesignationNames = new Set(designations
-    .filter((designation) => canAccessDesignationPortal(designation, "dashboard", "view", { isOwner: ownerAccess }))
+    .filter((designation) => canAccessDesignationPortal(designation, accessSurface, "view", { isOwner: ownerAccess }))
     .map((designation) => designation.name));
   const visibleExecutiveRows = ((executivesResult.data ?? []) as unknown as ExecutiveRow[])
     .filter((executive) => authorization.hasAllLocationAccess || allowedLocationIds.has(executive.location_id))
@@ -736,7 +738,7 @@ async function loadFieldExecutiveData(
       designation: executive.designation || "-",
       canEdit: canAccessDesignationPortal(
         designations.find((designation) => designation.name === executive.designation),
-        "dashboard",
+        accessSurface,
           "edit",
           { isOwner: ownerAccess }
       ),
@@ -817,6 +819,7 @@ export async function FieldExecutivePageContent({
   viewId?: string;
 }) {
   const authorization = await requirePagePermission(pageCode, "access");
+  const accessSurface = currentAccessSurface();
   const ownerAccess = isCompanyOwner(authorization);
   const permission = authorization.permissions[pageCode] ?? {
     canView: false,
@@ -824,7 +827,7 @@ export async function FieldExecutivePageContent({
     canEdit: false
   };
   const workforceConfig = nonEmployeeConfigForRoute(returnPath);
-  const { executives, locations, designations, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, designationCategoryFilter, workforceConfig.table, editId, viewId);
+  const { executives, locations, designations, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, designationCategoryFilter, workforceConfig.table, accessSurface, editId, viewId);
   const categoryRules = await loadWorkforceCategoryRules(
     requireCompanyId(authorization),
     workforceConfig.designationCategory,
@@ -856,8 +859,8 @@ export async function FieldExecutivePageContent({
     label: designation.name,
     helper: designation.code,
     modelIds: designation.model_ids ?? [],
-      canAdd: canAccessDesignationPortal(designation, "dashboard", "add", { isOwner: ownerAccess }),
-      canEdit: canAccessDesignationPortal(designation, "dashboard", "edit", { isOwner: ownerAccess }),
+      canAdd: canAccessDesignationPortal(designation, accessSurface, "add", { isOwner: ownerAccess }),
+      canEdit: canAccessDesignationPortal(designation, accessSurface, "edit", { isOwner: ownerAccess }),
     dashboardRules: (await loadWorkforceCategoryRules(
       requireCompanyId(authorization),
       workforceConfig.designationCategory,
@@ -920,7 +923,7 @@ export async function FieldExecutivePageContent({
         </section>
       ) : null}
 
-      {permission.canAdd ? <FieldExecutiveBulkImportPanel description={bulkImportDescription} entityLabel={entityLabel} returnPath={returnPath} title={bulkImportTitle} /> : null}
+      {permission.canAdd && accessSurface !== "ops" ? <FieldExecutiveBulkImportPanel description={bulkImportDescription} entityLabel={entityLabel} returnPath={returnPath} title={bulkImportTitle} /> : null}
 
       {permission.canView || permission.canEdit ? <FieldExecutiveList basePath={returnPath} canEdit={permission.canEdit} emptyLabel={emptyListLabel} rows={executives} title={listTitle} /> : null}
 

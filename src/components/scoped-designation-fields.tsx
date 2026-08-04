@@ -98,15 +98,15 @@ export function ScopedDesignationFields({
           value={selectedDesignation}
         />
       </label>
-      <label>Vehicle type {vehicleTypeRequired ? "*" : "(required for DA/PTDA)"}
+      {vehicleTypeRequired ? <label>Vehicle type *
         <SearchableSelect
           name={vehicleTypeName}
           options={[{ value: "bike", label: "Bike" }, { value: "van", label: "Van" }]}
           placeholder="Select Bike or Van"
-          required={vehicleTypeRequired}
+          required
           defaultValue={initialVehicleType ?? ""}
         />
-      </label>
+      </label> : null}
     </>
   );
 }

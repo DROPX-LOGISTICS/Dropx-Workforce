@@ -5,7 +5,7 @@ import { PaymentRequestForm } from "@/components/payment-request-form";
 import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
-import { requirePagePermission } from "@/lib/authorization";
+import { requirePagePermission, type AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { formatDashboardDate } from "@/lib/date-format";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
@@ -39,6 +39,7 @@ type PaymentHeadRow = {
 
 type PaymentRequestRow = {
   id: string;
+  location_id: string | null;
   approval_status: string | null;
   amount: number | null;
   amount_requested: number | null;
@@ -55,6 +56,8 @@ type PaymentRequestRow = {
   remarks: string | null;
   status: string;
 };
+
+const NO_LOCATION_SCOPE_ID = "00000000-0000-0000-0000-000000000000";
 
 function canSubmitBankDetails(request: PaymentRequestRow, userId: string) {
   if (request.requested_by !== userId) return false;
@@ -118,7 +121,7 @@ function paymentDetailInputForQuestion(question: QuestionRow) {
   );
 }
 
-async function loadExpenseRequestData(companyId: string) {
+async function loadExpenseRequestData(companyId: string, authorization: AuthorizationContext) {
   if (!supabaseAdmin) {
     return {
       error: "Supabase service role key is not configured.",
@@ -128,26 +131,38 @@ async function loadExpenseRequestData(companyId: string) {
     };
   }
 
-  const [locationsResult, headsResult, requestsResult] = await Promise.all([
-    supabaseAdmin
+  let locationsQuery = supabaseAdmin
       .from("stations")
       .select("id, station_code, station_name, station_email, station_manager_email")
       .eq("company_id", companyId)
       .eq("is_active", true)
-      .order("station_code"),
-    supabaseAdmin
+      .order("station_code");
+  const headsQuery = supabaseAdmin
       .from("payment_heads")
       .select("id, code, name, requires_supporting_document, payment_head_questions (id, question_text, answer_type, dropdown_options, field_stage, is_required, sort_order)")
       .eq("company_id", companyId)
       .eq("is_active", true)
-      .order("code"),
-    supabaseAdmin
+      .order("code");
+  let requestsQuery = supabaseAdmin
       .from("payment_requests")
-      .select("id, request_no, location_code, payment_head_id, amount, amount_requested, bank_account_no, ifsc, account_holder_name, contact_no, email, remarks, requested_by, status, approval_status, created_at")
+      .select("id, request_no, location_id, location_code, payment_head_id, amount, amount_requested, bank_account_no, ifsc, account_holder_name, contact_no, email, remarks, requested_by, status, approval_status, created_at")
       .eq("company_id", companyId)
       .is("amount", null)
       .order("created_at", { ascending: false })
-      .limit(20)
+      .limit(20);
+
+  if (!authorization.hasAllLocationAccess) {
+    const locationIds = authorization.locationScopeIds.length
+      ? authorization.locationScopeIds
+      : [NO_LOCATION_SCOPE_ID];
+    locationsQuery = locationsQuery.in("id", locationIds);
+    requestsQuery = requestsQuery.in("location_id", locationIds);
+  }
+
+  const [locationsResult, headsResult, requestsResult] = await Promise.all([
+    locationsQuery,
+    headsQuery,
+    requestsQuery
   ]);
 
   const error = locationsResult.error?.message || headsResult.error?.message || requestsResult.error?.message || null;
@@ -173,7 +188,7 @@ export default async function ExpenseRequestPage({
   const authorization = await requirePagePermission("expense_requests", "access");
   const companyId = requireCompanyId(authorization);
   const pagePermission = authorization.permissions.expense_requests;
-  const { error, heads, locations, requests } = await loadExpenseRequestData(companyId);
+  const { error, heads, locations, requests } = await loadExpenseRequestData(companyId, authorization);
   const scopedLocationIds = new Set(authorization.locationScopeIds);
   const userEmail = authorization.email?.trim().toLowerCase() ?? "";
   const visibleLocations = authorization.hasAllLocationAccess

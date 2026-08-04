@@ -46,6 +46,8 @@ type RequestRow = {
   profiles?: { full_name: string | null; email: string | null } | null;
 };
 
+const NO_LOCATION_SCOPE_ID = "00000000-0000-0000-0000-000000000000";
+
 type AnswerRow = {
   id: string;
   answer_value: string | null;
@@ -157,6 +159,15 @@ async function loadApprovals(companyId: string, authorization: AuthorizationCont
     `)
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
+
+  if (!authorization.hasAllLocationAccess) {
+    query = query.in(
+      "location_id",
+      authorization.locationScopeIds.length
+        ? authorization.locationScopeIds
+        : [NO_LOCATION_SCOPE_ID]
+    );
+  }
 
   const requestsResult = await query;
   const processHeadsResult = authorization.roleId ? await supabaseAdmin

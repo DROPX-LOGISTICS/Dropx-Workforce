@@ -5,7 +5,7 @@ import { PaymentRequestForm } from "@/components/payment-request-form";
 import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
-import { requirePagePermission } from "@/lib/authorization";
+import { requirePagePermission, type AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { formatDashboardDate, formatDashboardDateTime } from "@/lib/date-format";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
@@ -55,6 +55,8 @@ type AnswerRow = {
   file_path: string | null;
 };
 type ApprovalRemarkRow = { action: string | null; comments: string | null; created_at: string };
+
+const NO_LOCATION_SCOPE_ID = "00000000-0000-0000-0000-000000000000";
 
 function isResubmittable(request: PaymentRequestRow, userId: string) {
   return request.requested_by === userId && (
@@ -131,30 +133,42 @@ function resubmitInputForQuestion(question: QuestionRow, answer?: AnswerRow) {
   );
 }
 
-async function loadPaymentRequestData(companyId: string) {
+async function loadPaymentRequestData(companyId: string, authorization: AuthorizationContext) {
   if (!supabaseAdmin) {
     return { heads: [] as PaymentHeadRow[], locations: [] as LocationRow[], requests: [] as PaymentRequestRow[], error: "Supabase service role key is not configured." };
   }
-  const [locationsResult, headsResult, requestsResult] = await Promise.all([
-    supabaseAdmin
+  let locationsQuery = supabaseAdmin
       .from("stations")
       .select("id, station_code, station_name, station_email, station_manager_email")
       .eq("company_id", companyId)
       .eq("is_active", true)
-      .order("station_code"),
-    supabaseAdmin
+      .order("station_code");
+  const headsQuery = supabaseAdmin
       .from("payment_heads")
       .select("id, code, name, requires_supporting_document, request_expense_approval, expense_approval_threshold, payment_head_questions (id, question_text, answer_type, dropdown_options, field_stage, is_required, sort_order)")
       .eq("company_id", companyId)
       .eq("is_active", true)
-      .order("code"),
-    supabaseAdmin
+      .order("code");
+  let requestsQuery = supabaseAdmin
       .from("payment_requests")
       .select("id, request_no, location_id, location_code, payment_head_id, amount, amount_requested, bank_account_no, ifsc, account_holder_name, contact_no, email, remarks, status, approval_status, requested_by, created_at")
       .eq("company_id", companyId)
       .not("amount", "is", null)
       .order("created_at", { ascending: false })
-      .limit(20)
+      .limit(20);
+
+  if (!authorization.hasAllLocationAccess) {
+    const locationIds = authorization.locationScopeIds.length
+      ? authorization.locationScopeIds
+      : [NO_LOCATION_SCOPE_ID];
+    locationsQuery = locationsQuery.in("id", locationIds);
+    requestsQuery = requestsQuery.in("location_id", locationIds);
+  }
+
+  const [locationsResult, headsResult, requestsResult] = await Promise.all([
+    locationsQuery,
+    headsQuery,
+    requestsQuery
   ]);
   const error = locationsResult.error?.message || headsResult.error?.message || requestsResult.error?.message || null;
   return {
@@ -213,7 +227,7 @@ export default async function PaymentRequestsPage({
   const authorization = await requirePagePermission("payment_requests", "access");
   const companyId = requireCompanyId(authorization);
   const pagePermission = authorization.permissions.payment_requests;
-  const { heads, locations, requests, error } = await loadPaymentRequestData(companyId);
+  const { heads, locations, requests, error } = await loadPaymentRequestData(companyId, authorization);
   const headById = new Map(heads.map((head) => [head.id, head]));
   const scopedLocationIds = new Set(authorization.locationScopeIds);
   const userEmail = authorization.email?.trim().toLowerCase() ?? "";

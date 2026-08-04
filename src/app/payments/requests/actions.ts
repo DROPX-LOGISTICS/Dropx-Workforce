@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { sendPaymentNotification } from "@/lib/payment-email-notifications";
+import { canAccessPaymentLocation } from "@/lib/payment-approval-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { insertPaymentApprovalLog } from "../approvals/actions";
 
@@ -616,11 +617,14 @@ export async function submitPaymentBankDetails(formData: FormData) {
 
     const { data: request, error: requestError } = await admin
       .from("payment_requests")
-      .select("id, payment_head_id, requested_by, status, approval_status, current_approver_user_id, current_approver_role_id, current_approver_role_ids")
+      .select("id, location_id, payment_head_id, requested_by, status, approval_status, current_approver_user_id, current_approver_role_id, current_approver_role_ids")
       .eq("id", requestId)
       .eq("company_id", companyId)
       .single();
     if (requestError || !request) throw new Error("Payment request not found.");
+    if (!canAccessPaymentLocation(authorization, request.location_id)) {
+      throw new Error("You do not have access to this request location.");
+    }
     if (request.requested_by !== authorization.userId) throw new Error("Only the initiator can submit bank details.");
 
     const status = String(request.status ?? "").toUpperCase();
@@ -765,6 +769,9 @@ export async function resubmitPaymentRequest(formData: FormData) {
       .eq("company_id", companyId)
       .single();
     if (requestError || !request) throw new Error("Payment request not found.");
+    if (!canAccessPaymentLocation(authorization, request.location_id)) {
+      throw new Error("You do not have access to this request location.");
+    }
     if (request.requested_by !== authorization.userId) throw new Error("Only the initiator can resubmit a returned request.");
     const wasReturnedAfterProcessing = Boolean(
       (request as { processed_at?: string | null; utr_cin?: string | null }).processed_at ||

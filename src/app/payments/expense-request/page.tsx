@@ -145,6 +145,7 @@ async function loadExpenseRequestData(companyId: string) {
       .from("payment_requests")
       .select("id, request_no, location_code, payment_head_id, amount, amount_requested, bank_account_no, ifsc, account_holder_name, contact_no, email, remarks, requested_by, status, approval_status, created_at")
       .eq("company_id", companyId)
+      .is("amount", null)
       .order("created_at", { ascending: false })
       .limit(20)
   ]);

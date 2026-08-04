@@ -385,6 +385,11 @@ export async function POST(request: Request) {
       designationResult?.data?.profile_field_rules,
       categoryCode
     )).dropx_one;
+    if (rules.enabled.length === 0) {
+      throw new Error(
+        "Profile fields are not configured for this category and designation. Contact an administrator."
+      );
+    }
     const requiredFields = new Set(rules.required);
     const isRequired = (key: string) => requiredFields.has(key);
     const textValue = (key: string, label: string) => isRequired(key) ? requiredText(formData.get(key), label) : cleanText(formData.get(key));
@@ -426,10 +431,6 @@ export async function POST(request: Request) {
       vehicle_reg_exp_date: dateValue("vehicle_reg_exp_date", "Reg expiry date"),
       vehicle_insurance_exp_date: dateValue("vehicle_insurance_exp_date", "Vehicle Insurance expiry"),
       vehicle_pollution_exp_date: dateValue("vehicle_pollution_exp_date", "Pollution expiry date"),
-      onboarding_status: manualReviewRequired ? "under_review" : "active",
-      profile_return_remarks: null,
-      profile_returned_at: null,
-      is_active: true,
       updated_at: new Date().toISOString()
     };
 
@@ -470,22 +471,26 @@ export async function POST(request: Request) {
     const dlFrontPath = uploadedDlFrontPath ?? draft?.filePaths.dl_front ?? null;
     const dlBackPath = uploadedDlBackPath ?? draft?.filePaths.dl_back ?? null;
     const profilePhotoPath = uploadedProfilePhotoPath ?? draft?.filePaths.profile_photo ?? null;
-    const uploadPayload: Record<string, unknown> = {};
+    const uploadPayload: Record<string, unknown> = {
+      onboarding_status: manualReviewRequired ? "under_review" : "active",
+      profile_return_remarks: null,
+      profile_returned_at: null,
+      is_active: true,
+      updated_at: new Date().toISOString()
+    };
     if (aadhaarFrontPath) uploadPayload.aadhaar_front_path = aadhaarFrontPath;
     if (aadhaarBackPath) uploadPayload.aadhaar_back_path = aadhaarBackPath;
     if (panUploadPath) uploadPayload.pan_upload_path = panUploadPath;
     if (dlFrontPath) uploadPayload.dl_front_path = dlFrontPath;
     if (dlBackPath) uploadPayload.dl_back_path = dlBackPath;
     if (profilePhotoPath) uploadPayload.profile_photo_path = profilePhotoPath;
-    if (Object.keys(uploadPayload).length > 0) {
-      const uploadUpdateResult = await supabaseAdmin
-        .from(table)
-        .update(uploadPayload)
-        .eq("id", account.id)
-        .eq("company_id", account.companyId);
-      if (uploadUpdateResult.error) {
-        throw new Error(`Profile details were saved, but upload paths were not saved. Run scripts/field_executives_v1.sql in Supabase and try again. ${uploadUpdateResult.error.message}`);
-      }
+    const uploadUpdateResult = await supabaseAdmin
+      .from(table)
+      .update(uploadPayload)
+      .eq("id", account.id)
+      .eq("company_id", account.companyId);
+    if (uploadUpdateResult.error) {
+      throw new Error(`Profile details were saved, but the profile could not be submitted. ${uploadUpdateResult.error.message}`);
     }
     const executive = await loadExecutive(account.id, account.companyId, account.profileType);
     await deleteProfileDraft({

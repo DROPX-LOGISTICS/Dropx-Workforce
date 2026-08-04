@@ -42,6 +42,9 @@ export async function reviewPeopleProfile(formData: FormData) {
   try {
     if (!id) throw new Error("Profile is required.");
     if (!isWorkforceProfileType(profileTypeValue)) throw new Error("Choose a valid profile category.");
+    if (profileTypeValue === "field_executive") {
+      throw new Error("Workforce applicants must be reviewed through Workforce Lifecycle so agreement, provider ID and activation checks cannot be bypassed.");
+    }
     if (!["approve", "return"].includes(action)) throw new Error("Choose a valid review action.");
     if (action === "return" && !remarks) throw new Error("Return remarks are required.");
 

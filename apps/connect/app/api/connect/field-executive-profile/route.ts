@@ -69,6 +69,15 @@ type FieldExecutiveRow = {
   stations?: { station_code: string | null; station_name: string | null } | { station_code: string | null; station_name: string | null }[] | null;
 };
 
+type WorkforceAgreementView = {
+  id: string;
+  code: string;
+  title: string;
+  version: number;
+  body: string;
+  acceptedAt: string | null;
+};
+
 function firstRelation<T>(value: T | T[] | null | undefined) {
   return Array.isArray(value) ? value[0] ?? null : value ?? null;
 }
@@ -242,6 +251,53 @@ async function signedProfileUrl(path: string | null) {
   return result.data?.signedUrl ?? "";
 }
 
+async function loadApplicableAgreement(row: FieldExecutiveRow): Promise<WorkforceAgreementView | null> {
+  if (!supabaseAdmin) return null;
+  const designation = row.designation
+    ? await supabaseAdmin
+      .from("designations")
+      .select("code")
+      .eq("company_id", row.company_id)
+      .ilike("name", row.designation)
+      .maybeSingle()
+    : null;
+  if (designation?.error) throw new Error(designation.error.message);
+  const designationCode = String(designation?.data?.code ?? "").trim().toUpperCase();
+  const today = new Date().toISOString().slice(0, 10);
+  const agreements = await supabaseAdmin
+    .from("workforce_agreement_master")
+    .select("id, code, title, version, agreement_body, applicable_designation_codes, effective_to")
+    .eq("company_id", row.company_id)
+    .eq("is_active", true)
+    .lte("effective_from", today)
+    .order("version", { ascending: false });
+  if (agreements.error) throw new Error(agreements.error.message);
+  const agreement = (agreements.data ?? []).find((item) => {
+    const codes = Array.isArray(item.applicable_designation_codes)
+      ? item.applicable_designation_codes.map((value: unknown) => String(value).toUpperCase())
+      : [];
+    return (!item.effective_to || item.effective_to >= today) && (!codes.length || codes.includes(designationCode));
+  });
+  if (!agreement) return null;
+  const acceptance = await supabaseAdmin
+    .from("workforce_agreement_acceptances")
+    .select("accepted_at")
+    .eq("company_id", row.company_id)
+    .eq("field_executive_id", row.id)
+    .eq("agreement_id", agreement.id)
+    .eq("agreement_version", agreement.version)
+    .maybeSingle();
+  if (acceptance.error) throw new Error(acceptance.error.message);
+  return {
+    id: agreement.id,
+    code: agreement.code,
+    title: agreement.title,
+    version: agreement.version,
+    body: agreement.agreement_body,
+    acceptedAt: acceptance.data?.accepted_at ?? null
+  };
+}
+
 async function serializeExecutive(row: FieldExecutiveRow, profileType: NonEmployeeProfileType) {
   const station = firstRelation(row.stations);
   const designationResult = row.designation && supabaseAdmin
@@ -259,6 +315,7 @@ async function serializeExecutive(row: FieldExecutiveRow, profileType: NonEmploy
     designationResult?.data?.profile_field_rules,
     categoryCode
   )).dropx_one;
+  const agreement = profileType === "field_executive" ? await loadApplicableAgreement(row) : null;
   return {
     id: row.id,
     readOnly: {
@@ -320,7 +377,8 @@ async function serializeExecutive(row: FieldExecutiveRow, profileType: NonEmploy
     },
     profilePhotoUrl: await signedProfileUrl(row.profile_photo_path),
     status: row.onboarding_status ?? "pending",
-    returnRemarks: row.profile_return_remarks ?? ""
+    returnRemarks: row.profile_return_remarks ?? "",
+    agreement
   };
 }
 
@@ -361,6 +419,17 @@ export async function POST(request: Request) {
     const table = workforceTable(account.profileType);
     const manualReviewRequired = String(formData.get("manual_review_required") ?? "") === "true";
     const currentExecutive = await loadExecutive(account.id, account.companyId, account.profileType);
+    const requiredAgreement = account.profileType === "field_executive"
+      ? await loadApplicableAgreement(currentExecutive)
+      : null;
+    if (requiredAgreement) {
+      const accepted = String(formData.get("agreement_accepted") ?? "") === "true";
+      const agreementId = String(formData.get("agreement_id") ?? "");
+      const agreementVersion = Number(formData.get("agreement_version") ?? 0);
+      if (!accepted || agreementId !== requiredAgreement.id || agreementVersion !== requiredAgreement.version) {
+        throw new Error(`Accept ${requiredAgreement.title} before submitting registration.`);
+      }
+    }
     const currentStatus = String(currentExecutive.onboarding_status ?? "pending").trim().toLowerCase();
     if (!["pending", "returned"].includes(currentStatus)) {
       throw new Error("Profile cannot be edited after submission.");
@@ -471,12 +540,49 @@ export async function POST(request: Request) {
     const dlFrontPath = uploadedDlFrontPath ?? draft?.filePaths.dl_front ?? null;
     const dlBackPath = uploadedDlBackPath ?? draft?.filePaths.dl_back ?? null;
     const profilePhotoPath = uploadedProfilePhotoPath ?? draft?.filePaths.profile_photo ?? null;
+    if (requiredAgreement && !requiredAgreement.acceptedAt) {
+      const acceptedAt = new Date().toISOString();
+      const agreementAcceptance = await supabaseAdmin.from("workforce_agreement_acceptances").upsert({
+        company_id: account.companyId,
+        field_executive_id: account.id,
+        agreement_id: requiredAgreement.id,
+        agreement_version: requiredAgreement.version,
+        content_hash: createHash("sha256").update(requiredAgreement.body).digest("hex"),
+        accepted_at: acceptedAt,
+        accepted_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+        accepted_user_agent: request.headers.get("user-agent") ?? null
+      }, { onConflict: "field_executive_id,agreement_id,agreement_version" });
+      if (agreementAcceptance.error) throw new Error(agreementAcceptance.error.message);
+      const checklistItem = await supabaseAdmin
+        .from("workforce_onboarding_checklist_master")
+        .select("id")
+        .eq("company_id", account.companyId)
+        .eq("code", "agreement_accepted")
+        .eq("is_active", true)
+        .maybeSingle();
+      if (checklistItem.error) throw new Error(checklistItem.error.message);
+      if (checklistItem.data) {
+        const checklistResult = await supabaseAdmin.from("workforce_onboarding_checklist_results").upsert({
+          company_id: account.companyId,
+          field_executive_id: account.id,
+          checklist_item_id: checklistItem.data.id,
+          status: "completed",
+          remarks: `${requiredAgreement.code} v${requiredAgreement.version} accepted by applicant`,
+          completed_at: acceptedAt,
+          updated_at: acceptedAt
+        }, { onConflict: "field_executive_id,checklist_item_id" });
+        if (checklistResult.error) throw new Error(checklistResult.error.message);
+      }
+    }
+    const submittedAt = new Date().toISOString();
+    const isFieldExecutive = account.profileType === "field_executive";
     const uploadPayload: Record<string, unknown> = {
-      onboarding_status: manualReviewRequired ? "under_review" : "active",
+      onboarding_status: isFieldExecutive ? "under_review" : manualReviewRequired ? "under_review" : "active",
       profile_return_remarks: null,
       profile_returned_at: null,
-      is_active: true,
-      updated_at: new Date().toISOString()
+      is_active: !isFieldExecutive,
+      ...(isFieldExecutive ? { onboarding_submitted_at: submittedAt, lifecycle_status: "onboarding" } : {}),
+      updated_at: submittedAt
     };
     if (aadhaarFrontPath) uploadPayload.aadhaar_front_path = aadhaarFrontPath;
     if (aadhaarBackPath) uploadPayload.aadhaar_back_path = aadhaarBackPath;
@@ -491,6 +597,18 @@ export async function POST(request: Request) {
       .eq("company_id", account.companyId);
     if (uploadUpdateResult.error) {
       throw new Error(`Profile details were saved, but the profile could not be submitted. ${uploadUpdateResult.error.message}`);
+    }
+    if (isFieldExecutive) {
+      const eventResult = await supabaseAdmin.from("workforce_onboarding_events").insert({
+        company_id: account.companyId,
+        field_executive_id: account.id,
+        event_code: "candidate_submitted",
+        from_status: currentStatus,
+        to_status: "under_review",
+        source_portal: "connect",
+        remarks: "Applicant submitted profile and agreement for HO review."
+      });
+      if (eventResult.error) throw new Error(eventResult.error.message);
     }
     const executive = await loadExecutive(account.id, account.companyId, account.profileType);
     await deleteProfileDraft({
@@ -515,7 +633,11 @@ export async function POST(request: Request) {
       profileType: account.profileType,
       sourceKey: `${account.id}:${new Date().toISOString()}`
     });
-    return NextResponse.json({ ok: true, profile: await serializeExecutive(executive, account.profileType), notice: "Profile saved successfully." });
+    return NextResponse.json({
+      ok: true,
+      profile: await serializeExecutive(executive, account.profileType),
+      notice: isFieldExecutive ? "Registration submitted to the HO Workforce team for review." : "Profile saved successfully."
+    });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to save profile." }, { status: 400 });
   }

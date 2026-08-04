@@ -148,28 +148,36 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
   const nonEmployeeTypes: NonEmployeeProfileType[] = ["field_executive", "contractor", "vendor", "worker"];
   async function loadNonEmployee(profileType: NonEmployeeProfileType): Promise<MatchResult<NonEmployeeMatch>> {
     const table = workforceTable(profileType);
-    let result: MatchResult<NonEmployeeMatch> = await supabaseAdmin!
+    let query = supabaseAdmin!
       .from(table)
       .select("id, company_id, full_name, email, dropx_id, biometric_id, designation, onboarding_status, profile_photo_path, is_active, mobile_country_code")
-      .eq("is_active", true)
       .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
       .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`);
+    if (profileType !== "field_executive") query = query.eq("is_active", true);
+    let result: MatchResult<NonEmployeeMatch> = await query;
     if (profileType !== "field_executive" && isMissingColumnError(result.error)) {
       return { data: [], error: null };
     }
     if (isMissingColumnError(result.error)) {
-      result = await supabaseAdmin!
+      let fallbackQuery = supabaseAdmin!
         .from(table)
         .select("id, company_id, full_name, email, dropx_id, biometric_id, designation, onboarding_status, is_active")
-        .eq("is_active", true)
         .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`);
+      if (profileType !== "field_executive") fallbackQuery = fallbackQuery.eq("is_active", true);
+      result = await fallbackQuery;
     }
     if (profileType !== "field_executive" && isMissingColumnError(result.error)) {
       return { data: [], error: null };
     }
     return result;
   }
-  const nonEmployeeResults = await Promise.all(nonEmployeeTypes.map(loadNonEmployee));
+  const nonEmployeeResults = (await Promise.all(nonEmployeeTypes.map(loadNonEmployee))).map((result, index) => {
+    if (nonEmployeeTypes[index] !== "field_executive") return result;
+    return {
+      ...result,
+      data: (result.data ?? []).filter((row) => !["rejected", "cancelled"].includes(String(row.onboarding_status ?? "pending").toLowerCase()))
+    };
+  });
 
   if (isMissingColumnError(profilesResult.error) || isMissingColumnError(employeesResult.error)) {
     [profilesResult, employeesResult] = await Promise.all([

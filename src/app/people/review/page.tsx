@@ -102,7 +102,8 @@ async function loadReviewProfiles(
   const attachmentColumns = attachmentFields.map((field) => field.key).join(", ");
   const employeeSelect = `id, employee_code, biometric_id, full_name, location_id, pan_number, aadhaar_number, driving_license_no, pf_uan, bank_account_no, ifsc, vehicle_reg_no, updated_at, ${attachmentColumns}, stations (station_code, station_name), designations (name)`;
   const nonEmployeeSelect = `id, dropx_id, biometric_id, full_name, location_id, designation, pan_number, aadhaar_number, driving_license_no, pf_uan, bank_account_no, ifsc_code, vehicle_reg_no, updated_at, ${attachmentColumns}, stations (station_code, station_name)`;
-  const nonEmployeeTypes = workforceProfileTypes.filter((profileType) => profileType !== "employee");
+  const nonEmployeeTypes = workforceProfileTypes.filter((profileType) => profileType !== "employee" && profileType !== "field_executive");
+  const queryProfileTypes: WorkforceProfileType[] = ["employee", ...nonEmployeeTypes];
   const profileQueries = [
     admin
       .from("employees")
@@ -136,7 +137,7 @@ async function loadReviewProfiles(
 
   const profiles: ReviewProfile[] = [];
   profileResults.forEach((result, index) => {
-    const profileType = workforceProfileTypes[index];
+    const profileType = queryProfileTypes[index];
     for (const raw of (result.data ?? []) as unknown as Array<Record<string, unknown>>) {
       const locationId = text(raw.location_id) || null;
       if (!hasAllLocationAccess && (!locationId || !locationScopeIds.includes(locationId))) continue;

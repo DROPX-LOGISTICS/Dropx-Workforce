@@ -8109,3 +8109,29 @@ tr:last-child td {
   border-radius: 50%;
   animation: dx-spin 0.75s linear infinite;
 }
+
+.dx-agreement-copy {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  color: #302f35;
+  background: #fff8ed;
+  border: 1px solid #f2d4aa;
+  border-radius: 9px;
+}
+.dx-agreement-copy small { color: #8b6335; }
+.dx-agreement-copy p { margin: 0; font-size: 13px; line-height: 1.55; }
+.dx-agreement-accept {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  color: #272630;
+  background: #f6f7fb;
+  border: 1px solid #dedfeb;
+  border-radius: 9px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.dx-agreement-accept input { width: 18px; height: 18px; flex: 0 0 auto; }
+.dx-resignation-status,.dx-resignation-form{display:grid;gap:10px;padding:14px;background:#f7f8fb;border:1px solid #e2e3eb;border-radius:9px}.dx-resignation-status span,.dx-resignation-status small{color:#6b6d78}.dx-resignation-form p{margin:0;color:#656771;font-size:13px}.dx-resignation-form label{display:grid;gap:5px;color:#656771;font-size:12px}.dx-resignation-form input,.dx-resignation-form textarea{padding:10px;border:1px solid #dedfe7;border-radius:8px;background:#fff}.dx-resignation-form textarea{min-height:82px;resize:vertical}

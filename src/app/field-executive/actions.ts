@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createHash, randomBytes } from "node:crypto";
 import { waitUntil } from "@vercel/functions";
 import * as XLSX from "xlsx";
@@ -227,7 +228,11 @@ export async function createFieldExecutive(formData: FormData) {
     const dateOfJoin = required(formData.get("date_of_join"), "Date of join");
     const locationId = required(formData.get("location_id"), "Location");
     const designation = required(formData.get("designation"), "Designation");
-    const directActivate = await loadWorkforceCategoryDirectActivate(companyId, config.designationCategory);
+    const configuredDirectActivate = await loadWorkforceCategoryDirectActivate(companyId, config.designationCategory);
+    // Delivery-associate / field-executive profiles always pass through the HO
+    // Workforce Lifecycle queue. Direct activation remains available only for
+    // the other independently configured workforce categories.
+    const directActivate = config.profileType !== "field_executive" && configuredDirectActivate;
     const directPayload = directActivate ? normalizeFieldExecutivePayload(formData).payload : null;
     const designationRuleResult = await supabaseAdmin.from("designations")
       .select("id, profile_field_rules, onboarding_role_ids, portal_permissions")
@@ -304,8 +309,20 @@ export async function createFieldExecutive(formData: FormData) {
     });
     const registrationToken = randomBytes(32).toString("base64url");
     const registrationTokenHash = createHash("sha256").update(registrationToken).digest("hex");
-    const basePayload = withCompany({
+    const requestHost = headers().get("host")?.split(":")[0].toLowerCase() ?? "";
+    const applicationSource = requestHost === "ops.dropxlogistics.com" || requestHost.startsWith("ops-")
+      ? "ops"
+      : "dashboard";
+    const lifecyclePayload = config.profileType === "field_executive" ? {
+      approval_required: true,
+      onboarding_application_source: applicationSource,
+      onboarding_submitted_at: null,
+      provider_id_status: "pending",
+      lifecycle_status: "onboarding"
+    } : {};
+    const basePayload: Record<string, unknown> = withCompany({
       ...(directPayload ?? {}),
+      ...lifecyclePayload,
       full_name: fullName,
       mobile_country_code: mobileCountryCode,
       mobile,
@@ -319,7 +336,7 @@ export async function createFieldExecutive(formData: FormData) {
       statutory_applicability: formData.getAll("statutory_applicability").map(String).filter(Boolean).length
         ? formData.getAll("statutory_applicability").map(String).filter(Boolean)
         : ["not_applicable"],
-      is_active: true
+      is_active: config.profileType === "field_executive" ? false : true
     }, companyId);
     const executiveSelect = "id, stations (station_code, station_name, providers (name))";
     let insertResult = await supabaseAdmin.from(table).insert({
@@ -364,17 +381,32 @@ export async function createFieldExecutive(formData: FormData) {
       }
     }
 
-    await syncBiometricEnrolment({
-      companyId,
-      createdBy: authorization.userId,
-      effectiveFrom: dateOfJoin,
-      enrolmentId: biometricId,
-      accountId: executive.id,
-      isActive: true,
-      locationId,
-      profileType: config.profileType,
-      workerType: "individual_contract"
-    });
+    if (config.profileType !== "field_executive") {
+      await syncBiometricEnrolment({
+        companyId,
+        createdBy: authorization.userId,
+        effectiveFrom: dateOfJoin,
+        enrolmentId: biometricId,
+        accountId: executive.id,
+        isActive: true,
+        locationId,
+        profileType: config.profileType,
+        workerType: "individual_contract"
+      });
+    }
+
+    if (config.profileType === "field_executive") {
+      await supabaseAdmin.from("workforce_onboarding_events").insert({
+        company_id: companyId,
+        field_executive_id: executive.id,
+        event_code: "onboarding_requested",
+        from_status: null,
+        to_status: "pending",
+        actor_user_id: authorization.userId,
+        source_portal: applicationSource,
+        metadata: { designation, location_id: locationId }
+      });
+    }
 
     const stationRelation = executive.stations as unknown as { station_code?: string; station_name?: string | null; providers?: { name?: string } | Array<{ name?: string }> | null } | null;
     const providerRelation = Array.isArray(stationRelation?.providers) ? stationRelation?.providers[0] : stationRelation?.providers;
@@ -405,7 +437,11 @@ export async function createFieldExecutive(formData: FormData) {
     }, returnPath);
   }
 
-  fieldExecutiveRedirect({ notice: `${entityLabel} added successfully.` }, returnPath);
+  fieldExecutiveRedirect({
+    notice: returnPath === "/field-executive"
+      ? `${entityLabel} onboarding request created. The applicant must submit the profile and agreement before HO activation.`
+      : `${entityLabel} added successfully.`
+  }, returnPath);
 }
 
 export async function updateFieldExecutive(formData: FormData) {
@@ -596,6 +632,12 @@ export async function reviewFieldExecutiveProfile(formData: FormData) {
   const companyId = requireCompanyId(authorization);
   if (!supabaseAdmin) fieldExecutiveRedirect({ error: "Supabase service role key is not configured." }, returnPath);
 
+  if (nonEmployeeConfigForRoute(returnPath).profileType === "field_executive") {
+    fieldExecutiveRedirect({
+      error: "Delivery Associate activation is controlled in People → Workforce Lifecycle so the agreement, provider ID and HO checklist cannot be bypassed."
+    }, returnPath);
+  }
+
   const id = String(formData.get("id") ?? "").trim();
   const action = String(formData.get("review_action") ?? "").trim().toLowerCase();
   const remarks = String(formData.get("return_remarks") ?? "").trim();
@@ -767,6 +809,10 @@ export async function bulkImportFieldExecutives(formData: FormData) {
   const companyId = requireCompanyId(authorization);
   if (!supabaseAdmin) fieldExecutiveRedirect({ error: "Supabase service role key is not configured." }, returnPath);
   const inserted: { id: string; locationId: string; biometricId: string | null; dateOfJoin: string }[] = [];
+  const requestHost = headers().get("host")?.split(":")[0].toLowerCase() ?? "";
+  const applicationSource = requestHost === "ops.dropxlogistics.com" || requestHost.startsWith("ops-")
+    ? "ops"
+    : "dashboard";
 
   try {
     const rows = await parseBulkWorkbook(formData.get("bulk_file"));
@@ -849,13 +895,31 @@ export async function bulkImportFieldExecutives(formData: FormData) {
         designation: designation.name,
         created_by: authorization.userId,
         onboarding_status: "pending",
-        is_active: true
+        ...(config.profileType === "field_executive" ? {
+          approval_required: true,
+          onboarding_application_source: applicationSource,
+          provider_id_status: "pending",
+          lifecycle_status: "onboarding"
+        } : {}),
+        is_active: config.profileType === "field_executive" ? false : true
       }, companyId)).select("id").single();
       if (insertResult.error) throw new Error(`Row ${rowNumber}: ${friendlyFieldExecutiveError(insertResult.error.message)}`);
       inserted.push({ id: insertResult.data.id, locationId, biometricId, dateOfJoin: row.dateOfJoin });
     }
 
     for (const row of inserted) {
+      if (config.profileType === "field_executive") {
+        await supabaseAdmin.from("workforce_onboarding_events").insert({
+          company_id: companyId,
+          field_executive_id: row.id,
+          event_code: "onboarding_requested",
+          to_status: "pending",
+          actor_user_id: authorization.userId,
+          source_portal: applicationSource,
+          metadata: { bulk_import: true, location_id: row.locationId }
+        });
+        continue;
+      }
       await syncBiometricEnrolment({
         companyId,
         createdBy: authorization.userId,
@@ -870,7 +934,11 @@ export async function bulkImportFieldExecutives(formData: FormData) {
     }
 
     revalidatePath(returnPath);
-    fieldExecutiveRedirect({ notice: `${inserted.length} ${entityLabel.toLowerCase()} records imported successfully.` }, returnPath);
+    fieldExecutiveRedirect({
+      notice: config.profileType === "field_executive"
+        ? `${inserted.length} workforce onboarding requests imported. Activation remains pending candidate submission and HO approval.`
+        : `${inserted.length} ${entityLabel.toLowerCase()} records imported successfully.`
+    }, returnPath);
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     if (inserted.length) {

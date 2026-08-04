@@ -5,7 +5,8 @@ const commonStart: NavItem[] = [
   { code: "ops_pulse", label: "Command Center", href: "/", icon: "#" },
   { code: "cod_reports", label: "Performance", href: "/performance", icon: "P" },
   { code: "cps_associates", label: "Capacity", href: "/capacity", icon: "A" },
-  { code: "service_network", label: "Service Network", href: "/service-network", icon: "S" }
+  { code: "service_network", label: "Service Network", href: "/service-network", icon: "S" },
+  { code: "delivery_associates", label: "Workforce Onboarding", href: "/field-executive", icon: "+" }
 ];
 
 const reports: NavItem = { code: "cod_reports", label: "Reports", href: "/reports", icon: "R" };

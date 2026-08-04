@@ -47,7 +47,7 @@ export const navItems: NavItem[] = [
     icon: "+",
     children: [
       { code: "people_all", label: "All People", href: "/people/all" },
-      { code: "people_review", label: "Profile Review", href: "/people/review" }
+      { code: "people_review", label: "Workforce Lifecycle", href: "/people/workforce-lifecycle" }
     ]
   },
   { code: "executive_id_onboarding", label: "Executive ID Onboarding", href: "/executive-id-onboarding", icon: "ID" },

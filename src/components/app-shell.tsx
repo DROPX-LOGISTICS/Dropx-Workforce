@@ -60,7 +60,7 @@ export async function AppShell({ children, active, pageCode }: { children: React
   }
   const shellNavItems = baseShellNavItems.map((item) => {
     if (item.code !== "onboard" || !workforceCategories.length) return item;
-    const categoryChildren = workforceCategories.map((category) => {
+    const categoryChildren = workforceCategories.filter((category) => category.code !== "field_executives").map((category) => {
       const known = workforceCategoryRoutes[category.code];
       return known
         ? { code: known.code, label: category.name, href: known.href }
@@ -71,7 +71,7 @@ export async function AppShell({ children, active, pageCode }: { children: React
       children: [
         { code: "people_all", label: "All People", href: "/people/all" },
         ...categoryChildren,
-        { code: "people_review", label: "Profile Review", href: "/people/review" }
+        { code: "people_review", label: "Workforce Lifecycle", href: "/people/workforce-lifecycle" }
       ]
     };
   });

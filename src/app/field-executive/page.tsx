@@ -19,22 +19,22 @@ export default function FieldExecutivePage({
 }) {
   return (
     <FieldExecutivePageContent
-      activeLabel="Field Executive"
-      addTitle="Add field executive"
-      bulkImportDescription="Upload existing field executive rows and keep the profile completion pending for the app."
-      bulkImportTitle="Bulk upload field executives"
+      activeLabel="Workforce Onboarding"
+      addTitle="Request workforce onboarding"
+      bulkImportDescription="Upload workforce onboarding requests. Every applicant remains pending until profile submission, agreement acceptance and HO activation."
+      bulkImportTitle="Bulk onboarding requests"
       designationCategoryFilter={["field_executives"]}
-      detailSubtitle="Complete Field Executive profile"
+      detailSubtitle="Workforce application and profile"
       editId={searchParams?.edit}
-      editTitle="Edit field executive"
-      emptyListLabel="No field executives added yet."
-      entityLabel="Field Executive"
+      editTitle="Edit workforce request"
+      emptyListLabel="No workforce onboarding requests yet."
+      entityLabel="Workforce applicant"
       errorMessage={searchParams?.error}
-      listTitle="Field Executive register"
+      listTitle="Workforce onboarding requests"
       notice={searchParams?.notice}
       pageCode="delivery_associates"
-      pageSubtitle="Register and maintain field executives by location."
-      pageTitle="Field Executive"
+      pageSubtitle="Create DA/DCD/ODCD requests and track them through candidate submission and HO activation."
+      pageTitle="Workforce Onboarding"
       returnPath="/field-executive"
       viewId={searchParams?.view}
       addFormValues={{

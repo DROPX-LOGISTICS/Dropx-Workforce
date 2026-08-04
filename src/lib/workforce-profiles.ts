@@ -29,7 +29,7 @@ export const nonEmployeeProfileConfigs: Record<NonEmployeeProfileType, NonEmploy
   field_executive: {
     category: "field_executive",
     designationCategory: "field_executives",
-    label: "Field executive",
+    label: "Workforce applicant",
     pageCode: "delivery_associates",
     profileType: "field_executive",
     route: "/field-executive",

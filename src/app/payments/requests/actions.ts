@@ -747,6 +747,176 @@ export async function submitPaymentBankDetails(formData: FormData) {
   paymentRequestsRedirect({ paymentNotice: "Bank details submitted for payment processing." });
 }
 
+export async function resubmitExpenseRequest(formData: FormData) {
+  const authorization = await requirePagePermission("expense_requests", "add");
+  const companyId = requireCompanyId(authorization);
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
+    const admin = supabaseAdmin;
+    const requestId = required(formData.get("request_id"), "Expense request");
+    const amountText = required(formData.get("amount"), "Estimated Amount");
+    const remarks = required(formData.get("remarks"), "Remarks");
+
+    const { data: request, error: requestError } = await admin
+      .from("payment_requests")
+      .select("id, location_id, payment_head_id, requested_by, status, approval_status, approval_cycle")
+      .eq("id", requestId)
+      .eq("company_id", companyId)
+      .single();
+    if (requestError || !request) throw new Error("Expense request not found.");
+    if (!canAccessPaymentLocation(authorization, request.location_id)) {
+      throw new Error("You do not have access to this request location.");
+    }
+    if (request.requested_by !== authorization.userId) {
+      throw new Error("Only the initiator can resubmit a returned request.");
+    }
+
+    const [locationResult, headResult, returnedApprovalResult] = await Promise.all([
+      admin.from("stations").select("id, station_code").eq("id", request.location_id).eq("company_id", companyId).single(),
+      admin
+        .from("payment_heads")
+        .select("id, initial_approval_role_id, initial_approval_role_ids, final_approval_role_id, final_approval_role_ids, payment_head_questions (id, answer_type, is_required, field_stage, sort_order)")
+        .eq("id", request.payment_head_id)
+        .eq("company_id", companyId)
+        .single(),
+      admin
+        .from("payment_request_approvals")
+        .select("action, approver_user_id, approver_role_id, created_at")
+        .eq("company_id", companyId)
+        .or(`payment_request_id.eq.${request.id},request_id.eq.${request.id}`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    ]);
+    if (locationResult.error) throw new Error("Location not found for this company.");
+    if (headResult.error) throw new Error("Payment head not found for this company.");
+
+    const normalizedApprovalStatus = String(request.approval_status ?? "").toUpperCase();
+    const normalizedStatus = String(request.status ?? "").toLowerCase();
+    const latestReturnedApproval = String(returnedApprovalResult.data?.action ?? "").toLowerCase() === "returned"
+      ? returnedApprovalResult.data
+      : null;
+    if (normalizedApprovalStatus !== "RETURNED" && normalizedStatus !== "returned" && !latestReturnedApproval) {
+      throw new Error("Only returned requests can be resubmitted.");
+    }
+
+    const initialApprovalRoleIds = configuredRoleIds(headResult.data.initial_approval_role_ids, headResult.data.initial_approval_role_id);
+    const finalApprovalRoleIds = configuredRoleIds(headResult.data.final_approval_role_ids, headResult.data.final_approval_role_id);
+    if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
+
+    let approver: ApproverTarget;
+    let currentApprovalRoleIds: string[];
+    let currentApprovalStep: number;
+    if (latestReturnedApproval?.approver_user_id) {
+      approver = {
+        userId: latestReturnedApproval.approver_user_id,
+        roleId: latestReturnedApproval.approver_role_id ?? null
+      };
+      currentApprovalRoleIds = latestReturnedApproval.approver_role_id ? [latestReturnedApproval.approver_role_id] : [];
+      currentApprovalStep = initialApprovalRoleIds.includes(latestReturnedApproval.approver_role_id ?? "") ? 1 : 2;
+    } else {
+      const startsWithFinalApproval = !initialApprovalRoleIds.length;
+      currentApprovalRoleIds = startsWithFinalApproval ? finalApprovalRoleIds : initialApprovalRoleIds;
+      currentApprovalStep = startsWithFinalApproval ? 2 : 1;
+      approver = await approverForRoles(
+        companyId,
+        currentApprovalRoleIds,
+        startsWithFinalApproval ? "final approver roles" : "initial approver roles"
+      );
+    }
+
+    const { data: existingAnswers, error: existingAnswersError } = await admin
+      .from("payment_request_answers")
+      .select("id, question_id, file_name")
+      .eq("company_id", companyId)
+      .eq("payment_request_id", request.id);
+    if (existingAnswersError) throw new Error(existingAnswersError.message);
+    const existingAnswerByQuestionId = new Map((existingAnswers ?? []).map((answer) => [answer.question_id, answer]));
+    const expenseQuestions = questionsForStage(headResult.data.payment_head_questions, "expense");
+    const questionById = new Map(expenseQuestions.map((question) => [question.id, question]));
+
+    for (const questionId of formData.getAll("question_ids").map(String)) {
+      const question = questionById.get(questionId);
+      if (!question) continue;
+      const existingAnswer = existingAnswerByQuestionId.get(questionId);
+      const answerPayload = withCompany({
+        payment_request_id: request.id,
+        question_id: questionId,
+        updated_at: new Date().toISOString()
+      }, companyId) as Record<string, unknown>;
+
+      if (question.answer_type === "file") {
+        const file = formData.get(`files[${questionId}]`);
+        if (file instanceof File && file.size > 0) {
+          const path = `${companyId}/${request.id}/${questionId}/${Date.now()}-${safeFileName(file.name)}`;
+          const { error: uploadError } = await admin.storage.from("payment-request-documents").upload(path, file, { upsert: false });
+          if (uploadError) throw new Error(uploadError.message);
+          answerPayload.answer_value = file.name;
+          answerPayload.file_path = path;
+          answerPayload.file_name = file.name;
+          answerPayload.file_size = file.size;
+        } else if (question.is_required && !existingAnswer?.file_name) {
+          throw new Error("Required file upload is missing.");
+        } else {
+          continue;
+        }
+      } else {
+        const answerValue = clean(formData.get(`answers[${questionId}]`));
+        if (question.is_required && !answerValue) throw new Error("A required expense detail is missing.");
+        answerPayload.answer_value = answerValue;
+        answerPayload.file_path = null;
+        answerPayload.file_name = null;
+        answerPayload.file_size = null;
+      }
+
+      const answerWrite = existingAnswer
+        ? await admin.from("payment_request_answers").update(answerPayload).eq("id", existingAnswer.id).eq("company_id", companyId)
+        : await admin.from("payment_request_answers").insert(answerPayload);
+      if (answerWrite.error) throw new Error(answerWrite.error.message);
+    }
+
+    const nextApprovalCycle = (Number(request.approval_cycle) || 1) + 1;
+    const { error: updateError } = await admin
+      .from("payment_requests")
+      .update({
+        location_code: locationResult.data.station_code,
+        station_code: locationResult.data.station_code,
+        amount: null,
+        amount_requested: Number(amountText),
+        remarks,
+        status: "resubmitted",
+        approval_status: "RESUBMITTED",
+        approval_cycle: nextApprovalCycle,
+        current_step_order: currentApprovalStep,
+        current_approver_user_id: approver.userId,
+        current_approver_role_id: approver.roleId,
+        current_approver_role_ids: currentApprovalRoleIds,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", request.id)
+      .eq("company_id", companyId);
+    if (updateError) throw new Error(updateError.message);
+
+    await insertPaymentApprovalLog(withCompany({
+      payment_request_id: request.id,
+      request_id: request.id,
+      approver_user_id: authorization.userId,
+      approver_role_id: authorization.roleId,
+      approval_cycle: nextApprovalCycle,
+      action: "resubmitted",
+      comments: remarks
+    }, companyId), companyId);
+
+    revalidatePath("/payments/expense-request");
+    revalidatePath("/payments/approvals");
+    revalidatePath("/payments/report");
+  } catch (error) {
+    expenseRequestsRedirect({ expenseError: paymentRequestErrorMessage(error) });
+  }
+
+  expenseRequestsRedirect({ expenseNotice: "Expense request resubmitted for approval." });
+}
+
 export async function resubmitPaymentRequest(formData: FormData) {
   const authorization = await requirePagePermission("payment_requests", "add");
   const companyId = requireCompanyId(authorization);

@@ -9,7 +9,7 @@ import { requirePagePermission, type AuthorizationContext } from "@/lib/authoriz
 import { requireCompanyId } from "@/lib/company-scope";
 import { formatDashboardDate } from "@/lib/date-format";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
-import { createExpenseRequest, submitPaymentBankDetails } from "@/app/payments/requests/actions";
+import { createExpenseRequest, resubmitExpenseRequest, submitPaymentBankDetails } from "@/app/payments/requests/actions";
 
 type LocationRow = {
   id: string;
@@ -57,6 +57,16 @@ type PaymentRequestRow = {
   status: string;
 };
 
+type AnswerRow = {
+  id: string;
+  question_id: string;
+  answer_value: string | null;
+  file_name: string | null;
+  file_path: string | null;
+};
+
+type ApprovalRemarkRow = { action: string | null; comments: string | null; created_at: string };
+
 const NO_LOCATION_SCOPE_ID = "00000000-0000-0000-0000-000000000000";
 
 function canSubmitBankDetails(request: PaymentRequestRow, userId: string) {
@@ -68,6 +78,13 @@ function canSubmitBankDetails(request: PaymentRequestRow, userId: string) {
   const hasBankDetails = Boolean(request.amount != null && request.bank_account_no?.trim() && request.ifsc?.trim() && request.account_holder_name?.trim());
   const isApproved = status === "APPROVED" || approvalStatus === "APPROVED" || status === "OWNER_APPROVED" || approvalStatus === "OWNER_APPROVED" || approvalStatus.endsWith("_APPROVED");
   return isApproved && !isRejectedOrReturned && !isAlreadyProcessing && !hasBankDetails;
+}
+
+function isResubmittable(request: PaymentRequestRow, userId: string) {
+  return request.requested_by === userId && (
+    String(request.status ?? "").toLowerCase() === "returned" ||
+    String(request.approval_status ?? "").toUpperCase() === "RETURNED"
+  );
 }
 
 function questionStage(question: QuestionRow) {
@@ -119,6 +136,68 @@ function paymentDetailInputForQuestion(question: QuestionRow) {
       type={question.answer_type === "number" ? "number" : question.answer_type === "date" ? "date" : "text"}
     />
   );
+}
+
+function resubmitInputForQuestion(question: QuestionRow, answer?: AnswerRow) {
+  const name = `answers[${question.id}]`;
+  if (question.answer_type === "dropdown") {
+    return (
+      <select className="field" name={name} required={question.is_required} defaultValue={answer?.answer_value ?? ""}>
+        <option value="">Select</option>
+        {optionsFromText(question.dropdown_options).map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+    );
+  }
+  if (question.answer_type === "textarea") {
+    return <AutoGrowTextarea name={name} required={question.is_required} rows={3} defaultValue={answer?.answer_value ?? ""} />;
+  }
+  if (question.answer_type === "yes_no") {
+    return (
+      <select className="field" name={name} required={question.is_required} defaultValue={answer?.answer_value ?? ""}>
+        <option value="">Select</option>
+        <option value="Yes">Yes</option>
+        <option value="No">No</option>
+      </select>
+    );
+  }
+  if (question.answer_type === "file") {
+    return (
+      <>
+        {answer?.file_name ? <p className="subtle" style={{ margin: "4px 0 8px" }}>Current file: {answer.file_name}</p> : null}
+        <input className="field" name={`files[${question.id}]`} required={question.is_required && !answer?.file_name} type="file" />
+      </>
+    );
+  }
+  return (
+    <input
+      className="field"
+      name={name}
+      required={question.is_required}
+      step={question.answer_type === "number" ? "0.01" : undefined}
+      type={question.answer_type === "number" ? "number" : question.answer_type === "date" ? "date" : "text"}
+      defaultValue={answer?.answer_value ?? ""}
+    />
+  );
+}
+
+async function loadReturnRemark(companyId: string, requestId: string) {
+  if (!supabaseAdmin) return null;
+  for (const requestColumn of ["payment_request_id", "request_id"] as const) {
+    const result = await supabaseAdmin
+      .from("payment_request_approvals")
+      .select("action, comments, created_at")
+      .eq("company_id", companyId)
+      .eq(requestColumn, requestId)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    if (result.error) continue;
+    const returnLog = ((result.data ?? []) as ApprovalRemarkRow[]).find((log) => {
+      const action = String(log.action ?? "").toLowerCase();
+      return action === "returned" || action === "rejected";
+    });
+    if (returnLog) return returnLog;
+  }
+  return null;
 }
 
 async function loadExpenseRequestData(companyId: string, authorization: AuthorizationContext) {
@@ -183,7 +262,7 @@ export const dynamic = "force-dynamic";
 export default async function ExpenseRequestPage({
   searchParams
 }: {
-  searchParams?: { bank?: string; expenseError?: string; expenseNotice?: string };
+  searchParams?: { bank?: string; expenseError?: string; expenseNotice?: string; resubmit?: string };
 }) {
   const authorization = await requirePagePermission("expense_requests", "access");
   const companyId = requireCompanyId(authorization);
@@ -207,6 +286,22 @@ export default async function ExpenseRequestPage({
     : null;
   const bankHead = bankRequest ? headById.get(bankRequest.payment_head_id) ?? null : null;
   const bankQuestions = questionsForStage(bankHead?.payment_head_questions, "payment");
+  const resubmitRequest = searchParams?.resubmit
+    ? requests.find((request) => request.id === searchParams.resubmit && isResubmittable(request, authorization.userId)) ?? null
+    : null;
+  const resubmitHead = resubmitRequest ? headById.get(resubmitRequest.payment_head_id) ?? null : null;
+  const resubmitQuestions = questionsForStage(resubmitHead?.payment_head_questions, "expense");
+  const [resubmitAnswersResult, returnRemark] = resubmitRequest && supabaseAdmin
+    ? await Promise.all([
+        supabaseAdmin
+          .from("payment_request_answers")
+          .select("id, question_id, answer_value, file_name, file_path")
+          .eq("company_id", companyId)
+          .eq("payment_request_id", resubmitRequest.id),
+        loadReturnRemark(companyId, resubmitRequest.id)
+      ])
+    : [{ data: [] as AnswerRow[] }, null];
+  const answerByQuestionId = new Map(((resubmitAnswersResult.data ?? []) as AnswerRow[]).map((answer) => [answer.question_id, answer]));
 
   return (
     <AppShell active="Expense Request" pageCode="expense_requests">
@@ -287,7 +382,9 @@ export default async function ExpenseRequestPage({
                     <td>{formatDashboardDate(request.created_at)}</td>
                     {pagePermission.canAdd ? (
                       <td>
-                        {canSubmitBankDetails(request, authorization.userId) ? (
+                        {isResubmittable(request, authorization.userId) ? (
+                          <PendingLink className="button compact" href={`/payments/expense-request?resubmit=${request.id}`} scroll={false}>Resubmit</PendingLink>
+                        ) : canSubmitBankDetails(request, authorization.userId) ? (
                           <PendingLink className="button compact" href={`/payments/expense-request?bank=${request.id}`} scroll={false}>Submit details</PendingLink>
                         ) : "-"}
                       </td>
@@ -300,6 +397,61 @@ export default async function ExpenseRequestPage({
             </table>
           </div>
         </section>
+      ) : null}
+
+      {resubmitRequest ? (
+        <div className="modal-backdrop">
+          <section className="modal-panel wide-modal" role="dialog" aria-modal="true" aria-labelledby="expense-resubmit-title">
+            <div className="panel-head">
+              <div>
+                <h2 id="expense-resubmit-title">Correct and resubmit expense request</h2>
+                <p className="subtle">{resubmitRequest.request_no} - Update the returned details and send it back for approval.</p>
+              </div>
+              <PendingLink className="icon-button" href="/payments/expense-request" scroll={false} aria-label="Close">x</PendingLink>
+            </div>
+            <form action={resubmitExpenseRequest} className="panel-body payment-resubmit-form" encType="multipart/form-data">
+              <input type="hidden" name="request_id" value={resubmitRequest.id} />
+              {returnRemark?.comments ? (
+                <div className="message-panel warn" style={{ marginBottom: 16 }}>
+                  <strong>Return remarks</strong>
+                  <p className="subtle" style={{ marginTop: 6 }}>{returnRemark.comments}</p>
+                </div>
+              ) : null}
+              <div className="form-grid three">
+                <label>
+                  Location
+                  <input className="field" value={resubmitRequest.location_code} readOnly />
+                </label>
+                <label>
+                  Payment Head
+                  <input className="field" value={resubmitHead?.name ?? "-"} readOnly />
+                </label>
+                <label>
+                  Estimated Amount *
+                  <input className="field" min="0" name="amount" required step="0.01" type="number" defaultValue={resubmitRequest.amount_requested ?? ""} />
+                </label>
+                {resubmitQuestions.map((question) => {
+                  const isWideField = question.answer_type === "textarea";
+                  return (
+                    <label key={question.id} className={isWideField ? "span-3" : undefined}>
+                      {question.question_text}{question.is_required ? " *" : ""}
+                      <input type="hidden" name="question_ids" value={question.id} />
+                      {resubmitInputForQuestion(question, answerByQuestionId.get(question.id))}
+                    </label>
+                  );
+                })}
+              </div>
+              <label className="payment-resubmit-remarks">
+                Resubmission remarks *
+                <AutoGrowTextarea className="field" name="remarks" required rows={3} defaultValue={resubmitRequest.remarks ?? ""} />
+              </label>
+              <div className="form-actions modal-actions">
+                <PendingLink className="button secondary" href="/payments/expense-request" scroll={false}>Cancel</PendingLink>
+                <SubmitButton pendingText="Resubmitting">Resubmit request</SubmitButton>
+              </div>
+            </form>
+          </section>
+        </div>
       ) : null}
 
       {bankRequest ? (

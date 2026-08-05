@@ -2,6 +2,7 @@ import { hasPermission, isCompanyOwner, type AuthorizationContext } from "@/lib/
 import { currentAccessSurface } from "@/lib/access-surface";
 import { getPaymentApprovalEligibility } from "@/lib/payment-approval-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { loadPeopleExceptionCount } from "@/lib/people-exception-count";
 
 export type PaymentNotificationItem = {
   key: string;
@@ -49,6 +50,7 @@ type PaymentNotificationRequest = {
 
 const EMPTY_BADGES = {
   people_review: 0,
+  people_exceptions: 0,
   payments: 0,
   expense_requests: 0,
   payment_requests: 0,
@@ -165,6 +167,7 @@ export async function loadPaymentNotificationSnapshot(authorization: Authorizati
   const badges = { ...EMPTY_BADGES };
   const items: PaymentNotificationItem[] = [];
   badges.people_review = await loadPeopleReviewCount(authorization);
+  badges.people_exceptions = await loadPeopleExceptionCount(authorization);
   const canSeePayments = hasPermission(authorization, "payments", "access");
   if (!canSeePayments || !supabaseAdmin) return { total: 0, badges, items };
 

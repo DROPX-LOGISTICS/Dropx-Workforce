@@ -24,6 +24,9 @@ type RequestRow = {
   payment_head_id: string;
   amount: number | null;
   amount_requested: number | null;
+  payment_mode: string | null;
+  payment_portal: string | null;
+  payment_reference: string | null;
   bank_account_no: string | null;
   ifsc: string | null;
   account_holder_name: string | null;
@@ -136,6 +139,9 @@ async function loadApprovals(companyId: string, authorization: AuthorizationCont
       payment_head_id,
       amount,
       amount_requested,
+      payment_mode,
+      payment_portal,
+      payment_reference,
       bank_account_no,
       ifsc,
       account_holder_name,
@@ -406,9 +412,13 @@ export default async function PaymentApprovalsPage({
                 <label>Payment Head<input className="field" readOnly value={selectedRequest.payment_heads?.name ?? "-"} /></label>
                 <label>{selectedRequest.amount == null && selectedRequest.amount_requested != null ? "Estimated Amount" : "Amount"}<input className="field" readOnly value={(selectedRequest.amount ?? selectedRequest.amount_requested) == null ? "-" : `Rs ${Number(selectedRequest.amount ?? selectedRequest.amount_requested).toLocaleString("en-IN")}`} /></label>
                 <label>Status<input className="field" readOnly value={selectedRequest.approval_status || selectedRequest.status} /></label>
+                <label>Payment Method<input className="field" readOnly value={selectedRequest.payment_mode === "upi_payment" ? "UPI Payment" : selectedRequest.payment_mode === "online_payment" ? "Online Payment" : "Bank Transfer"} /></label>
                 {hasDisplayValue(selectedRequest.account_holder_name) ? <label>Acc Holder Name<input className="field" readOnly value={selectedRequest.account_holder_name ?? "-"} /></label> : null}
-                {hasDisplayValue(selectedRequest.bank_account_no) ? <label>Bank Account No<input className="field" readOnly value={selectedRequest.bank_account_no ?? "-"} /></label> : null}
-                {hasDisplayValue(selectedRequest.ifsc) ? <label>IFSC<input className="field" readOnly value={selectedRequest.ifsc ?? "-"} /></label> : null}
+                {selectedRequest.payment_mode === "upi_payment" && hasDisplayValue(selectedRequest.payment_reference) ? <label>UPI ID<input className="field" readOnly value={selectedRequest.payment_reference ?? "-"} /></label> : null}
+                {selectedRequest.payment_mode === "online_payment" && hasDisplayValue(selectedRequest.payment_portal) ? <label>Payment Portal<input className="field" readOnly value={selectedRequest.payment_portal ?? "-"} /></label> : null}
+                {selectedRequest.payment_mode === "online_payment" && hasDisplayValue(selectedRequest.payment_reference) ? <label>Reference ID<input className="field" readOnly value={selectedRequest.payment_reference ?? "-"} /></label> : null}
+                {(selectedRequest.payment_mode ?? "account_transfer") === "account_transfer" && hasDisplayValue(selectedRequest.bank_account_no) ? <label>Bank Account No<input className="field" readOnly value={selectedRequest.bank_account_no ?? "-"} /></label> : null}
+                {(selectedRequest.payment_mode ?? "account_transfer") === "account_transfer" && hasDisplayValue(selectedRequest.ifsc) ? <label>IFSC<input className="field" readOnly value={selectedRequest.ifsc ?? "-"} /></label> : null}
                 {hasDisplayValue(selectedRequest.contact_no) ? <label>Contact No<input className="field" readOnly value={selectedRequest.contact_no ?? "-"} /></label> : null}
                 {hasDisplayValue(selectedRequest.email) ? <label>Email<input className="field" readOnly value={selectedRequest.email ?? "-"} /></label> : null}
               </div>

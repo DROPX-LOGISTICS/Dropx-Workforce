@@ -49,7 +49,6 @@ export function PaymentBeneficiaryFields({
   function invalidateBankVerification() {
     setSelectedBankContactId("");
     setBankVerified(false);
-    setAccountHolderName("");
     setVerificationMessage("");
   }
 
@@ -71,7 +70,6 @@ export function PaymentBeneficiaryFields({
       setVerificationMessage(result.source === "contact" ? "Verified account found in Contacts." : "Bank account verified.");
     } catch (error) {
       setBankVerified(false);
-      setAccountHolderName("");
       setVerificationMessage(error instanceof Error ? error.message : "Bank verification failed.");
     } finally {
       setBankVerifying(false);
@@ -94,7 +92,6 @@ export function PaymentBeneficiaryFields({
       setVerificationMessage(result.source === "contact" ? "Verified UPI ID found in Contacts." : "UPI ID verified.");
     } catch (error) {
       setUpiVerified(false);
-      setUpiAccountHolderName("");
       setVerificationMessage(error instanceof Error ? error.message : "UPI verification failed.");
     } finally {
       setUpiVerifying(false);
@@ -105,9 +102,6 @@ export function PaymentBeneficiaryFields({
     setSelectedBankContactId(contactId);
     const contact = bankContacts.find((item) => item.id === contactId);
     if (!contact) {
-      setBankAccountNo("");
-      setIfsc("");
-      setAccountHolderName("");
       setBankVerified(false);
       setVerificationMessage("");
       return;
@@ -125,8 +119,6 @@ export function PaymentBeneficiaryFields({
     setSelectedUpiContactId(contactId);
     const contact = upiContacts.find((item) => item.id === contactId);
     if (!contact) {
-      setUpiId("");
-      setUpiAccountHolderName("");
       setUpiVerified(false);
       setVerificationMessage("");
       return;
@@ -191,7 +183,6 @@ export function PaymentBeneficiaryFields({
                   setUpiId(event.target.value.replace(/\s/g, "").toLowerCase());
                   setSelectedUpiContactId("");
                   setUpiVerified(false);
-                  setUpiAccountHolderName("");
                   setVerificationMessage("");
                 }}
                 placeholder="name@bank"
@@ -206,7 +197,7 @@ export function PaymentBeneficiaryFields({
           </label>
           <label>
             Account Holder Name *
-            <input className="field" name="upi_account_holder_name" readOnly required value={upiAccountHolderName} />
+            <input className="field" name="upi_account_holder_name" onChange={(event) => setUpiAccountHolderName(event.target.value)} readOnly={upiVerified} required value={upiAccountHolderName} />
             <input name="upi_verified" type="hidden" value={upiVerified ? "1" : "0"} />
           </label>
           <label>
@@ -268,7 +259,7 @@ export function PaymentBeneficiaryFields({
           </label>
           <label>
             Acc Holder Name *
-            <input className="field" name="account_holder_name" readOnly required value={accountHolderName} />
+            <input className="field" name="account_holder_name" onChange={(event) => setAccountHolderName(event.target.value)} readOnly={bankVerified} required value={accountHolderName} />
             <input name="bank_verified" type="hidden" value={bankVerified ? "1" : "0"} />
           </label>
           <label>

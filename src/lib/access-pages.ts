@@ -13,6 +13,7 @@ export const accessPages = [
   { code: "leads_sop", name: "Ad SOP", sort_order: 37 },
   { code: "people_all", name: "All People", sort_order: 20 },
   { code: "people_review", name: "Profile Review", sort_order: 29 },
+  { code: "people_exceptions", name: "People Exceptions", sort_order: 30 },
   { code: "executive_id_onboarding", name: "Executive ID Onboarding", sort_order: 30 },
   { code: "provider_mapping", name: "ID Mapping", sort_order: 40 },
   { code: "fleet", name: "Fleet", sort_order: 45 },
@@ -473,6 +474,7 @@ export async function ensureAccessPages(supabase: SupabaseClient, companyId: str
   if (pageTopologyChanged) {
     const categoryCodes = categoryPages.map((page) => page.code);
     await seedTargetPermissionsFromSources(supabase, companyId, categoryCodes, "people_all");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["people_exceptions"], "people_review");
     await seedTargetPermissionsFromSources(supabase, companyId, ["cod_reports"], "executive_id_onboarding");
     await seedTargetPermissionsFromSources(supabase, companyId, ["designations"], "workforce_categories");
     await seedTargetPermissionsFromSources(supabase, companyId, ["designations"], "workforce_whatsapp");

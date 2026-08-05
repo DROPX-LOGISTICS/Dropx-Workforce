@@ -53,6 +53,19 @@ export function PaymentBeneficiaryFields({
   }
 
   async function verifyBankAccount() {
+    const savedContact = bankContacts.find((contact) =>
+      contact.bank_account_no?.toUpperCase() === bankAccountNo.toUpperCase() &&
+      contact.ifsc?.toUpperCase() === ifsc.toUpperCase()
+    );
+    if (savedContact) {
+      setSelectedBankContactId(savedContact.id);
+      setAccountHolderName(savedContact.account_holder_name);
+      setContactNo(savedContact.contact_no ?? contactNo);
+      setContactEmail(savedContact.email ?? contactEmail);
+      setBankVerified(true);
+      setVerificationMessage("Verified account found in Contacts. No API call required.");
+      return;
+    }
     setBankVerifying(true);
     setVerificationMessage("");
     try {
@@ -77,6 +90,16 @@ export function PaymentBeneficiaryFields({
   }
 
   async function verifyUpiId() {
+    const savedContact = upiContacts.find((contact) => contact.upi_id?.toLowerCase() === upiId.toLowerCase());
+    if (savedContact) {
+      setSelectedUpiContactId(savedContact.id);
+      setUpiAccountHolderName(savedContact.account_holder_name);
+      setContactNo(savedContact.contact_no ?? contactNo);
+      setContactEmail(savedContact.email ?? contactEmail);
+      setUpiVerified(true);
+      setVerificationMessage("Verified UPI ID found in Contacts. No API call required.");
+      return;
+    }
     setUpiVerifying(true);
     setVerificationMessage("");
     try {
@@ -197,7 +220,8 @@ export function PaymentBeneficiaryFields({
           </label>
           <label>
             Account Holder Name *
-            <input className="field" name="upi_account_holder_name" onChange={(event) => setUpiAccountHolderName(event.target.value)} readOnly={upiVerified} required value={upiAccountHolderName} />
+            <input className="field" disabled={upiVerified} name={upiVerified ? undefined : "upi_account_holder_name"} onChange={(event) => setUpiAccountHolderName(event.target.value)} required value={upiAccountHolderName} />
+            {upiVerified ? <input name="upi_account_holder_name" type="hidden" value={upiAccountHolderName} /> : null}
             <input name="upi_verified" type="hidden" value={upiVerified ? "1" : "0"} />
           </label>
           <label>
@@ -259,7 +283,8 @@ export function PaymentBeneficiaryFields({
           </label>
           <label>
             Acc Holder Name *
-            <input className="field" name="account_holder_name" onChange={(event) => setAccountHolderName(event.target.value)} readOnly={bankVerified} required value={accountHolderName} />
+            <input className="field" disabled={bankVerified} name={bankVerified ? undefined : "account_holder_name"} onChange={(event) => setAccountHolderName(event.target.value)} required value={accountHolderName} />
+            {bankVerified ? <input name="account_holder_name" type="hidden" value={accountHolderName} /> : null}
             <input name="bank_verified" type="hidden" value={bankVerified ? "1" : "0"} />
           </label>
           <label>

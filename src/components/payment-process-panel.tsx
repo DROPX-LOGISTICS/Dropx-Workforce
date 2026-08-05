@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
+import QRCode from "qrcode";
 import { PageHead } from "@/components/page-head";
 import { StatusPill } from "@/components/status-pill";
 import { formatDashboardDate } from "@/lib/date-format";
@@ -21,6 +22,7 @@ export type PaymentProcessRequest = {
   amount_requested: number | null;
   payment_mode: string | null;
   payment_reference: string | null;
+  account_holder_name: string | null;
   status: string | null;
   approval_status: string | null;
   created_at: string;
@@ -33,6 +35,36 @@ function amountValue(request: PaymentProcessRequest) {
 
 function isAccountTransfer(request: PaymentProcessRequest) {
   return (request.payment_mode ?? "account_transfer") === "account_transfer";
+}
+
+function paymentMethodLabel(request: PaymentProcessRequest) {
+  if (request.payment_mode === "upi_payment") return "UPI Payment";
+  if (request.payment_mode === "online_payment") return "Online Payment";
+  return "Bank Transfer";
+}
+
+function UpiPaymentQr({ request }: { request: PaymentProcessRequest }) {
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const upiId = request.payment_reference?.trim() ?? "";
+  const amount = amountValue(request).toFixed(2);
+
+  useEffect(() => {
+    if (!upiId) return;
+    const params = new URLSearchParams({ pa: upiId, am: amount, cu: "INR", tn: request.request_no });
+    if (request.account_holder_name?.trim()) params.set("pn", request.account_holder_name.trim());
+    QRCode.toDataURL(`upi://pay?${params.toString()}`, { errorCorrectionLevel: "M", margin: 2, width: 240 })
+      .then(setQrDataUrl)
+      .catch(() => setQrDataUrl(""));
+  }, [amount, request.account_holder_name, request.request_no, upiId]);
+
+  if (!qrDataUrl) return null;
+  return (
+    <div style={{ alignItems: "center", background: "#fff", border: "1px solid var(--border)", borderRadius: 14, display: "flex", flexDirection: "column", gap: 8, padding: 14 }}>
+      <strong>Scan to pay via UPI</strong>
+      <img alt={`UPI QR for ${request.request_no}`} height={220} src={qrDataUrl} width={220} />
+      <small className="subtle">{upiId} · Rs {Number(amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</small>
+    </div>
+  );
 }
 
 function statusLabel(request: PaymentProcessRequest) {
@@ -260,6 +292,7 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
                 <th>Request</th>
                 <th>Location</th>
                 <th>Payment Head</th>
+                <th>Payment Method</th>
                 <th>Amount</th>
                 <th>Status</th>
                 <th>Created</th>
@@ -282,6 +315,7 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
                   <td><strong>{request.request_no}</strong></td>
                   <td>{request.location_code}</td>
                   <td>{request.payment_head_name ?? "-"}</td>
+                  <td>{paymentMethodLabel(request)}</td>
                   <td>Rs {amountValue(request).toLocaleString("en-IN")}</td>
                   <td><StatusPill status={statusLabel(request)} /></td>
                   <td>{displayDate(request.created_at)}</td>
@@ -292,7 +326,7 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
                   </td>
                 </tr>
               )) : (
-                <tr><td className="empty-cell" colSpan={8}>No final approved payment requests ready for processing.</td></tr>
+                <tr><td className="empty-cell" colSpan={9}>No final approved payment requests ready for processing.</td></tr>
               )}
             </tbody>
           </table>
@@ -353,6 +387,9 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
                 <label>Amount
                   <input className="field" readOnly value={`Rs ${amountValue(processRequest).toLocaleString("en-IN")}`} />
                 </label>
+                <label>Payment Method
+                  <input className="field" readOnly value={paymentMethodLabel(processRequest)} />
+                </label>
                 <label>Status
                   <input className="field" readOnly value={statusLabel(processRequest)} />
                 </label>
@@ -364,6 +401,15 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
                   />
                 </label>
               </div>
+              {processRequest.payment_mode === "upi_payment" ? (
+                <div className="form-grid two" style={{ alignItems: "stretch", marginTop: 16 }}>
+                  <div className="form-grid" style={{ alignContent: "start" }}>
+                    <label>UPI ID<input className="field" readOnly value={processRequest.payment_reference ?? "-"} /></label>
+                    <label>Account Holder Name<input className="field" readOnly value={processRequest.account_holder_name ?? "-"} /></label>
+                  </div>
+                  <UpiPaymentQr request={processRequest} />
+                </div>
+              ) : null}
               <div className="form-actions modal-actions">
                 <button className="button secondary" onClick={() => setProcessRequest(null)} type="button">Cancel</button>
                 {statusKey(processRequest) !== "processing" && statusKey(processRequest) !== "processed" ? (

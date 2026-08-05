@@ -187,7 +187,7 @@ function expectedIfsc(request: PaymentRequestFinalizeRow) {
 }
 
 function expectedAmount(request: PaymentRequestFinalizeRow) {
-  return Number(request.amount_requested ?? request.amount ?? 0);
+  return Number(request.amount ?? request.amount_requested ?? 0);
 }
 
 function cleanFormText(value: FormDataEntryValue | null) {

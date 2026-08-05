@@ -28,7 +28,7 @@ export type PaymentProcessRequest = {
 };
 
 function amountValue(request: PaymentProcessRequest) {
-  return Number(request.amount_requested ?? request.amount ?? 0);
+  return Number(request.amount ?? request.amount_requested ?? 0);
 }
 
 function isAccountTransfer(request: PaymentProcessRequest) {

@@ -68,7 +68,7 @@ function fedOneRows(requests: RequestRow[], debitAccountNumber: string, valueDat
     return {
       "Transaction Type": beneficiaryIfsc.startsWith("FDRL") ? "IFT" : "NEFT",
       "Debit Account Number": debitAccountNumber,
-      "Transaction Amount": Number(request.amount_requested ?? request.amount ?? 0),
+      "Transaction Amount": Number(request.amount ?? request.amount_requested ?? 0),
       "Value Date": valueDate,
       "Beneficiary Account Number": safe(request.beneficiary_account_number || request.beneficiary_account_no || request.bank_account_no),
       "Beneficiary Name": safe(request.beneficiary_account_holder || request.account_holder_name),

@@ -41,6 +41,24 @@ const rupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "IN
 function indiaToday() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 }
+
+async function readPreviewResponse(response: Response): Promise<PreviewResponse> {
+  const body = await response.text();
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    try {
+      return JSON.parse(body) as PreviewResponse;
+    } catch {
+      throw new Error("The import service returned an unreadable response. Please retry once.");
+    }
+  }
+
+  if (response.status === 404) {
+    throw new Error("The import service is temporarily unavailable after an update. Please refresh and retry.");
+  }
+  throw new Error(`The import service could not complete the request (HTTP ${response.status}). Please retry.`);
+}
+
 export function CompensationBulkUpload({ kind }: { kind: ImportKind }) {
   const employee = kind === "employee_salary";
   const [file, setFile] = useState<File | null>(null);
@@ -77,7 +95,7 @@ export function CompensationBulkUpload({ kind }: { kind: ImportKind }) {
       body.set("effective_from", effectiveFrom);
       body.set("file", file);
       const response = await fetch("/api/payroll/compensation-import", { method: "POST", body });
-      const result = await response.json() as PreviewResponse;
+      const result = await readPreviewResponse(response);
       setPreview(result);
       if (!response.ok) throw new Error(result.error ?? "Unable to process this workbook.");
     } catch (caught) {

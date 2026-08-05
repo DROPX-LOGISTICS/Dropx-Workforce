@@ -153,7 +153,6 @@ export function PaymentRequestForm({
       setBankVerificationMessage(result.source === "contact" ? "Verified account found in Contacts." : "Bank account verified.");
     } catch (error) {
       setBankVerified(false);
-      setAccountHolderName("");
       setBankVerificationMessage(error instanceof Error ? error.message : "Bank verification failed.");
     } finally {
       setBankVerifying(false);
@@ -163,7 +162,6 @@ export function PaymentRequestForm({
   function invalidateBankVerification() {
     setSelectedBankContactId("");
     setBankVerified(false);
-    setAccountHolderName("");
     setBankVerificationMessage("");
   }
 
@@ -183,7 +181,6 @@ export function PaymentRequestForm({
       setBankVerificationMessage(result.source === "contact" ? "Verified UPI ID found in Contacts." : "UPI ID verified.");
     } catch (error) {
       setUpiVerified(false);
-      setUpiAccountHolderName("");
       setBankVerificationMessage(error instanceof Error ? error.message : "UPI verification failed.");
     } finally {
       setUpiVerifying(false);
@@ -194,9 +191,6 @@ export function PaymentRequestForm({
     setSelectedBankContactId(contactId);
     const contact = bankContacts.find((item) => item.id === contactId);
     if (!contact) {
-      setBankAccountNo("");
-      setIfsc("");
-      setAccountHolderName("");
       setBankVerified(false);
       setBankVerificationMessage("");
       return;
@@ -214,8 +208,6 @@ export function PaymentRequestForm({
     setSelectedUpiContactId(contactId);
     const contact = upiContacts.find((item) => item.id === contactId);
     if (!contact) {
-      setUpiId("");
-      setUpiAccountHolderName("");
       setUpiVerified(false);
       setBankVerificationMessage("");
       return;
@@ -289,14 +281,14 @@ export function PaymentRequestForm({
               <label>
                 UPI ID *
                 <span className="field-with-action">
-                  <input className="field" disabled={blockedByExpenseApproval} name="upi_id" onChange={(event) => { setUpiId(event.target.value.replace(/\s/g, "").toLowerCase()); setSelectedUpiContactId(""); setUpiVerified(false); setUpiAccountHolderName(""); setBankVerificationMessage(""); }} required placeholder="name@bank" value={upiId} />
+                  <input className="field" disabled={blockedByExpenseApproval} name="upi_id" onChange={(event) => { setUpiId(event.target.value.replace(/\s/g, "").toLowerCase()); setSelectedUpiContactId(""); setUpiVerified(false); setBankVerificationMessage(""); }} required placeholder="name@bank" value={upiId} />
                   <button className="button secondary compact" disabled={blockedByExpenseApproval || upiVerifying || !upiId || upiVerified} onClick={verifyUpiId} type="button">{upiVerifying ? "Verifying..." : upiVerified ? "Verified" : "Verify"}</button>
                 </span>
                 {bankVerificationMessage ? <span className={upiVerified ? "verification-message success" : "verification-message error"}>{bankVerificationMessage}</span> : null}
               </label>
               <label>
                 Account Holder Name *
-                <input className="field" name="upi_account_holder_name" readOnly required value={upiAccountHolderName} />
+                <input className="field" name="upi_account_holder_name" onChange={(event) => setUpiAccountHolderName(event.target.value)} readOnly={upiVerified} required value={upiAccountHolderName} />
                 <input name="upi_verified" type="hidden" value={upiVerified ? "1" : "0"} />
               </label>
               <label>
@@ -327,7 +319,7 @@ export function PaymentRequestForm({
               </label>
               <label>
                 Acc Holder Name *
-                <input className="field" name="account_holder_name" readOnly required value={accountHolderName} />
+                <input className="field" name="account_holder_name" onChange={(event) => setAccountHolderName(event.target.value)} readOnly={bankVerified} required value={accountHolderName} />
                 <input name="bank_verified" type="hidden" value={bankVerified ? "1" : "0"} />
               </label>
               <label>

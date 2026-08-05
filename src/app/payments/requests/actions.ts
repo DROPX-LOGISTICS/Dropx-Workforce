@@ -347,9 +347,6 @@ export async function createPaymentRequest(formData: FormData) {
     const bankAccountNo = isAccountTransfer ? required(formData.get("bank_account_no"), "Bank Account No") : null;
     const ifsc = isAccountTransfer ? required(formData.get("ifsc"), "IFSC") : null;
     const accountHolderName = isAccountTransfer ? required(formData.get("account_holder_name"), "Acc Holder Name") : null;
-    if (isAccountTransfer && clean(formData.get("bank_verified")) !== "1") {
-      throw new Error("Verify the bank account before submitting the payment request.");
-    }
     const paymentPortal = isOnlinePayment ? required(formData.get("payment_portal"), "Payment Portal") : null;
     const paymentReference = isOnlinePayment
       ? clean(formData.get("payment_reference"))
@@ -357,9 +354,7 @@ export async function createPaymentRequest(formData: FormData) {
         ? required(formData.get("upi_id"), "UPI ID")
         : null;
     const submittedUpiHolderName = isUpiPayment ? required(formData.get("upi_account_holder_name"), "UPI Account Holder Name") : null;
-    if (isUpiPayment && clean(formData.get("upi_verified")) !== "1") {
-      throw new Error("Verify the UPI ID before submitting the payment request.");
-    }
+    const upiVerified = clean(formData.get("upi_verified")) === "1";
     const contactNo = clean(formData.get("contact_no"));
     const email = clean(formData.get("email"));
     const remarks = clean(formData.get("remarks"));
@@ -380,7 +375,7 @@ export async function createPaymentRequest(formData: FormData) {
     }
 
     let verifiedUpiHolderName: string | null = null;
-    if (isUpiPayment && paymentReference) {
+    if (isUpiPayment && paymentReference && upiVerified) {
       const verifiedContact = await admin
         .from("payment_contacts")
         .select("account_holder_name")
@@ -419,7 +414,7 @@ export async function createPaymentRequest(formData: FormData) {
     const workDate = new Date().toISOString().slice(0, 10);
     const legacyAccountValue = bankAccountNo ?? paymentReference ?? paymentPortal ?? locationResult.data.station_code;
     const legacyIfscValue = ifsc ?? (isUpiPayment ? "UPI" : "ONLINE");
-    const legacyHolderValue = accountHolderName ?? verifiedUpiHolderName ?? paymentPortal ?? "Online Payment";
+    const legacyHolderValue = accountHolderName ?? verifiedUpiHolderName ?? submittedUpiHolderName ?? paymentPortal ?? "Online Payment";
     const startsWithFinalApproval = !initialApprovalRoleIds.length;
     const currentApprovalRoleIds = startsWithFinalApproval ? finalApprovalRoleIds : initialApprovalRoleIds;
     const approver = await approverForRoles(
@@ -656,12 +651,8 @@ export async function submitPaymentBankDetails(formData: FormData) {
     const submittedUpiHolderName = paymentMode === "upi_payment" ? required(formData.get("upi_account_holder_name"), "UPI Account Holder Name") : null;
     const paymentPortal = paymentMode === "online_payment" ? required(formData.get("payment_portal"), "Payment Portal") : null;
     const onlineReference = paymentMode === "online_payment" ? clean(formData.get("payment_reference")) : null;
-    if (isAccountTransfer && clean(formData.get("bank_verified")) !== "1") {
-      throw new Error("Verify the bank account before submitting payment details.");
-    }
-    if (paymentMode === "upi_payment" && clean(formData.get("upi_verified")) !== "1") {
-      throw new Error("Verify the UPI ID before submitting payment details.");
-    }
+    const bankVerified = clean(formData.get("bank_verified")) === "1";
+    const upiVerified = clean(formData.get("upi_verified")) === "1";
     if (bankAccountNo && !/^[A-Z0-9]{4,30}$/.test(bankAccountNo)) throw new Error("Invalid bank account number.");
     if (ifsc && !/^[A-Z0-9]{11}$/.test(ifsc)) throw new Error("Invalid IFSC.");
     if (upiId && !/^[A-Z0-9._-]{2,256}@[A-Z0-9.-]{2,64}$/i.test(upiId)) throw new Error("Invalid UPI ID.");
@@ -681,8 +672,8 @@ export async function submitPaymentBankDetails(formData: FormData) {
     }
     if (request.requested_by !== authorization.userId) throw new Error("Only the initiator can submit bank details.");
 
-    let accountHolderName: string | null = null;
-    if (isAccountTransfer && bankAccountNo && ifsc) {
+    let accountHolderName: string | null = submittedHolderName ?? submittedUpiHolderName;
+    if (isAccountTransfer && bankAccountNo && ifsc && bankVerified) {
       const verifiedContact = await admin
         .from("payment_contacts")
         .select("account_holder_name")
@@ -700,7 +691,7 @@ export async function submitPaymentBankDetails(formData: FormData) {
         throw new Error("Bank verification has changed. Verify the account again.");
       }
     }
-    if (paymentMode === "upi_payment" && upiId) {
+    if (paymentMode === "upi_payment" && upiId && upiVerified) {
       const verifiedContact = await admin
         .from("payment_contacts")
         .select("account_holder_name")

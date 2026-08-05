@@ -221,7 +221,7 @@ export default async function PeopleReviewPage({
   const selectedAttachments = selected?.attachmentPaths ?? [];
 
   return (
-    <AppShell active="Profile Review" pageCode="people_review">
+    <AppShell active="Under Review" pageCode="people_review">
       <PageHead
         eyebrow="People"
         title="Profile Review"

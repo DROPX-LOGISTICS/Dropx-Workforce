@@ -569,8 +569,15 @@ function FieldExecutiveBulkImportPanel({
       <form action={bulkImportFieldExecutives} className="workforce-bulk-form">
         <input type="hidden" name="return_path" value={returnPath} />
         <div className="workforce-template-note">
-          <strong>Excel columns</strong>
-          <span>DropX ID, Biometric ID, Full name, Mob country code, Mob no, Email, Date of join (DD/MM/YYYY), Location, Designation code</span>
+          <strong>{entityLabel} upload template</strong>
+          <span>Download the prepared Excel, fill one person per row, and upload the completed file.</span>
+          <a
+            className="template-download-link"
+            download
+            href={`/api/import-template?kind=${returnPath === "/contractors" ? "contractor" : "field_executive"}`}
+          >
+            Download sample Excel
+          </a>
         </div>
         <input accept=".xlsx,.xls,.csv" className="field" name="bulk_file" required type="file" />
         <SubmitButton

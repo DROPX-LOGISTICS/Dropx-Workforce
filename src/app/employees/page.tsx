@@ -294,8 +294,9 @@ function EmployeeBulkImportPanel() {
       </div>
       <form action={bulkImportEmployees} className="workforce-bulk-form">
         <div className="workforce-template-note">
-          <strong>Excel columns</strong>
-          <span>DropX ID, Biometric ID, Full name, Mob country code, Mob no, Email, Date of join (DD/MM/YYYY), Location, Designation code, Statutory applicability</span>
+          <strong>Employee upload template</strong>
+          <span>Download the prepared Excel, fill one employee per row, and upload the completed file.</span>
+          <a className="template-download-link" download href="/api/import-template?kind=employee">Download sample Excel</a>
         </div>
         <input accept=".xlsx,.xls,.csv" className="field" name="bulk_file" required type="file" />
         <SubmitButton

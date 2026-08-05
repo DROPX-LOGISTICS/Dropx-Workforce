@@ -3377,6 +3377,33 @@ h3 {
   line-height: 1.35;
 }
 
+.template-download-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  color: #c2410c;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.template-download-link::before {
+  content: "↓";
+  font-size: 14px;
+}
+
+.template-download-link:hover {
+  color: #9a3412;
+  text-decoration: underline;
+}
+
+.compensation-import-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .compensation-import-body {
   display: grid;
   gap: 14px;

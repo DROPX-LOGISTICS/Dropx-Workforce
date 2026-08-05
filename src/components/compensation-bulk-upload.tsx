@@ -119,7 +119,16 @@ export function CompensationBulkUpload({ kind }: { kind: ImportKind }) {
           <h2>{title}</h2>
           <p className="subtle">{description}</p>
         </div>
-        <span className="status-pill good">Owner only</span>
+        <div className="compensation-import-head-actions">
+          <a
+            className="template-download-link"
+            download
+            href={`/api/import-template?kind=${employee ? "employee_salary" : "contractor_remuneration"}`}
+          >
+            Download sample Excel
+          </a>
+          <span className="status-pill good">Owner only</span>
+        </div>
       </div>
       <div className="compensation-import-body">
         <div className="compensation-import-controls">

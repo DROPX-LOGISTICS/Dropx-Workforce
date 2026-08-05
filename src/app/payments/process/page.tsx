@@ -164,6 +164,7 @@ export default async function PaymentProcessPage({
             amount_requested: request.amount_requested,
             payment_mode: request.payment_mode,
             payment_reference: request.payment_reference,
+            account_holder_name: request.account_holder_name,
             status: request.status,
             approval_status: request.approval_status,
             created_at: request.created_at,

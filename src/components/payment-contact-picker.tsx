@@ -40,8 +40,8 @@ export function PaymentContactPicker({ contacts, disabled, mode, onValueChange, 
             value: contact.id,
             label: contact.account_holder_name,
             helper: isUpi
-              ? [contact.upi_id, contact.contact_no, contact.email].filter(Boolean).join(" · ")
-              : [contact.bank_account_no, contact.ifsc, contact.contact_no].filter(Boolean).join(" · ")
+              ? [`UPI: ${contact.upi_id}`, contact.contact_no ? `Phone: ${contact.contact_no}` : null, contact.email ? `Email: ${contact.email}` : null].filter(Boolean).join(" · ")
+              : [`A/C: ${contact.bank_account_no}`, `IFSC: ${contact.ifsc}`, contact.contact_no ? `Phone: ${contact.contact_no}` : null].filter(Boolean).join(" · ")
           }))}
           placeholder={contacts.length ? "Search by name, account, UPI ID or phone" : `No saved ${isUpi ? "UPI" : "bank"} contacts`}
           value={selectedId ?? ""}
@@ -52,7 +52,9 @@ export function PaymentContactPicker({ contacts, disabled, mode, onValueChange, 
           <span className="payment-contact-avatar">{selected.account_holder_name.slice(0, 1).toUpperCase()}</span>
           <span className="payment-contact-selected-copy">
             <strong>{selected.account_holder_name}</strong>
-            <small>{[primaryDetail, secondaryDetail].filter(Boolean).join(" · ")}</small>
+            <small>{isUpi
+              ? `UPI: ${primaryDetail ?? "-"}${secondaryDetail ? ` · ${secondaryDetail}` : ""}`
+              : `A/C: ${primaryDetail ?? "-"} · IFSC: ${secondaryDetail ?? "-"}`}</small>
           </span>
           <span className="payment-contact-verified"><BadgeCheck aria-hidden="true" size={15} /> Verified</span>
         </div>

@@ -979,8 +979,8 @@ export async function resubmitExpenseRequest(formData: FormData) {
         amount: null,
         amount_requested: Number(amountText),
         remarks,
-        status: "resubmitted",
-        approval_status: "RESUBMITTED",
+        status: currentApprovalStep === 1 ? "re_pending" : "re_cluster_approved",
+        approval_status: currentApprovalStep === 1 ? "RE_PENDING" : "RE_CLUSTER_APPROVED",
         approval_cycle: nextApprovalCycle,
         current_step_order: currentApprovalStep,
         current_approver_user_id: approver.userId,
@@ -1038,10 +1038,6 @@ export async function resubmitPaymentRequest(formData: FormData) {
       throw new Error("You do not have access to this request location.");
     }
     if (request.requested_by !== authorization.userId) throw new Error("Only the initiator can resubmit a returned request.");
-    const wasReturnedAfterProcessing = Boolean(
-      (request as { processed_at?: string | null; utr_cin?: string | null }).processed_at ||
-      (request as { utr_cin?: string | null }).utr_cin
-    );
     const nextApprovalCycle = (Number(request.approval_cycle) || 1) + 1;
 
     const [locationResult, headResult, returnedApprovalResult] = await Promise.all([
@@ -1054,7 +1050,7 @@ export async function resubmitPaymentRequest(formData: FormData) {
         .single(),
       admin
         .from("payment_request_approvals")
-        .select("action, approver_user_id, approver_role_id, approval_cycle, created_at")
+        .select("action, approver_user_id, approver_role_id, role_code, approval_cycle, created_at")
         .eq("company_id", companyId)
         .or(`payment_request_id.eq.${request.id},request_id.eq.${request.id}`)
         .order("created_at", { ascending: false })
@@ -1081,29 +1077,38 @@ export async function resubmitPaymentRequest(formData: FormData) {
     let approver: { userId: string | null; roleId: string | null } = { userId: null, roleId: null };
     let currentApprovalRoleIds: string[] = [];
     let currentApprovalStep = 1;
-    if (!wasReturnedAfterProcessing) {
-      const initialApprovalRoleIds = configuredRoleIds(headResult.data.initial_approval_role_ids, headResult.data.initial_approval_role_id);
-      const finalApprovalRoleIds = configuredRoleIds(headResult.data.final_approval_role_ids, headResult.data.final_approval_role_id);
-      if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
+    const initialApprovalRoleIds = configuredRoleIds(headResult.data.initial_approval_role_ids, headResult.data.initial_approval_role_id);
+    const finalApprovalRoleIds = configuredRoleIds(headResult.data.final_approval_role_ids, headResult.data.final_approval_role_id);
+    const paymentProcessRoleIds = (headResult.data.payment_process_role_ids ?? []) as string[];
+    if (!finalApprovalRoleIds.length) throw new Error("Final approval role is not configured for this payment head.");
 
-      const returnedApproval = latestReturnedApproval;
-      if (returnedApproval?.approver_user_id) {
-        approver = {
-          userId: returnedApproval.approver_user_id,
-          roleId: returnedApproval.approver_role_id ?? null
-        };
-        currentApprovalRoleIds = returnedApproval.approver_role_id ? [returnedApproval.approver_role_id] : [];
-        currentApprovalStep = initialApprovalRoleIds.includes(returnedApproval.approver_role_id ?? "") ? 1 : 2;
-      } else {
-        const startsWithFinalApproval = !initialApprovalRoleIds.length;
-        currentApprovalRoleIds = startsWithFinalApproval ? finalApprovalRoleIds : initialApprovalRoleIds;
-        currentApprovalStep = startsWithFinalApproval ? 2 : 1;
-        approver = await approverForRoles(
-          companyId,
-          currentApprovalRoleIds,
-          startsWithFinalApproval ? "final approver roles" : "initial approver roles"
-        );
-      }
+    const returnedRoleId = latestReturnedApproval?.approver_role_id ?? null;
+    const returnedByProcessor = String(latestReturnedApproval?.role_code ?? "").toUpperCase() === "BANK" ||
+      Boolean(returnedRoleId && paymentProcessRoleIds.includes(returnedRoleId));
+    let resubmittedApprovalStatus = "RE_PENDING";
+    if (returnedByProcessor) {
+      approver = {
+        userId: latestReturnedApproval?.approver_user_id ?? null,
+        roleId: returnedRoleId ?? paymentProcessRoleIds[0] ?? null
+      };
+      currentApprovalRoleIds = approver.roleId ? [approver.roleId] : paymentProcessRoleIds;
+      currentApprovalStep = 3;
+      resubmittedApprovalStatus = "RE_APPROVED";
+    } else if (latestReturnedApproval?.approver_user_id) {
+      approver = { userId: latestReturnedApproval.approver_user_id, roleId: returnedRoleId };
+      currentApprovalRoleIds = returnedRoleId ? [returnedRoleId] : [];
+      currentApprovalStep = initialApprovalRoleIds.includes(returnedRoleId ?? "") ? 1 : 2;
+      resubmittedApprovalStatus = currentApprovalStep === 1 ? "RE_PENDING" : "RE_CLUSTER_APPROVED";
+    } else {
+      const startsWithFinalApproval = !initialApprovalRoleIds.length;
+      currentApprovalRoleIds = startsWithFinalApproval ? finalApprovalRoleIds : initialApprovalRoleIds;
+      currentApprovalStep = startsWithFinalApproval ? 2 : 1;
+      approver = await approverForRoles(
+        companyId,
+        currentApprovalRoleIds,
+        startsWithFinalApproval ? "final approver roles" : "initial approver roles"
+      );
+      resubmittedApprovalStatus = startsWithFinalApproval ? "RE_CLUSTER_APPROVED" : "RE_PENDING";
     }
 
     const { data: existingAnswers } = await admin
@@ -1157,19 +1162,9 @@ export async function resubmitPaymentRequest(formData: FormData) {
       }
     }
 
-    const statusPayload = wasReturnedAfterProcessing
-      ? {
-        status: "processed",
-        approval_status: "PROCESSED",
-        bank_status: "Paid",
-        current_step_order: null,
-        current_approver_user_id: null,
-        current_approver_role_id: null,
-        current_approver_role_ids: []
-      }
-      : {
-        status: "resubmitted",
-        approval_status: "RESUBMITTED",
+    const statusPayload = {
+        status: resubmittedApprovalStatus.toLowerCase(),
+        approval_status: resubmittedApprovalStatus,
         approval_cycle: nextApprovalCycle,
         current_step_order: currentApprovalStep,
         current_approver_user_id: approver.userId,
@@ -1201,8 +1196,7 @@ export async function resubmitPaymentRequest(formData: FormData) {
       .eq("company_id", companyId);
     if (updateError) throw new Error(updateError.message);
 
-    if (!wasReturnedAfterProcessing) {
-      await insertPaymentApprovalLog(withCompany({
+    await insertPaymentApprovalLog(withCompany({
         payment_request_id: request.id,
         request_id: request.id,
         approver_user_id: authorization.userId,
@@ -1211,7 +1205,6 @@ export async function resubmitPaymentRequest(formData: FormData) {
         action: "resubmitted",
         comments: remarks
       }, companyId), companyId);
-    }
 
     revalidatePath("/payments/requests");
     revalidatePath("/payments/approvals");

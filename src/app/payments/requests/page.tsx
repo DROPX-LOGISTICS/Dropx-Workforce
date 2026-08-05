@@ -11,6 +11,7 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { formatDashboardDate, formatDashboardDateTime } from "@/lib/date-format";
 import { paymentFileAccept, paymentFileGroupLabels } from "@/lib/payment-file-types";
 import { loadUserPaymentContacts } from "@/lib/payment-contacts";
+import { loadPaymentNotificationSnapshot } from "@/lib/payment-notification-counts";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import type { PaymentMode } from "@/lib/payment-modes";
 import { createPaymentRequest, resubmitPaymentRequest, submitPaymentBankDetails } from "./actions";
@@ -241,6 +242,7 @@ export default async function PaymentRequestsPage({
   const pagePermission = authorization.permissions.payment_requests;
   const { heads, locations, requests, error } = await loadPaymentRequestData(companyId, authorization);
   const savedContacts = await loadUserPaymentContacts(companyId, authorization.userId);
+  const expenseActionCount = (await loadPaymentNotificationSnapshot(authorization)).badges.expense_requests ?? 0;
   const headById = new Map(heads.map((head) => [head.id, head]));
   const scopedLocationIds = new Set(authorization.locationScopeIds);
   const userEmail = authorization.email?.trim().toLowerCase() ?? "";
@@ -310,7 +312,10 @@ export default async function PaymentRequestsPage({
               <h2>New payment request</h2>
               <p className="subtle">Use this for payment heads that do not require expense approval.</p>
             </div>
-            <PendingLink className="button secondary" href="/payments/expense-request">New expense request</PendingLink>
+            <PendingLink className="button secondary" href="/payments/expense-request">
+              New expense request
+              {expenseActionCount > 0 ? <span className="nav-badge">{expenseActionCount > 99 ? "99+" : expenseActionCount}</span> : null}
+            </PendingLink>
           </div>
           <PaymentRequestForm
             action={createPaymentRequest}

@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { AppShell } from "@/components/app-shell";
+import { CompensationBulkUpload } from "@/components/compensation-bulk-upload";
 import { EmployeeForm } from "@/components/employee-form";
 import { EmployeeList } from "@/components/employee-list";
 import { PageHead } from "@/components/page-head";
@@ -510,6 +511,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams?: {
       ) : null}
 
       {!error && pagePermission.canAdd ? <EmployeeBulkImportPanel /> : null}
+      {!error && ownerAccess ? <CompensationBulkUpload kind="employee_salary" /> : null}
 
       {!error && pagePermission.canView ? (
         <EmployeeList

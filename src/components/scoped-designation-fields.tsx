@@ -40,9 +40,7 @@ export function ScopedDesignationFields({
   locationName,
   locationOptions,
   onDesignationChange,
-  required = true,
-  vehicleTypeName = "vehicle_type",
-  initialVehicleType = ""
+  required = true
 }: {
   designationName: string;
   designationOptions: ScopedDesignationOption[];
@@ -52,8 +50,6 @@ export function ScopedDesignationFields({
   locationOptions: ScopedLocationOption[];
   onDesignationChange?: (value: string) => void;
   required?: boolean;
-  vehicleTypeName?: string;
-  initialVehicleType?: string | null;
 }) {
   const [selectedLocationId, setSelectedLocationId] = useState(initialLocationId ?? "");
   const [selectedDesignation, setSelectedDesignation] = useState(initialDesignation ?? "");
@@ -62,11 +58,6 @@ export function ScopedDesignationFields({
     ? [{ value: selectedDesignation, label: selectedDesignation, helper: "Current", modelIds: [] }, ...filteredDesignationOptions]
     : filteredDesignationOptions;
   const designationDisabled = !selectedLocationId || !effectiveDesignationOptions.length;
-  const selectedDesignationOption = effectiveDesignationOptions.find((option) => option.value === selectedDesignation);
-  const selectedDesignationCode = selectedDesignationOption?.code?.trim().toUpperCase() ?? "";
-  const selectedDesignationName = (selectedDesignationOption?.value || selectedDesignation).trim().toLowerCase();
-  const vehicleTypeRequired = ["DA", "PTDA"].includes(selectedDesignationCode)
-    || ["delivery associate", "part time delivery associate"].includes(selectedDesignationName);
 
   return (
     <>
@@ -98,15 +89,6 @@ export function ScopedDesignationFields({
           value={selectedDesignation}
         />
       </label>
-      {vehicleTypeRequired ? <label>Vehicle type *
-        <SearchableSelect
-          name={vehicleTypeName}
-          options={[{ value: "bike", label: "Bike" }, { value: "van", label: "Van" }]}
-          placeholder="Select Bike or Van"
-          required
-          defaultValue={initialVehicleType ?? ""}
-        />
-      </label> : null}
     </>
   );
 }

@@ -183,7 +183,7 @@ async function loadApprovals(companyId: string, authorization: AuthorizationCont
   const eligibleIds = await getPaymentApprovalEligibility(companyId, authorization, unscopedRequests);
   const normalizedFilter = statusFilter || "pending";
   const normalizedSearch = String(searchTerm ?? "").trim().toLowerCase();
-  const pendingApprovalStatuses = new Set(["pending", "resubmitted"]);
+  const pendingApprovalStatuses = new Set(["pending", "resubmitted", "re_pending", "re_cluster_approved"]);
   const requests = unscopedRequests.filter((request) => {
     if (!eligibleIds.has(request.id)) return false;
     const requestStatus = String(request.status ?? "").trim().toLowerCase();

@@ -30,6 +30,8 @@ type PaymentRequestFinalizeRow = {
   beneficiary_account_number: string | null;
   ifsc: string | null;
   beneficiary_ifsc: string | null;
+  approval_status?: string | null;
+  current_approver_user_id?: string | null;
   current_approver_role_id: string | null;
   approval_cycle?: number | null;
 };
@@ -150,7 +152,8 @@ async function insertBankReturnLog(
   companyId: string,
   request: Pick<PaymentRequestFinalizeRow, "id" | "current_approver_role_id" | "approval_cycle">,
   comments: string,
-  actorUserId: string | null
+  actorUserId: string | null,
+  actorRoleId: string | null
 ) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
   const payload: Record<string, unknown> = {
@@ -158,7 +161,7 @@ async function insertBankReturnLog(
     payment_request_id: request.id,
     request_id: request.id,
     approver_user_id: actorUserId,
-    approver_role_id: request.current_approver_role_id,
+    approver_role_id: actorRoleId ?? request.current_approver_role_id,
     role_code: "BANK",
     action: "returned",
     comments,
@@ -210,11 +213,14 @@ export async function updatePaymentProcessStatus(formData: FormData) {
 
     const { data: request, error } = await supabaseAdmin
       .from("payment_requests")
-      .select("id, request_no, current_approver_role_id, approval_cycle")
+      .select("id, request_no, approval_status, current_approver_user_id, current_approver_role_id, approval_cycle")
       .eq("company_id", companyId)
       .eq("id", requestId)
       .single();
     if (error || !request) throw new Error("Payment request was not found.");
+    if (String(request.approval_status ?? "").toUpperCase() === "RE_APPROVED" && request.current_approver_user_id !== authorization.userId) {
+      throw new Error("This returned request is assigned to another processor.");
+    }
 
     const now = new Date().toISOString();
     if (action === "processing") {
@@ -272,7 +278,7 @@ export async function updatePaymentProcessStatus(formData: FormData) {
       current_approver_role_id: null,
       updated_at: now
     });
-    await insertBankReturnLog(companyId, request, `Returned: ${remarks}`, authorization.userId);
+    await insertBankReturnLog(companyId, request, `Returned: ${remarks}`, authorization.userId, authorization.roleId);
     await sendPaymentNotification({
       actorUserId: authorization.userId,
       companyId,
@@ -305,7 +311,7 @@ export async function finalizePaymentProcess(formData: FormData) {
     const requestNos = Array.from(new Set(bankRows.map((row) => row.requestNo).filter(Boolean)));
     const { data, error } = await supabaseAdmin
       .from("payment_requests")
-      .select("id, request_no, amount, amount_requested, payment_mode, bank_account_no, beneficiary_account_no, beneficiary_account_number, ifsc, beneficiary_ifsc, current_approver_role_id, approval_cycle")
+      .select("id, request_no, amount, amount_requested, payment_mode, bank_account_no, beneficiary_account_no, beneficiary_account_number, ifsc, beneficiary_ifsc, approval_status, current_approver_user_id, current_approver_role_id, approval_cycle")
       .eq("company_id", companyId)
       .in("request_no", requestNos);
     if (error) throw new Error(error.message);
@@ -321,6 +327,10 @@ export async function finalizePaymentProcess(formData: FormData) {
     for (const row of bankRows) {
       const request = requestByNo.get(normalizeMatch(row.requestNo));
       if (!request) {
+        skippedCount += 1;
+        continue;
+      }
+      if (String(request.approval_status ?? "").toUpperCase() === "RE_APPROVED" && request.current_approver_user_id !== authorization.userId) {
         skippedCount += 1;
         continue;
       }
@@ -365,7 +375,7 @@ export async function finalizePaymentProcess(formData: FormData) {
           current_approver_role_id: null,
           updated_at: now
         });
-        await insertBankReturnLog(companyId, request, remarks, authorization.userId);
+        await insertBankReturnLog(companyId, request, remarks, authorization.userId, authorization.roleId);
         await sendPaymentNotification({
           actorUserId: authorization.userId,
           companyId,

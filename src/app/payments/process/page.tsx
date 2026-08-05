@@ -56,16 +56,18 @@ function isReadyForPaymentProcess(request: PaymentRequestRow) {
       request.account_holder_name?.trim()
     );
   return hasPaymentDetails && (status === "APPROVED" ||
+    status === "RE_APPROVED" ||
     status === "PROCESSING" ||
     status === "PROCESSED" ||
     status === "OWNER_APPROVED" ||
     approvalStatus === "PROCESSING" ||
     approvalStatus === "PROCESSED" ||
     approvalStatus === "OWNER_APPROVED" ||
+    approvalStatus === "RE_APPROVED" ||
     (approvalStatus.endsWith("_APPROVED") && !hasCurrentApprover));
 }
 
-async function loadPaymentProcess(companyId: string, roleId: string | null, canSeeAllFinalApproved: boolean) {
+async function loadPaymentProcess(companyId: string, userId: string | null, roleId: string | null, canSeeAllFinalApproved: boolean) {
   if (!supabaseAdmin) {
     return {
       banks: [] as PaymentBankRow[],
@@ -103,6 +105,7 @@ async function loadPaymentProcess(companyId: string, roleId: string | null, canS
     banks: (banksResult.data ?? []) as PaymentBankRow[],
     requests: ((requestsResult.data ?? []) as unknown as PaymentRequestRow[])
       .filter(isReadyForPaymentProcess)
+      .filter((request) => String(request.approval_status ?? "").toUpperCase() !== "RE_APPROVED" || request.current_approver_user_id === userId)
       .map((request) => ({
         ...request,
         payment_heads: firstRelation(request.payment_heads)
@@ -122,7 +125,7 @@ export default async function PaymentProcessPage({
   const companyId = requireCompanyId(authorization);
   const pagePermission = authorization.permissions.payment_process;
   const canSeeAllFinalApproved = isCompanyOwner(authorization);
-  const { banks, requests, error } = await loadPaymentProcess(companyId, authorization.roleId, canSeeAllFinalApproved);
+  const { banks, requests, error } = await loadPaymentProcess(companyId, authorization.userId, authorization.roleId, canSeeAllFinalApproved);
   const today = new Date().toISOString().slice(0, 10);
 
   return (

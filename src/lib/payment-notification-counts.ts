@@ -92,6 +92,7 @@ function isFinalApproved(request: PaymentNotificationRequest) {
   return (
     status === "APPROVED" ||
     status === "OWNER_APPROVED" ||
+    status === "RE_APPROVED" ||
     (status.endsWith("_APPROVED") && !hasCurrentApprover(request))
   );
 }
@@ -110,6 +111,7 @@ function needsPaymentDetails(request: PaymentNotificationRequest) {
 
 function isPendingApproval(request: PaymentNotificationRequest) {
   const status = requestStatus(request);
+  if (status === "RE_APPROVED") return false;
   if (CLOSED_STATUSES.has(status)) return false;
   return Boolean(request.current_approver_user_id || request.current_approver_role_id || request.current_approver_role_ids?.length || status === "PENDING" || !status);
 }

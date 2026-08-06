@@ -202,6 +202,7 @@ function MultiDesignationRows({
 
       {series.map((item, index) => {
         const sample = formatSample(item);
+        const selectedDesignations = designations.filter((designation) => item.designation_ids.includes(designation.id));
         return (
           <div className="multi-designation-series" key={item.key}>
             <input name="row_scope" type="hidden" value="multi_designation" />
@@ -235,30 +236,52 @@ function MultiDesignationRows({
               </label>
             </div>
             <div className="multi-designation-picker">
-              <span className="field-label">Designations ({item.designation_ids.length} selected)</span>
-              <div className="multi-designation-options">
-                {designations.map((designation) => {
-                  const owner = assignedTo.get(designation.id);
-                  const checked = item.designation_ids.includes(designation.id);
-                  const unavailable = Boolean(owner && owner !== item.key);
-                  return (
-                    <label className={`${checked ? "selected" : ""} ${unavailable ? "disabled" : ""}`} key={designation.id}>
-                      <input
-                        checked={checked}
-                        disabled={unavailable}
-                        onChange={(event) => updateSeries(item.key, {
-                          designation_ids: event.target.checked
-                            ? [...item.designation_ids, designation.id]
-                            : item.designation_ids.filter((id) => id !== designation.id)
-                        })}
-                        type="checkbox"
-                      />
+              <span className="field-label">Designations</span>
+              {selectedDesignations.length ? (
+                <div className="multi-designation-tags" aria-label="Selected designations">
+                  {selectedDesignations.map((designation) => (
+                    <button
+                      className="multi-designation-tag"
+                      key={designation.id}
+                      onClick={() => updateSeries(item.key, { designation_ids: item.designation_ids.filter((id) => id !== designation.id) })}
+                      title={`Remove ${optionLabel(designation)}`}
+                      type="button"
+                    >
                       <span>{optionLabel(designation)}</span>
-                      {unavailable ? <small>Used in another series</small> : null}
-                    </label>
-                  );
-                })}
-              </div>
+                      <b aria-hidden="true">×</b>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <details className="multi-designation-dropdown">
+                <summary>
+                  <span>{item.designation_ids.length ? `${item.designation_ids.length} designation${item.designation_ids.length === 1 ? "" : "s"} selected` : "Select designations"}</span>
+                  <span aria-hidden="true">⌄</span>
+                </summary>
+                <div className="multi-designation-options">
+                  {designations.map((designation) => {
+                    const owner = assignedTo.get(designation.id);
+                    const checked = item.designation_ids.includes(designation.id);
+                    const unavailable = Boolean(owner && owner !== item.key);
+                    return (
+                      <label className={`${checked ? "selected" : ""} ${unavailable ? "disabled" : ""}`} key={designation.id}>
+                        <input
+                          checked={checked}
+                          disabled={unavailable}
+                          onChange={(event) => updateSeries(item.key, {
+                            designation_ids: event.target.checked
+                              ? [...item.designation_ids, designation.id]
+                              : item.designation_ids.filter((id) => id !== designation.id)
+                          })}
+                          type="checkbox"
+                        />
+                        <span>{optionLabel(designation)}</span>
+                        {unavailable ? <small>Already used in another series</small> : null}
+                      </label>
+                    );
+                  })}
+                </div>
+              </details>
             </div>
           </div>
         );

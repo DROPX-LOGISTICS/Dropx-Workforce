@@ -6,7 +6,7 @@ const supabaseAuthKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env
 const COOKIE_CHUNK_SIZE = 3000;
 const MAX_COOKIE_CHUNKS = 8;
 const ENCODED_COOKIE_PREFIX = "b64-";
-const CLEAN_OPS_ROOTS = ["/daily-submission", "/performance", "/capacity", "/service-network", "/field-executive", "/business-documents", "/cod", "/reports", "/client", "/access", "/unauthorized"];
+const CLEAN_OPS_ROOTS = ["/daily-submission", "/performance", "/capacity", "/service-network", "/field-executive", "/cod", "/reports", "/client", "/access", "/unauthorized"];
 const MOVED_OPS_PAYMENT_PATHS = [
   "/payments/expense-request",
   "/payments/requests",
@@ -59,7 +59,8 @@ export async function middleware(request: NextRequest) {
   const isPlatformAdminHost = host === "admin-panel.dropxlogistics.com";
   const isOpsHost = host === "ops.dropxlogistics.com";
   const isDashboardHost = host === "dashboard.dropxlogistics.com";
-  const isSharedOpsPath = path === "/fleet" || path.startsWith("/fleet/");
+  const isSharedOpsPath = path === "/fleet" || path.startsWith("/fleet/") ||
+    path === "/business-documents" || path.startsWith("/business-documents/");
 
   const opsAppUrl = process.env.OPS_APP_URL?.trim();
   if (isDashboardHost && opsAppUrl && (path === "/ops-pulse" || path.startsWith("/ops-pulse/"))) {

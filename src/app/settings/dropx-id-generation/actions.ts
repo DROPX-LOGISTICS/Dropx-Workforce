@@ -8,7 +8,7 @@ import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const settingTypes = ["dropx_id", "biometric_id"] as const;
-const scopeTypes = ["company", "category", "model", "location", "designation"] as const;
+const scopeTypes = ["company", "category", "model", "location", "designation", "multi_designation"] as const;
 
 type SettingType = typeof settingTypes[number];
 type ScopeType = typeof scopeTypes[number];
@@ -68,7 +68,9 @@ function buildConfigs(formData: FormData, selectedScope: ScopeType) {
   const suffixes = formData.getAll("row_suffix").map((value) => String(value).trim().toUpperCase());
   const serials = formData.getAll("row_next_serial_no").map((value) => String(value));
   const digits = formData.getAll("row_serial_digits").map((value) => String(value));
+  const designationIds = formData.getAll("row_designation_ids").map((value) => String(value));
   const configs: Record<string, Record<string, unknown>> = {};
+  const assignedDesignations = new Set<string>();
 
   keys.forEach((key, index) => {
     if (!key || scopes[index] !== selectedScope) return;
@@ -80,13 +82,28 @@ function buildConfigs(formData: FormData, selectedScope: ScopeType) {
     if (!Number.isInteger(serialDigits) || serialDigits < 1 || serialDigits > 12) {
       throw new Error("Minimum digit must be between 1 and 12.");
     }
+    let mappedDesignationIds: string[] | undefined;
+    if (selectedScope === "multi_designation") {
+      try {
+        const parsed = JSON.parse(designationIds[index] || "[]");
+        mappedDesignationIds = Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string" && Boolean(id)) : [];
+      } catch {
+        throw new Error(`Select valid designations for ${labels[index] || "the series"}.`);
+      }
+      if (!mappedDesignationIds.length) throw new Error(`Select at least one designation for ${labels[index] || "each series"}.`);
+      for (const designationId of mappedDesignationIds) {
+        if (assignedDesignations.has(designationId)) throw new Error("A designation cannot be mapped to more than one series.");
+        assignedDesignations.add(designationId);
+      }
+    }
     configs[key] = {
       label: labels[index] || key,
       prefix: prefixes[index] || null,
       separator: separators[index] ?? "",
       suffix: suffixes[index] || null,
       next_serial_no: nextSerialNo,
-      serial_digits: serialDigits
+      serial_digits: serialDigits,
+      ...(mappedDesignationIds ? { designation_ids: mappedDesignationIds } : {})
     };
   });
 

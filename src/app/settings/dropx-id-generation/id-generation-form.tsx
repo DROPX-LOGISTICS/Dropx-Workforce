@@ -6,7 +6,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { saveIdGenerationSetting } from "./actions";
 
 type SettingType = "dropx_id" | "biometric_id";
-type ScopeType = "company" | "category" | "model" | "location" | "designation";
+type ScopeType = "company" | "category" | "model" | "location" | "designation" | "multi_designation";
 
 type GenerationConfig = {
   label?: string | null;
@@ -15,6 +15,7 @@ type GenerationConfig = {
   suffix?: string | null;
   next_serial_no?: number | null;
   serial_digits?: number | null;
+  designation_ids?: string[] | null;
 };
 
 type SettingRow = {
@@ -39,7 +40,8 @@ const scopeTypes: Array<{ value: ScopeType; label: string }> = [
   { value: "category", label: "Category wise" },
   { value: "model", label: "Model wise" },
   { value: "location", label: "Location wise" },
-  { value: "designation", label: "Designation wise" }
+  { value: "designation", label: "Designation wise" },
+  { value: "multi_designation", label: "Multi Designation Wise" }
 ];
 
 function optionLabel(row: OptionRow) {
@@ -147,6 +149,124 @@ function ConfigRows({
   );
 }
 
+type MultiSeries = GenerationConfig & { key: string; designation_ids: string[] };
+
+function MultiDesignationRows({
+  defaultPrefix,
+  designations,
+  setting
+}: {
+  defaultPrefix: string;
+  designations: OptionRow[];
+  setting?: SettingRow;
+}) {
+  const initial = Object.entries(setting?.scope_type === "multi_designation" ? setting.configs ?? {} : {}).map(([key, config]) => ({
+    ...defaultConfig(config.label || "Series", defaultPrefix),
+    ...config,
+    key,
+    designation_ids: Array.isArray(config.designation_ids) ? config.designation_ids : []
+  }));
+  const [series, setSeries] = useState<MultiSeries[]>(initial);
+
+  function addSeries() {
+    setSeries((current) => [
+      ...current,
+      {
+        ...defaultConfig(`Series ${current.length + 1}`, defaultPrefix),
+        key: `series_${Date.now()}_${current.length + 1}`,
+        designation_ids: []
+      }
+    ]);
+  }
+
+  function updateSeries(key: string, patch: Partial<MultiSeries>) {
+    setSeries((current) => current.map((item) => item.key === key ? { ...item, ...patch } : item));
+  }
+
+  const assignedTo = new Map<string, string>();
+  series.forEach((item) => item.designation_ids.forEach((id) => assignedTo.set(id, item.key)));
+
+  return (
+    <div className="id-generation-scope-block multi-designation-block">
+      <div className="multi-designation-title">
+        <div>
+          <h4>Multi Designation Wise</h4>
+          <p className="subtle">Create independent ID series and map one or more designations to each series.</p>
+        </div>
+        <button className="button secondary compact" onClick={addSeries} type="button">+ Add series</button>
+      </div>
+
+      {!series.length ? (
+        <div className="id-generation-empty">Add the first series, then choose the designations that share it.</div>
+      ) : null}
+
+      {series.map((item, index) => {
+        const sample = formatSample(item);
+        return (
+          <div className="multi-designation-series" key={item.key}>
+            <input name="row_scope" type="hidden" value="multi_designation" />
+            <input name="row_key" type="hidden" value={item.key} />
+            <input name="row_designation_ids" type="hidden" value={JSON.stringify(item.designation_ids)} />
+            <div className="multi-designation-series-head">
+              <strong>Series {index + 1}</strong>
+              <button className="button secondary compact danger-text" onClick={() => setSeries((current) => current.filter((row) => row.key !== item.key))} type="button">Remove</button>
+            </div>
+            <div className="multi-designation-fields">
+              <label>Series name
+                <input className="field" name="row_label" onChange={(event) => updateSeries(item.key, { label: event.target.value })} placeholder={`Series ${index + 1}`} required value={item.label ?? ""} />
+              </label>
+              <label>Prefix
+                <input className="field id-generation-soft-placeholder" name="row_prefix" onChange={(event) => updateSeries(item.key, { prefix: event.target.value })} placeholder="Optional" value={item.prefix ?? ""} />
+              </label>
+              <label>Separator
+                <input className="field id-generation-soft-placeholder" name="row_separator" onChange={(event) => updateSeries(item.key, { separator: event.target.value })} placeholder="Optional" value={item.separator ?? ""} />
+              </label>
+              <label>Starting number
+                <input className="field" min={1} name="row_next_serial_no" onChange={(event) => updateSeries(item.key, { next_serial_no: Number(event.target.value) })} required type="number" value={item.next_serial_no ?? 1} />
+              </label>
+              <label>Minimum digit
+                <input className="field" max={12} min={1} name="row_serial_digits" onChange={(event) => updateSeries(item.key, { serial_digits: Number(event.target.value) })} required type="number" value={item.serial_digits ?? 3} />
+              </label>
+              <label>Suffix
+                <input className="field id-generation-soft-placeholder" name="row_suffix" onChange={(event) => updateSeries(item.key, { suffix: event.target.value })} placeholder="Optional" value={item.suffix ?? ""} />
+              </label>
+              <label>Sample
+                <code className="multi-designation-sample">{sample}</code>
+              </label>
+            </div>
+            <div className="multi-designation-picker">
+              <span className="field-label">Designations ({item.designation_ids.length} selected)</span>
+              <div className="multi-designation-options">
+                {designations.map((designation) => {
+                  const owner = assignedTo.get(designation.id);
+                  const checked = item.designation_ids.includes(designation.id);
+                  const unavailable = Boolean(owner && owner !== item.key);
+                  return (
+                    <label className={`${checked ? "selected" : ""} ${unavailable ? "disabled" : ""}`} key={designation.id}>
+                      <input
+                        checked={checked}
+                        disabled={unavailable}
+                        onChange={(event) => updateSeries(item.key, {
+                          designation_ids: event.target.checked
+                            ? [...item.designation_ids, designation.id]
+                            : item.designation_ids.filter((id) => id !== designation.id)
+                        })}
+                        type="checkbox"
+                      />
+                      <span>{optionLabel(designation)}</span>
+                      {unavailable ? <small>Used in another series</small> : null}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function IdGenerationForm({
   canEdit,
   categories,
@@ -180,7 +300,8 @@ export function IdGenerationForm({
     category: categories,
     model: models,
     location: locations,
-    designation: designations
+    designation: designations,
+    multi_designation: []
   };
 
   return (
@@ -215,7 +336,9 @@ export function IdGenerationForm({
             Select one generation method. Only that method's structure will be displayed and saved.
           </div>
 
-          {selectedScope ? (
+          {selectedScope === "multi_designation" ? (
+            <MultiDesignationRows defaultPrefix={defaultPrefix} designations={designations} setting={setting} />
+          ) : selectedScope ? (
             <ConfigRows
               defaultPrefix={defaultPrefix}
               options={optionsByScope[selectedScope]}

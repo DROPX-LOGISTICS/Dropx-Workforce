@@ -1272,6 +1272,121 @@ h3 {
   text-align: center;
 }
 
+.multi-designation-block {
+  overflow: visible;
+  padding-bottom: 14px;
+  background: #fbfcfe;
+}
+
+.multi-designation-title,
+.multi-designation-series-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.multi-designation-title {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fafc;
+}
+
+.multi-designation-title h4 {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.multi-designation-title p {
+  margin: 3px 0 0;
+}
+
+.multi-designation-series {
+  margin: 14px;
+  border: 1px solid #dfe5ee;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+
+.multi-designation-series-head {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #fffaf5;
+}
+
+.danger-text {
+  color: #b42318;
+}
+
+.multi-designation-fields {
+  display: grid;
+  grid-template-columns: 1.25fr repeat(5, minmax(105px, 0.75fr)) minmax(120px, 0.9fr);
+  gap: 10px;
+  padding: 12px;
+}
+
+.multi-designation-fields label {
+  min-width: 0;
+}
+
+.multi-designation-sample {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  border-radius: 7px;
+  background: #fff7ed;
+  color: #9a3412;
+  padding: 8px 10px;
+}
+
+.multi-designation-picker {
+  padding: 0 12px 12px;
+}
+
+.multi-designation-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  max-height: 260px;
+  margin-top: 7px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  overflow-y: auto;
+}
+
+.multi-designation-options label {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 7px 9px;
+  border: 1px solid #e4e8ef;
+  border-radius: 7px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.multi-designation-options label.selected {
+  border-color: #fb923c;
+  background: #fff7ed;
+}
+
+.multi-designation-options label.disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.multi-designation-options small {
+  grid-column: 2;
+  color: var(--muted);
+}
+
 .whatsapp-settings-stack {
   display: grid;
   gap: 12px;

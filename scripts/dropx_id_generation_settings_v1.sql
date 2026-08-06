@@ -2,7 +2,7 @@ create table if not exists public.dropx_id_generation_settings (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete cascade,
   setting_type text not null default 'dropx_id' check (setting_type in ('dropx_id', 'biometric_id')),
-  scope_type text not null default 'category' check (scope_type in ('company', 'category', 'model', 'location', 'designation')),
+  scope_type text not null default 'category' check (scope_type in ('company', 'category', 'model', 'location', 'designation', 'multi_designation')),
   configs jsonb not null default '{}'::jsonb,
   is_active boolean not null default true,
   is_locked boolean not null default false,
@@ -103,7 +103,7 @@ alter table public.dropx_id_generation_settings
 
 alter table public.dropx_id_generation_settings
   add constraint dropx_id_generation_settings_scope_type_check
-  check (scope_type in ('company', 'category', 'model', 'location', 'designation'));
+  check (scope_type in ('company', 'category', 'model', 'location', 'designation', 'multi_designation'));
 
 create unique index if not exists dropx_id_generation_settings_one_per_type_idx
   on public.dropx_id_generation_settings(company_id, setting_type);
@@ -169,6 +169,12 @@ begin
 
   selected_key := case selected_setting.scope_type
     when 'designation' then p_designation_id::text
+    when 'multi_designation' then (
+      select entry.key
+        from jsonb_each(selected_setting.configs) entry
+       where entry.value -> 'designation_ids' ? p_designation_id::text
+       limit 1
+    )
     when 'location' then p_location_id::text
     when 'model' then p_model_id::text
     when 'company' then 'company'

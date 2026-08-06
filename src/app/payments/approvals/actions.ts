@@ -311,7 +311,7 @@ export async function approvePaymentRequest(formData: FormData) {
   const comments = clean(formData.get("comments"));
   const { data: request, error } = await supabaseAdmin
     .from("payment_requests")
-    .select("id, location_id, requested_by, approval_cycle, current_approver_user_id, current_approver_role_id, current_approver_role_ids, final_approval_role_id, final_approval_role_ids")
+    .select("id, location_id, requested_by, status, approval_status, approval_cycle, current_step_order, current_approver_user_id, current_approver_role_id, current_approver_role_ids, final_approval_role_id, final_approval_role_ids")
     .eq("id", requestId)
     .eq("company_id", companyId)
     .single();
@@ -340,11 +340,15 @@ export async function approvePaymentRequest(formData: FormData) {
   const finalRoleIds = (request.final_approval_role_ids?.length ? request.final_approval_role_ids : request.final_approval_role_id ? [request.final_approval_role_id] : []) as string[];
   if (!finalRoleIds.length) throw new Error("Final approval role is not configured for this payment request.");
 
-  const actorRoleCode = String(authorization.roleCode ?? "").trim().toUpperCase();
-  const isFinalApproval =
-    actorRoleCode === "OWNER" ||
-    authorization.isMasterOwner ||
-    Boolean(authorization.roleId && finalRoleIds.includes(authorization.roleId));
+  // Routing is determined by the request stage, not by the actor's role. This
+  // prevents an initial approver who also has a configured final role from
+  // accidentally completing both approval stages in one action.
+  const storedStepOrder = Number(request.current_step_order);
+  const legacyStatus = String(request.approval_status || request.status || "").trim().toUpperCase();
+  const currentStepOrder = storedStepOrder > 0
+    ? storedStepOrder
+    : legacyStatus.endsWith("_APPROVED") ? 2 : 1;
+  const isFinalApproval = currentStepOrder >= 2;
 
   if (isFinalApproval) {
     await updatePaymentRequest(request.id, companyId, {

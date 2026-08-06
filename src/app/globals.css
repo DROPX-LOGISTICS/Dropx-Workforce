@@ -1467,6 +1467,26 @@ h3 {
   text-align: center;
 }
 
+.id-generation-locked-note {
+  margin: 12px 0 0;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1e40af;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.multi-designation-fields input[readonly] {
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.multi-designation-tag:disabled {
+  cursor: default;
+}
+
 .multi-designation-options label {
   display: grid;
   grid-template-columns: auto 1fr;

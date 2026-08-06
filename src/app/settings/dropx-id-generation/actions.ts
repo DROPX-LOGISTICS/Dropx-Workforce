@@ -111,6 +111,42 @@ function buildConfigs(formData: FormData, selectedScope: ScopeType) {
   return configs;
 }
 
+function generationStructure(config: Record<string, unknown> | undefined) {
+  return {
+    label: config?.label ?? null,
+    prefix: config?.prefix ?? null,
+    separator: config?.separator ?? "",
+    suffix: config?.suffix ?? null,
+    next_serial_no: config?.next_serial_no ?? 1,
+    serial_digits: config?.serial_digits ?? 3
+  };
+}
+
+function validateLockedMultiDesignationUpdate(
+  existingConfigs: Record<string, Record<string, unknown>>,
+  proposedConfigs: Record<string, Record<string, unknown>>
+) {
+  const existingKeys = Object.keys(existingConfigs).sort();
+  const proposedKeys = Object.keys(proposedConfigs).sort();
+  if (JSON.stringify(existingKeys) !== JSON.stringify(proposedKeys)) {
+    throw new Error("Series cannot be added or removed after ID generation has started.");
+  }
+  const existingAssignments = new Map<string, string>();
+  for (const key of existingKeys) {
+    if (JSON.stringify(generationStructure(existingConfigs[key])) !== JSON.stringify(generationStructure(proposedConfigs[key]))) {
+      throw new Error("Series name, prefix, separator, starting number, digits and suffix are locked after ID generation has started.");
+    }
+    const existingIds = Array.isArray(existingConfigs[key].designation_ids) ? existingConfigs[key].designation_ids as string[] : [];
+    existingIds.forEach((designationId) => existingAssignments.set(designationId, key));
+  }
+  for (const [designationId, key] of existingAssignments) {
+    const proposedIds = Array.isArray(proposedConfigs[key].designation_ids) ? proposedConfigs[key].designation_ids as string[] : [];
+    if (!proposedIds.includes(designationId)) {
+      throw new Error("Existing designation mappings cannot be removed or moved after ID generation has started.");
+    }
+  }
+}
+
 export async function saveIdGenerationSetting(formData: FormData) {
   const authorization = await requirePagePermission("app_settings", "edit");
   const companyId = requireCompanyId(authorization);
@@ -122,13 +158,34 @@ export async function saveIdGenerationSetting(formData: FormData) {
     const configs = buildConfigs(formData, selectedScope);
 
     const existing = await (supabaseAdmin.from("dropx_id_generation_settings") as any)
-      .select("id, is_locked")
+      .select("id, is_locked, scope_type, configs")
       .eq("company_id", companyId)
       .eq("setting_type", selectedSetting)
       .maybeSingle();
     if (existing.error) throw new Error(existing.error.message);
-    if (existing.data?.is_locked) {
+    const lockedMultiDesignation = Boolean(existing.data?.is_locked && existing.data?.scope_type === "multi_designation" && selectedScope === "multi_designation");
+    if (existing.data?.is_locked && !lockedMultiDesignation) {
       throw new Error(`${selectedSetting === "dropx_id" ? "DropX ID" : "Biometric ID"} generation is locked because an ID was already generated.`);
+    }
+    if (lockedMultiDesignation) {
+      validateLockedMultiDesignationUpdate(existing.data.configs ?? {}, configs);
+      const existingIds = new Set<string>(Object.values(existing.data.configs ?? {}).flatMap((config: any) => Array.isArray(config.designation_ids) ? config.designation_ids : []));
+      const proposedIds = Array.from(new Set(Object.values(configs).flatMap((config: any) => Array.isArray(config.designation_ids) ? config.designation_ids : [])));
+      const addedIds = proposedIds.filter((id) => !existingIds.has(id));
+      if (addedIds.length) {
+        const validDesignations = await supabaseAdmin.from("designations").select("id").eq("company_id", companyId).eq("is_active", true).in("id", addedIds);
+        if (validDesignations.error) throw new Error(validDesignations.error.message);
+        if ((validDesignations.data ?? []).length !== addedIds.length) throw new Error("One or more selected designations are not active for this company.");
+      }
+      const mappingUpdate = await (supabaseAdmin.rpc as any)("update_locked_multi_designation_mappings", {
+        p_company_id: companyId,
+        p_configs: configs,
+        p_setting_type: selectedSetting
+      });
+      if (mappingUpdate.error) throw new Error(mappingUpdate.error.message);
+      revalidatePath("/settings/dropx-id-generation");
+      revalidatePath("/settings");
+      flash({ notice: "New designation mappings saved. Series structure and counters remain locked." }, selectedSetting);
     }
 
     const payload = withCompany({

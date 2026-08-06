@@ -189,13 +189,21 @@ async function loadApprovals(companyId: string, authorization: AuthorizationCont
   const eligibleIds = await getPaymentApprovalEligibility(companyId, authorization, unscopedRequests);
   const normalizedFilter = statusFilter || "pending";
   const normalizedSearch = String(searchTerm ?? "").trim().toLowerCase();
-  const pendingApprovalStatuses = new Set(["pending", "resubmitted", "re_pending", "re_cluster_approved"]);
+  const closedApprovalStatuses = new Set(["APPROVED", "RE_APPROVED", "REJECTED", "RETURNED", "CANCELLED", "PROCESSING", "PROCESSED"]);
   const requests = unscopedRequests.filter((request) => {
     if (!eligibleIds.has(request.id)) return false;
     const requestStatus = String(request.status ?? "").trim().toLowerCase();
-    const approvalStatus = String(request.approval_status ?? "").toUpperCase();
+    const approvalStatus = String(request.approval_status || request.status || "").trim().toUpperCase();
     if (normalizedFilter === "pending") {
-      if (!pendingApprovalStatuses.has(requestStatus)) return false;
+      const hasCurrentApprover = Boolean(
+        request.current_approver_user_id ||
+        request.current_approver_role_id ||
+        request.current_approver_role_ids?.length
+      );
+      const isPendingApproval = approvalStatus !== "RE_APPROVED" &&
+        !closedApprovalStatuses.has(approvalStatus) &&
+        (hasCurrentApprover || approvalStatus === "PENDING" || approvalStatus === "RESUBMITTED" || approvalStatus === "RE_PENDING");
+      if (!isPendingApproval) return false;
     } else if (normalizedFilter === "returned") {
       if (requestStatus !== "returned" && approvalStatus !== "RETURNED") return false;
     } else if (normalizedFilter === "rejected") {

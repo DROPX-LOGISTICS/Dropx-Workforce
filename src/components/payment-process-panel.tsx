@@ -21,7 +21,10 @@ export type PaymentProcessRequest = {
   amount: number | null;
   amount_requested: number | null;
   payment_mode: string | null;
+  payment_portal: string | null;
   payment_reference: string | null;
+  bank_account_no: string | null;
+  ifsc: string | null;
   account_holder_name: string | null;
   contact_no: string | null;
   email: string | null;
@@ -405,34 +408,50 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
                   />
                 </label>
               </div>
-              {processRequest.payment_mode === "upi_payment" ? (
-                <div style={{ marginTop: 16 }}>
-                  <div className="form-grid two" style={{ alignItems: "stretch" }}>
-                    <div className="form-grid" style={{ alignContent: "start" }}>
-                    <label>UPI ID<input className="field" readOnly value={processRequest.payment_reference ?? "-"} /></label>
-                    <label>Account Holder Name<input className="field" readOnly value={processRequest.account_holder_name ?? "-"} /></label>
+              <div style={{ marginTop: 16 }}>
+                <div className={processRequest.payment_mode === "upi_payment" ? "form-grid two" : undefined} style={{ alignItems: "stretch" }}>
+                  <div className="form-grid two" style={{ alignContent: "start" }}>
+                    {isAccountTransfer(processRequest) ? (
+                      <>
+                        <label>Bank Account No<input className="field" readOnly value={processRequest.bank_account_no ?? "-"} /></label>
+                        <label>IFSC<input className="field" readOnly value={processRequest.ifsc ?? "-"} /></label>
+                        <label>Account Holder Name<input className="field" readOnly value={processRequest.account_holder_name ?? "-"} /></label>
+                      </>
+                    ) : null}
+                    {processRequest.payment_mode === "upi_payment" ? (
+                      <>
+                        <label>UPI ID<input className="field" readOnly value={processRequest.payment_reference ?? "-"} /></label>
+                        <label>Account Holder Name<input className="field" readOnly value={processRequest.account_holder_name ?? "-"} /></label>
+                      </>
+                    ) : null}
+                    {processRequest.payment_mode === "online_payment" ? (
+                      <>
+                        <label>Payment Portal<input className="field" readOnly value={processRequest.payment_portal ?? "-"} /></label>
+                        <label>Payment Reference<input className="field" readOnly value={processRequest.payment_reference ?? "-"} /></label>
+                        <label>Account Holder Name<input className="field" readOnly value={processRequest.account_holder_name ?? "-"} /></label>
+                      </>
+                    ) : null}
                     <label>Contact No<input className="field" readOnly value={processRequest.contact_no ?? "-"} /></label>
                     <label>Email<input className="field" readOnly value={processRequest.email ?? "-"} /></label>
-                    <label>Request Remarks<textarea className="field" readOnly value={processRequest.request_remarks ?? "-"} /></label>
-                    </div>
-                    <UpiPaymentQr request={processRequest} />
+                    <label style={{ gridColumn: "1 / -1" }}>Request Remarks<textarea className="field" readOnly value={processRequest.request_remarks ?? "-"} /></label>
                   </div>
-                  {processRequest.payment_details.length ? (
-                    <div className="table-wrap" style={{ marginTop: 16 }}>
-                      <table>
-                        <tbody>
-                          {processRequest.payment_details.map((detail) => (
-                            <tr key={detail.id}>
-                              <th>{detail.label}</th>
-                              <td>{detail.file_name ? <a href={`/api/payments/requests/attachment?answer_id=${encodeURIComponent(detail.id)}`} rel="noreferrer" target="_blank">{detail.file_name}</a> : detail.value || "-"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : null}
+                  {processRequest.payment_mode === "upi_payment" ? <UpiPaymentQr request={processRequest} /> : null}
                 </div>
-              ) : null}
+                {processRequest.payment_details.length ? (
+                  <div className="table-wrap" style={{ marginTop: 16 }}>
+                    <table>
+                      <tbody>
+                        {processRequest.payment_details.map((detail) => (
+                          <tr key={detail.id}>
+                            <th>{detail.label}</th>
+                            <td>{detail.file_name ? <a href={`/api/payments/requests/attachment?answer_id=${encodeURIComponent(detail.id)}`} rel="noreferrer" target="_blank">{detail.file_name}</a> : detail.value || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+              </div>
               <div className="form-actions modal-actions">
                 <button className="button secondary" onClick={() => setProcessRequest(null)} type="button">Cancel</button>
                 {statusKey(processRequest) !== "processing" && statusKey(processRequest) !== "processed" ? (

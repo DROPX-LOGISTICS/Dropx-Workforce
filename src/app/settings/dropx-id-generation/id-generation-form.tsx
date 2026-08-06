@@ -209,7 +209,10 @@ function MultiDesignationRows({
         const sample = formatSample(item);
         const selectedDesignations = designations.filter((designation) => item.designation_ids.includes(designation.id));
         const designationSearch = searchBySeries[item.key] ?? "";
-        const visibleDesignations = designations.filter((designation) => optionLabel(designation).toLowerCase().includes(designationSearch.trim().toLowerCase()));
+        const visibleDesignations = designations.filter((designation) => (
+          !assignedTo.has(designation.id)
+          && optionLabel(designation).toLowerCase().includes(designationSearch.trim().toLowerCase())
+        ));
         return (
           <div className="multi-designation-series" key={item.key}>
             <input name="row_scope" type="hidden" value="multi_designation" />
@@ -281,24 +284,16 @@ function MultiDesignationRows({
                     />
                   </div>
                   {visibleDesignations.map((designation) => {
-                    const owner = assignedTo.get(designation.id);
-                    const originalOwner = originallyAssignedTo.get(designation.id);
-                    const checked = item.designation_ids.includes(designation.id);
-                    const unavailable = Boolean(owner && owner !== item.key);
                     return (
-                      <label className={`${checked ? "selected" : ""} ${unavailable ? "disabled" : ""}`} key={designation.id}>
+                      <label key={designation.id}>
                         <input
-                          checked={checked}
-                          disabled={unavailable || (structureLocked && originalOwner === item.key)}
-                          onChange={(event) => updateSeries(item.key, {
-                            designation_ids: event.target.checked
-                              ? [...item.designation_ids, designation.id]
-                              : item.designation_ids.filter((id) => id !== designation.id)
+                          checked={false}
+                          onChange={() => updateSeries(item.key, {
+                            designation_ids: [...item.designation_ids, designation.id]
                           })}
                           type="checkbox"
                         />
                         <span>{optionLabel(designation)}</span>
-                        {unavailable ? <small>Already used in another series</small> : null}
                       </label>
                     );
                   })}

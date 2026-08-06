@@ -167,6 +167,7 @@ function MultiDesignationRows({
     designation_ids: Array.isArray(config.designation_ids) ? config.designation_ids : []
   }));
   const [series, setSeries] = useState<MultiSeries[]>(initial);
+  const [searchBySeries, setSearchBySeries] = useState<Record<string, string>>({});
 
   function addSeries() {
     setSeries((current) => [
@@ -203,6 +204,8 @@ function MultiDesignationRows({
       {series.map((item, index) => {
         const sample = formatSample(item);
         const selectedDesignations = designations.filter((designation) => item.designation_ids.includes(designation.id));
+        const designationSearch = searchBySeries[item.key] ?? "";
+        const visibleDesignations = designations.filter((designation) => optionLabel(designation).toLowerCase().includes(designationSearch.trim().toLowerCase()));
         return (
           <div className="multi-designation-series" key={item.key}>
             <input name="row_scope" type="hidden" value="multi_designation" />
@@ -259,7 +262,20 @@ function MultiDesignationRows({
                   <span aria-hidden="true">⌄</span>
                 </summary>
                 <div className="multi-designation-options">
-                  {designations.map((designation) => {
+                  <div className="multi-designation-search">
+                    <span aria-hidden="true">⌕</span>
+                    <input
+                      aria-label={`Search designations for series ${index + 1}`}
+                      autoComplete="off"
+                      onChange={(event) => setSearchBySeries((current) => ({ ...current, [item.key]: event.target.value }))}
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }}
+                      placeholder="Search by designation code or name"
+                      type="search"
+                      value={designationSearch}
+                    />
+                  </div>
+                  {visibleDesignations.map((designation) => {
                     const owner = assignedTo.get(designation.id);
                     const checked = item.designation_ids.includes(designation.id);
                     const unavailable = Boolean(owner && owner !== item.key);
@@ -280,6 +296,7 @@ function MultiDesignationRows({
                       </label>
                     );
                   })}
+                  {!visibleDesignations.length ? <div className="multi-designation-no-results">No matching designations found.</div> : null}
                 </div>
               </details>
             </div>

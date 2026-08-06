@@ -25,6 +25,7 @@ const opsPageCodes = new Set([
   "service_network",
   "service_network_master",
   "delivery_associates",
+  "business_documents",
   "expense_requests",
   "payment_requests",
   "payment_approvals",
@@ -49,6 +50,7 @@ const opsPageCodes = new Set([
 
 const sharedPageCodes = new Set([
   "imports",
+  "business_documents",
   "expense_requests",
   "payment_requests",
   "payment_approvals",

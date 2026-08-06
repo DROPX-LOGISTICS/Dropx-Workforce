@@ -11,6 +11,13 @@ const commonStart: NavItem[] = [
 
 const reports: NavItem = { code: "cod_reports", label: "Reports", href: "/reports", icon: "R" };
 
+const businessDocuments: NavItem = {
+  code: "business_documents",
+  label: "Business Docs",
+  href: "/business-documents",
+  icon: "D"
+};
+
 const payments: NavItem = {
   code: "payments",
   label: "Payments",
@@ -108,7 +115,7 @@ function modelOperations(mode: OperatingMode): NavItem {
 
 export function opsNavItemsForMode(mode: OperatingMode): NavItem[] {
   const start = mode === "amazon_now" ? commonStart.filter((item) => !["Capacity", "Service Network"].includes(item.label)) : commonStart;
-  return [...start, modelOperations(mode), payments, cps, fleetNavItem, reports, ...administration];
+  return [...start, modelOperations(mode), businessDocuments, payments, cps, fleetNavItem, reports, ...administration];
 }
 
 export function normalizeOpsClient(value: string | null | undefined) {

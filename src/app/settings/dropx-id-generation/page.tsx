@@ -8,7 +8,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { IdGenerationForm } from "./id-generation-form";
 
 type SettingType = "dropx_id" | "biometric_id";
-type ScopeType = "company" | "category" | "model" | "location" | "designation";
+type ScopeType = "company" | "category" | "model" | "location" | "designation" | "multi_designation";
 
 type GenerationConfig = {
   label?: string | null;
@@ -17,6 +17,7 @@ type GenerationConfig = {
   suffix?: string | null;
   next_serial_no?: number | null;
   serial_digits?: number | null;
+  designation_ids?: string[] | null;
 };
 
 type SettingRow = {

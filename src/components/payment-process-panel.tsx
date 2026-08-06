@@ -23,6 +23,10 @@ export type PaymentProcessRequest = {
   payment_mode: string | null;
   payment_reference: string | null;
   account_holder_name: string | null;
+  contact_no: string | null;
+  email: string | null;
+  request_remarks: string | null;
+  payment_details: Array<{ id: string; label: string; value: string | null; file_name: string | null }>;
   status: string | null;
   approval_status: string | null;
   created_at: string;
@@ -402,12 +406,31 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
                 </label>
               </div>
               {processRequest.payment_mode === "upi_payment" ? (
-                <div className="form-grid two" style={{ alignItems: "stretch", marginTop: 16 }}>
-                  <div className="form-grid" style={{ alignContent: "start" }}>
+                <div style={{ marginTop: 16 }}>
+                  <div className="form-grid two" style={{ alignItems: "stretch" }}>
+                    <div className="form-grid" style={{ alignContent: "start" }}>
                     <label>UPI ID<input className="field" readOnly value={processRequest.payment_reference ?? "-"} /></label>
                     <label>Account Holder Name<input className="field" readOnly value={processRequest.account_holder_name ?? "-"} /></label>
+                    <label>Contact No<input className="field" readOnly value={processRequest.contact_no ?? "-"} /></label>
+                    <label>Email<input className="field" readOnly value={processRequest.email ?? "-"} /></label>
+                    <label>Request Remarks<textarea className="field" readOnly value={processRequest.request_remarks ?? "-"} /></label>
+                    </div>
+                    <UpiPaymentQr request={processRequest} />
                   </div>
-                  <UpiPaymentQr request={processRequest} />
+                  {processRequest.payment_details.length ? (
+                    <div className="table-wrap" style={{ marginTop: 16 }}>
+                      <table>
+                        <tbody>
+                          {processRequest.payment_details.map((detail) => (
+                            <tr key={detail.id}>
+                              <th>{detail.label}</th>
+                              <td>{detail.file_name ? <a href={`/api/payments/requests/attachment?answer_id=${encodeURIComponent(detail.id)}`} rel="noreferrer" target="_blank">{detail.file_name}</a> : detail.value || "-"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               <div className="form-actions modal-actions">

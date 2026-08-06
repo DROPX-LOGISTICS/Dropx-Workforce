@@ -27,12 +27,24 @@ type PaymentRequestRow = {
   bank_account_no: string | null;
   ifsc: string | null;
   account_holder_name: string | null;
+  contact_no: string | null;
+  email: string | null;
+  remarks: string | null;
   status: string;
   approval_status: string | null;
   current_approver_user_id: string | null;
   current_approver_role_id: string | null;
   created_at: string;
   payment_heads?: { name: string; code: string } | null;
+  payment_details?: Array<{ id: string; label: string; value: string | null; file_name: string | null }>;
+};
+
+type PaymentAnswerRow = {
+  id: string;
+  payment_request_id: string;
+  answer_value: string | null;
+  file_name: string | null;
+  payment_head_questions?: { question_text: string; sort_order: number | null } | Array<{ question_text: string; sort_order: number | null }> | null;
 };
 
 function firstRelation<T>(value: T | T[] | null | undefined) {
@@ -81,7 +93,7 @@ async function loadPaymentProcess(companyId: string, userId: string | null, role
 
   let requestsQuery = supabaseAdmin
     .from("payment_requests")
-    .select("id, request_no, location_code, payment_head_id, amount, amount_requested, payment_mode, payment_portal, payment_reference, bank_account_no, ifsc, account_holder_name, status, approval_status, current_approver_user_id, current_approver_role_id, created_at, payment_heads ( name, code )")
+    .select("id, request_no, location_code, payment_head_id, amount, amount_requested, payment_mode, payment_portal, payment_reference, bank_account_no, ifsc, account_holder_name, contact_no, email, remarks, status, approval_status, current_approver_user_id, current_approver_role_id, created_at, payment_heads ( name, code )")
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
 
@@ -101,14 +113,35 @@ async function loadPaymentProcess(companyId: string, userId: string | null, role
 
   const error = banksResult.error?.message || requestsResult.error?.message || null;
   if (error) return { banks: [] as PaymentBankRow[], requests: [] as PaymentRequestRow[], error };
+  const requestRows = ((requestsResult.data ?? []) as unknown as PaymentRequestRow[])
+    .filter(isReadyForPaymentProcess)
+    .filter((request) => String(request.approval_status ?? "").toUpperCase() !== "RE_APPROVED" || request.current_approver_user_id === userId);
+  const requestIds = requestRows.map((request) => request.id);
+  const answersResult = requestIds.length ? await supabaseAdmin
+    .from("payment_request_answers")
+    .select("id, payment_request_id, answer_value, file_name, payment_head_questions ( question_text, sort_order )")
+    .eq("company_id", companyId)
+    .in("payment_request_id", requestIds) : { data: [], error: null };
+  if (answersResult.error) return { banks: [] as PaymentBankRow[], requests: [] as PaymentRequestRow[], error: answersResult.error.message };
+  const detailsByRequest = new Map<string, PaymentRequestRow["payment_details"]>();
+  ((answersResult.data ?? []) as unknown as PaymentAnswerRow[])
+    .sort((a, b) => Number(firstRelation(a.payment_head_questions)?.sort_order ?? 0) - Number(firstRelation(b.payment_head_questions)?.sort_order ?? 0))
+    .forEach((answer) => {
+      const details = detailsByRequest.get(answer.payment_request_id) ?? [];
+      details.push({
+        id: answer.id,
+        label: firstRelation(answer.payment_head_questions)?.question_text ?? "Field",
+        value: answer.answer_value,
+        file_name: answer.file_name
+      });
+      detailsByRequest.set(answer.payment_request_id, details);
+    });
   return {
     banks: (banksResult.data ?? []) as PaymentBankRow[],
-    requests: ((requestsResult.data ?? []) as unknown as PaymentRequestRow[])
-      .filter(isReadyForPaymentProcess)
-      .filter((request) => String(request.approval_status ?? "").toUpperCase() !== "RE_APPROVED" || request.current_approver_user_id === userId)
-      .map((request) => ({
+    requests: requestRows.map((request) => ({
         ...request,
-        payment_heads: firstRelation(request.payment_heads)
+        payment_heads: firstRelation(request.payment_heads),
+        payment_details: detailsByRequest.get(request.id) ?? []
       })),
     error: null
   };
@@ -165,6 +198,10 @@ export default async function PaymentProcessPage({
             payment_mode: request.payment_mode,
             payment_reference: request.payment_reference,
             account_holder_name: request.account_holder_name,
+            contact_no: request.contact_no,
+            email: request.email,
+            request_remarks: request.remarks,
+            payment_details: request.payment_details ?? [],
             status: request.status,
             approval_status: request.approval_status,
             created_at: request.created_at,

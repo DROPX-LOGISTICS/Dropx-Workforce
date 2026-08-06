@@ -154,11 +154,13 @@ type MultiSeries = GenerationConfig & { key: string; designation_ids: string[] }
 function MultiDesignationRows({
   defaultPrefix,
   designations,
-  setting
+  setting,
+  structureLocked
 }: {
   defaultPrefix: string;
   designations: OptionRow[];
   setting?: SettingRow;
+  structureLocked: boolean;
 }) {
   const initial = Object.entries(setting?.scope_type === "multi_designation" ? setting.configs ?? {} : {}).map(([key, config]) => ({
     ...defaultConfig(config.label || "Series", defaultPrefix),
@@ -186,6 +188,8 @@ function MultiDesignationRows({
 
   const assignedTo = new Map<string, string>();
   series.forEach((item) => item.designation_ids.forEach((id) => assignedTo.set(id, item.key)));
+  const originallyAssignedTo = new Map<string, string>();
+  initial.forEach((item) => item.designation_ids.forEach((id) => originallyAssignedTo.set(id, item.key)));
 
   return (
     <div className="id-generation-scope-block multi-designation-block">
@@ -194,7 +198,7 @@ function MultiDesignationRows({
           <h4>Multi Designation Wise</h4>
           <p className="subtle">Create independent ID series and map one or more designations to each series.</p>
         </div>
-        <button className="button secondary compact" onClick={addSeries} type="button">+ Add series</button>
+        <button className="button secondary compact" disabled={structureLocked} onClick={addSeries} type="button">+ Add series</button>
       </div>
 
       {!series.length ? (
@@ -213,26 +217,26 @@ function MultiDesignationRows({
             <input name="row_designation_ids" type="hidden" value={JSON.stringify(item.designation_ids)} />
             <div className="multi-designation-series-head">
               <strong>Series {index + 1}</strong>
-              <button className="button secondary compact danger-text" onClick={() => setSeries((current) => current.filter((row) => row.key !== item.key))} type="button">Remove</button>
+              <button className="button secondary compact danger-text" disabled={structureLocked} onClick={() => setSeries((current) => current.filter((row) => row.key !== item.key))} type="button">Remove</button>
             </div>
             <div className="multi-designation-fields">
               <label>Series name
-                <input className="field" name="row_label" onChange={(event) => updateSeries(item.key, { label: event.target.value })} placeholder={`Series ${index + 1}`} required value={item.label ?? ""} />
+                <input className="field" name="row_label" onChange={(event) => updateSeries(item.key, { label: event.target.value })} placeholder={`Series ${index + 1}`} readOnly={structureLocked} required value={item.label ?? ""} />
               </label>
               <label>Prefix
-                <input className="field id-generation-soft-placeholder" name="row_prefix" onChange={(event) => updateSeries(item.key, { prefix: event.target.value })} placeholder="Optional" value={item.prefix ?? ""} />
+                <input className="field id-generation-soft-placeholder" name="row_prefix" onChange={(event) => updateSeries(item.key, { prefix: event.target.value })} placeholder="Optional" readOnly={structureLocked} value={item.prefix ?? ""} />
               </label>
               <label>Separator
-                <input className="field id-generation-soft-placeholder" name="row_separator" onChange={(event) => updateSeries(item.key, { separator: event.target.value })} placeholder="Optional" value={item.separator ?? ""} />
+                <input className="field id-generation-soft-placeholder" name="row_separator" onChange={(event) => updateSeries(item.key, { separator: event.target.value })} placeholder="Optional" readOnly={structureLocked} value={item.separator ?? ""} />
               </label>
               <label>Starting number
-                <input className="field" min={1} name="row_next_serial_no" onChange={(event) => updateSeries(item.key, { next_serial_no: Number(event.target.value) })} required type="number" value={item.next_serial_no ?? 1} />
+                <input className="field" min={1} name="row_next_serial_no" onChange={(event) => updateSeries(item.key, { next_serial_no: Number(event.target.value) })} readOnly={structureLocked} required type="number" value={item.next_serial_no ?? 1} />
               </label>
               <label>Minimum digit
-                <input className="field" max={12} min={1} name="row_serial_digits" onChange={(event) => updateSeries(item.key, { serial_digits: Number(event.target.value) })} required type="number" value={item.serial_digits ?? 3} />
+                <input className="field" max={12} min={1} name="row_serial_digits" onChange={(event) => updateSeries(item.key, { serial_digits: Number(event.target.value) })} readOnly={structureLocked} required type="number" value={item.serial_digits ?? 3} />
               </label>
               <label>Suffix
-                <input className="field id-generation-soft-placeholder" name="row_suffix" onChange={(event) => updateSeries(item.key, { suffix: event.target.value })} placeholder="Optional" value={item.suffix ?? ""} />
+                <input className="field id-generation-soft-placeholder" name="row_suffix" onChange={(event) => updateSeries(item.key, { suffix: event.target.value })} placeholder="Optional" readOnly={structureLocked} value={item.suffix ?? ""} />
               </label>
               <label>Sample
                 <code className="multi-designation-sample">{sample}</code>
@@ -245,6 +249,7 @@ function MultiDesignationRows({
                   {selectedDesignations.map((designation) => (
                     <button
                       className="multi-designation-tag"
+                      disabled={structureLocked && originallyAssignedTo.get(designation.id) === item.key}
                       key={designation.id}
                       onClick={() => updateSeries(item.key, { designation_ids: item.designation_ids.filter((id) => id !== designation.id) })}
                       title={`Remove ${optionLabel(designation)}`}
@@ -277,13 +282,14 @@ function MultiDesignationRows({
                   </div>
                   {visibleDesignations.map((designation) => {
                     const owner = assignedTo.get(designation.id);
+                    const originalOwner = originallyAssignedTo.get(designation.id);
                     const checked = item.designation_ids.includes(designation.id);
                     const unavailable = Boolean(owner && owner !== item.key);
                     return (
                       <label className={`${checked ? "selected" : ""} ${unavailable ? "disabled" : ""}`} key={designation.id}>
                         <input
                           checked={checked}
-                          disabled={unavailable}
+                          disabled={unavailable || (structureLocked && originalOwner === item.key)}
                           onChange={(event) => updateSeries(item.key, {
                             designation_ids: event.target.checked
                               ? [...item.designation_ids, designation.id]
@@ -334,7 +340,9 @@ export function IdGenerationForm({
 }) {
   const [selectedScope, setSelectedScope] = useState<ScopeType | "">(setting?.scope_type ?? "");
   const locked = Boolean(setting?.is_locked);
-  const disabled = !canEdit || locked;
+  const lockedMultiDesignation = locked && setting?.scope_type === "multi_designation";
+  const structureDisabled = !canEdit || locked;
+  const saveDisabled = !canEdit || (locked && !lockedMultiDesignation);
   const optionsByScope = {
     company: [{ id: "company", code: null, name: companyLabel }],
     category: categories,
@@ -356,12 +364,13 @@ export function IdGenerationForm({
       <div className="panel-body">
         <form action={saveIdGenerationSetting}>
           <input name="setting_type" type="hidden" value={type} />
+          {structureDisabled && selectedScope ? <input name="scope_type" type="hidden" value={selectedScope} /> : null}
           <div className="form-grid three">
             <label>Generation method
               <select
                 className="select"
-                disabled={disabled}
-                name="scope_type"
+                disabled={structureDisabled}
+                name={structureDisabled ? undefined : "scope_type"}
                 onChange={(event) => setSelectedScope(event.target.value as ScopeType | "")}
                 required
                 value={selectedScope}
@@ -377,7 +386,7 @@ export function IdGenerationForm({
           </div>
 
           {selectedScope === "multi_designation" ? (
-            <MultiDesignationRows defaultPrefix={defaultPrefix} designations={designations} setting={setting} />
+            <MultiDesignationRows defaultPrefix={defaultPrefix} designations={designations} setting={setting} structureLocked={locked} />
           ) : selectedScope ? (
             <ConfigRows
               defaultPrefix={defaultPrefix}
@@ -389,9 +398,11 @@ export function IdGenerationForm({
             <div className="id-generation-empty">Select a generation method to configure the ID structure.</div>
           )}
 
-          {locked ? <p className="inline-error">This setting is locked because it has already generated an ID.</p> : null}
+          {lockedMultiDesignation ? (
+            <p className="id-generation-locked-note">Series structure and existing mappings are locked. New designations can still be mapped to an existing series.</p>
+          ) : locked ? <p className="inline-error">This setting is locked because it has already generated an ID.</p> : null}
           <div className="form-actions align-right">
-            <SubmitButton disabled={disabled}>Save {title}</SubmitButton>
+            <SubmitButton disabled={saveDisabled}>{lockedMultiDesignation ? "Save designation mappings" : `Save ${title}`}</SubmitButton>
           </div>
         </form>
       </div>

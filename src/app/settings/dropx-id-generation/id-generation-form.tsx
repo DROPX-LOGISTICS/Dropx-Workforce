@@ -192,9 +192,6 @@ function MultiDesignationRows({
 
   const assignedTo = new Map<string, string>();
   series.forEach((item) => item.designation_ids.forEach((id) => assignedTo.set(id, item.key)));
-  const originallyAssignedTo = new Map<string, string>();
-  initial.forEach((item) => item.designation_ids.forEach((id) => originallyAssignedTo.set(id, item.key)));
-
   return (
     <div className="id-generation-scope-block multi-designation-block">
       <div className="multi-designation-title">
@@ -257,7 +254,7 @@ function MultiDesignationRows({
                   {selectedDesignations.map((designation) => (
                     <button
                       className="multi-designation-tag"
-                      disabled={!canEdit || (seriesLocked && originallyAssignedTo.get(designation.id) === item.key)}
+                      disabled={!canEdit}
                       key={designation.id}
                       onClick={() => updateSeries(item.key, { designation_ids: item.designation_ids.filter((id) => id !== designation.id) })}
                       title={`Remove ${optionLabel(designation)}`}

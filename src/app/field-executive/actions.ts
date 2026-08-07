@@ -11,7 +11,6 @@ import { currentAccessSurface } from "@/lib/access-surface";
 import { syncBiometricEnrolment } from "@/lib/biometric/enrolments";
 import { generateBiometricEnrolmentId } from "@/lib/biometric/ids";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
-import { normalizeFieldExecutiveVehicleType } from "@/lib/field-executive-vehicle";
 import { cleanCountryCode } from "@/lib/country-codes";
 import { assertWorkerDesignationMappedToIdSeries, generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { requireDesignationOnboardingAccess } from "@/lib/designation-onboarding-access";
@@ -115,7 +114,6 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
   const dateOfJoin = required(formData.get("date_of_join"), "Date of join");
   const locationId = required(formData.get("location_id"), "Location");
   const designation = required(formData.get("designation"), "Designation");
-  const vehicleType = optional(formData.get("vehicle_type"))?.toLowerCase() ?? null;
   const gender = optional(formData.get("gender"));
   const dateOfBirth = optional(formData.get("date_of_birth"));
   const aadhaarNumber = optional(formData.get("aadhaar_number"))?.replace(/\D/g, "") ?? null;
@@ -181,7 +179,6 @@ function normalizeFieldExecutivePayload(formData: FormData, requireId = false) {
       date_of_join: dateOfJoin,
       location_id: locationId,
       designation,
-      vehicle_type: vehicleType,
       gender,
       date_of_birth: dateOfBirth,
       aadhaar_number: aadhaarNumber,
@@ -248,7 +245,6 @@ export async function createFieldExecutive(formData: FormData) {
     if (!designationRuleResult.data) throw new Error("Selected designation is not available.");
     requireDesignationOnboardingAccess(designationRuleResult.data, authorization);
     requireDesignationPortalAccess(designationRuleResult.data, currentAccessSurface(), "add", { isOwner: isCompanyOwner(authorization) });
-    const vehicleType = normalizeFieldExecutiveVehicleType(formData.get("vehicle_type"), designationRuleResult.data.code);
     const dashboardRules = directActivate
       ? (await loadWorkforceCategoryRules(
         companyId,
@@ -335,7 +331,6 @@ export async function createFieldExecutive(formData: FormData) {
       date_of_join: dateOfJoin,
       location_id: locationId,
       designation,
-      vehicle_type: vehicleType,
       biometric_id: biometricId,
       dropx_id: dropxId,
       created_by: authorization.userId,
@@ -494,7 +489,6 @@ export async function updateFieldExecutive(formData: FormData) {
     if (designationResult.error) throw new Error(designationResult.error.message);
     if (!designationResult.data) throw new Error("Selected designation is not available.");
     requireDesignationPortalAccess(designationResult.data, currentAccessSurface(), "edit", { isOwner: isCompanyOwner(authorization) });
-    payload.vehicle_type = normalizeFieldExecutiveVehicleType(payload.vehicle_type, designationResult.data.code);
     const dashboardRules = (await loadWorkforceCategoryRules(
       companyId,
       config.designationCategory,
@@ -552,7 +546,6 @@ export async function updateFieldExecutive(formData: FormData) {
       date_of_join: payload.date_of_join,
       location_id: payload.location_id,
       designation: payload.designation,
-      vehicle_type: payload.vehicle_type,
       biometric_id: payload.biometric_id,
       is_active: payload.is_active,
       statutory_applicability: payload.statutory_applicability
@@ -733,7 +726,6 @@ type BulkImportRow = {
   dateOfJoin: string;
   locationCode: string;
   designationCode: string;
-  vehicleType: string | null;
 };
 
 function normalizeHeader(value: unknown) {
@@ -787,7 +779,6 @@ async function parseBulkWorkbook(fileValue: FormDataEntryValue | null) {
     const mobile = cellText(row, ["Mob no", "Mobile", "Mobile number", "Mob number"]).replace(/\D/g, "");
     const locationCode = cellText(row, ["Location", "Location code"]).toUpperCase();
     const designationCode = cellText(row, ["Designation code", "Delisignation code", "Designation"]).toUpperCase();
-    const vehicleType = cellText(row, ["Vehicle type", "Vehicle", "Bike or Van"]).toLowerCase() || null;
     if (!fullName) throw new Error(`Row ${rowNumber}: Full name is required.`);
     if (!/^\d{6,15}$/.test(mobile)) throw new Error(`Row ${rowNumber}: Mobile number must contain 6 to 15 digits.`);
     if (!locationCode) throw new Error(`Row ${rowNumber}: Location is required.`);
@@ -805,8 +796,7 @@ async function parseBulkWorkbook(fileValue: FormDataEntryValue | null) {
       email: required(cellText(row, ["Email", "Email ID"]), `Row ${rowNumber}: Email`).toLowerCase(),
       dateOfJoin: parseExcelDate(cellValue(row, ["Date of join", "Date of join (DD/MM/YYYY)", "Date of join (DD/MM/YYY)", "DOJ"]), rowNumber),
       locationCode,
-      designationCode,
-      vehicleType
+      designationCode
     } satisfies BulkImportRow;
   });
 }
@@ -879,7 +869,6 @@ export async function bulkImportFieldExecutives(formData: FormData) {
       requireDesignationOnboardingAccess(designation, authorization);
       requireDesignationPortalAccess(designation, currentAccessSurface(), "add", { isOwner: isCompanyOwner(authorization) });
       await assertWorkerDesignationMappedToIdSeries({ companyId, designationId: designation.id });
-      const vehicleType = normalizeFieldExecutiveVehicleType(row.vehicleType, row.designationCode);
       if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
         throw new Error(`Row ${rowNumber}: You do not have access to location ${row.locationCode}.`);
       }
@@ -909,7 +898,6 @@ export async function bulkImportFieldExecutives(formData: FormData) {
         date_of_join: row.dateOfJoin,
         location_id: locationId,
         designation: designation.name,
-        vehicle_type: vehicleType,
         created_by: authorization.userId,
         onboarding_status: "pending",
         ...(config.profileType === "field_executive" ? {

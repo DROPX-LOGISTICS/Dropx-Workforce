@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { syncBiometricEnrolment } from "@/lib/biometric/enrolments";
 import { requireCompanyId } from "@/lib/company-scope";
-import { normalizeFieldExecutiveVehicleType } from "@/lib/field-executive-vehicle";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 function lifecycleRedirect(params: { error?: string; notice?: string; tab?: string }): never {
@@ -31,7 +30,7 @@ async function requireScopedApplicant(id: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const result = await supabaseAdmin
     .from("field_executives")
-    .select("id, full_name, location_id, designation, vehicle_type, date_of_join, biometric_id, onboarding_status, lifecycle_status")
+    .select("id, full_name, location_id, designation, date_of_join, biometric_id, onboarding_status, lifecycle_status")
     .eq("company_id", companyId)
     .eq("id", id)
     .maybeSingle();
@@ -98,7 +97,6 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
     }
 
     const code = await designationCode(companyId, applicant.designation);
-    normalizeFieldExecutiveVehicleType(applicant.vehicle_type, code);
     const master = await supabaseAdmin!.from("workforce_onboarding_checklist_master")
       .select("id, code, label, is_required, applicable_designation_codes")
       .eq("company_id", companyId).eq("is_active", true).order("sort_order");

@@ -1,5 +1,6 @@
 import { bulkImportFieldExecutives, createFieldExecutive, reviewFieldExecutiveProfile, updateFieldExecutive } from "@/app/field-executive/actions";
 import { AppShell } from "@/components/app-shell";
+import { CompensationBulkUpload } from "@/components/compensation-bulk-upload";
 import { FieldExecutiveList, type FieldExecutiveListRow } from "@/components/field-executive-list";
 import { PageHead } from "@/components/page-head";
 import { PendingLink } from "@/components/pending-link";
@@ -63,7 +64,6 @@ type ExecutiveRow = {
   statutory_applicability?: string[] | null;
   location_id: string;
   designation: string | null;
-  vehicle_type?: string | null;
   gender: string | null;
   date_of_birth: string | null;
   aadhaar_number: string | null;
@@ -119,7 +119,6 @@ type FieldExecutiveAddFormValues = {
   dateOfJoin?: string;
   locationId?: string;
   designation?: string;
-  vehicleType?: string;
 };
 
 function firstRelation<T>(value: T | T[] | null | undefined) {
@@ -259,7 +258,6 @@ function FieldExecutiveDetails({
           <ExecutiveDetail label="ID" value={executive.dropx_id} />
           <ExecutiveDetail label="Full name" value={executive.full_name} />
           <ExecutiveDetail label="Designation" value={executive.designation} />
-          <ExecutiveDetail label="Vehicle type" value={executive.vehicle_type ? executive.vehicle_type[0].toUpperCase() + executive.vehicle_type.slice(1) : null} />
           <ExecutiveDetail label="Date of join" value={formatDashboardDate(executive.date_of_join)} />
           <ExecutiveDetail label="Location" value={location?.station_name || location?.station_code} />
           <ExecutiveDetail label="Status" value={fieldExecutiveStatus(executive)} />
@@ -387,7 +385,6 @@ function FieldExecutiveForm({
         designationOptions={designationOptions}
         initialDesignation={executive?.designation}
         initialLocationId={executive?.location_id}
-        initialVehicleType={executive?.vehicle_type}
         locationName="location_id"
         locationOptions={locationOptions}
         required={!optionalEditFields}
@@ -517,7 +514,6 @@ function AddFieldExecutiveForm({
         initialLocationId={values?.locationId}
         locationName="location_id"
         locationOptions={locationOptions}
-        initialVehicleType={values?.vehicleType}
       />
       {statutoryEnabled ? (
         <fieldset className="span-3 statutory-fieldset">
@@ -573,8 +569,15 @@ function FieldExecutiveBulkImportPanel({
       <form action={bulkImportFieldExecutives} className="workforce-bulk-form">
         <input type="hidden" name="return_path" value={returnPath} />
         <div className="workforce-template-note">
-          <strong>Excel columns</strong>
-          <span>DropX ID, Biometric ID, Full name, Mob country code, Mob no, Email, Date of join (DD/MM/YYYY), Location, Designation code, Vehicle type (Bike/Van for DA/PTDA)</span>
+          <strong>{entityLabel} upload template</strong>
+          <span>Download the prepared Excel, fill one person per row, and upload the completed file.</span>
+          <a
+            className="template-download-link"
+            download
+            href={`/api/import-template?kind=${returnPath === "/contractors" ? "contractor" : "field_executive"}`}
+          >
+            Download sample Excel
+          </a>
         </div>
         <input accept=".xlsx,.xls,.csv" className="field" name="bulk_file" required type="file" />
         <SubmitButton
@@ -660,7 +663,6 @@ async function loadFieldExecutiveData(
         statutory_applicability,
         location_id,
         designation,
-        vehicle_type,
         gender,
         date_of_birth,
         aadhaar_number,
@@ -931,6 +933,7 @@ export async function FieldExecutivePageContent({
       ) : null}
 
       {permission.canAdd && accessSurface !== "ops" ? <FieldExecutiveBulkImportPanel description={bulkImportDescription} entityLabel={entityLabel} returnPath={returnPath} title={bulkImportTitle} /> : null}
+      {ownerAccess && accessSurface !== "ops" && returnPath === "/contractors" ? <CompensationBulkUpload kind="contractor_remuneration" /> : null}
 
       {permission.canView || permission.canEdit ? <FieldExecutiveList basePath={returnPath} canEdit={permission.canEdit} emptyLabel={emptyListLabel} rows={executives} title={listTitle} /> : null}
 

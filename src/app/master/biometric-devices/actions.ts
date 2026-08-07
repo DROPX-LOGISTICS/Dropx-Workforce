@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import * as XLSX from "xlsx";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -62,6 +63,140 @@ function payloadFromForm(formData: FormData) {
     is_active: true,
     remarks: null
   };
+}
+
+function normalizedHeader(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function workbookCell(row: Record<string, unknown>, aliases: string[]) {
+  const entries = new Map(Object.entries(row).map(([key, value]) => [normalizedHeader(key), value]));
+  for (const alias of aliases) {
+    const value = entries.get(normalizedHeader(alias));
+    if (value != null && String(value).trim()) return String(value).trim();
+  }
+  return "";
+}
+
+function temporaryUntilValue(value: string, rowNumber: number) {
+  if (!value) return null;
+  if (/^\d+(?:\.\d+)?$/.test(value)) {
+    const parsed = XLSX.SSF.parse_date_code(Number(value));
+    if (parsed) return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
+  }
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const localMatch = value.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
+  const normalized = isoMatch ? value : localMatch ? `${localMatch[3]}-${localMatch[2]}-${localMatch[1]}` : "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized) || Number.isNaN(new Date(`${normalized}T00:00:00Z`).getTime())) {
+    throw new Error(`Row ${rowNumber}: Temporary until must be YYYY-MM-DD or DD/MM/YYYY.`);
+  }
+  return normalized;
+}
+
+async function parseTemporaryDeviceWorkbook(fileValue: FormDataEntryValue | null) {
+  if (!(fileValue instanceof File) || !fileValue.size) throw new Error("Choose an Excel or CSV file to upload.");
+  if (fileValue.size > 5 * 1024 * 1024) throw new Error("Bulk upload file must be 5 MB or smaller.");
+  const workbook = XLSX.read(Buffer.from(await fileValue.arrayBuffer()), { type: "buffer", cellDates: false });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  if (!sheet) throw new Error("The uploaded file does not contain a worksheet.");
+  const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+  if (!rawRows.length) throw new Error("The uploaded file does not contain any device rows.");
+  if (rawRows.length > 500) throw new Error("Upload a maximum of 500 devices at a time.");
+
+  return rawRows.map((row, index) => {
+    const rowNumber = index + 2;
+    const terminalId = workbookCell(row, ["Device ID", "Terminal ID", "Device no"]);
+    const deviceSerial = workbookCell(row, ["Serial no", "Serial number", "Device serial"]).toUpperCase();
+    const locationCode = workbookCell(row, ["Location", "Location code"]).toUpperCase();
+    const model = workbookCell(row, ["Model no", "Model", "Model number"]);
+    const localIpAddress = workbookCell(row, ["Local IP address", "Local IP", "IP address"]);
+    const localPortText = workbookCell(row, ["Local port no", "Local port", "Port"]);
+    if (!/^\d{1,10}$/.test(terminalId)) throw new Error(`Row ${rowNumber}: Device ID must be numeric.`);
+    if (!deviceSerial) throw new Error(`Row ${rowNumber}: Serial number is required.`);
+    if (!locationCode) throw new Error(`Row ${rowNumber}: Location is required.`);
+    if (!model) throw new Error(`Row ${rowNumber}: Model number is required.`);
+    if (!localIpAddress) throw new Error(`Row ${rowNumber}: Local IP address is required.`);
+    const localPort = Number(localPortText);
+    if (!Number.isInteger(localPort) || localPort < 1 || localPort > 65535) throw new Error(`Row ${rowNumber}: Local port must be between 1 and 65535.`);
+    const connectionText = workbookCell(row, ["Connection type", "Connection mode"]).toUpperCase();
+    const connectionMode = connectionText === "P2P" ? "P2P" : "TCP_PUSH";
+    return {
+      rowNumber,
+      terminalId,
+      deviceSerial,
+      locationCode,
+      model,
+      localIpAddress,
+      localPort,
+      connectionMode,
+      networkPassword: workbookCell(row, ["Network password", "Password"]) || null,
+      p2pType: workbookCell(row, ["P2P type"]) || null,
+      p2pDeviceId: workbookCell(row, ["P2P device ID", "P2P ID"]) || null,
+      temporaryUntil: temporaryUntilValue(workbookCell(row, ["Temporary until", "Expiry date", "Valid until"]), rowNumber),
+      remarks: workbookCell(row, ["Remarks", "Remark"]) || null
+    };
+  });
+}
+
+export async function bulkImportTemporaryBiometricDevices(formData: FormData) {
+  const authorization = await requirePagePermission("biometric_devices", "add");
+  const companyId = requireCompanyId(authorization);
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    const rows = await parseTemporaryDeviceWorkbook(formData.get("bulk_file"));
+    const duplicateSerials = rows.filter((row, index) => rows.findIndex((candidate) => candidate.deviceSerial === row.deviceSerial) !== index);
+    const duplicateTerminalIds = rows.filter((row, index) => rows.findIndex((candidate) => candidate.terminalId === row.terminalId) !== index);
+    if (duplicateSerials.length) throw new Error(`Row ${duplicateSerials[0].rowNumber}: Serial number is duplicated in the file.`);
+    if (duplicateTerminalIds.length) throw new Error(`Row ${duplicateTerminalIds[0].rowNumber}: Device ID is duplicated in the file.`);
+
+    const [locationsResult, existingResult] = await Promise.all([
+      supabaseAdmin.from("stations").select("id, station_code").eq("company_id", companyId).eq("is_active", true).in("station_code", Array.from(new Set(rows.map((row) => row.locationCode)))),
+      supabaseAdmin.from("biometric_devices").select("device_serial, terminal_id").eq("company_id", companyId)
+    ]);
+    if (locationsResult.error) throw new Error(locationsResult.error.message);
+    if (existingResult.error) throw new Error(existingResult.error.message);
+    const locations = new Map((locationsResult.data ?? []).map((location) => [String(location.station_code).toUpperCase(), String(location.id)]));
+    const existingSerials = new Set((existingResult.data ?? []).map((device) => String(device.device_serial).toUpperCase()));
+    const existingTerminalIds = new Set((existingResult.data ?? []).map((device) => String(device.terminal_id ?? "")).filter(Boolean));
+    const importRows = rows.filter((row) => !existingSerials.has(row.deviceSerial) && !existingTerminalIds.has(row.terminalId));
+    const skipped = rows.length - importRows.length;
+    const payloads = importRows.map((row) => {
+      const locationId = locations.get(row.locationCode);
+      if (!locationId) throw new Error(`Row ${row.rowNumber}: Active location ${row.locationCode} was not found.`);
+      if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
+        throw new Error(`Row ${row.rowNumber}: You do not have access to location ${row.locationCode}.`);
+      }
+      return withCompany({
+        device_serial: row.deviceSerial,
+        terminal_id: row.terminalId,
+        device_no: row.terminalId,
+        location_id: locationId,
+        device_name: null,
+        model: row.model,
+        local_ip_address: row.localIpAddress,
+        local_port: row.localPort,
+        p2p_type: row.p2pType,
+        p2p_device_id: row.p2pDeviceId,
+        connection_mode: row.connectionMode,
+        network_password: row.networkPassword,
+        status: "Disconnected",
+        is_active: true,
+        is_temporary: true,
+        temporary_until: row.temporaryUntil,
+        remarks: row.remarks,
+        created_by: authorization.userId
+      }, companyId);
+    });
+    if (payloads.length) {
+      const { error } = await supabaseAdmin.from("biometric_devices").insert(payloads);
+      if (error) throw new Error(error.message);
+    }
+    revalidatePath("/master/biometric-devices");
+    deviceRedirect({ notice: `${payloads.length} temporary device${payloads.length === 1 ? "" : "s"} imported${skipped ? `; ${skipped} existing duplicate${skipped === 1 ? "" : "s"} skipped` : ""}.` });
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    deviceRedirect({ error: error instanceof Error ? error.message : "Unable to import temporary devices." });
+  }
 }
 
 export async function createBiometricDevice(formData: FormData) {

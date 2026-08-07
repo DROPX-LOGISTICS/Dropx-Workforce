@@ -44,6 +44,8 @@ alter table public.biometric_devices
   add column if not exists last_seen_at timestamptz,
   add column if not exists last_source_ip text,
   add column if not exists is_active boolean not null default true,
+  add column if not exists is_temporary boolean not null default false,
+  add column if not exists temporary_until date,
   add column if not exists remarks text,
   add column if not exists created_by uuid,
   add column if not exists updated_at timestamptz not null default now();
@@ -57,6 +59,10 @@ create unique index if not exists biometric_devices_company_serial_uidx
 
 create index if not exists biometric_devices_company_location_idx
   on public.biometric_devices(company_id, location_id);
+
+create index if not exists biometric_devices_company_temporary_idx
+  on public.biometric_devices(company_id, is_temporary, temporary_until)
+  where is_temporary = true;
 
 create table if not exists public.biometric_middleware_settings (
   id boolean not null default true,

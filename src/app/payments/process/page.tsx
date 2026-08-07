@@ -30,6 +30,8 @@ type PaymentRequestRow = {
   contact_no: string | null;
   email: string | null;
   remarks: string | null;
+  requested_by: string | null;
+  processed_at: string | null;
   status: string;
   approval_status: string | null;
   current_approver_user_id: string | null;
@@ -37,6 +39,26 @@ type PaymentRequestRow = {
   created_at: string;
   payment_heads?: { name: string; code: string } | null;
   payment_details?: Array<{ id: string; label: string; value: string | null; file_name: string | null }>;
+  payment_history?: PaymentHistoryRow[];
+};
+
+type PaymentApprovalRow = {
+  id: string;
+  payment_request_id: string;
+  action: string;
+  comments: string | null;
+  created_at: string;
+  approver_user_id: string | null;
+  approver_role_id: string | null;
+};
+
+type PaymentHistoryRow = {
+  id: string;
+  action: string;
+  actor: string;
+  role: string;
+  comments: string | null;
+  created_at: string;
 };
 
 type PaymentAnswerRow = {
@@ -93,7 +115,7 @@ async function loadPaymentProcess(companyId: string, userId: string | null, role
 
   let requestsQuery = supabaseAdmin
     .from("payment_requests")
-    .select("id, request_no, location_code, payment_head_id, amount, amount_requested, payment_mode, payment_portal, payment_reference, bank_account_no, ifsc, account_holder_name, contact_no, email, remarks, status, approval_status, current_approver_user_id, current_approver_role_id, created_at, payment_heads ( name, code )")
+    .select("id, request_no, location_code, payment_head_id, amount, amount_requested, payment_mode, payment_portal, payment_reference, bank_account_no, ifsc, account_holder_name, contact_no, email, remarks, requested_by, processed_at, status, approval_status, current_approver_user_id, current_approver_role_id, created_at, payment_heads ( name, code )")
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
 
@@ -117,12 +139,21 @@ async function loadPaymentProcess(companyId: string, userId: string | null, role
     .filter(isReadyForPaymentProcess)
     .filter((request) => String(request.approval_status ?? "").toUpperCase() !== "RE_APPROVED" || request.current_approver_user_id === userId);
   const requestIds = requestRows.map((request) => request.id);
-  const answersResult = requestIds.length ? await supabaseAdmin
-    .from("payment_request_answers")
-    .select("id, payment_request_id, answer_value, file_name, payment_head_questions ( question_text, sort_order )")
-    .eq("company_id", companyId)
-    .in("payment_request_id", requestIds) : { data: [], error: null };
-  if (answersResult.error) return { banks: [] as PaymentBankRow[], requests: [] as PaymentRequestRow[], error: answersResult.error.message };
+  const [answersResult, approvalsResult] = requestIds.length ? await Promise.all([
+    supabaseAdmin
+      .from("payment_request_answers")
+      .select("id, payment_request_id, answer_value, file_name, payment_head_questions ( question_text, sort_order )")
+      .eq("company_id", companyId)
+      .in("payment_request_id", requestIds),
+    supabaseAdmin
+      .from("payment_request_approvals")
+      .select("id, payment_request_id, action, comments, created_at, approver_user_id, approver_role_id")
+      .eq("company_id", companyId)
+      .in("payment_request_id", requestIds)
+      .order("created_at", { ascending: true })
+  ]) : [{ data: [], error: null }, { data: [], error: null }];
+  const relatedError = answersResult.error?.message || approvalsResult.error?.message;
+  if (relatedError) return { banks: [] as PaymentBankRow[], requests: [] as PaymentRequestRow[], error: relatedError };
   const detailsByRequest = new Map<string, PaymentRequestRow["payment_details"]>();
   ((answersResult.data ?? []) as unknown as PaymentAnswerRow[])
     .sort((a, b) => Number(firstRelation(a.payment_head_questions)?.sort_order ?? 0) - Number(firstRelation(b.payment_head_questions)?.sort_order ?? 0))
@@ -136,12 +167,69 @@ async function loadPaymentProcess(companyId: string, userId: string | null, role
       });
       detailsByRequest.set(answer.payment_request_id, details);
     });
+  const approvalRows = (approvalsResult.data ?? []) as PaymentApprovalRow[];
+  const profileIds = Array.from(new Set([
+    ...requestRows.map((request) => request.requested_by),
+    ...approvalRows.map((approval) => approval.approver_user_id)
+  ].filter(Boolean))) as string[];
+  const roleIds = Array.from(new Set(approvalRows.map((approval) => approval.approver_role_id).filter(Boolean))) as string[];
+  const [profilesResult, rolesResult] = await Promise.all([
+    profileIds.length ? supabaseAdmin.from("profiles").select("id, full_name, email").eq("company_id", companyId).in("id", profileIds) : { data: [], error: null },
+    roleIds.length ? supabaseAdmin.from("user_roles").select("id, name, code").eq("company_id", companyId).in("id", roleIds) : { data: [], error: null }
+  ]);
+  const identityError = profilesResult.error?.message || rolesResult.error?.message;
+  if (identityError) return { banks: [] as PaymentBankRow[], requests: [] as PaymentRequestRow[], error: identityError };
+  const profilesById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));
+  const rolesById = new Map((rolesResult.data ?? []).map((role) => [role.id, role]));
+  const approvalsByRequest = new Map<string, PaymentApprovalRow[]>();
+  approvalRows.forEach((approval) => {
+    const rows = approvalsByRequest.get(approval.payment_request_id) ?? [];
+    rows.push(approval);
+    approvalsByRequest.set(approval.payment_request_id, rows);
+  });
   return {
     banks: (banksResult.data ?? []) as PaymentBankRow[],
     requests: requestRows.map((request) => ({
         ...request,
         payment_heads: firstRelation(request.payment_heads),
-        payment_details: detailsByRequest.get(request.id) ?? []
+        payment_details: detailsByRequest.get(request.id) ?? [],
+        payment_history: (() => {
+          const approvalHistory = approvalsByRequest.get(request.id) ?? [];
+          const requester = request.requested_by ? profilesById.get(request.requested_by) : null;
+          const history: PaymentHistoryRow[] = approvalHistory.map((approval) => {
+            const actor = approval.approver_user_id ? profilesById.get(approval.approver_user_id) : null;
+            const role = approval.approver_role_id ? rolesById.get(approval.approver_role_id) : null;
+            return {
+              id: approval.id,
+              action: approval.action,
+              actor: actor?.full_name ?? actor?.email ?? "System",
+              role: role?.name ?? role?.code ?? (approval.action.toLowerCase() === "created" ? "Requester" : "-"),
+              comments: approval.comments,
+              created_at: approval.created_at
+            };
+          });
+          if (!history.some((entry) => entry.action.toLowerCase() === "created")) {
+            history.unshift({
+              id: `created-${request.id}`,
+              action: "created",
+              actor: requester?.full_name ?? requester?.email ?? request.location_code,
+              role: "Requester",
+              comments: request.remarks || "Payment request created.",
+              created_at: request.created_at
+            });
+          }
+          if (request.processed_at && !history.some((entry) => entry.action.toLowerCase() === "processed")) {
+            history.push({
+              id: `processed-${request.id}`,
+              action: "processed",
+              actor: "System",
+              role: "Payment processing",
+              comments: "Payment processing completed.",
+              created_at: request.processed_at
+            });
+          }
+          return history.sort((first, second) => new Date(first.created_at).getTime() - new Date(second.created_at).getTime());
+        })()
       })),
     error: null
   };
@@ -205,6 +293,7 @@ export default async function PaymentProcessPage({
             email: request.email,
             request_remarks: request.remarks,
             payment_details: request.payment_details ?? [],
+            payment_history: request.payment_history ?? [],
             status: request.status,
             approval_status: request.approval_status,
             created_at: request.created_at,

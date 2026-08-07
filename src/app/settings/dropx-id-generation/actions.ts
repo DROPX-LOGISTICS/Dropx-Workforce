@@ -128,7 +128,6 @@ function validateLockedMultiDesignationUpdate(
   proposedConfigs: Record<string, Record<string, unknown>>
 ) {
   const existingKeys = Object.keys(existingConfigs).sort();
-  const existingAssignments = new Map<string, string>();
   for (const key of existingKeys) {
     const seriesLocked = existingConfigs[key].is_locked !== false;
     if (seriesLocked && !proposedConfigs[key]) {
@@ -138,14 +137,6 @@ function validateLockedMultiDesignationUpdate(
       throw new Error("Series name, prefix, separator, starting number, digits and suffix are locked after ID generation has started.");
     }
     if (!seriesLocked || !proposedConfigs[key]) continue;
-    const existingIds = Array.isArray(existingConfigs[key].designation_ids) ? existingConfigs[key].designation_ids as string[] : [];
-    existingIds.forEach((designationId) => existingAssignments.set(designationId, key));
-  }
-  for (const [designationId, key] of existingAssignments) {
-    const proposedIds = Array.isArray(proposedConfigs[key].designation_ids) ? proposedConfigs[key].designation_ids as string[] : [];
-    if (!proposedIds.includes(designationId)) {
-      throw new Error("Existing designation mappings cannot be removed or moved after ID generation has started.");
-    }
   }
   for (const [key, config] of Object.entries(proposedConfigs)) {
     config.is_locked = existingConfigs[key]?.is_locked !== false && Boolean(existingConfigs[key]) ? true : false;

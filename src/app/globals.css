@@ -15977,3 +15977,651 @@ td strong,
     padding: 14px;
   }
 }
+
+/* === cash-recon / remittance UI (ported from dropx-ops-pulse) === */
+.remittance-deposit-panel,
+.remittance-final-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.remittance-intro {
+  display: grid;
+  gap: 10px;
+}
+
+.remittance-intro p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.remittance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.remittance-cooldown {
+  margin: 0;
+}
+
+.remittance-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.remittance-status-pill.good {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.remittance-status-pill.warn {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.remittance-status-pill.danger {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.remittance-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.remittance-kpi-grid.compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.remittance-kpi {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  min-width: 0;
+}
+
+.remittance-kpi.primary {
+  border-color: #cbd5e1;
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+}
+
+.remittance-kpi span {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.remittance-kpi strong {
+  color: #0f172a;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.remittance-kpi small {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.remittance-kpi.short strong,
+.amount-tone.short,
+.remittance-day-metrics .short {
+  color: #b91c1c;
+}
+
+.remittance-kpi.excess strong,
+.amount-tone.excess,
+.remittance-day-metrics .excess {
+  color: #166534;
+}
+
+.remittance-kpi.warn {
+  border-color: #fde68a;
+  background: linear-gradient(180deg, #fffdf5 0%, #fffbeb 100%);
+}
+
+.remittance-kpi.warn strong {
+  color: #b45309;
+}
+
+.remittance-meta-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.remittance-meta-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  min-width: 0;
+}
+
+.remittance-meta-item span {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+.remittance-meta-item strong {
+  color: #1e293b;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.remittance-status.good { color: #166534; }
+.remittance-status.warn { color: #b45309; }
+
+.remittance-alert {
+  margin: 0;
+}
+
+.remittance-tables {
+  display: grid;
+  gap: 14px;
+}
+
+.remittance-table-block {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.remittance-table-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.remittance-table-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.remittance-table-head strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.remittance-table-head span {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.remittance-table-head em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 750;
+  color: #475569;
+  background: #e2e8f0;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.remittance-table-wrap {
+  margin: 0;
+}
+
+.remittance-table-wrap table {
+  margin: 0;
+}
+
+.remittance-table-wrap th {
+  font-size: 10px;
+}
+
+.remittance-table-wrap td {
+  font-size: 12px;
+  vertical-align: top;
+}
+
+.remittance-id {
+  display: block;
+  margin-top: 2px;
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.remittance-chip {
+  display: inline-flex;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+}
+
+.remittance-chip.good {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.remittance-chip.warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.remittance-empty-state {
+  padding: 18px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  text-align: center;
+}
+
+.remittance-empty-state strong {
+  display: block;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.remittance-empty-state p,
+.remittance-empty-note {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.remittance-ledger-modal {
+  width: min(980px, calc(100vw - 24px));
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+}
+
+.remittance-ledger-body {
+  overflow: auto;
+  display: grid;
+  gap: 14px;
+}
+
+.remittance-ledger-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.remittance-ledger-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid #bbf7d0;
+  border-left: 4px solid #16a34a;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+}
+
+.remittance-ledger-hero.warn {
+  border-color: #fde68a;
+  border-left-color: #d97706;
+  background: linear-gradient(180deg, #fffbeb 0%, #ffffff 100%);
+}
+
+.remittance-ledger-hero-status {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.remittance-ledger-hero-status strong {
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.remittance-ledger-hero-status span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.remittance-ledger-hero-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.remittance-ledger-hero-metrics > div {
+  display: grid;
+  gap: 2px;
+}
+
+.remittance-ledger-hero-metrics span {
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.remittance-ledger-hero-metrics strong {
+  color: #0f172a;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.remittance-ledger-section {
+  display: grid;
+  gap: 8px;
+}
+
+.remittance-ledger-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 850;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.remittance-day-list {
+  display: grid;
+  gap: 8px;
+}
+
+.remittance-day-card {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px 14px 18px;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+
+.remittance-day-card:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .06);
+  transform: translateY(-1px);
+}
+
+.remittance-day-card.pending {
+  border-left-color: #dc2626;
+}
+
+.remittance-day-card.forwarded {
+  border-left-color: #d97706;
+}
+
+.remittance-day-card.cleared {
+  border-left-color: #16a34a;
+}
+
+.remittance-day-card > div:first-child {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.remittance-day-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.remittance-day-card strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.remittance-day-card span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.remittance-day-metrics {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  color: #475569;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.remittance-day-metrics em {
+  font-style: normal;
+  color: #0f172a;
+  font-weight: 750;
+}
+
+.remittance-cleared-days {
+  border: 1px solid #e5e9f0;
+  border-radius: 12px;
+  padding: 4px;
+  background: #f8fafc;
+}
+
+.remittance-cleared-days > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 9px 12px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.remittance-cleared-days > summary::-webkit-details-marker {
+  display: none;
+}
+
+.remittance-cleared-days > summary::before {
+  content: "â–¸";
+  display: inline-block;
+  margin-right: 6px;
+  color: #94a3b8;
+  transition: transform .15s ease;
+}
+
+.remittance-cleared-days[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.remittance-cleared-days > .remittance-day-list {
+  padding: 0 6px 6px;
+}
+
+.remittance-driver-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.remittance-driver-card + .remittance-driver-card {
+  margin-top: 10px;
+}
+
+.remittance-driver-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.remittance-driver-head > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.remittance-driver-head strong {
+  color: #0f172a;
+}
+
+.remittance-driver-head span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.remittance-driver-head em {
+  font-style: normal;
+  font-weight: 800;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1100px) {
+  .remittance-kpi-grid,
+  .remittance-kpi-grid.compact,
+  .remittance-meta-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .remittance-kpi-grid,
+  .remittance-kpi-grid.compact,
+  .remittance-meta-row {
+    grid-template-columns: 1fr;
+  }
+
+  .remittance-day-card {
+    flex-direction: column;
+  }
+
+  .remittance-day-metrics {
+    justify-items: start;
+  }
+
+  .remittance-ledger-hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .remittance-ledger-hero-metrics {
+    gap: 14px;
+  }
+}
+
+.reconciliation-saved-list {
+  border-top: 1px solid #e2e8f0;
+}
+
+.reconciliation-field-label {
+  display: block;
+  margin-bottom: 5px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.reconciliation-saved-grid > div .subtle {
+  display: block;
+  margin-top: 6px;
+}
+
+.expected-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.expected-edit-row .field {
+  flex: 1;
+}
+
+.expected-edit-button {
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cash-pending-lock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid #f6d0a8;
+  border-radius: 10px;
+  background: #fff8ef;
+  color: #9a6700;
+}
+
+.cash-pending-lock strong {
+  color: #7a4d00;
+}
+
+.cash-pending-lock span {
+  flex: 1 1 220px;
+  font-size: 12px;
+}
+
+.cash-recon-modal .panel-head {
+  align-items: flex-start;
+}
+
+.required-mark {
+  color: #b42318;
+}
+
+.reconciliation-gate.final.remittance-final-panel {
+  display: grid;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.reconciliation-gate.final.remittance-final-panel > .form-actions {
+  margin: 0 !important;
+  justify-content: flex-end;
+}
+
+.reconciliation-gate.locked {
+  background: #f8fafc;
+  box-shadow: none;
+}
+
+.is-disabled {
+  opacity: .55;
+  pointer-events: none;
+}

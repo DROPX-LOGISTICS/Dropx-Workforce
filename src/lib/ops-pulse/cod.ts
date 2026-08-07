@@ -803,8 +803,21 @@ export async function loadExecutiveReconciliationRows(
     const key = executiveRowKey(stationCode, providerEmployeeId);
     const existing = rowsByKey.get(key);
     if (existing) {
-      if (!existing.source_associate_name && associate.provider_employee_name) existing.source_associate_name = associate.provider_employee_name;
-      if (!existing.associate_name && associate.provider_employee_name) existing.associate_name = associate.provider_employee_name;
+      // Prefer full "Name / DROP / empId" labels when either side has them.
+      const shipmentName = String(associate.provider_employee_name ?? "").trim();
+      const existingName = String(existing.source_associate_name ?? "").trim();
+      if (shipmentName) {
+        const prefer = shipmentName.includes("/")
+          ? shipmentName
+          : existingName.includes("/")
+            ? existingName
+            : shipmentName;
+        existing.source_associate_name = prefer;
+        existing.associate_name = prefer;
+      }
+      // Mark as shipment-backed so Collect cash includes this employee ID.
+      existing.source = "shipment_data";
+      existing.shipment_type = "Shipment data";
       existing.total_delivery = Number(existing.total_delivery ?? 0) || Number(associate.total_delivery ?? 0);
       existing.total_activity = Number(existing.total_activity ?? 0) || Number(associate.total_delivery ?? 0);
       return;

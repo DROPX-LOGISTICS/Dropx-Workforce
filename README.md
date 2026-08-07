@@ -22,6 +22,8 @@ NEXT_PUBLIC_SUPABASE_URL=https://uimajyffojydenqsegjv.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 NEXT_PUBLIC_APP_URL=https://dashboard.dropxlogistics.com
+CASH_RECON_WORKER_URL=https://cash-recon-worker.withered-voice-1c40.workers.dev
+CASH_RECON_ADMIN_KEY=
 ```
 
 Never expose `SUPABASE_SERVICE_ROLE_KEY` to browser or mobile code.

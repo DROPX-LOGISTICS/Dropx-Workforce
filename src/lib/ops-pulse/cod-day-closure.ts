@@ -1,4 +1,5 @@
 import { sendEmail } from "@/lib/email";
+import { fetchDriverReconciliation, fetchLiabilitySummary, fetchRemittance, isCashReconWorkerConfigured } from "@/lib/ops-pulse/cash-recon-worker";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export type CodGateStatus =
@@ -71,6 +72,10 @@ function runStatus(run: PortalRun | undefined): CodGateStatus {
 function preserveGateStatus(stored: CodGateStatus, derived: CodGateStatus) {
   if (stored.startsWith("Exception ")) return stored;
   if (stored === "Not run" || stored === "Locked") return stored;
+  // Cash-recon path marks driver Passed after liability check; don't let a stale Queued SCC run re-lock Step 3.
+  if (stored === "Passed" && ["Queued", "Running", "Pending", "Not run", "Locked"].includes(derived)) {
+    return stored;
+  }
   return derived;
 }
 
@@ -174,6 +179,7 @@ export async function notifyCodManager({
   ].map((email) => String(email ?? "").trim().toLowerCase()).filter(Boolean);
   const recipients = [...new Set(emails)];
   const notification = await supabaseAdmin.from("cod_manager_notifications").insert({
+    id: crypto.randomUUID(),
     company_id: companyId,
     closure_id: closureId,
     location_id: locationId,
@@ -181,7 +187,9 @@ export async function notifyCodManager({
     notification_type: notificationType,
     title,
     message,
-    email_status: recipients.length ? "Pending" : "Skipped"
+    status: "Unread",
+    email_status: recipients.length ? "Pending" : "Skipped",
+    created_at: new Date().toISOString()
   }).select("id").single();
   if (notification.error) throw new Error(notification.error.message);
 
@@ -203,15 +211,19 @@ export async function finalizeCodClosure({
   companyId,
   locationId,
   stationCode,
-  userId
+  userId,
+  remittanceOverrideRemarks = null
 }: {
   businessDate: string;
   companyId: string;
   locationId: string;
   stationCode: string;
   userId: string;
+  remittanceOverrideRemarks?: string | null;
 }) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+  const cashReconReady = isCashReconWorkerConfigured();
+
   const [closureResult, reconciliations, runs] = await Promise.all([
     supabaseAdmin
       .from("cod_day_closures")
@@ -244,39 +256,125 @@ export async function finalizeCodClosure({
   const latest = latestRuns((runs.data ?? []) as PortalRun[]);
   const driverRun = latest.get("driver_reconciliation");
   const depositRun = latest.get("prepared_deposit");
-  const driverCleared = closure.driver_check_status === "Exception approved" ||
-    (runStatus(driverRun) === "Passed" && amount(driverRun?.pending_amount) === 0);
+  const driverCleared = cashReconReady
+    ? closure.driver_check_status === "Passed" || closure.driver_check_status === "Exception approved"
+    : closure.driver_check_status === "Exception approved" ||
+      (runStatus(driverRun) === "Passed" && amount(driverRun?.pending_amount) === 0);
   if (!driverCleared) throw new Error("Driver Reconciliation must pass or receive manager approval before final submission.");
 
-  const deposit = depositDetails(depositRun);
   const existingSnapshot = rawObject(closure.validation_snapshot);
   const cashSubmission = rawObject(existingSnapshot.cash_submission);
   const cashVariance = amount(cashSubmission.difference_amount);
   const collectedCod = Number((reconciliations.data ?? []).reduce((sum, row) => sum + amount(row.collected_amount), 0).toFixed(2));
-  const difference = Number((collectedCod - deposit.openExpected).toFixed(2));
-  const depositPassed = runStatus(depositRun) === "Passed" && deposit.noLiability &&
-    deposit.openRemittances.length > 0 && Math.abs(difference) <= 1;
-  const depositCleared = closure.deposit_check_status === "Exception approved" || depositPassed;
-  if (!depositCleared) throw new Error("Bank Deposit must pass or receive manager approval before final submission.");
+  const overrideRemarks = String(remittanceOverrideRemarks ?? "").trim();
+
+  let remittanceExpected = 0;
+  let remittanceCount = 0;
+  let difference = 0;
+  let noDepositLiability = false;
+  let remittanceSnapshot: Record<string, unknown> | null = null;
+
+  if (cashReconReady) {
+    if (closure.deposit_check_status !== "Passed" && closure.deposit_check_status !== "Exception approved") {
+      throw new Error("Validate bank deposit remittance before final COD submission.");
+    }
+    const [remittance, liability] = await Promise.all([
+      fetchRemittance({ stationCode, date: businessDate }),
+      fetchLiabilitySummary({ stationCode, date: businessDate })
+    ]);
+    remittanceExpected = remittance.remittanceTotalCash;
+    remittanceCount = remittance.remittanceCodes.length || remittance.submittedCount;
+    difference = Number((collectedCod - remittance.remittanceTotalCash).toFixed(2));
+    noDepositLiability = remittance.createdCount === 0;
+
+    if (difference < -10) {
+      throw new Error(
+        `Cash is short by more than ₹10 vs remittance (₹${Math.abs(difference).toFixed(2)}). Clear the short before final submission.`
+      );
+    }
+    const match = remittance.matchSummary;
+    if (match) {
+      if (match.finalPendingTotal > 0.01) {
+        throw new Error(
+          `Pending cash ledger still has ₹${match.finalPendingTotal.toFixed(2)} unresolved. Clear forwarded/pending remittance before final submission.`
+        );
+      }
+      if (match.mode === "sameDay" && match.sameDayShortAmount > 10) {
+        throw new Error(
+          `Same-day remittance short is ₹${match.sameDayShortAmount.toFixed(2)} (expected ₹${match.sameDayExpectedCashTotal.toFixed(2)}, remittance ₹${match.sameDayRemittanceTotalCash.toFixed(2)}). Clear before final submission.`
+        );
+      }
+    } else {
+      const driverRecon = await fetchDriverReconciliation({ stationCode, date: businessDate });
+      const expectedCashTotal = Number(driverRecon.expectedCash?.totalReceived ?? NaN);
+      if (Number.isFinite(expectedCashTotal)) {
+        const expectedDiff = Number((remittance.remittanceTotalCash - expectedCashTotal).toFixed(2));
+        if (Math.abs(expectedDiff) >= 0.01) {
+          throw new Error(
+            `Remittance ₹${remittance.remittanceTotalCash.toFixed(2)} does not match expected cash ₹${expectedCashTotal.toFixed(2)}. Clear this before final submission.`
+          );
+        }
+      }
+    }
+    if (!liability.isClear) {
+      const cash = liability.cashSummary;
+      throw new Error(
+        `SCC cash liability is not clear (expected ₹${cash.expectedAmount.toFixed(2)}, actual ₹${cash.actualAmount.toFixed(2)}, short/excess ₹${cash.shortExcessAmount.toFixed(2)}). Complete liability before submitting COD.`
+      );
+    }
+    if (Math.abs(difference) >= 0.01 && !overrideRemarks) {
+      throw new Error(
+        `Cash vs remittance difference is ₹${difference.toFixed(2)}. Provide remittance remarks before final submission.`
+      );
+    }
+    if (remittance.createdCount > 0 && !overrideRemarks) {
+      throw new Error(
+        `${remittance.createdCount} remittance(s) are still created/pending in SCC. Clear them or provide remarks.`
+      );
+    }
+    remittanceSnapshot = {
+      ...remittance,
+      difference_amount: difference,
+      collected_cash: collectedCod,
+      override_remarks: overrideRemarks || null,
+      validated_at: new Date().toISOString()
+    };
+  } else {
+    const deposit = depositDetails(depositRun);
+    remittanceExpected = deposit.openExpected;
+    remittanceCount = deposit.openRemittances.length;
+    difference = Number((collectedCod - deposit.openExpected).toFixed(2));
+    noDepositLiability = deposit.noLiability;
+    const depositPassed = runStatus(depositRun) === "Passed" && deposit.noLiability &&
+      deposit.openRemittances.length > 0 && Math.abs(difference) <= 1;
+    const depositCleared = closure.deposit_check_status === "Exception approved" || depositPassed;
+    if (!depositCleared) throw new Error("Bank Deposit must pass or receive manager approval before final submission.");
+    remittanceSnapshot = {
+      deposit: depositRun,
+      open_remittances: deposit.openRemittances
+    };
+  }
 
   const now = new Date().toISOString();
   const saved = await supabaseAdmin.from("cod_day_closures").update({
     collected_cod: collectedCod,
-    amazon_open_remittance_expected: deposit.openExpected,
-    amazon_open_remittance_count: deposit.openRemittances.length,
+    amazon_open_remittance_expected: remittanceExpected,
+    amazon_open_remittance_count: remittanceCount,
     difference_amount: difference,
     driver_reconciliation_pending: amount(driverRun?.pending_amount),
-    no_deposit_liability: deposit.noLiability,
+    no_deposit_liability: noDepositLiability,
     driver_check_status: closure.driver_check_status === "Exception approved" ? "Exception approved" : "Passed",
     deposit_check_status: closure.deposit_check_status === "Exception approved" ? "Exception approved" : "Passed",
     validation_status: Math.abs(cashVariance) >= 0.01 || Math.abs(difference) > 1 ? "Mismatch" : "Matched",
     submission_status: "Submitted",
     manager_status: Math.abs(cashVariance) >= 0.01 ? closure.manager_status : "Not required",
+    override_reason: overrideRemarks
+      ? [closure.override_reason, `Remittance: ${overrideRemarks}`].filter(Boolean).join(" | ")
+      : closure.override_reason,
     validation_snapshot: {
       ...existingSnapshot,
       driver: driverRun,
-      deposit: depositRun,
-      open_remittances: deposit.openRemittances
+      ...(cashReconReady ? { remittance: remittanceSnapshot } : remittanceSnapshot)
     },
     submitted_by: userId,
     submitted_at: now,

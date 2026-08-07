@@ -52,7 +52,9 @@ export async function writeCodAudit({
   stationCode: string;
 }) {
   if (!supabaseAdmin) return;
+  const now = new Date().toISOString();
   const { error } = await supabaseAdmin.from("cod_reconciliation_audit_log").insert({
+    id: crypto.randomUUID(),
     company_id: authorization.companyId,
     business_date: businessDate,
     location_id: locationId,
@@ -62,13 +64,14 @@ export async function writeCodAudit({
     provider_employee_id: providerEmployeeId,
     associate_name: associateName,
     action,
-    before_data: before,
-    after_data: after,
+    before_data: before ?? {},
+    after_data: after ?? {},
     changed_fields: changedFields(before, after),
     actor_user_id: authorization.userId,
     actor_name: authorization.fullName,
     actor_email: authorization.email,
-    actor_role: authorization.roleName ?? authorization.roleCode
+    actor_role: authorization.roleName ?? authorization.roleCode,
+    created_at: now
   });
   if (error) throw new Error(`COD action completed, but audit logging failed: ${error.message}`);
 }

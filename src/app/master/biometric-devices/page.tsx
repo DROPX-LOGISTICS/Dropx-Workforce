@@ -7,9 +7,9 @@ import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
-import { formatDashboardDateTime } from "@/lib/date-format";
+import { formatDashboardDate, formatDashboardDateTime } from "@/lib/date-format";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
-import { createBiometricDevice, deleteBiometricDevice, updateBiometricDevice } from "./actions";
+import { bulkImportTemporaryBiometricDevices, createBiometricDevice, deleteBiometricDevice, updateBiometricDevice } from "./actions";
 
 type LocationRow = {
   id: string;
@@ -36,6 +36,8 @@ type DeviceRow = {
   last_seen_at: string | null;
   last_source_ip: string | null;
   is_active: boolean;
+  is_temporary: boolean;
+  temporary_until: string | null;
   remarks: string | null;
 };
 
@@ -202,6 +204,8 @@ async function loadDeviceData(companyId: string, locationScopeIds: string[], has
         last_seen_at,
         last_source_ip,
         is_active,
+        is_temporary,
+        temporary_until,
         remarks
       `)
       .eq("company_id", companyId)
@@ -457,6 +461,8 @@ export default async function DeviceMasterPage({
                     <th>P2P Type</th>
                     <th>P2P Device Id</th>
                     <th>Serial no.</th>
+                    <th>Type</th>
+                    <th>Temporary until</th>
                     <th>Last source IP</th>
                     <th>Connect info</th>
                     <th>Live status</th>
@@ -474,6 +480,8 @@ export default async function DeviceMasterPage({
                       <td>{device.p2p_type || "-"}</td>
                       <td>{device.p2p_device_id || "-"}</td>
                       <td><strong>{device.device_serial}</strong></td>
+                      <td><StatusPill status={device.is_temporary ? "Temporary" : "Permanent"} /></td>
+                      <td>{device.temporary_until ? formatDashboardDate(device.temporary_until) : "-"}</td>
                       <td>{device.last_source_ip || "-"}</td>
                       <td>{formatDateTime(device.last_seen_at)}</td>
                       <td><StatusPill status={isDeviceConnected(device) ? "Connected" : "Disconnected"} /></td>
@@ -497,12 +505,39 @@ export default async function DeviceMasterPage({
                       ) : null}
                     </tr>
                   )) : (
-                    <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 12 : 11}>No devices found.</td></tr>
+                    <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 14 : 13}>No devices found.</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
           </section>
+
+          {pagePermission.canAdd ? (
+            <section className="panel workforce-bulk-panel">
+              <div className="panel-head">
+                <div>
+                  <h2>Bulk upload temporary devices</h2>
+                  <p className="subtle">Import temporary biometric terminals by location. Existing serial numbers or device IDs are skipped.</p>
+                </div>
+                <a className="button secondary compact" download href="/templates/temporary-biometric-devices-template.csv">Download CSV template</a>
+              </div>
+              <form action={bulkImportTemporaryBiometricDevices} className="workforce-bulk-form">
+                <div className="workforce-template-note">
+                  <strong>Required columns</strong>
+                  <span>Device ID, Location, Serial no., Model no., Local IP address, Local port no. Optional: Connection type, network/P2P details, temporary-until date and remarks.</span>
+                </div>
+                <input accept=".xlsx,.xls,.csv" className="field" name="bulk_file" required type="file" />
+                <SubmitButton
+                  confirmDescription="All new rows will be marked as temporary biometric devices. Existing duplicate serial numbers or device IDs will be skipped."
+                  confirmMessage="Import temporary devices from this file?"
+                  confirmSubmitText="Import"
+                  confirmTitle="Confirm temporary device upload"
+                >
+                  Upload temporary devices
+                </SubmitButton>
+              </form>
+            </section>
+          ) : null}
 
           <section className="split-grid">
             <DeviceStatusPanel devices={connectedDevices} locationMap={locationMap} title="Connected Device List" tone="connected" />

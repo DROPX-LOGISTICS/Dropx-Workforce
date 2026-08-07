@@ -68,6 +68,8 @@ create table if not exists public.biometric_devices (
   last_seen_at timestamptz,
   last_source_ip text,
   is_active boolean not null default true,
+  is_temporary boolean not null default false,
+  temporary_until date,
   remarks text,
   created_by uuid,
   created_at timestamptz not null default now(),
@@ -80,6 +82,10 @@ create unique index if not exists biometric_devices_company_serial_uidx
 
 create index if not exists biometric_devices_company_location_idx
   on public.biometric_devices(company_id, location_id);
+
+create index if not exists biometric_devices_company_temporary_idx
+  on public.biometric_devices(company_id, is_temporary, temporary_until)
+  where is_temporary = true;
 
 create table if not exists public.biometric_enrolments (
   id uuid primary key default gen_random_uuid(),

@@ -5,7 +5,7 @@ import { useFormStatus } from "react-dom";
 import QRCode from "qrcode";
 import { PageHead } from "@/components/page-head";
 import { StatusPill } from "@/components/status-pill";
-import { formatDashboardDate } from "@/lib/date-format";
+import { formatDashboardDate, formatDashboardDateTime } from "@/lib/date-format";
 
 export type PaymentProcessBank = {
   id: string;
@@ -30,6 +30,7 @@ export type PaymentProcessRequest = {
   email: string | null;
   request_remarks: string | null;
   payment_details: Array<{ id: string; label: string; value: string | null; file_name: string | null }>;
+  payment_history: Array<{ id: string; action: string; actor: string; role: string; comments: string | null; created_at: string }>;
   status: string | null;
   approval_status: string | null;
   created_at: string;
@@ -450,6 +451,28 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
                       </tbody>
                     </table>
                   </div>
+                ) : null}
+                {processRequest.payment_history.length ? (
+                  <>
+                    <div className="section-divider" />
+                    <h3>Request history</h3>
+                    <div className="table-wrap">
+                      <table>
+                        <thead><tr><th>Action</th><th>Action by</th><th>Role</th><th>Remarks</th><th>Date</th></tr></thead>
+                        <tbody>
+                          {processRequest.payment_history.map((entry) => (
+                            <tr key={entry.id}>
+                              <td><StatusPill status={entry.action} /></td>
+                              <td>{entry.actor}</td>
+                              <td>{entry.role}</td>
+                              <td>{entry.comments || "-"}</td>
+                              <td>{formatDashboardDateTime(entry.created_at)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 ) : null}
               </div>
               <div className="form-actions modal-actions">

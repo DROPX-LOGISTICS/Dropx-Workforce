@@ -80,7 +80,7 @@ function loadFlash() {
   }
 }
 
-async function loadData(companyId: string) {
+async function loadData(companyId: string, settingType: SettingType) {
   if (!supabaseAdmin) {
     return {
       designations: [] as OptionRow[],
@@ -89,10 +89,11 @@ async function loadData(companyId: string) {
       locations: [] as OptionRow[],
       models: [] as OptionRow[],
       settings: [] as SettingRow[],
+      usedDesignationIds: [] as string[],
       categories: [] as Array<{ id: string; code: string; name: string }>
     };
   }
-  const [settingsResult, companyResult, locationsResult, modelsResult, designationsResult, categoriesResult] = await Promise.all([
+  const [settingsResult, companyResult, locationsResult, modelsResult, designationsResult, categoriesResult, usedDesignationsResult] = await Promise.all([
     (supabaseAdmin.from("dropx_id_generation_settings") as any)
       .select("id, setting_type, scope_type, configs, is_active, is_locked")
       .eq("company_id", companyId)
@@ -101,9 +102,10 @@ async function loadData(companyId: string) {
     supabaseAdmin.from("stations").select("id, station_code, station_name").eq("company_id", companyId).eq("is_active", true).order("station_code"),
     supabaseAdmin.from("location_models").select("id, code, name").eq("company_id", companyId).eq("is_active", true).order("code"),
     supabaseAdmin.from("designations").select("id, code, name").eq("company_id", companyId).eq("is_active", true).order("code"),
-    supabaseAdmin.from("workforce_categories").select("code, name").eq("company_id", companyId).eq("is_active", true).order("sort_order").order("name")
+    supabaseAdmin.from("workforce_categories").select("code, name").eq("company_id", companyId).eq("is_active", true).order("sort_order").order("name"),
+    (supabaseAdmin.rpc as any)("multi_designation_used_designation_ids", { p_company_id: companyId, p_setting_type: settingType })
   ]);
-  const error = settingsResult.error?.message || companyResult.error?.message || locationsResult.error?.message || modelsResult.error?.message || designationsResult.error?.message || categoriesResult.error?.message || null;
+  const error = settingsResult.error?.message || companyResult.error?.message || locationsResult.error?.message || modelsResult.error?.message || designationsResult.error?.message || categoriesResult.error?.message || usedDesignationsResult.error?.message || null;
   const companyRow = companyResult.data as { name?: string | null; code?: string | null } | null;
   return {
     designations: (designationsResult.data ?? []) as OptionRow[],
@@ -112,6 +114,7 @@ async function loadData(companyId: string) {
     locations: (locationsResult.data ?? []) as OptionRow[],
     models: (modelsResult.data ?? []) as OptionRow[],
     settings: (settingsResult.data ?? []) as SettingRow[],
+    usedDesignationIds: (usedDesignationsResult.data ?? []).map((row: { designation_id: string }) => String(row.designation_id)),
     categories: (categoriesResult.data ?? []).map((category) => ({
       id: legacyCategoryKeys[category.code] ?? category.code,
       code: idCategoryCode(category.code),
@@ -131,9 +134,9 @@ export default async function DropxIdGenerationSettingsPage({ searchParams }: { 
   const companyId = requireCompanyId(authorization);
   const permission = authorization.permissions.app_settings;
   const { error: flashError, notice } = loadFlash();
-  const data = await loadData(companyId);
-  const settingByType = new Map(data.settings.map((setting) => [setting.setting_type, setting]));
   const currentType = selectedSettingType(searchParams?.type);
+  const data = await loadData(companyId, currentType);
+  const settingByType = new Map(data.settings.map((setting) => [setting.setting_type, setting]));
   const currentCard = settingCards.find((card) => card.type === currentType) ?? settingCards[0];
 
   return (
@@ -171,6 +174,7 @@ export default async function DropxIdGenerationSettingsPage({ searchParams }: { 
         subtitle={currentCard.subtitle}
         title={currentCard.title}
         type={currentCard.type}
+        usedDesignationIds={data.usedDesignationIds}
       />
     </AppShell>
   );

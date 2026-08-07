@@ -1605,6 +1605,15 @@ h3 {
   cursor: default;
 }
 
+.multi-designation-tag.used,
+.multi-designation-tag.used:disabled {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #64748b;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
 .multi-designation-options label {
   display: grid;
   grid-template-columns: auto 1fr;

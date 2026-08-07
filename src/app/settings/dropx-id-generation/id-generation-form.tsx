@@ -157,13 +157,15 @@ function MultiDesignationRows({
   defaultPrefix,
   designations,
   setting,
-  structureLocked
+  structureLocked,
+  usedDesignationIds
 }: {
   canEdit: boolean;
   defaultPrefix: string;
   designations: OptionRow[];
   setting?: SettingRow;
   structureLocked: boolean;
+  usedDesignationIds: string[];
 }) {
   const initial = Object.entries(setting?.scope_type === "multi_designation" ? setting.configs ?? {} : {}).map(([key, config]) => ({
     ...defaultConfig(config.label || "Series", defaultPrefix),
@@ -173,6 +175,7 @@ function MultiDesignationRows({
   }));
   const [series, setSeries] = useState<MultiSeries[]>(initial);
   const [searchBySeries, setSearchBySeries] = useState<Record<string, string>>({});
+  const usedDesignationSet = new Set(usedDesignationIds);
 
   function addSeries() {
     setSeries((current) => [
@@ -251,19 +254,22 @@ function MultiDesignationRows({
               <span className="field-label">Designations</span>
               {selectedDesignations.length ? (
                 <div className="multi-designation-tags" aria-label="Selected designations">
-                  {selectedDesignations.map((designation) => (
+                  {selectedDesignations.map((designation) => {
+                    const isUsed = usedDesignationSet.has(designation.id);
+                    return (
                     <button
-                      className="multi-designation-tag"
-                      disabled={!canEdit}
+                      className={`multi-designation-tag${isUsed ? " used" : ""}`}
+                      disabled={!canEdit || isUsed}
                       key={designation.id}
                       onClick={() => updateSeries(item.key, { designation_ids: item.designation_ids.filter((id) => id !== designation.id) })}
-                      title={`Remove ${optionLabel(designation)}`}
+                      title={isUsed ? `${optionLabel(designation)} is locked because an ID has been generated` : `Remove ${optionLabel(designation)}`}
                       type="button"
                     >
                       <span>{optionLabel(designation)}</span>
                       <b aria-hidden="true">×</b>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : null}
               <details className="multi-designation-dropdown">
@@ -321,7 +327,8 @@ export function IdGenerationForm({
   setting,
   subtitle,
   title,
-  type
+  type,
+  usedDesignationIds
 }: {
   canEdit: boolean;
   categories: OptionRow[];
@@ -334,6 +341,7 @@ export function IdGenerationForm({
   subtitle: string;
   title: string;
   type: SettingType;
+  usedDesignationIds: string[];
 }) {
   const [selectedScope, setSelectedScope] = useState<ScopeType | "">(setting?.scope_type ?? "");
   const locked = Boolean(setting?.is_locked);
@@ -383,7 +391,7 @@ export function IdGenerationForm({
           </div>
 
           {selectedScope === "multi_designation" ? (
-            <MultiDesignationRows canEdit={canEdit} defaultPrefix={defaultPrefix} designations={designations} setting={setting} structureLocked={locked} />
+            <MultiDesignationRows canEdit={canEdit} defaultPrefix={defaultPrefix} designations={designations} setting={setting} structureLocked={locked} usedDesignationIds={usedDesignationIds} />
           ) : selectedScope ? (
             <ConfigRows
               defaultPrefix={defaultPrefix}

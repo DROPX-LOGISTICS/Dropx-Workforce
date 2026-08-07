@@ -11,6 +11,7 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { formatDashboardDate, formatDashboardDateTime } from "@/lib/date-format";
 import { paymentFileAccept, paymentFileGroupLabels } from "@/lib/payment-file-types";
 import { loadUserPaymentContacts } from "@/lib/payment-contacts";
+import { paymentStatusLabel } from "@/lib/payment-status-label";
 import { loadPaymentNotificationSnapshot } from "@/lib/payment-notification-counts";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import type { PaymentMode } from "@/lib/payment-modes";
@@ -365,7 +366,7 @@ export default async function PaymentRequestsPage({
                       <td>{request.account_holder_name ?? "-"}</td>
                       <td>{request.bank_account_no ?? "-"}</td>
                       <td>{request.ifsc ?? "-"}</td>
-                      <td><StatusPill status={request.approval_status || request.status} /></td>
+                      <td><StatusPill status={paymentStatusLabel(request)} /></td>
                       <td>{formatDashboardDate(request.created_at)}</td>
                       {pagePermission.canAdd ? (
                         <td>

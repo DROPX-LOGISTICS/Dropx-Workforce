@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Eye } from "lucide-react";
 import { StatusPill } from "@/components/status-pill";
 import { formatDashboardDate, formatDashboardDateTime } from "@/lib/date-format";
+import { paymentStatusLabel } from "@/lib/payment-status-label";
 
 export type PaymentReportAnswer = {
   id: string;
@@ -80,25 +81,7 @@ function isProcessingStarted(request: PaymentReportRequest) {
 }
 
 function reportStatusLabel(request: PaymentReportRequest) {
-  const status = String(request.status ?? "").trim().toUpperCase();
-  const approvalStatus = String(request.approval_status ?? "").trim().toUpperCase();
-  const effectiveStatus = approvalStatus || status;
-  if (status === "PROCESSED" || approvalStatus === "PROCESSED") return "Processed";
-  if (status === "PROCESSING" || approvalStatus === "PROCESSING") return "Processing";
-  if (status === "RETURNED" || approvalStatus === "RETURNED") return "Returned";
-  if (status === "REJECTED" || approvalStatus === "REJECTED") return "Rejected";
-  if (status === "CANCELLED" || approvalStatus === "CANCELLED") return "Cancelled";
-  const hasCurrentApprover = Boolean(
-    request.current_approver_user_id ||
-    request.current_approver_role_id ||
-    request.current_approver_role_ids?.length
-  );
-  const isApprovedStage = effectiveStatus === "APPROVED" ||
-    effectiveStatus === "RE_APPROVED" ||
-    effectiveStatus.endsWith("_APPROVED");
-  if (isApprovedStage) return hasCurrentApprover ? "Initial Approved" : "Final Approved";
-  if (["PENDING", "RE_PENDING", "RESUBMITTED"].includes(effectiveStatus)) return "Pending";
-  return effectiveStatus ? effectiveStatus.toLowerCase().split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ") : "-";
+  return paymentStatusLabel(request);
 }
 
 function buildHistory(request: PaymentReportRequest) {

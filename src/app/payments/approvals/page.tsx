@@ -9,6 +9,7 @@ import { requirePagePermission, type AuthorizationContext } from "@/lib/authoriz
 import { requireCompanyId } from "@/lib/company-scope";
 import { formatDashboardDate, formatDashboardDateTime } from "@/lib/date-format";
 import { getPaymentApprovalEligibility } from "@/lib/payment-approval-scope";
+import { isResubmittedPaymentStage, paymentStatusLabel } from "@/lib/payment-status-label";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import {
   handleApprovePaymentApproval,
@@ -279,9 +280,7 @@ export default async function PaymentApprovalsPage({
   }));
   const logs = detailData?.[1].logs ?? [];
   const currentApprovalCycle = Number(selectedRequest?.approval_cycle) || 1;
-  const isResubmitted =
-    selectedRequest?.status.toLowerCase() === "resubmitted" ||
-    String(selectedRequest?.approval_status ?? "").toUpperCase() === "RESUBMITTED";
+  const isResubmitted = selectedRequest ? isResubmittedPaymentStage(selectedRequest) : false;
   const currentUserAlreadyActed = !isResubmitted && logs.some(
     (log) =>
       log.approver_user_id === authorization.userId &&
@@ -386,7 +385,7 @@ export default async function PaymentApprovalsPage({
                     <td>{request.payment_heads?.name ?? "-"}</td>
                     <td>{request.amount == null ? "-" : `Rs ${Number(request.amount).toLocaleString("en-IN")}`}</td>
                     <td>{request.profiles?.full_name ?? request.profiles?.email ?? "-"}</td>
-                    <td><StatusPill status={request.status} /></td>
+                    <td><StatusPill status={paymentStatusLabel(request)} /></td>
                     <td>{formatDashboardDate(request.created_at)}</td>
                     {pagePermission.canEdit ? <td><PendingLink className="button secondary compact" href={`/payments/approvals?${new URLSearchParams({ ...Object.fromEntries(currentParams), manage: request.id }).toString()}`} scroll={false}>Manage</PendingLink></td> : null}
                   </tr>
@@ -419,7 +418,7 @@ export default async function PaymentApprovalsPage({
               <div className="form-grid three">
                 <label>Payment Head<input className="field" readOnly value={selectedRequest.payment_heads?.name ?? "-"} /></label>
                 <label>{selectedRequest.amount == null && selectedRequest.amount_requested != null ? "Estimated Amount" : "Amount"}<input className="field" readOnly value={(selectedRequest.amount ?? selectedRequest.amount_requested) == null ? "-" : `Rs ${Number(selectedRequest.amount ?? selectedRequest.amount_requested).toLocaleString("en-IN")}`} /></label>
-                <label>Status<input className="field" readOnly value={selectedRequest.approval_status || selectedRequest.status} /></label>
+                <label>Status<input className="field" readOnly value={paymentStatusLabel(selectedRequest)} /></label>
                 <label>Payment Method<input className="field" readOnly value={selectedRequest.payment_mode === "upi_payment" ? "UPI Payment" : selectedRequest.payment_mode === "online_payment" ? "Online Payment" : "Bank Transfer"} /></label>
                 {hasDisplayValue(selectedRequest.account_holder_name) ? <label>Acc Holder Name<input className="field" readOnly value={selectedRequest.account_holder_name ?? "-"} /></label> : null}
                 {selectedRequest.payment_mode === "upi_payment" && hasDisplayValue(selectedRequest.payment_reference) ? <label>UPI ID<input className="field" readOnly value={selectedRequest.payment_reference ?? "-"} /></label> : null}

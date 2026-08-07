@@ -11,6 +11,7 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { formatDashboardDate } from "@/lib/date-format";
 import { paymentFileAccept, paymentFileGroupLabels } from "@/lib/payment-file-types";
 import { loadUserPaymentContacts } from "@/lib/payment-contacts";
+import { paymentStatusLabel } from "@/lib/payment-status-label";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import type { PaymentMode } from "@/lib/payment-modes";
 import { createExpenseRequest, resubmitExpenseRequest, submitPaymentBankDetails } from "@/app/payments/requests/actions";
@@ -89,11 +90,7 @@ function isFinalApprovalComplete(request: PaymentRequestRow) {
 }
 
 function displayApprovalStatus(request: PaymentRequestRow) {
-  const status = String(request.status ?? "").toUpperCase();
-  const approvalStatus = String(request.approval_status ?? "").toUpperCase();
-  if (isFinalApprovalComplete(request)) return "Final Approved";
-  if (status.endsWith("_APPROVED") || approvalStatus.endsWith("_APPROVED")) return "Initial Approved";
-  return request.approval_status || request.status;
+  return paymentStatusLabel(request);
 }
 
 function canSubmitBankDetails(request: PaymentRequestRow, userId: string) {

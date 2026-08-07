@@ -18,6 +18,7 @@ type GenerationConfig = {
   next_serial_no?: number | null;
   serial_digits?: number | null;
   designation_ids?: string[] | null;
+  is_locked?: boolean | null;
 };
 
 type SettingRow = {

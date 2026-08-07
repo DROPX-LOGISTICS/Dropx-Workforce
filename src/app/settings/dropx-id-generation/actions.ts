@@ -103,6 +103,7 @@ function buildConfigs(formData: FormData, selectedScope: ScopeType) {
       suffix: suffixes[index] || null,
       next_serial_no: nextSerialNo,
       serial_digits: serialDigits,
+      is_locked: false,
       ...(mappedDesignationIds ? { designation_ids: mappedDesignationIds } : {})
     };
   });
@@ -127,15 +128,16 @@ function validateLockedMultiDesignationUpdate(
   proposedConfigs: Record<string, Record<string, unknown>>
 ) {
   const existingKeys = Object.keys(existingConfigs).sort();
-  const proposedKeys = Object.keys(proposedConfigs).sort();
-  if (JSON.stringify(existingKeys) !== JSON.stringify(proposedKeys)) {
-    throw new Error("Series cannot be added or removed after ID generation has started.");
-  }
   const existingAssignments = new Map<string, string>();
   for (const key of existingKeys) {
-    if (JSON.stringify(generationStructure(existingConfigs[key])) !== JSON.stringify(generationStructure(proposedConfigs[key]))) {
+    const seriesLocked = existingConfigs[key].is_locked !== false;
+    if (seriesLocked && !proposedConfigs[key]) {
+      throw new Error("A series that has generated an ID cannot be removed.");
+    }
+    if (seriesLocked && JSON.stringify(generationStructure(existingConfigs[key])) !== JSON.stringify(generationStructure(proposedConfigs[key]))) {
       throw new Error("Series name, prefix, separator, starting number, digits and suffix are locked after ID generation has started.");
     }
+    if (!seriesLocked || !proposedConfigs[key]) continue;
     const existingIds = Array.isArray(existingConfigs[key].designation_ids) ? existingConfigs[key].designation_ids as string[] : [];
     existingIds.forEach((designationId) => existingAssignments.set(designationId, key));
   }
@@ -144,6 +146,9 @@ function validateLockedMultiDesignationUpdate(
     if (!proposedIds.includes(designationId)) {
       throw new Error("Existing designation mappings cannot be removed or moved after ID generation has started.");
     }
+  }
+  for (const [key, config] of Object.entries(proposedConfigs)) {
+    config.is_locked = existingConfigs[key]?.is_locked !== false && Boolean(existingConfigs[key]) ? true : false;
   }
 }
 

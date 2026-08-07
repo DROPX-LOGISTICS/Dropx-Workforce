@@ -203,12 +203,13 @@ begin
     case when coalesce(selected_suffix, '') <> '' then selected_separator || selected_suffix else '' end;
 
   update public.dropx_id_generation_settings
-     set configs = jsonb_set(
-           configs,
-           array[selected_key, 'next_serial_no'],
-           to_jsonb(selected_serial + 1),
-           true
-         ),
+     set configs = case when selected_setting.scope_type = 'multi_designation' then
+           jsonb_set(
+             jsonb_set(configs, array[selected_key, 'next_serial_no'], to_jsonb(selected_serial + 1), true),
+             array[selected_key, 'is_locked'], 'true'::jsonb, true
+           )
+         else jsonb_set(configs, array[selected_key, 'next_serial_no'], to_jsonb(selected_serial + 1), true)
+         end,
          is_locked = true,
          updated_at = now()
    where id = selected_setting.id;

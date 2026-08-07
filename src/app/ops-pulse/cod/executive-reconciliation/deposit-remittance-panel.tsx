@@ -18,6 +18,29 @@ function currency(value: number) {
   return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** Formats INR with the sign before the rupee symbol: -₹26.00 */
+function money(value: number) {
+  const absolute = currency(Math.abs(value));
+  if (Math.abs(value) < MATCH_EPSILON) return `₹${absolute}`;
+  return value < 0 ? `-₹${absolute}` : `₹${absolute}`;
+}
+
+function matchModeLabel(mode: string | null | undefined) {
+  const normalized = String(mode ?? "").trim();
+  if (!normalized) return "From remittance summary";
+  if (normalized === "sameDay") return "Same-day match";
+  if (normalized === "window") return "Window match";
+  return normalized.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (char) => char.toUpperCase());
+}
+
+function matchStatusLabel(status: string | null | undefined) {
+  const normalized = String(status ?? "").trim();
+  if (!normalized) return "—";
+  if (normalized === "MATCHED") return "Matched";
+  if (normalized === "MISMATCH") return "Mismatch";
+  return normalized.replace(/_/g, " ").toLowerCase().replace(/^./, (char) => char.toUpperCase());
+}
+
 function formatEpoch(ms: number | null) {
   if (ms == null || !Number.isFinite(ms)) return "—";
   return new Date(ms).toLocaleString("en-IN", {
@@ -110,9 +133,9 @@ function RemittanceRowsTable({
                 <td><span className="remittance-chip">{row.status}</span></td>
                 <td>{formatEpoch(row.creationDate)}</td>
                 <td>{formatEpoch(row.submissionDate)}</td>
-                <td>₹{currency(row.expectedAmount)}</td>
-                <td>₹{currency(row.actualAmount)}</td>
-                <td className={`amount-tone ${toneForAmount(row.variance)}`}>₹{currency(row.variance)}</td>
+                <td>{money(row.expectedAmount)}</td>
+                <td>{money(row.actualAmount)}</td>
+                <td className={`amount-tone ${toneForAmount(row.variance)}`}>{money(row.variance)}</td>
               </tr>
             )) : (
               <tr><td className="empty-cell" colSpan={7}>{emptyLabel}</td></tr>
@@ -143,12 +166,12 @@ function LedgerDayCard({
           <strong>{formatDateLabel(day.date)}</strong>
           <span className={`remittance-status-pill ${ledgerDayStatusTone(status)}`}>{ledgerDayStatusLabel(status)}</span>
         </div>
-        <span>Expected ₹{currency(day.expectedCashTotal)} · Remittance ₹{currency(day.remittanceTotalCash)}</span>
+        <span>Expected {money(day.expectedCashTotal)} · Remittance {money(day.remittanceTotalCash)}</span>
       </div>
       <div className="remittance-day-metrics">
-        <span className={toneForAmount(day.shortAmount)}>Short ₹{currency(day.shortAmount)}</span>
-        <span>Pending ₹{currency(day.stillPendingAmount)}</span>
-        <span>Forwarded ₹{currency(day.forwardedAmount)}</span>
+        <span className={toneForAmount(day.shortAmount)}>Short {money(day.shortAmount)}</span>
+        <span>Pending {money(day.stillPendingAmount)}</span>
+        <span>Forwarded {money(day.forwardedAmount)}</span>
         <em>View day →</em>
       </div>
     </button>
@@ -307,23 +330,23 @@ function LedgerModal({
                   <strong>{overallClear ? "All cash cleared" : "Pending cash needs attention"}</strong>
                   <span>
                     {summary
-                      ? `${summary.mode === "sameDay" ? "Same-day" : summary.mode} match · window ${summary.windowFrom ?? "—"} → ${summary.windowTo ?? "—"}`
-                      : "No match summary returned for this station/date."}
+                      ? `${matchModeLabel(summary.mode)} · window ${summary.windowFrom ?? "—"} → ${summary.windowTo ?? "—"}`
+                      : "No match summary is available for this station and date."}
                   </span>
                 </div>
                 {summary ? (
                   <div className="remittance-ledger-hero-metrics">
                     <div>
                       <span>Match status</span>
-                      <strong className={`remittance-status ${summary.status === "MATCHED" ? "good" : "warn"}`}>{summary.status}</strong>
+                      <strong className={`remittance-status ${summary.status === "MATCHED" ? "good" : "warn"}`}>{matchStatusLabel(summary.status)}</strong>
                     </div>
                     <div>
                       <span>Final pending</span>
-                      <strong>₹{currency(summary.finalPendingTotal)}</strong>
+                      <strong>{money(summary.finalPendingTotal)}</strong>
                     </div>
                     <div>
                       <span>Same-day short</span>
-                      <strong>₹{currency(summary.sameDayShortAmount)}</strong>
+                      <strong>{money(summary.sameDayShortAmount)}</strong>
                     </div>
                   </div>
                 ) : null}
@@ -333,7 +356,7 @@ function LedgerModal({
                 {openDays.length ? openDays.map((day) => (
                   <LedgerDayCard key={day.date} day={day} onOpen={setSelectedDate} />
                 )) : !ledger.length ? (
-                  <p className="subtle remittance-empty-note">No ledger rows returned for this station/date.</p>
+                  <p className="subtle remittance-empty-note">No ledger rows for this station and date.</p>
                 ) : null}
               </div>
 
@@ -491,7 +514,7 @@ export function DepositRemittancePanel({
       }
       setDepositValidated(true);
       setShowDifferenceModal(false);
-      setNotice(result.notice || "Deposit remittance validated.");
+      setNotice(result.notice || "Remittance validation saved.");
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save remittance validation.");
@@ -584,9 +607,9 @@ export function DepositRemittancePanel({
     if (!canSubmitFinal) {
       setError(
         !depositValidated
-          ? "Validate deposit before submitting final COD closure."
+          ? "Validate remittance before submitting final COD closure."
           : submitBlocked
-            ? "Clear short cash / pending remittance ledger before submitting."
+            ? "Resolve the cash short or pending remittance before submitting."
             : null
       );
       return;
@@ -613,7 +636,7 @@ export function DepositRemittancePanel({
   }
 
   const validateLabel = !driverCleared
-    ? "Driver recon required"
+    ? "Complete driver reconciliation first"
     : checking
       ? "Validating…"
       : savingValidation
@@ -644,8 +667,9 @@ export function DepositRemittancePanel({
 
         <div className="remittance-intro">
           <p>
-            SCC remittance for <strong>{stationCode}</strong> · <strong>{businessDate}</strong>.
-            Page cash <strong>₹{currency(collectedCash)}</strong>. Re-validate after SCC updates; locked only after final submit.
+            Amazon SCC remittance for <strong>{stationCode}</strong> on <strong>{businessDate}</strong>.
+            Collected cash on this page: <strong>{money(collectedCash)}</strong>.
+            Re-validate after SCC updates. Cash entries lock only after final submission.
           </p>
           <div className="remittance-actions">
             <form ref={validateFormRef} onSubmit={(event) => event.preventDefault()}>
@@ -672,19 +696,19 @@ export function DepositRemittancePanel({
             </button>
           </div>
           {validateOnCooldown && !checking ? (
-            <p className="subtle remittance-cooldown">Next validate in {cooldownLeftSec}s</p>
+            <p className="subtle remittance-cooldown">You can validate again in {cooldownLeftSec}s</p>
           ) : null}
         </div>
 
         {error ? (
           <div className="alert danger remittance-alert">
-            <strong>Deposit / submit</strong>
+            <strong>Action failed</strong>
             <span>{error}</span>
           </div>
         ) : null}
         {notice ? (
           <div className="alert remittance-alert">
-            <strong>Status</strong>
+            <strong>Update</strong>
             <span>{notice}</span>
           </div>
         ) : null}
@@ -695,23 +719,23 @@ export function DepositRemittancePanel({
             <div className="remittance-kpi-grid">
               <div className="remittance-kpi primary">
                 <span>Remittance total</span>
-                <strong>₹{currency(remittance.remittanceTotalCash)}</strong>
-                <small>{remittance.submittedCount} submitted · {remittance.createdCount} created</small>
+                <strong>{money(remittance.remittanceTotalCash)}</strong>
+                <small>{remittance.submittedCount} submitted · {remittance.createdCount} pending creation</small>
               </div>
               <div className="remittance-kpi">
                 <span>Same-day expected</span>
-                <strong>{expectedCashTotal == null ? "—" : `₹${currency(expectedCashTotal)}`}</strong>
-                <small>{match?.mode || "expected from remittance summary"}</small>
+                <strong>{expectedCashTotal == null ? "—" : money(expectedCashTotal)}</strong>
+                <small>{matchModeLabel(match?.mode)}</small>
               </div>
               <div className="remittance-kpi">
                 <span>Page cash</span>
-                <strong>₹{currency(collectedCash)}</strong>
+                <strong>{money(collectedCash)}</strong>
                 <small>Saved collected COD</small>
               </div>
               <div className={`remittance-kpi ${pageVsRemittance != null ? toneForAmount(-(pageVsRemittance)) : ""}`}>
-                <span>Page − remittance</span>
-                <strong>₹{currency(pageVsRemittance ?? 0)}</strong>
-                <small>Short &gt; ₹{SHORT_BLOCK_RUPEES} blocks submit</small>
+                <span>Variance (page − remittance)</span>
+                <strong>{money(pageVsRemittance ?? 0)}</strong>
+                <small>Submit blocked if short exceeds ₹{SHORT_BLOCK_RUPEES}</small>
               </div>
             </div>
 
@@ -719,79 +743,83 @@ export function DepositRemittancePanel({
               <div className="remittance-meta-item">
                 <span>Match</span>
                 <strong className={`remittance-status ${matchStatus === "MATCHED" ? "good" : matchStatus ? "warn" : ""}`}>
-                  {matchStatus || "—"}
+                  {matchStatusLabel(matchStatus)}
                 </strong>
               </div>
               <div className="remittance-meta-item">
                 <span>Same-day short</span>
                 <strong className={sameDayShort != null ? toneForAmount(sameDayShort) : ""}>
-                  {sameDayShort == null ? "—" : `₹${currency(sameDayShort)}`}
+                  {sameDayShort == null ? "—" : money(sameDayShort)}
                 </strong>
               </div>
               <div className="remittance-meta-item">
                 <span>Final pending</span>
-                <strong>{match ? `₹${currency(match.finalPendingTotal)}` : "—"}</strong>
+                <strong>{match ? money(match.finalPendingTotal) : "—"}</strong>
               </div>
               <div className="remittance-meta-item">
-                <span>Codes</span>
+                <span>Remittance codes</span>
                 <strong>{remittance.remittanceCodes.length ? remittance.remittanceCodes.join(", ") : "—"}</strong>
               </div>
             </div>
 
             {isShortOverLimit ? (
               <div className="alert danger remittance-alert">
-                <strong>Submit disabled — page short over ₹{SHORT_BLOCK_RUPEES}</strong>
+                <strong>Submission blocked — cash short exceeds ₹{SHORT_BLOCK_RUPEES}</strong>
                 <span>
-                  Page cash is ₹{currency(Math.abs(pageVsRemittance ?? 0))} below remittance.
-                  Clear short, then Validate again.
+                  Collected cash is {money(Math.abs(pageVsRemittance ?? 0))} below remittance.
+                  Resolve the short in SCC, then validate again.
                 </span>
               </div>
             ) : null}
 
             {unresolvedPending ? (
               <div className="alert danger remittance-alert">
-                <strong>Submit disabled — pending cash ledger</strong>
+                <strong>Submission blocked — pending cash ledger</strong>
                 <span>
-                  Final pending ₹{currency(match?.finalPendingTotal ?? 0)} is still open.
-                  Open the ledger, clear forwarded/pending cash in SCC, then Validate again.
+                  Final pending of {money(match?.finalPendingTotal ?? 0)} is still open.
+                  Open the ledger, clear forwarded or pending cash in SCC, then validate again.
                 </span>
               </div>
             ) : null}
 
             {sameDayShortBlocked ? (
               <div className="alert danger remittance-alert">
-                <strong>Submit disabled — same-day remittance short</strong>
+                <strong>Submission blocked — same-day remittance short</strong>
                 <span>
-                  Expected ₹{currency(match?.sameDayExpectedCashTotal ?? 0)} vs remittance ₹{currency(match?.sameDayRemittanceTotalCash ?? 0)}
-                  (short ₹{currency(match?.sameDayShortAmount ?? 0)}). Clear in SCC, then Validate again.
+                  Same-day expected {money(match?.sameDayExpectedCashTotal ?? 0)} versus remittance {money(match?.sameDayRemittanceTotalCash ?? 0)}
+                  {" "}(short {money(match?.sameDayShortAmount ?? 0)}). Clear this in SCC, then validate again.
                 </span>
               </div>
             ) : null}
 
             {!isShortOverLimit && needsDifferenceRemarks ? (
               <div className="alert remittance-alert">
-                <strong>Cash difference</strong>
-                <span>Difference of ₹{currency(pageVsRemittance ?? 0)} — remarks required when validating.</span>
+                <strong>Cash difference noted</strong>
+                <span>
+                  Variance of {money(pageVsRemittance ?? 0)} requires remarks when validating remittance.
+                </span>
               </div>
             ) : null}
 
             {hasPendingCreated ? (
               <div className="alert remittance-alert">
-                <strong>Created remittance pending</strong>
-                <span>{remittance.createdCount} created remittance(s) totaling ₹{currency(remittance.createdTotal)} are not submitted yet.</span>
+                <strong>Pending remittance creation</strong>
+                <span>
+                  {remittance.createdCount} remittance{remittance.createdCount === 1 ? "" : "s"} totaling {money(remittance.createdTotal)} {remittance.createdCount === 1 ? "has" : "have"} been created but not yet submitted in SCC.
+                </span>
               </div>
             ) : null}
 
             <div className="remittance-tables">
               <RemittanceRowsTable
-                title="Creation list"
-                meta="Remittance pending"
+                title="Pending remittances"
+                meta="Awaiting submission in SCC"
                 rows={remittance.created}
-                emptyLabel="No created (pending) remittances."
+                emptyLabel="No pending remittances."
               />
               <RemittanceRowsTable
-                title="Submitted list"
-                meta={`Total ₹${currency(remittance.submittedTotal)}`}
+                title="Submitted remittances"
+                meta={`Total ${money(remittance.submittedTotal)}`}
                 rows={remittance.submitted}
                 emptyLabel="No submitted remittances."
               />
@@ -799,8 +827,8 @@ export function DepositRemittancePanel({
           </>
         ) : (
           <div className="remittance-empty-state">
-            <strong>No remittance loaded yet</strong>
-            <p>Click Validate deposit to pull SCC remittance, match summary, and pending cash ledger.</p>
+            <strong>Remittance not loaded</strong>
+            <p>Click Validate deposit to load SCC remittance, match summary, and the pending cash ledger.</p>
           </div>
         )}
       </section>
@@ -815,15 +843,15 @@ export function DepositRemittancePanel({
             {isFinalSubmitted ? "Submitted" : canSubmitFinal ? "Ready" : submitBlocked ? "Blocked" : "Pending"}
           </span>
         </div>
-        <p className="subtle">Locks cash entries after remittance validation and clear liability.</p>
+        <p className="subtle">Locks cash entries after remittance is validated and station liability is clear.</p>
         {submitBlocked ? (
           <div className="alert danger remittance-alert">
-            <strong>Submit locked</strong>
+            <strong>Submission blocked</strong>
             <span>
-              {isShortOverLimit ? `Clear page short over ₹${SHORT_BLOCK_RUPEES}. ` : ""}
-              {unresolvedPending ? "Clear pending cash ledger. " : ""}
-              {sameDayShortBlocked ? "Clear same-day remittance short. " : ""}
-              Then Validate again.
+              {isShortOverLimit ? `Collected cash is short by more than ₹${SHORT_BLOCK_RUPEES}. ` : ""}
+              {unresolvedPending ? "Pending cash remains on the ledger. " : ""}
+              {sameDayShortBlocked ? "Same-day remittance is still short. " : ""}
+              Resolve the issue, then validate again.
             </span>
           </div>
         ) : null}
@@ -835,7 +863,7 @@ export function DepositRemittancePanel({
             onClick={() => void openLiabilityGate()}
           >
             {isFinalSubmitted
-              ? "Final submitted and locked"
+              ? "Final submission complete"
               : checkingLiability
                 ? "Checking liability…"
                 : submitting
@@ -850,17 +878,17 @@ export function DepositRemittancePanel({
           <section className="modal-panel wide cash-recon-modal" role="dialog" aria-modal="true" aria-labelledby="remittance-diff-title">
             <div className="panel-head">
               <div>
-                <h2 id="remittance-diff-title">Cash difference with remittance</h2>
+                <h2 id="remittance-diff-title">Cash variance versus remittance</h2>
                 <p className="subtle">{stationCode} · {businessDate}</p>
               </div>
               <button className="modal-close" type="button" onClick={() => setShowDifferenceModal(false)} aria-label="Close">×</button>
             </div>
             <div className="panel-body">
               <div className="remittance-kpi-grid compact" style={{ marginBottom: 14 }}>
-                <div className="remittance-kpi"><span>Page cash</span><strong>₹{currency(collectedCash)}</strong></div>
-                <div className="remittance-kpi"><span>Remittance</span><strong>₹{currency(remittance.remittanceTotalCash)}</strong></div>
+                <div className="remittance-kpi"><span>Page cash</span><strong>{money(collectedCash)}</strong></div>
+                <div className="remittance-kpi"><span>Remittance</span><strong>{money(remittance.remittanceTotalCash)}</strong></div>
                 <div className={`remittance-kpi ${toneForAmount(-(pageVsRemittance))}`}>
-                  <span>Difference</span><strong>₹{currency(pageVsRemittance)}</strong>
+                  <span>Difference</span><strong>{money(pageVsRemittance)}</strong>
                 </div>
               </div>
               <label style={{ display: "grid", gap: 6 }}>
@@ -870,7 +898,7 @@ export function DepositRemittancePanel({
                   rows={3}
                   value={validateRemarks}
                   onChange={(event) => setValidateRemarks(event.target.value)}
-                  placeholder="Explain the cash vs remittance difference"
+                  placeholder="Explain why page cash differs from remittance"
                 />
               </label>
               <div className="form-actions" style={{ marginTop: 14 }}>
@@ -881,7 +909,7 @@ export function DepositRemittancePanel({
                   disabled={!validateRemarks.trim() || savingValidation}
                   onClick={() => void confirmDifferenceRemarks()}
                 >
-                  {savingValidation ? "Saving…" : "Save remarks & validate"}
+                  {savingValidation ? "Saving…" : "Save remarks and validate"}
                 </button>
               </div>
             </div>
@@ -894,40 +922,40 @@ export function DepositRemittancePanel({
           <section className="modal-panel wide cash-recon-modal" role="dialog" aria-modal="true" aria-labelledby="liability-remind-title">
             <div className="panel-head">
               <div>
-                <h2 id="liability-remind-title">Complete liability before COD submit</h2>
+                <h2 id="liability-remind-title">Confirm liability before final submission</h2>
                 <p className="subtle">{stationCode} · {businessDate}</p>
               </div>
               <button className="modal-close" type="button" disabled={submitting} onClick={() => setShowLiabilityModal(false)} aria-label="Close">×</button>
             </div>
             <div className="panel-body">
               <p className="subtle" style={{ marginBottom: 12 }}>
-                Station cash liability in SCC must be clear before final COD submit.
+                Station cash liability in SCC must be clear before final COD submission.
               </p>
               {checkingLiability || !liability ? (
                 <p className="subtle">Checking SCC liability…</p>
               ) : liability.isClear ? (
                 <>
                   <div className="alert remittance-alert">
-                    <strong>Liability clear</strong>
+                    <strong>Liability is clear</strong>
                     <span>
-                      Expected ₹{currency(liability.cashSummary.expectedAmount)} · Actual ₹{currency(liability.cashSummary.actualAmount)} ·
-                      Short/excess ₹{currency(liability.cashSummary.shortExcessAmount)}.
+                      Expected {money(liability.cashSummary.expectedAmount)} · Actual {money(liability.cashSummary.actualAmount)} ·
+                      Short/excess {money(liability.cashSummary.shortExcessAmount)}.
                     </span>
                   </div>
                   <div className="form-actions">
                     <button className="button secondary" type="button" disabled={submitting} onClick={() => setShowLiabilityModal(false)}>Cancel</button>
                     <button className="button" type="button" disabled={submitting} onClick={() => void runFinalSubmit()}>
-                      {submitting ? "Submitting…" : "Submit final COD"}
+                      {submitting ? "Submitting…" : "Submit final COD closure"}
                     </button>
                   </div>
                 </>
               ) : (
                 <>
                   <div className="alert danger remittance-alert">
-                    <strong>Liability still open</strong>
+                    <strong>Liability is still open</strong>
                     <span>
-                      Expected ₹{currency(liability.cashSummary.expectedAmount)} · Actual ₹{currency(liability.cashSummary.actualAmount)} ·
-                      Short/excess ₹{currency(liability.cashSummary.shortExcessAmount)}. Complete in SCC, then recheck.
+                      Expected {money(liability.cashSummary.expectedAmount)} · Actual {money(liability.cashSummary.actualAmount)} ·
+                      Short/excess {money(liability.cashSummary.shortExcessAmount)}. Complete clearance in SCC, then recheck.
                     </span>
                   </div>
                   <div className="form-actions">

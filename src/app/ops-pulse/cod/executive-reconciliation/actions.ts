@@ -1337,9 +1337,14 @@ export async function validateCodRemittanceDeposit(formData: FormData): Promise<
 
     revalidatePath(pagePath);
     revalidatePath("/ops-pulse/cod");
+    const formatInr = (value: number) => {
+      const absolute = Math.abs(value).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (Math.abs(value) < 0.01) return `₹${absolute}`;
+      return value < 0 ? `-₹${absolute}` : `₹${absolute}`;
+    };
     const notice = Math.abs(difference) < 0.01
-      ? `Deposit remittance validated for ${station.station_code}. Total ₹${remittance.remittanceTotalCash.toFixed(2)}.`
-      : `Deposit remittance validated with difference ₹${difference.toFixed(2)} for ${station.station_code}.`;
+      ? `Remittance validated for ${station.station_code}. Total ${formatInr(remittance.remittanceTotalCash)} matched collected cash.`
+      : `Remittance validated for ${station.station_code} with a cash difference of ${formatInr(difference)}.`;
     if (clientResponse) return { ok: true, notice } satisfies CashEntryActionResult;
     redirectWithFlash({ notice }, returnHref);
   } catch (error) {

@@ -42,6 +42,9 @@ export type PaymentReportRequest = {
   supporting_document_path: string | null;
   status: string;
   approval_status: string | null;
+  current_approver_user_id: string | null;
+  current_approver_role_id: string | null;
+  current_approver_role_ids: string[] | null;
   utr_cin: string | null;
   bank_status: string | null;
   bank_processing_remarks: string | null;
@@ -74,6 +77,28 @@ function isProcessingStarted(request: PaymentReportRequest) {
     status === "PROCESSED" ||
     approvalStatus === "PROCESSING" ||
     approvalStatus === "PROCESSED";
+}
+
+function reportStatusLabel(request: PaymentReportRequest) {
+  const status = String(request.status ?? "").trim().toUpperCase();
+  const approvalStatus = String(request.approval_status ?? "").trim().toUpperCase();
+  const effectiveStatus = approvalStatus || status;
+  if (status === "PROCESSED" || approvalStatus === "PROCESSED") return "Processed";
+  if (status === "PROCESSING" || approvalStatus === "PROCESSING") return "Processing";
+  if (status === "RETURNED" || approvalStatus === "RETURNED") return "Returned";
+  if (status === "REJECTED" || approvalStatus === "REJECTED") return "Rejected";
+  if (status === "CANCELLED" || approvalStatus === "CANCELLED") return "Cancelled";
+  const hasCurrentApprover = Boolean(
+    request.current_approver_user_id ||
+    request.current_approver_role_id ||
+    request.current_approver_role_ids?.length
+  );
+  const isApprovedStage = effectiveStatus === "APPROVED" ||
+    effectiveStatus === "RE_APPROVED" ||
+    effectiveStatus.endsWith("_APPROVED");
+  if (isApprovedStage) return hasCurrentApprover ? "Initial Approved" : "Final Approved";
+  if (["PENDING", "RE_PENDING", "RESUBMITTED"].includes(effectiveStatus)) return "Pending";
+  return effectiveStatus ? effectiveStatus.toLowerCase().split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ") : "-";
 }
 
 function buildHistory(request: PaymentReportRequest) {
@@ -156,7 +181,7 @@ export function PaymentReportTable({ requests }: { requests: PaymentReportReques
                 <td>{request.account_holder_name ?? "-"}</td>
                 <td>{request.bank_account_no ?? "-"}</td>
                 <td>{request.ifsc ?? "-"}</td>
-                <td><StatusPill status={request.status} /></td>
+                <td><StatusPill status={reportStatusLabel(request)} /></td>
                 <td>{request.supporting_document_path ? "Uploaded" : "-"}</td>
                 <td>{formatDate(request.created_at)}</td>
                 <td>
@@ -186,7 +211,7 @@ export function PaymentReportTable({ requests }: { requests: PaymentReportReques
               <div className="form-grid three">
                 <label>Payment Head<input className="field" readOnly value={selectedRequest.payment_head_name} /></label>
                 <label>External ID<input className="field" readOnly value={selectedRequest.payment_head_external_id} /></label>
-                <label>Status<input className="field" readOnly value={selectedRequest.status} /></label>
+                <label>Status<input className="field" readOnly value={reportStatusLabel(selectedRequest)} /></label>
                 <label>Amount<input className="field" readOnly value={formatAmount(selectedRequest.amount)} /></label>
                 <label>Location<input className="field" readOnly value={selectedRequest.location_code} /></label>
                 <label>Created<input className="field" readOnly value={formatDate(selectedRequest.created_at)} /></label>

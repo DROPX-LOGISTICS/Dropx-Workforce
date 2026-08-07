@@ -78,22 +78,7 @@ function workbookCell(row: Record<string, unknown>, aliases: string[]) {
   return "";
 }
 
-function temporaryUntilValue(value: string, rowNumber: number) {
-  if (!value) return null;
-  if (/^\d+(?:\.\d+)?$/.test(value)) {
-    const parsed = XLSX.SSF.parse_date_code(Number(value));
-    if (parsed) return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
-  }
-  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  const localMatch = value.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
-  const normalized = isoMatch ? value : localMatch ? `${localMatch[3]}-${localMatch[2]}-${localMatch[1]}` : "";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized) || Number.isNaN(new Date(`${normalized}T00:00:00Z`).getTime())) {
-    throw new Error(`Row ${rowNumber}: Temporary until must be YYYY-MM-DD or DD/MM/YYYY.`);
-  }
-  return normalized;
-}
-
-async function parseTemporaryDeviceWorkbook(fileValue: FormDataEntryValue | null) {
+async function parseDeviceWorkbook(fileValue: FormDataEntryValue | null) {
   if (!(fileValue instanceof File) || !fileValue.size) throw new Error("Choose an Excel or CSV file to upload.");
   if (fileValue.size > 5 * 1024 * 1024) throw new Error("Bulk upload file must be 5 MB or smaller.");
   const workbook = XLSX.read(Buffer.from(await fileValue.arrayBuffer()), { type: "buffer", cellDates: false });
@@ -132,18 +117,17 @@ async function parseTemporaryDeviceWorkbook(fileValue: FormDataEntryValue | null
       networkPassword: workbookCell(row, ["Network password", "Password"]) || null,
       p2pType: workbookCell(row, ["P2P type"]) || null,
       p2pDeviceId: workbookCell(row, ["P2P device ID", "P2P ID"]) || null,
-      temporaryUntil: temporaryUntilValue(workbookCell(row, ["Temporary until", "Expiry date", "Valid until"]), rowNumber),
       remarks: workbookCell(row, ["Remarks", "Remark"]) || null
     };
   });
 }
 
-export async function bulkImportTemporaryBiometricDevices(formData: FormData) {
+export async function bulkImportBiometricDevices(formData: FormData) {
   const authorization = await requirePagePermission("biometric_devices", "add");
   const companyId = requireCompanyId(authorization);
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
-    const rows = await parseTemporaryDeviceWorkbook(formData.get("bulk_file"));
+    const rows = await parseDeviceWorkbook(formData.get("bulk_file"));
     const duplicateSerials = rows.filter((row, index) => rows.findIndex((candidate) => candidate.deviceSerial === row.deviceSerial) !== index);
     const duplicateTerminalIds = rows.filter((row, index) => rows.findIndex((candidate) => candidate.terminalId === row.terminalId) !== index);
     if (duplicateSerials.length) throw new Error(`Row ${duplicateSerials[0].rowNumber}: Serial number is duplicated in the file.`);
@@ -181,8 +165,6 @@ export async function bulkImportTemporaryBiometricDevices(formData: FormData) {
         network_password: row.networkPassword,
         status: "Disconnected",
         is_active: true,
-        is_temporary: true,
-        temporary_until: row.temporaryUntil,
         remarks: row.remarks,
         created_by: authorization.userId
       }, companyId);
@@ -192,10 +174,10 @@ export async function bulkImportTemporaryBiometricDevices(formData: FormData) {
       if (error) throw new Error(error.message);
     }
     revalidatePath("/master/biometric-devices");
-    deviceRedirect({ notice: `${payloads.length} temporary device${payloads.length === 1 ? "" : "s"} imported${skipped ? `; ${skipped} existing duplicate${skipped === 1 ? "" : "s"} skipped` : ""}.` });
+    deviceRedirect({ notice: `${payloads.length} device${payloads.length === 1 ? "" : "s"} imported${skipped ? `; ${skipped} existing duplicate${skipped === 1 ? "" : "s"} skipped` : ""}.` });
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
-    deviceRedirect({ error: error instanceof Error ? error.message : "Unable to import temporary devices." });
+    deviceRedirect({ error: error instanceof Error ? error.message : "Unable to import devices." });
   }
 }
 

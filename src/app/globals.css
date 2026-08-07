@@ -25,6 +25,29 @@
 .workforce-lifecycle-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}.workforce-lifecycle-summary article{display:grid;grid-template-columns:34px 1fr auto;gap:4px 10px;align-items:center;padding:16px;background:#fff;border:1px solid var(--border);border-radius:14px}.workforce-lifecycle-summary svg{grid-row:1/3;width:24px;color:#d7275f}.workforce-lifecycle-summary span{color:var(--muted);font-size:12px}.workforce-lifecycle-summary strong{grid-column:3;grid-row:1/3;font-size:25px}.workforce-lifecycle-tabs{display:flex;gap:6px;margin-bottom:16px;padding:5px;background:#fff;border:1px solid var(--border);border-radius:12px}.workforce-lifecycle-tabs a{padding:10px 15px;color:var(--muted);border-radius:8px;text-decoration:none;font-weight:650}.workforce-lifecycle-tabs a.active{color:#fff;background:#252b48}.workforce-lifecycle-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.workforce-lifecycle-card{padding:0;overflow:hidden}.workforce-lifecycle-card>header{display:flex;justify-content:space-between;gap:14px;padding:18px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#fff,#fff8fb)}.workforce-lifecycle-card h2{margin:3px 0;font-size:19px}.workforce-lifecycle-card header p,.workforce-lifecycle-card header small{margin:0;color:var(--muted)}.workforce-lifecycle-card>.subtle,.workforce-lifecycle-card>p{padding:0 18px}.workforce-lifecycle-card .status{align-self:flex-start;padding:6px 10px;background:#f2f3f7;border-radius:999px;font-size:11px;font-weight:750}.workforce-lifecycle-card .status.active,.workforce-lifecycle-card .status.approved,.workforce-lifecycle-card .status.settled{color:#087650;background:#dff7ed}.workforce-lifecycle-card .status.under_review,.workforce-lifecycle-card .status.settlement_pending{color:#9b5b00;background:#fff0d0}.workforce-lifecycle-card .status.rejected,.workforce-lifecycle-card .status.termination_pending{color:#a9283b;background:#ffe2e7}.workforce-lifecycle-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:16px 18px}.workforce-lifecycle-facts span{display:grid;gap:3px;padding:10px;background:#f7f8fb;border-radius:9px;color:var(--muted);font-size:10px;text-transform:uppercase}.workforce-lifecycle-facts strong{color:var(--text);font-size:13px;text-transform:none}.workforce-review-form,.workforce-exit-start,.workforce-decision-form{display:grid;gap:11px;margin:0;padding:16px 18px;border-top:1px solid var(--border)}.workforce-review-form h3{margin:0 0 3px}.workforce-review-form>label{display:flex;gap:10px;align-items:flex-start;padding:10px;background:#f8f8fb;border:1px solid #e6e7ee;border-radius:9px}.workforce-review-form>label input[type=checkbox]{width:17px;height:17px;flex:0 0 auto}.workforce-review-form>label span{display:grid;gap:3px}.workforce-review-form small{color:var(--muted)}.workforce-review-form textarea,.workforce-decision-form textarea,.workforce-exit-start textarea{width:100%;min-height:70px}.workforce-provider-row,.workforce-settlement-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.workforce-provider-row label,.workforce-settlement-values label,.workforce-exit-start label,.workforce-decision-form label{display:grid;gap:5px;color:var(--muted);font-size:12px}.workforce-provider-row input,.workforce-settlement-values input,.workforce-settlement-values select,.workforce-exit-start input,.workforce-exit-start select,.workforce-decision-form textarea{min-height:40px;padding:8px;border:1px solid var(--border);border-radius:8px;background:#fff}.workforce-provider-row .compact-check{display:flex;align-items:center;flex-direction:row}.workforce-empty{grid-column:1/-1;display:grid;place-items:center;min-height:220px;text-align:center}.workforce-empty svg{color:#1c9b69}
 @media(max-width:900px){.workforce-lifecycle-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.workforce-lifecycle-grid{grid-template-columns:1fr}}@media(max-width:560px){.workforce-lifecycle-summary{grid-template-columns:1fr}.workforce-lifecycle-tabs{overflow-x:auto}.workforce-lifecycle-tabs a{white-space:nowrap}.workforce-lifecycle-facts,.workforce-provider-row,.workforce-settlement-values{grid-template-columns:1fr}}
 
+.count-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+
+.field-error {
+  margin-top: 4px;
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -11098,16 +11121,18 @@ tbody tr:hover td {
 
 .reconciliation-gates {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 14px;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  margin-top: 16px;
 }
 
 .reconciliation-gate {
-  padding: 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  padding: 18px 20px;
+  border: 1px solid #e5e9f0;
+  border-radius: 16px;
   background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .03);
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
 
 .reconciliation-gate.final {
@@ -11115,14 +11140,38 @@ tbody tr:hover td {
   display: flex;
   align-items: center;
   gap: 16px;
+  border-color: #fde68a;
+  background: linear-gradient(180deg, #fffdf7, #fff);
 }
 
 .reconciliation-gate.final > .form-actions {
   margin: 0 0 0 auto !important;
 }
 
+.reconciliation-gate.final .button:not(.secondary):not(.ghost) {
+  min-width: 220px;
+  height: 42px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .01em;
+}
+
+/* The remittance final panel has richer stacked content (head, copy, alert, actions) —
+   override the legacy flex-row final-gate layout so it stacks instead of squashing. */
+.reconciliation-gate.final.remittance-final-panel {
+  display: grid;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.reconciliation-gate.final.remittance-final-panel > .form-actions {
+  margin: 0 !important;
+  justify-content: flex-end;
+}
+
 .reconciliation-gate.locked {
   background: #f8fafc;
+  box-shadow: none;
 }
 
 .reconciliation-gate-head,
@@ -11135,20 +11184,21 @@ tbody tr:hover td {
 
 .reconciliation-gate-head > div {
   display: grid;
-  gap: 2px;
+  gap: 3px;
 }
 
 .reconciliation-gate-head span {
-  color: #64748b;
+  color: #94a3b8;
   font-size: 9px;
   font-weight: 850;
-  letter-spacing: .05em;
+  letter-spacing: .07em;
   text-transform: uppercase;
 }
 
 .reconciliation-gate-head strong {
   color: #172033;
-  font-size: 15px;
+  font-size: 16px;
+  font-weight: 800;
 }
 
 .reconciliation-exception,
@@ -16448,7 +16498,7 @@ td strong,
 }
 
 .remittance-cleared-days > summary::before {
-  content: "â–¸";
+  content: "▸";
   display: inline-block;
   margin-right: 6px;
   color: #94a3b8;
@@ -16603,22 +16653,6 @@ td strong,
 
 .required-mark {
   color: #b42318;
-}
-
-.reconciliation-gate.final.remittance-final-panel {
-  display: grid;
-  align-items: stretch;
-  gap: 14px;
-}
-
-.reconciliation-gate.final.remittance-final-panel > .form-actions {
-  margin: 0 !important;
-  justify-content: flex-end;
-}
-
-.reconciliation-gate.locked {
-  background: #f8fafc;
-  box-shadow: none;
 }
 
 .is-disabled {

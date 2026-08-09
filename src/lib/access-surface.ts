@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 
 export type AccessSurface = "dashboard" | "ops";
 
-const opsPageCodes = new Set([
+export const opsAccessPageCodes = [
   "ops_pulse",
   "daily_submission",
   "cod",
@@ -46,7 +46,9 @@ const opsPageCodes = new Set([
   "fleet_live_gps",
   "fleet_maintenance",
   "fleet_reports"
-]);
+] as const;
+
+const opsPageCodes = new Set<string>(opsAccessPageCodes);
 
 const sharedPageCodes = new Set([
   "imports",

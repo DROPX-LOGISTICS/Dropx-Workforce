@@ -30,6 +30,14 @@ function isAssetPath(path: string) {
   return /\.[a-z0-9]{2,8}$/i.test(path);
 }
 
+function isPublicOpsInstallAsset(path: string) {
+  return path === "/manifest.webmanifest" ||
+    path === "/sw.js" ||
+    path.startsWith("/opspulse/") ||
+    path.startsWith("/downloads/") ||
+    path.startsWith("/.well-known/");
+}
+
 function encodeCookieValue(value: string) {
   const bytes = new TextEncoder().encode(value);
   let binary = "";
@@ -89,6 +97,7 @@ export async function middleware(request: NextRequest) {
     !path.startsWith("/api/") &&
     !path.startsWith("/auth/") &&
     !path.startsWith("/_next/") &&
+    !isPublicOpsInstallAsset(path) &&
     !isAssetPath(path)
   ) {
     const deniedUrl = request.nextUrl.clone();
@@ -109,7 +118,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("https://admin-panel.dropxlogistics.com/", request.url));
   }
 
-  if (path === "/login" || path.startsWith("/api/") || path.startsWith("/auth/") || path.startsWith("/_next/") || isAssetPath(path)) {
+  if (path === "/login" || path.startsWith("/api/") || path.startsWith("/auth/") || path.startsWith("/_next/") || isPublicOpsInstallAsset(path) || isAssetPath(path)) {
     return NextResponse.next();
   }
 

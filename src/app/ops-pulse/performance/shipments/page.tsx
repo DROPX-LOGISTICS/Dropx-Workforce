@@ -7,6 +7,8 @@ import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import {
   loadCapacityDeliveryBreakdown,
+  loadCapacityPincodes,
+  type CapacityPincode,
   type CapacityDeliveryBreakdown
 } from "@/lib/ops-pulse/capacity-shipments";
 import {
@@ -43,8 +45,16 @@ export default async function DeliveryDataPage({ searchParams }: { searchParams?
   const sort = ["code", "workload", "activeIds", "days", "average", "spr"].includes(String(searchParams?.sort)) ? String(searchParams?.sort) : "workload";
   const dir = searchParams?.dir === "asc" ? "asc" : "desc";
   const deliveryCodes = selectedStation ? [selectedStation] : codes;
-  const breakdownResult = await loadCapacityDeliveryBreakdown(companyId, deliveryCodes, from, to);
+  const pincodeFrom = selectedDay || from;
+  const pincodeTo = selectedDay || to;
+  const [breakdownResult, pincodeResult] = await Promise.all([
+    loadCapacityDeliveryBreakdown(companyId, deliveryCodes, from, to),
+    selectedStation
+      ? loadCapacityPincodes(companyId, selectedStation, pincodeFrom, pincodeTo)
+      : Promise.resolve({ data: [] as CapacityPincode[], error: null })
+  ]);
   const breakdown = breakdownResult.data ?? [];
+  const pincodes = pincodeResult.data ?? [];
   const daily = summarizeAmazonDeliveryRows(breakdown);
   const locationMap = new Map(locations.map((location) => [location.station_code, location]));
   const stationRows = codes.map((code) => {
@@ -97,10 +107,14 @@ export default async function DeliveryDataPage({ searchParams }: { searchParams?
   const latestDate = daily.map((row) => row.workDate).sort().at(-1) ?? null;
   const latestActiveIds = latestDate ? daily.filter((row) => row.workDate === latestDate).reduce((sum, row) => sum + row.activeIds, 0) : 0;
   const sourceDays = new Set(daily.map((row) => row.workDate)).size;
+  const pincodeDelivered = pincodes.reduce((sum, row) => sum + num(row.delivered), 0);
+  const pincodeSmall = pincodes.reduce((sum, row) => sum + num(row.small), 0);
+  const pincodeVolumetric = pincodes.reduce((sum, row) => sum + num(row.volumetric), 0);
+  const pincodeUnclassified = pincodes.reduce((sum, row) => sum + num(row.unclassified), 0);
   const base = `from=${from}&to=${to}${searchParams?.stations ? `&stations=${encodeURIComponent(searchParams.stations)}` : ""}`;
   const sortHref = (label: string, key: string) => <Link href={`/ops-pulse/performance/shipments?${base}&sort=${key}&dir=${sort === key && dir === "desc" ? "asc" : "desc"}`}>{label}{sort === key ? dir === "desc" ? " ↓" : " ↑" : " ↕"}</Link>;
   const scopeStations = locations.map((location) => ({ code: location.station_code, name: location.station_name || location.city || location.station_code, cluster: location.cluster || "", region: location.region || "" }));
-  const error = locationsResult.error || breakdownResult.error?.message;
+  const error = locationsResult.error || breakdownResult.error?.message || pincodeResult.error?.message;
 
   return <AppShell active="Capacity" pageCode="cps_shipments"><div className="ops-command-center shipment-workspace">
     <PageHead eyebrow="Capacity" title="Delivery Data" subtitle="Capacity workload = Amazon delivery + SMD + SWA delivery + C-return." />
@@ -116,7 +130,24 @@ export default async function DeliveryDataPage({ searchParams }: { searchParams?
     })}{!stationDaily.length ? <tr><td className="empty-cell" colSpan={10}>No delivery data is available for this station.</td></tr> : null}</tbody></table></div></section> : null}
     {selectedStation && selectedDay ? <section className="panel"><div className="panel-head"><div><h2>Associate workload breakup</h2><p className="subtle">{selectedStation} · {selectedDay}</p></div><span className="status-pill neutral">{dayAssociates.length} road-active IDs</span></div><div className="table-wrap"><table className="shipment-table shipment-breakup-table"><thead><tr><th>Associate</th><th>Capacity workload</th><th>Amazon delivery</th><th>SMD delivery</th><th>SWA</th><th>C-return</th><th>MFN forward</th><th>MFN return</th><th>Position</th></tr></thead><tbody>{dayAssociates.map((row) => {
       const workload = num(row.base_amazon_delivery) + num(row.smd_delivery) + num(row.smd2_delivery) + num(row.swa_delivery) + num(row.c_return);
-      return <tr key={row.provider_employee_id}><td><Link href={`/ops-pulse/capacity/associates/${encodeURIComponent(row.provider_employee_id)}?station=${selectedStation}&from=${from}&to=${to}&name=${encodeURIComponent(row.provider_employee_name || "")}`}><strong>{row.provider_employee_name || row.provider_employee_id}</strong><small>{row.provider_employee_name ? row.provider_employee_id : "Associate ID"}</small></Link></td><td><strong>{fmt(workload)}</strong></td><td>{fmt(num(row.base_amazon_delivery))}</td><td>{fmt(num(row.smd_delivery) + num(row.smd2_delivery))}</td><td>{fmt(num(row.swa_delivery))}</td><td>{fmt(num(row.c_return))}</td><td>{fmt(num(row.mfn))}</td><td>{fmt(num(row.mfn_return))}</td><td><span className={`capacity-decision ${workload > 70 ? "risk" : workload < 60 ? "unconfigured" : "balanced"}`}>{workload > 70 ? "Above safe" : workload < 60 ? "Below target" : "Target range"}</span></td></tr>;
+      return <tr key={row.provider_employee_id}><td><Link href={`/ops-pulse/capacity/associates/${encodeURIComponent(row.provider_employee_id)}?station=${selectedStation}&from=${selectedDay}&to=${selectedDay}&detail=selected&name=${encodeURIComponent(row.provider_employee_name || "")}`}><strong>{row.provider_employee_name || row.provider_employee_id}</strong><small>{row.provider_employee_name ? row.provider_employee_id : "Associate ID"}</small></Link></td><td><strong>{fmt(workload)}</strong></td><td>{fmt(num(row.base_amazon_delivery))}</td><td>{fmt(num(row.smd_delivery) + num(row.smd2_delivery))}</td><td>{fmt(num(row.swa_delivery))}</td><td>{fmt(num(row.c_return))}</td><td>{fmt(num(row.mfn))}</td><td>{fmt(num(row.mfn_return))}</td><td><span className={`capacity-decision ${workload > 70 ? "risk" : workload < 60 ? "unconfigured" : "balanced"}`}>{workload > 70 ? "Above safe" : workload < 60 ? "Below target" : "Target range"}</span></td></tr>;
     })}{!dayAssociates.length ? <tr><td className="empty-cell" colSpan={9}>No associate delivery data is available for this date.</td></tr> : null}</tbody></table></div></section> : null}
+    {selectedStation ? <section className="panel capacity-associate-delivery-detail">
+      <div className="panel-head"><div><h2>Pincode & package mix</h2><p className="subtle">Delivered Detail drilldown for {selectedStation}; official capacity counts above remain unchanged.</p></div><span className="status-pill neutral">{selectedDay ? selectedDay.split("-").reverse().join("/") : `${from.split("-").reverse().join("/")}–${to.split("-").reverse().join("/")}`}</span></div>
+      <div className="performance-summary-grid shipment-breakup-summary">
+        <article><span>Detailed shipments</span><strong>{fmt(pincodeDelivered)}</strong><small>Tracking-level delivered rows</small></article>
+        <article><span>Pincodes served</span><strong>{fmt(pincodes.length)}</strong><small>{selectedDay ? "Selected day" : "Selected range"}</small></article>
+        <article><span>Small mix</span><strong>{pincodeDelivered ? `${fmt(pincodeSmall / pincodeDelivered * 100, 1)}%` : "—"}</strong><small>{fmt(pincodeSmall)} shipments</small></article>
+        <article><span>Volumetric mix</span><strong>{pincodeDelivered ? `${fmt(pincodeVolumetric / pincodeDelivered * 100, 1)}%` : "—"}</strong><small>{fmt(pincodeVolumetric)} shipments</small></article>
+      </div>
+      <div className="table-wrap"><table className="shipment-table shipment-breakup-table"><thead><tr><th>Pincode</th><th>Detailed shipments</th><th>Share</th><th>Serving IDs</th><th>Active days</th><th>Small</th><th>Small mix</th><th>Volumetric</th><th>Volumetric mix</th><th>Unclassified</th></tr></thead><tbody>{pincodes.map((row) => {
+        const delivered = num(row.delivered);
+        const small = num(row.small);
+        const volumetric = num(row.volumetric);
+        const evidenceBase = `/ops-pulse/capacity/shipments?station=${selectedStation}&pincode=${encodeURIComponent(row.postal_code)}&from=${pincodeFrom}&to=${pincodeTo}`;
+        return <tr key={row.postal_code}><td><strong>{row.postal_code}</strong></td><td><Link href={evidenceBase}>{fmt(delivered)}</Link></td><td>{pincodeDelivered ? `${fmt(delivered / pincodeDelivered * 100, 1)}%` : "—"}</td><td>{fmt(num(row.active_ids))}</td><td>{fmt(num(row.active_days))}</td><td><Link href={`${evidenceBase}&size=small`}>{fmt(small)}</Link></td><td>{delivered ? `${fmt(small / delivered * 100, 1)}%` : "—"}</td><td><Link href={`${evidenceBase}&size=volumetric`}>{fmt(volumetric)}</Link></td><td>{delivered ? `${fmt(volumetric / delivered * 100, 1)}%` : "—"}</td><td>{fmt(num(row.unclassified))}</td></tr>;
+      })}{!pincodes.length ? <tr><td className="empty-cell" colSpan={10}>No pincode-level Delivered Detail is available for this station and period.</td></tr> : null}</tbody></table></div>
+      {pincodeUnclassified ? <div className="capacity-source-gap"><strong>{fmt(pincodeUnclassified)} shipments need package classification</strong><span>One or more weight/dimension fields are missing in Delivered Detail.</span></div> : null}
+    </section> : null}
   </div></AppShell>;
 }

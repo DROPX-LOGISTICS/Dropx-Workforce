@@ -107,8 +107,10 @@ function modelOperations(mode: OperatingMode): NavItem {
       { code: "cod_submission", label: "COD Submission", href: "/cod/submission?client=amazon" },
       { code: "cod_validation", label: "Validation & Closure", href: "/cod/validation?client=amazon" },
       { code: "cod_portal_checks", label: "SCC Portal Checks", href: "/cod/portal-checks" },
-      { code: "cod_reports", label: "COD Reports", href: "/cod/reports?client=amazon" }
-      ,{ code: "cod_reports", label: "Performance Reports", href: "/reports/amazon" }
+      { code: "cod_reports", label: "COD Reports", href: "/cod/reports?client=amazon" },
+      // Same permission as COD Reports (dropx-ops-pulse 79f85aa).
+      { code: "cod_reports", label: "Cash In Associate", href: "/cod/cash-in-associate?client=amazon" },
+      { code: "cod_reports", label: "Performance Reports", href: "/reports/amazon" }
     ]
   };
 }

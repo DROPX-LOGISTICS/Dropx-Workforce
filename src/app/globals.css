@@ -4114,6 +4114,18 @@ h3 {
   color: var(--brand-red);
 }
 
+.tabs .tab.loading {
+  background: #fff7ed;
+  color: #c2410c;
+  cursor: wait;
+  opacity: 0.92;
+}
+
+.tabs .tab.loading .inline-spinner {
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
 .table-wrap {
   overflow-x: auto;
   max-width: 100%;
@@ -14606,6 +14618,108 @@ td strong,
 
 @keyframes capacity-loading-enter {
   from { opacity: .5; }
+}
+
+.cod-submit-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(2px);
+}
+
+.cod-submit-overlay-card {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  text-align: center;
+  max-width: 360px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #e8edf3;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.cod-loading-view {
+  animation: capacity-loading-enter .18s ease-out;
+  display: grid;
+  gap: 16px;
+  min-height: 42vh;
+  padding: 4px 0 12px;
+}
+
+.cod-loading-head {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 2px;
+  max-width: 520px;
+}
+
+.cod-loading-eyebrow,
+.cod-loading-title,
+.cod-loading-subtitle,
+.cod-loading-line,
+.cod-loading-filters span,
+.cod-loading-rows span,
+.cod-loading-tabs i,
+.cod-loading-badge {
+  animation: capacity-loading-pulse 1.15s ease-in-out infinite alternate;
+  background: #e8edf3;
+  border-radius: 7px;
+  display: block;
+}
+
+.cod-loading-eyebrow { height: 10px; width: 72px; }
+.cod-loading-title { height: 28px; width: 260px; }
+.cod-loading-subtitle { height: 12px; width: 360px; max-width: 100%; }
+.cod-loading-status {
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted, #667085);
+}
+.cod-loading-hint { margin: 0; }
+
+.cod-loading-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cod-loading-tabs i { height: 34px; width: 150px; }
+
+.cod-loading-filters {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.cod-loading-filters span { height: 40px; }
+
+.cod-loading-metrics .cod-loading-line.short { height: 11px; width: 48%; }
+.cod-loading-metrics .cod-loading-line.value { height: 24px; margin-top: 10px; width: 56%; }
+.cod-loading-metrics .cod-loading-line.tiny { height: 10px; margin-top: 8px; width: 38%; }
+
+.cod-loading-line.medium { height: 14px; width: 220px; }
+.cod-loading-badge { height: 24px; width: 78px; }
+
+.cod-loading-rows {
+  display: grid;
+  gap: 1px;
+  padding: 0 16px 16px;
+}
+.cod-loading-rows span {
+  border-radius: 0;
+  height: 44px;
+}
+
+@media (max-width: 900px) {
+  .cod-loading-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cod-loading-title { width: 200px; }
+  .cod-loading-subtitle { width: 100%; }
 }
 
 .capacity-station-toolbar {

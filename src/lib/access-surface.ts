@@ -11,6 +11,7 @@ export const opsAccessPageCodes = [
   "cod_validation",
   "cod_reports",
   "cod_portal_checks",
+  "cod_cash_in_associate",
   "cps",
   "cps_overview",
   "cps_daily",

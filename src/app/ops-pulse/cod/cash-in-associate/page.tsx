@@ -1,7 +1,7 @@
 import { CodSectionTabs } from "@/components/cod-section-tabs";
 import { PageHead } from "@/components/page-head";
 import { requireCiaAccess } from "@/lib/ops-pulse/cia-access";
-import { formatDateTime } from "@/lib/ops-pulse/cod";
+import { formatAmount, formatDateTime } from "@/lib/ops-pulse/cod";
 import { fetchCiaNetwork, isCashReconWorkerConfigured } from "@/lib/ops-pulse/cash-recon-worker";
 import { CiaNetworkClient } from "./cia-client";
 import { CiaSummaryMetrics } from "./cia-summary-metrics";

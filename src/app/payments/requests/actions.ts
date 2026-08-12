@@ -9,6 +9,7 @@ import { sendPaymentNotification } from "@/lib/payment-email-notifications";
 import { canAccessPaymentLocation } from "@/lib/payment-approval-scope";
 import { validatePaymentFile } from "@/lib/payment-file-types";
 import { normalizePaymentModes, type PaymentMode } from "@/lib/payment-modes";
+import { hasSubmittedPaymentDetails } from "@/lib/payment-details";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { insertPaymentApprovalLog } from "../approvals/actions";
 
@@ -662,7 +663,7 @@ export async function submitPaymentBankDetails(formData: FormData) {
 
     const { data: request, error: requestError } = await admin
       .from("payment_requests")
-      .select("id, location_id, payment_head_id, requested_by, status, approval_status, current_approver_user_id, current_approver_role_id, current_approver_role_ids")
+      .select("id, location_id, payment_head_id, requested_by, status, approval_status, amount, payment_mode, payment_portal, payment_reference, bank_account_no, ifsc, account_holder_name, current_approver_user_id, current_approver_role_id, current_approver_role_ids")
       .eq("id", requestId)
       .eq("company_id", companyId)
       .single();
@@ -715,6 +716,9 @@ export async function submitPaymentBankDetails(formData: FormData) {
       status === "OWNER_APPROVED" ||
       approvalStatus === "OWNER_APPROVED" ||
       (approvalStatus.endsWith("_APPROVED") && !request.current_approver_user_id && !request.current_approver_role_id && !(request.current_approver_role_ids?.length));
+    if (hasSubmittedPaymentDetails(request)) {
+      throw new Error("Payment details have already been submitted for this request.");
+    }
     if (!isApproved || isRejectedOrReturned || isAlreadyProcessing) {
       throw new Error("Bank details can be submitted only after final approval.");
     }

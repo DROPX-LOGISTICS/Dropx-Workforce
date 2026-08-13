@@ -96,6 +96,7 @@ export function CiaNetworkClient({
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [notice, setNotice] = useState<RefreshNotice | null>(null);
   const [liveProgress, setLiveProgress] = useState<CiaRefreshProgress | null>(initialRefreshProgress);
+  const [autoAdvance, setAutoAdvance] = useState(false);
   const advancingRef = useRef(false);
 
   useEffect(() => {
@@ -119,6 +120,7 @@ export function CiaNetworkClient({
       if (nextProgress) setLiveProgress(nextProgress);
       const station = result.processedStation ? String(result.processedStation) : null;
       const done = Boolean(result.done);
+      if (done) setAutoAdvance(false);
       setNotice({
         kind: station || done ? "ok" : "info",
         title: done
@@ -129,7 +131,7 @@ export function CiaNetworkClient({
         detail: done
           ? "All stations in this run are finished. Reloading numbers…"
           : station
-            ? `${station} was fetched just now. Next station in about 15 seconds…`
+            ? `${station} was fetched just now.${source === "auto" ? " Next station in about 15 seconds…" : ""}`
             : "Refresh is still running, but no station was advanced this time. Retrying shortly…"
       });
       startTransition(() => router.refresh());
@@ -190,6 +192,7 @@ export function CiaNetworkClient({
 
   async function handleStationRefresh(stationCode: string) {
     if (busy) return;
+    setAutoAdvance(false);
     setNotice(null);
     setRefreshingStation(stationCode);
     try {
@@ -215,12 +218,16 @@ export function CiaNetworkClient({
   }
 
   useEffect(() => {
-    if (!refreshActive || busy) return;
+    if (!autoAdvance || !refreshActive) {
+      if (autoAdvance && !refreshActive) setAutoAdvance(false);
+      return;
+    }
+    if (busy) return;
     const timer = window.setTimeout(() => {
       void advanceNextStation("auto");
     }, CIA_UI_ADVANCE_MS);
     return () => window.clearTimeout(timer);
-  }, [refreshActive, busy, advanceNextStation, liveProgress?.stationsOk, liveProgress?.status]);
+  }, [autoAdvance, refreshActive, busy, advanceNextStation, liveProgress?.stationsOk, liveProgress?.status]);
 
   async function handleUpdateNumbers() {
     if (busy) return;
@@ -242,6 +249,7 @@ export function CiaNetworkClient({
     if (!confirmed) return;
 
     setNotice(null);
+    setAutoAdvance(true);
     setRefreshingAll(true);
     try {
       const result = await postCiaRefresh();
@@ -263,6 +271,7 @@ export function CiaNetworkClient({
       });
       startTransition(() => router.refresh());
     } catch (error) {
+      setAutoAdvance(false);
       setNotice({
         kind: "error",
         title: "Could not start network refresh",
@@ -286,8 +295,9 @@ export function CiaNetworkClient({
             <p className="subtle" style={{ marginTop: 6 }}>
               {progress.stationsOk} of {progress.stationsTotal} stations attempted so far
               {refreshProgressDetail(progress)}.
-              Next station in about 15 seconds while this page is open, or click Update numbers now.
-              Overnight cron still uses 3 minutes.
+              {autoAdvance
+                ? "Next station in about 15 seconds while this page is open, or click Update numbers now."
+                : "Click Refresh all stations to refresh the whole network, or Refresh on one row for that station only."}
             </p>
           </div>
         </section>
@@ -467,7 +477,11 @@ export function CiaNetworkClient({
                           className="button secondary cia-icon-btn"
                           title={`Refresh ${row.stationCode}`}
                           disabled={busy}
-                          onClick={() => void handleStationRefresh(row.stationCode)}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            void handleStationRefresh(row.stationCode);
+                          }}
                         >
                           {isRowRefreshing ? <Loader2 size={15} className="cia-spin" /> : <RefreshCw size={15} />}
                           <span>{isRowRefreshing ? "Refreshing…" : "Refresh"}</span>

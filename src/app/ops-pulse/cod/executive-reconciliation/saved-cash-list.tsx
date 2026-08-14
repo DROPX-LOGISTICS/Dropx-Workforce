@@ -167,7 +167,23 @@ export function SavedCashList({
       && serverRow.location_id === row.location_id
       && serverRow.provider_employee_id === row.provider_employee_id
     )),
-    ...localRows
+    ...localRows.map((serverRow) => {
+      const overlay = optimisticRows.find((row) =>
+        row.business_date === serverRow.business_date
+        && row.location_id === serverRow.location_id
+        && row.provider_employee_id === serverRow.provider_employee_id
+      );
+      if (!overlay) return serverRow;
+      return {
+        ...serverRow,
+        expected_amount: overlay.expected_amount,
+        collected_amount: overlay.collected_amount,
+        pending_amount: overlay.pending_amount,
+        difference_amount: overlay.difference_amount,
+        reconciliation_status: overlay.reconciliation_status,
+        optimisticSync: true
+      };
+    })
   ];
 
   return (

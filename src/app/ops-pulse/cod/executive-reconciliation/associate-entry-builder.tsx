@@ -23,6 +23,12 @@ export type AssociateOption = {
   mappedFromWorkforce?: boolean;
 };
 
+export type SavedCashSummary = {
+  providerEmployeeId: string;
+  expectedAmount: number;
+  collectedAmount: number;
+};
+
 type EntryRow = {
   key: number;
   providerEmployeeId: string;
@@ -79,6 +85,24 @@ function expectedPrefill(associate: AssociateOption | undefined) {
   return value > 0 ? String(value) : "";
 }
 
+function remainingFromSaved(saved: SavedCashSummary) {
+  return Math.max(0, Number((Number(saved.expectedAmount) - Number(saved.collectedAmount)).toFixed(2)));
+}
+
+function indexSavedCash(entries: SavedCashSummary[]) {
+  const byId: Record<string, SavedCashSummary> = {};
+  for (const row of entries) {
+    const id = String(row.providerEmployeeId ?? "").trim().toUpperCase();
+    if (!id || id === "__OTHER__") continue;
+    byId[id] = {
+      providerEmployeeId: id,
+      expectedAmount: Number(row.expectedAmount) || 0,
+      collectedAmount: Number(row.collectedAmount) || 0
+    };
+  }
+  return byId;
+}
+
 export function AssociateEntryBuilder({
   associates,
   businessDate,
@@ -88,7 +112,8 @@ export function AssociateEntryBuilder({
   stationCode,
   stationLabel,
   emptyHint,
-  initiallyHiddenProviderIds = []
+  initiallyHiddenProviderIds = [],
+  savedCashEntries = []
 }: {
   associates: AssociateOption[];
   businessDate: string;
@@ -99,6 +124,7 @@ export function AssociateEntryBuilder({
   stationLabel: string;
   emptyHint?: string;
   initiallyHiddenProviderIds?: string[];
+  savedCashEntries?: SavedCashSummary[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -117,8 +143,8 @@ export function AssociateEntryBuilder({
   const [pendingModalKey, setPendingModalKey] = useState<number | null>(null);
   const [submittingKey, setSubmittingKey] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [savedProviderIds, setSavedProviderIds] = useState<string[]>(
-    () => initiallyHiddenProviderIds.map((value) => value.trim().toUpperCase()).filter(Boolean)
+  const [savedCash, setSavedCash] = useState<Record<string, SavedCashSummary>>(
+    () => indexSavedCash(savedCashEntries)
   );
   const optionMap = useMemo(
     () => new Map(associates.map((associate) => [associate.providerEmployeeId, associate])),
@@ -126,8 +152,14 @@ export function AssociateEntryBuilder({
   );
 
   useEffect(() => {
-    setSavedProviderIds(initiallyHiddenProviderIds.map((value) => value.trim().toUpperCase()).filter(Boolean));
-  }, [initiallyHiddenProviderIds]);
+    setSavedCash(indexSavedCash(savedCashEntries));
+  }, [savedCashEntries]);
+
+  const savedProviderIds = useMemo(() => {
+    const fromCash = Object.keys(savedCash);
+    const fromHidden = initiallyHiddenProviderIds.map((value) => value.trim().toUpperCase()).filter(Boolean);
+    return Array.from(new Set([...fromCash, ...fromHidden]));
+  }, [initiallyHiddenProviderIds, savedCash]);
 
   function resetRow(key: number) {
     setRows((current) => {
@@ -192,17 +224,25 @@ export function AssociateEntryBuilder({
     setRows((current) => current.length === 1 ? current : current.filter((row) => row.key !== key));
   }
 
+  function tripExpectedFor(providerEmployeeId: string, associate: AssociateOption | undefined) {
+    const id = providerEmployeeId.trim().toUpperCase();
+    const saved = savedCash[id];
+    if (saved) return remainingFromSaved(saved);
+    return Number(associate?.expectedAmount ?? associate?.pendingAmount ?? 0);
+  }
+
   function selectAssociate(key: number, providerEmployeeId: string) {
     const associate = optionMap.get(providerEmployeeId);
     const pending = Number(associate?.pendingRecon ?? 0) > 0.01;
     const isOther = providerEmployeeId === "__other__";
     const requiresManualName = isOther || Boolean(associate?.requiresManualName);
+    const remaining = isOther ? 0 : tripExpectedFor(providerEmployeeId, associate);
     setRows((current) => current.map((row) => row.key === key ? {
       ...row,
       providerEmployeeId,
       manualAssociateName: "",
-      expectedAmount: isOther ? "" : expectedPrefill(associate),
-      expectedOriginal: isOther ? "0" : String(associate?.expectedAmount ?? associate?.pendingAmount ?? 0),
+      expectedAmount: isOther ? "" : remaining > 0 ? String(remaining) : savedCash[providerEmployeeId.trim().toUpperCase()] ? "0" : expectedPrefill(associate),
+      expectedOriginal: isOther ? "0" : String(remaining),
       pendingOverrideRemarks: "",
       denominationUnlocked: requiresManualName && isOther ? true : Boolean(associate) && !pending,
       denominationCounts: emptyDenominations(),
@@ -243,14 +283,16 @@ export function AssociateEntryBuilder({
           })
           .map((option) => {
             const optionId = option.providerEmployeeId.trim().toUpperCase();
-            const alreadySaved = savedProviderIds.includes(optionId);
+            const saved = savedCash[optionId];
+            const alreadySaved = Boolean(saved);
+            const remaining = saved ? remainingFromSaved(saved) : null;
             return {
             value: option.providerEmployeeId,
             label: option.name,
             helper: option.providerEmployeeId === "__other__"
               ? "Manual name"
               : alreadySaved
-                ? "Saved — next save adds cash"
+                ? `Saved — remaining ₹${currency(remaining ?? 0)}`
               : option.requiresManualName
                 ? `Driver ID ${option.providerEmployeeId}`
                 : option.providerEmployeeId
@@ -273,7 +315,8 @@ export function AssociateEntryBuilder({
             : { className: "excess", label: "Excess", amount: `₹${currency(difference)}` };
         const isOther = entry.providerEmployeeId === "__other__";
         const requiresManualName = isOther || Boolean(associate?.requiresManualName);
-        const alreadySaved = savedProviderIds.includes(entry.providerEmployeeId.trim().toUpperCase());
+        const alreadySaved = Boolean(savedCash[entry.providerEmployeeId.trim().toUpperCase()]);
+        const savedEntry = savedCash[entry.providerEmployeeId.trim().toUpperCase()];
         const canSave = Boolean(entry.providerEmployeeId)
           && entry.denominationUnlocked
           && (!expectedEdited || entry.remarks.trim())
@@ -300,7 +343,9 @@ export function AssociateEntryBuilder({
                       const associateName = requiresManualName
                         ? entry.manualAssociateName.trim()
                         : (associate?.name ?? "").trim();
-                      if (!alreadySaved) {
+                      const originalExpected = savedEntry?.expectedAmount ?? expectedAmount;
+                      const combinedCollected = Number(((savedEntry?.collectedAmount ?? 0) + collectedAmount).toFixed(2));
+                      const combinedDifference = Number((combinedCollected - originalExpected).toFixed(2));
                       window.dispatchEvent(new CustomEvent("executive-reconciliation:saved", {
                         detail: {
                           key: `optimistic:${savedId || entry.key}:${Date.now()}`,
@@ -314,9 +359,9 @@ export function AssociateEntryBuilder({
                           shipment_type: associate?.shipmentType ?? "Shipment data",
                           total_delivery: 0,
                           total_activity: 0,
-                          reconciliation_status: optimisticStatus(expectedAmount, collectedAmount),
-                          pending_amount: Math.max(0, Number((expectedAmount - collectedAmount).toFixed(2))),
-                          expected_amount: expectedAmount,
+                          reconciliation_status: optimisticStatus(originalExpected, combinedCollected),
+                          pending_amount: Math.max(0, Number((originalExpected - combinedCollected).toFixed(2))),
+                          expected_amount: originalExpected,
                           cash_500_count: numberValue(entry.denominationCounts.cash_500_count),
                           cash_200_count: numberValue(entry.denominationCounts.cash_200_count),
                           cash_100_count: numberValue(entry.denominationCounts.cash_100_count),
@@ -324,8 +369,8 @@ export function AssociateEntryBuilder({
                           cash_20_count: numberValue(entry.denominationCounts.cash_20_count),
                           cash_10_count: numberValue(entry.denominationCounts.cash_10_count),
                           cash_other_amount: numberValue(entry.cashOtherAmount),
-                          collected_amount: collectedAmount,
-                          difference_amount: Number((collectedAmount - expectedAmount).toFixed(2)),
+                          collected_amount: combinedCollected,
+                          difference_amount: combinedDifference,
                           remarks: entry.remarks || null,
                           scc_pending_amount: associate?.pendingRecon ?? 0,
                           scc_pending_details: null,
@@ -337,9 +382,15 @@ export function AssociateEntryBuilder({
                           optimisticSync: true
                         }
                       }));
-                      }
                       if (savedId && savedId !== "__OTHER__") {
-                        setSavedProviderIds((current) => current.includes(savedId) ? current : [...current, savedId]);
+                        setSavedCash((current) => ({
+                          ...current,
+                          [savedId]: {
+                            providerEmployeeId: savedId,
+                            expectedAmount: originalExpected,
+                            collectedAmount: combinedCollected
+                          }
+                        }));
                       }
                       resetRow(entry.key);
                       setSubmittingKey(null);
@@ -385,7 +436,7 @@ export function AssociateEntryBuilder({
                     Driver ID <code>{entry.providerEmployeeId}</code> — enter the employee name, then count denominations.
                   </p>
                 ) : null}
-                <label>Expected COD
+                <label>{alreadySaved ? "Remaining COD" : "Expected COD"}
                   <input
                     className="field"
                     name="expected_amount"
@@ -396,7 +447,7 @@ export function AssociateEntryBuilder({
                     })}
                     inputMode="decimal"
                     placeholder="₹ 0"
-                    disabled={!canEdit}
+                    disabled={!canEdit || alreadySaved}
                   />
                 </label>
                 <label>Remarks
@@ -477,13 +528,14 @@ export function AssociateEntryBuilder({
                 </details>
               )}
               <div className={`cash-live-status ${cashState.className}`} aria-live="polite">
-                <span>Collected <strong>₹{currency(collectedAmount)}</strong></span>
-                <span>Expected <strong>₹{currency(expectedAmount)}</strong></span>
+                <span>This delivery <strong>₹{currency(collectedAmount)}</strong></span>
+                <span>{alreadySaved ? "Remaining" : "Expected"} <strong>₹{currency(expectedAmount)}</strong></span>
                 <span className="cash-live-result">{cashState.label} {cashState.amount ? <strong>{cashState.amount}</strong> : null}</span>
               </div>
-              {alreadySaved ? (
+              {alreadySaved && savedEntry ? (
                 <p className="subtle" style={{ marginTop: 8 }}>
-                  This associate already has saved cash. This delivery is added to their notes and Pending Amount Short is recalculated.
+                  Already collected ₹{currency(savedEntry.collectedAmount)} of ₹{currency(savedEntry.expectedAmount)}.
+                  Remaining ₹{currency(remainingFromSaved(savedEntry))} will combine into Saved cash on save.
                 </p>
               ) : null}
               {submitError && submittingKey === entry.key ? (

@@ -244,6 +244,15 @@ async function savePayload(
   const cashOther = Number((
     cashOtherInput + (prior ? Number(prior.cash_other_amount ?? 0) : 0)
   ).toFixed(2));
+  const thisTripCollected = Number((
+    cash500Input * 500 +
+    cash200Input * 200 +
+    cash100Input * 100 +
+    cash50Input * 50 +
+    cash20Input * 20 +
+    cash10Input * 10 +
+    cashOtherInput
+  ).toFixed(2));
   const collectedAmount = Number((
     cash500 * 500 +
     cash200 * 200 +
@@ -253,16 +262,21 @@ async function savePayload(
     cash10 * 10 +
     cashOther
   ).toFixed(2));
-  const differenceAmount = Number((collectedAmount - expectedAmount).toFixed(2));
+  const storedExpected = addToExisting && prior
+    ? Number(prior.expected_amount ?? 0)
+    : expectedAmount;
+  const differenceAmount = Number((collectedAmount - storedExpected).toFixed(2));
   const baseRemarks = clean(formData.get("remarks"));
-  if (expectedEdited && !baseRemarks) {
+  if (expectedEdited && !addToExisting && !baseRemarks) {
     throw new Error("Remarks are required when Expected COD is edited.");
   }
   const remarkParts = [
     baseRemarks,
-    expectedEdited ? `Expected edited from ₹${expectedOriginal.toFixed(2)} to ₹${expectedAmount.toFixed(2)}.` : null,
+    expectedEdited && !addToExisting ? `Expected edited from ₹${expectedOriginal.toFixed(2)} to ₹${expectedAmount.toFixed(2)}.` : null,
     pendingOverrideRemarks ? `Pending recon override: ${pendingOverrideRemarks}` : null,
-    addToExisting ? "Added a second cash delivery to saved denominations." : null
+    addToExisting
+      ? `Second cash delivery ₹${thisTripCollected.toFixed(2)} added to saved cash.`
+      : null
   ].filter(Boolean);
   const remarks = remarkParts.length ? remarkParts.join(" ") : null;
 
@@ -276,9 +290,9 @@ async function savePayload(
     shipment_type: clean(formData.get("shipment_type")),
     total_delivery: optionalNumber(formData.get("total_delivery")),
     total_activity: optionalNumber(formData.get("total_activity")),
-    reconciliation_status: reconciliationStatus(expectedAmount, collectedAmount),
-    pending_amount: Math.max(0, Number((expectedAmount - collectedAmount).toFixed(2))),
-    expected_amount: expectedAmount,
+    reconciliation_status: reconciliationStatus(storedExpected, collectedAmount),
+    pending_amount: Math.max(0, Number((storedExpected - collectedAmount).toFixed(2))),
+    expected_amount: storedExpected,
     cash_500_count: cash500,
     cash_200_count: cash200,
     cash_100_count: cash100,

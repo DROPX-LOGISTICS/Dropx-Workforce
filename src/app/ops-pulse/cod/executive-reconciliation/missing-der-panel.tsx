@@ -1,6 +1,6 @@
 "use client";
 
-import { AssociateEntryBuilder, type AssociateOption } from "./associate-entry-builder";
+import { AssociateEntryBuilder, type AssociateOption, type SavedCashSummary } from "./associate-entry-builder";
 
 export function MissingDerPanel({
   associates,
@@ -8,6 +8,7 @@ export function MissingDerPanel({
   canEdit,
   driversReady = true,
   initiallyHiddenProviderIds = [],
+  savedCashEntries = [],
   locationId,
   returnHref,
   stationCode,
@@ -18,6 +19,7 @@ export function MissingDerPanel({
   canEdit: boolean;
   driversReady?: boolean;
   initiallyHiddenProviderIds?: string[];
+  savedCashEntries?: SavedCashSummary[];
   locationId: string;
   returnHref: string;
   stationCode: string;
@@ -45,6 +47,7 @@ export function MissingDerPanel({
               businessDate={businessDate}
               canEdit={canEdit}
               initiallyHiddenProviderIds={initiallyHiddenProviderIds}
+              savedCashEntries={savedCashEntries}
               locationId={locationId}
               returnHref={returnHref}
               stationCode={stationCode}

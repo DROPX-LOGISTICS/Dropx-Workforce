@@ -391,6 +391,11 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
               locationId={defaultLocationId}
               returnHref={returnHref}
               savedProviderEmployeeIds={savedProviderEmployeeIds}
+              savedCashEntries={savedRows.map((row) => ({
+                providerEmployeeId: String(row.provider_employee_id ?? "").trim(),
+                expectedAmount: amountValue(row.expected_amount),
+                collectedAmount: amountValue(row.collected_amount)
+              }))}
               savedCount={savedRows.length}
               stationCode={selectedStation.station_code}
               stationLabel={selectedStation.station_name ?? selectedStation.state ?? ""}

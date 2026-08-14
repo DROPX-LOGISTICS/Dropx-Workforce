@@ -242,9 +242,9 @@ export function CiaNetworkClient({
     if (busy) return;
     const confirmed = window.confirm(
       "Refresh Cash In Associate for all stations?\n\n"
-      + "This starts a fresh network run (clears the previous retry queue) and fetches the first station now. "
+      + "This starts a fresh network run and fetches the first station now. "
       + "While this page is open, the next station is fetched about every 15 seconds. "
-      + "Overnight cron still advances one station every 3 minutes."
+      + "Overnight, cron continues on its own (one week of one station every 3 minutes)."
     );
     if (!confirmed) return;
 
@@ -296,8 +296,8 @@ export function CiaNetworkClient({
               {progress.stationsOk} of {progress.stationsTotal} stations attempted so far
               {refreshProgressDetail(progress)}.
               {autoAdvance
-                ? "Next station in about 15 seconds while this page is open, or click Update numbers now."
-                : "Click Refresh all stations to refresh the whole network, or Refresh on one row for that station only."}
+                ? "Next station in about 15 seconds while this page is open, or click Update numbers now. Row Refresh still updates only that station."
+                : "Click Refresh all stations for the whole network, Update numbers for the next station, or Refresh on one row for that station only. Overnight cron runs on its own."}
             </p>
           </div>
         </section>

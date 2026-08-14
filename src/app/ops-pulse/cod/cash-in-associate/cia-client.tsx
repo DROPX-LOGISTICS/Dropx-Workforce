@@ -119,6 +119,18 @@ export function CiaNetworkClient({
       if (nextProgress) setLiveProgress(nextProgress);
       const station = result.processedStation ? String(result.processedStation) : null;
       const done = Boolean(result.done);
+      const retrying = String(result.status ?? "") === "retry"
+        || /resource limit|error 1102|1102/i.test(String(result.error ?? ""));
+      if (retrying) {
+        setNotice({
+          kind: "info",
+          title: station ? `${station} will retry` : "Temporary worker limit",
+          detail: "Cloudflare hit a resource limit (often from switching pages mid-fetch). Releasing that station and continuing shortly…"
+        });
+        startTransition(() => router.refresh());
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+        return true;
+      }
       setNotice({
         kind: station || done ? "ok" : "info",
         title: done
@@ -139,11 +151,19 @@ export function CiaNetworkClient({
       }
       return true;
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown continue error";
+      const retryable = /resource limit|error 1102|1102|try a shorter/i.test(message);
       setNotice({
-        kind: "error",
-        title: "Could not advance refresh",
-        detail: error instanceof Error ? error.message : "Unknown continue error"
+        kind: retryable ? "info" : "error",
+        title: retryable ? "Temporary worker limit" : "Could not advance refresh",
+        detail: retryable
+          ? "Cloudflare hit a resource limit. Waiting a few seconds, then continuing…"
+          : message
       });
+      if (retryable) {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        return true;
+      }
       return false;
     } finally {
       advancingRef.current = false;

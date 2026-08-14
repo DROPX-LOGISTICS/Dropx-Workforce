@@ -214,13 +214,36 @@ async function savePayload(
     throw new Error("Pending cash recon is above zero. Clear it in SCC or provide manual override remarks.");
   }
 
-  const cash500 = optionalCount(formData.get("cash_500_count"), "Rs 500 note count");
-  const cash200 = optionalCount(formData.get("cash_200_count"), "Rs 200 note count");
-  const cash100 = optionalCount(formData.get("cash_100_count"), "Rs 100 note count");
-  const cash50 = optionalCount(formData.get("cash_50_count"), "Rs 50 note count");
-  const cash20 = optionalCount(formData.get("cash_20_count"), "Rs 20 note count");
-  const cash10 = optionalCount(formData.get("cash_10_count"), "Rs 10 note count");
-  const cashOther = optionalAmount(formData.get("cash_other_amount"), "Other cash amount");
+  const cash500Input = optionalCount(formData.get("cash_500_count"), "Rs 500 note count");
+  const cash200Input = optionalCount(formData.get("cash_200_count"), "Rs 200 note count");
+  const cash100Input = optionalCount(formData.get("cash_100_count"), "Rs 100 note count");
+  const cash50Input = optionalCount(formData.get("cash_50_count"), "Rs 50 note count");
+  const cash20Input = optionalCount(formData.get("cash_20_count"), "Rs 20 note count");
+  const cash10Input = optionalCount(formData.get("cash_10_count"), "Rs 10 note count");
+  const cashOtherInput = optionalAmount(formData.get("cash_other_amount"), "Other cash amount");
+  const accumulateExisting = String(formData.get("accumulate_existing") ?? "").trim() === "1";
+
+  const existing = await supabaseAdmin
+    .from("cod_executive_reconciliations")
+    .select("*")
+    .eq("company_id", companyId)
+    .eq("business_date", businessDate)
+    .eq("station_code", station.station_code)
+    .eq("provider_employee_id", providerEmployeeId)
+    .maybeSingle();
+  if (existing.error) throw new Error(existing.error.message);
+
+  const addToExisting = accumulateExisting && Boolean(existing.data);
+  const prior = addToExisting && existing.data ? existing.data : null;
+  const cash500 = cash500Input + (prior ? Number(prior.cash_500_count ?? 0) : 0);
+  const cash200 = cash200Input + (prior ? Number(prior.cash_200_count ?? 0) : 0);
+  const cash100 = cash100Input + (prior ? Number(prior.cash_100_count ?? 0) : 0);
+  const cash50 = cash50Input + (prior ? Number(prior.cash_50_count ?? 0) : 0);
+  const cash20 = cash20Input + (prior ? Number(prior.cash_20_count ?? 0) : 0);
+  const cash10 = cash10Input + (prior ? Number(prior.cash_10_count ?? 0) : 0);
+  const cashOther = Number((
+    cashOtherInput + (prior ? Number(prior.cash_other_amount ?? 0) : 0)
+  ).toFixed(2));
   const collectedAmount = Number((
     cash500 * 500 +
     cash200 * 200 +
@@ -238,7 +261,8 @@ async function savePayload(
   const remarkParts = [
     baseRemarks,
     expectedEdited ? `Expected edited from ₹${expectedOriginal.toFixed(2)} to ₹${expectedAmount.toFixed(2)}.` : null,
-    pendingOverrideRemarks ? `Pending recon override: ${pendingOverrideRemarks}` : null
+    pendingOverrideRemarks ? `Pending recon override: ${pendingOverrideRemarks}` : null,
+    addToExisting ? "Added a second cash delivery to saved denominations." : null
   ].filter(Boolean);
   const remarks = remarkParts.length ? remarkParts.join(" ") : null;
 
@@ -267,16 +291,6 @@ async function savePayload(
     remarks,
     updated_by: authorization.userId
   }, companyId);
-
-  const existing = await supabaseAdmin
-    .from("cod_executive_reconciliations")
-    .select("*")
-    .eq("company_id", companyId)
-    .eq("business_date", businessDate)
-    .eq("station_code", station.station_code)
-    .eq("provider_employee_id", providerEmployeeId)
-    .maybeSingle();
-  if (existing.error) throw new Error(existing.error.message);
 
   // Avoid PostgREST ON CONFLICT: personal DBs may lack the unique index, and
   // id/created_at defaults may be missing after incomplete schema setup.
@@ -478,9 +492,10 @@ export async function submitCodCashCollection(formData: FormData) {
       validation_snapshot: { ...previousSnapshot, cash_submission: cashSnapshot },
       submitted_by: authorization.userId,
       submitted_at: now,
-      // Cash-recon liability check clears the driver gate; Step 3 opens immediately.
-      driver_check_status: cashReconReady ? "Passed" : "Queued",
-      deposit_check_status: cashReconReady ? "Not run" : "Locked",
+      // Driver validation must confirm today's CIA pending (or record feedback)
+      // before Deposit & summary. Do not auto-pass this gate.
+      driver_check_status: cashReconReady ? "Pending" : "Queued",
+      deposit_check_status: "Locked",
       updated_at: now
     };
 
@@ -509,7 +524,7 @@ export async function submitCodCashCollection(formData: FormData) {
     if (!closureId) throw new Error("Could not create the cash submission record.");
 
     let driverCheckRunId: string | null = null;
-    let driverCheckStatus = cashReconReady ? "Passed" : "Queued";
+    let driverCheckStatus = cashReconReady ? "Pending" : "Queued";
     // Only queue the old SCC portal path when cash-recon worker is not available.
     if (!cashReconReady && codMaster) {
       const run = await supabaseAdmin
@@ -615,10 +630,9 @@ export async function submitCodCashCollection(formData: FormData) {
       : difference > 0
         ? `COD submitted with excess ₹${excessAmount.toFixed(2)}. Manager notified${cashReconReady ? "; cash liability checked." : "; Driver Reconciliation is running."}`
         : cashReconReady
-          ? "COD submitted with no variance. Cash liability check passed."
+          ? "COD submitted with no variance. Confirm Driver validation before Deposit & summary."
           : "COD submitted with no variance. Driver Reconciliation is running.";
-    // Cash-recon clears driver gate → land on deposit step. Legacy SCC path stays on step 2.
-    const nextHref = withStep(returnHref, cashReconReady ? 3 : 2);
+    const nextHref = withStep(returnHref, 2);
     if (wantsClientResponse(formData)) {
       setFlashCookie({ notice });
       return { ok: true, notice, nextHref } satisfies CashEntryActionResult;
@@ -1108,6 +1122,104 @@ export async function requestCodGateException(formData: FormData) {
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     redirectWithFlash({ error: error instanceof Error ? error.message : "Unable to request manager approval." }, returnHref);
+  }
+}
+
+export async function confirmDriverReconForDeposit(formData: FormData) {
+  const authorization = await requirePagePermission("cod_executive_reconciliation", "edit");
+  const companyId = requireCompanyId(authorization);
+  const clientResponse = wantsClientResponse(formData);
+  const returnHref = safeReturnHref(formData.get("return_href"));
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    const businessDate = required(formData.get("business_date"), "Business date");
+    const locationId = required(formData.get("location_id"), "Station");
+    const pendingAmount = optionalAmount(formData.get("pending_cia_amount") ?? "0", "Pending recon");
+    const remarks = clean(formData.get("cia_pending_remarks"));
+    if (pendingAmount > 0.01 && !remarks) {
+      throw new Error("Today's Cash In Associate is still pending. Add feedback like the cash sheet override, then continue to Deposit & summary.");
+    }
+    const station = await stationForInput(companyId, locationId, null);
+    assertLocationAccess(authorization, station.id);
+    await assertClosureEditable(companyId, businessDate, locationId);
+
+    const closureResult = await supabaseAdmin
+      .from("cod_day_closures")
+      .select("id, driver_check_status, is_final_submitted, validation_snapshot")
+      .eq("company_id", companyId)
+      .eq("business_date", businessDate)
+      .eq("location_id", locationId)
+      .maybeSingle();
+    if (closureResult.error) throw new Error(closureResult.error.message);
+    if (!closureResult.data?.id) throw new Error("Submit cash first, then confirm driver validation.");
+    if (closureResult.data.is_final_submitted) throw new Error("This COD day is locked.");
+
+    const now = new Date().toISOString();
+    const stillPending = pendingAmount > 0.01;
+    const snapshot = closureResult.data.validation_snapshot
+      && typeof closureResult.data.validation_snapshot === "object"
+      && !Array.isArray(closureResult.data.validation_snapshot)
+      ? closureResult.data.validation_snapshot as Record<string, unknown>
+      : {};
+    const continuationReason = stillPending
+      ? `Continued with Cash In Associate pending ₹${pendingAmount.toFixed(2)}. ${remarks}`
+      : "Driver validation confirmed. No Cash In Associate pending.";
+    const updated = await supabaseAdmin.from("cod_day_closures").update({
+      driver_check_status: stillPending ? "Exception approved" : "Passed",
+      driver_exception_reason: continuationReason,
+      driver_exception_requested_by: authorization.userId,
+      driver_exception_requested_at: now,
+      driver_exception_manager_remarks: stillPending
+        ? "Operational continuation recorded; manager notified."
+        : "Driver recon cleared from Cash In Associate ageing.",
+      deposit_check_status: "Not run",
+      validation_snapshot: {
+        ...snapshot,
+        driver_cia_confirmation: {
+          pending_amount: pendingAmount,
+          remarks: remarks || null,
+          confirmed_at: now,
+          confirmed_by: authorization.userId
+        }
+      },
+      updated_at: now
+    }).eq("id", closureResult.data.id);
+    if (updated.error) throw new Error(updated.error.message);
+
+    if (stillPending) {
+      await notifyCodManager({
+        closureId: closureResult.data.id,
+        companyId,
+        locationId,
+        stationCode: station.station_code,
+        notificationType: "Driver Reconciliation pending continuation",
+        title: `CIA pending continuation: ${station.station_code} on ${businessDate}`,
+        message: `The station continued to Deposit & summary with ₹${pendingAmount.toFixed(2)} Cash In Associate still pending. Reason: ${remarks}.`
+      });
+    }
+    await writeCodAudit({
+      action: stillPending
+        ? "Continued with Cash In Associate pending"
+        : "Confirmed driver recon for deposit",
+      after: { pending_amount: pendingAmount, remarks, status: stillPending ? "Exception approved" : "Passed" },
+      authorization,
+      businessDate,
+      closureId: closureResult.data.id,
+      locationId,
+      stationCode: station.station_code
+    });
+    revalidatePath(pagePath);
+    revalidatePath(publicPagePath);
+    const notice = stillPending
+      ? "Feedback recorded. Deposit & summary is unlocked; pending Cash In Associate stays visible."
+      : "Driver validation cleared. Continue to Deposit & summary.";
+    if (clientResponse) return { ok: true, notice } satisfies CashEntryActionResult;
+    redirectWithFlash({ notice }, withStep(returnHref, 3));
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    const message = error instanceof Error ? error.message : "Unable to confirm driver validation.";
+    if (clientResponse) return { ok: false, error: message } satisfies CashEntryActionResult;
+    redirectWithFlash({ error: message }, returnHref);
   }
 }
 

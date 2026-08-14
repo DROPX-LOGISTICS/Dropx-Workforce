@@ -1,17 +1,42 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { StatusPill } from "@/components/status-pill";
-import { moneyValue, type CashReconAssociate, type CashReconRow } from "@/lib/ops-pulse/cash-recon-types";
+import {
+  associateCiaPendingAmount,
+  moneyValue,
+  type CashReconAssociate,
+  type CashReconPendingBreakdown,
+  type CashReconRow
+} from "@/lib/ops-pulse/cash-recon-types";
 import {
   driverReconCacheKey,
   readLatestDriverReconCache,
   writeDriverReconCache,
   type DriverReconClientPayload
 } from "@/lib/ops-pulse/driver-recon-client-cache";
+import { confirmDriverReconForDeposit } from "./cash-entry-actions";
 
 function currency(value: number) {
   return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatCollectionTime(epochMs: number | null) {
+  if (!epochMs || !Number.isFinite(epochMs)) return "-";
+  try {
+    return new Intl.DateTimeFormat("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Asia/Kolkata"
+    }).format(new Date(epochMs));
+  } catch {
+    return "-";
+  }
+}
+
+function associateBreakdown(row: CashReconAssociate): CashReconPendingBreakdown[] {
+  return [...(row.sameDayBreakdown ?? []), ...(row.breakdown ?? [])];
 }
 
 function summarizePending(payload: {
@@ -19,29 +44,69 @@ function summarizePending(payload: {
   missingFromDer?: CashReconAssociate[];
   reconciliation?: CashReconRow[];
 }) {
-  const byId = new Map<string, { id: string; name: string; pending: number }>();
+  const byId = new Map<string, {
+    id: string;
+    name: string;
+    pending: number;
+    breakdown: CashReconPendingBreakdown[];
+  }>();
 
-  const upsert = (idRaw: string, nameRaw: string, pendingRaw: number) => {
+  const upsert = (
+    idRaw: string,
+    nameRaw: string,
+    pendingRaw: number,
+    breakdown: CashReconPendingBreakdown[] = []
+  ) => {
     const id = String(idRaw ?? "").trim().toUpperCase();
     if (!id || id === "__OTHER__") return;
     const pending = Number(pendingRaw) || 0;
     const name = String(nameRaw ?? "").trim() || id;
     const existing = byId.get(id);
-    if (!existing || pending > existing.pending) {
-      byId.set(id, { id, name, pending });
+    if (!existing || pending > existing.pending || (!existing.breakdown.length && breakdown.length)) {
+      byId.set(id, {
+        id,
+        name,
+        pending: existing && pending < existing.pending ? existing.pending : pending,
+        breakdown: breakdown.length ? breakdown : existing?.breakdown ?? []
+      });
     }
   };
 
   for (const row of [...(payload.associates ?? []), ...(payload.missingFromDer ?? [])]) {
-    upsert(row.providerEmployeeId, row.displayName || row.name, Number(row.pendingRecon) || 0);
+    upsert(
+      row.providerEmployeeId,
+      row.displayName || row.name,
+      associateCiaPendingAmount(row),
+      associateBreakdown(row)
+    );
   }
 
-  if (!byId.size) {
+  if (![...byId.values()].some((row) => row.pending > 0.01)) {
     for (const row of payload.reconciliation ?? []) {
       upsert(
         String(row.driverInfo?.id ?? ""),
         String(row.driverInfo?.name ?? ""),
-        moneyValue(row.paymentInfo?.overallPendingRecon)
+        moneyValue(row.paymentInfo?.overallPendingRecon) + moneyValue(row.paymentInfo?.sameDayPendingRecon),
+        [
+          ...((row.paymentInfo?.sameDayPendingReconBreakdownList ?? []).map((item) => ({
+            trackingId: String(item?.trackingId ?? "").trim() || "-",
+            paymentMethod: String(item?.paymentMethod ?? "").trim() || "-",
+            moneyCollectionTime: typeof item?.moneyCollectionTime === "number"
+              ? item.moneyCollectionTime
+              : typeof item?.transactionTime === "number" ? item.transactionTime : null,
+            amount: moneyValue(item?.amount),
+            stationTimeZone: String(item?.stationTimeZone ?? "").trim() || "IST"
+          }))),
+          ...((row.paymentInfo?.overallPendingReconBreakdownList ?? []).map((item) => ({
+            trackingId: String(item?.trackingId ?? "").trim() || "-",
+            paymentMethod: String(item?.paymentMethod ?? "").trim() || "-",
+            moneyCollectionTime: typeof item?.moneyCollectionTime === "number"
+              ? item.moneyCollectionTime
+              : typeof item?.transactionTime === "number" ? item.transactionTime : null,
+            amount: moneyValue(item?.amount),
+            stationTimeZone: String(item?.stationTimeZone ?? "").trim() || "IST"
+          })))
+        ]
       );
     }
   }
@@ -62,26 +127,36 @@ export function DriverReconCashPanel({
   stationCode,
   businessDate,
   locationId,
+  returnHref,
   canRefresh,
-  cashSubmitted
+  cashSubmitted,
+  canEdit,
+  driverCheckStatus
 }: {
   stationCode: string;
   businessDate: string;
   locationId: string;
+  returnHref: string;
   canRefresh: boolean;
   cashSubmitted: boolean;
+  canEdit: boolean;
+  driverCheckStatus?: string | null;
 }) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
   const cacheKey = useMemo(
     () => driverReconCacheKey({ stationCode, businessDate, locationId, baselineKey: "step2" }),
     [stationCode, businessDate, locationId]
   );
-  // Also try the step-1 cache keys that may exist without knowing baselineKey.
   const [payload, setPayload] = useState<DriverReconClientPayload | null>(() =>
     readLatestDriverReconCache({ stationCode, businessDate, locationId })
   );
   const [loading, setLoading] = useState(!payload);
   const [error, setError] = useState<string | null>(null);
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
+  const [remarks, setRemarks] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const load = useCallback(async (force = false) => {
     if (!stationCode || !businessDate || !locationId) return;
@@ -132,15 +207,18 @@ export function DriverReconCashPanel({
     [payload]
   );
 
+  const alreadyUnlocked = driverCheckStatus === "Passed" || driverCheckStatus === "Exception approved";
   const statusLabel = loading
     ? "Loading…"
     : error
       ? "Check failed"
       : !summary
         ? "Not checked"
+        : alreadyUnlocked
+          ? (summary.cleared ? "Driver recon cleared" : "Feedback recorded · deposit unlocked")
         : summary.cleared
           ? "Driver recon cleared"
-          : `Pending recon · ${summary.pendingCount}`;
+          : `Today CIA pending · ${summary.pendingCount}`;
 
   const checkedLabel = checkedAt
     ? new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(new Date(checkedAt))
@@ -148,11 +226,40 @@ export function DriverReconCashPanel({
       ? "Cached"
       : "Not checked";
 
+  async function handleConfirm() {
+    if (!canEdit || !cashSubmitted || submitting || !summary) return;
+    if (!summary.cleared && !remarks.trim()) {
+      setSubmitError("Add feedback for remaining Cash In Associate, then continue to Deposit & summary.");
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError(null);
+    const formData = new FormData();
+    formData.set("response_mode", "client");
+    formData.set("return_href", returnHref);
+    formData.set("business_date", businessDate);
+    formData.set("location_id", locationId);
+    formData.set("pending_cia_amount", String(summary.pendingAmount));
+    formData.set("cia_pending_remarks", remarks.trim());
+    try {
+      const result = await confirmDriverReconForDeposit(formData);
+      if (result?.ok) {
+        startTransition(() => router.refresh());
+        return;
+      }
+      setSubmitError(result?.error ?? "Unable to confirm driver validation.");
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Unable to confirm driver validation.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="driver-recon-cash-panel">
       <div className="portal-check-progress">
         <div>
-          <span>Cash recon · Driver reconciliation</span>
+          <span>Cash recon · Driver validation</span>
           <strong>{statusLabel}</strong>
         </div>
         <div>
@@ -160,7 +267,7 @@ export function DriverReconCashPanel({
           <strong>{summary ? summary.pendingCount : "—"}</strong>
         </div>
         <div>
-          <span>Pending amount</span>
+          <span>Today CIA pending</span>
           <strong>{summary ? `₹${currency(summary.pendingAmount)}` : "—"}</strong>
         </div>
         <div>
@@ -169,10 +276,15 @@ export function DriverReconCashPanel({
         </div>
       </div>
 
+      <p className="subtle" style={{ marginTop: 10 }}>
+        Today&apos;s Cash In Associate belongs on this page — denomination on the cash sheet does not hide it.
+        If it is still open after counting, record feedback here before Deposit & summary.
+      </p>
+
       <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <StatusPill status={statusLabel} />
         <span className="subtle">
-          {payload?.sessionSource ? `Source · ${payload.sessionSource}` : "Uses /api/admin/executive/driver-reconciliation overallPendingRecon"}
+          {payload?.sessionSource ? `Source · ${payload.sessionSource}` : "Uses ageing Cash In Associate for this date"}
         </span>
         <button
           className="button secondary"
@@ -196,6 +308,7 @@ export function DriverReconCashPanel({
                 <th>Associate</th>
                 <th>Driver ID</th>
                 <th>Pending recon</th>
+                <th>Tracking</th>
               </tr>
             </thead>
             <tbody>
@@ -204,6 +317,16 @@ export function DriverReconCashPanel({
                   <td><strong>{row.name}</strong></td>
                   <td>{row.id}</td>
                   <td>₹{currency(row.pending)}</td>
+                  <td>
+                    {row.breakdown.length
+                      ? row.breakdown.map((item) => (
+                        <div key={`${row.id}-${item.trackingId}`}>
+                          {item.trackingId} · ₹{currency(item.amount)}
+                          {item.moneyCollectionTime ? ` · ${formatCollectionTime(item.moneyCollectionTime)}` : ""}
+                        </div>
+                      ))
+                      : "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -211,7 +334,55 @@ export function DriverReconCashPanel({
         </div>
       ) : summary && !loading ? (
         <p className="subtle" style={{ marginTop: 10 }}>
-          No pending recon across {summary.driverCount} driver{summary.driverCount === 1 ? "" : "s"}.
+          No Cash In Associate pending across {summary.driverCount} driver{summary.driverCount === 1 ? "" : "s"}.
+        </p>
+      ) : null}
+
+      {cashSubmitted && !alreadyUnlocked && summary && !loading ? (
+        <div className="cash-submission-card" style={{ marginTop: 16 }}>
+          <div>
+            <span>Continue to Deposit & summary</span>
+            <strong>{summary.cleared ? "No CIA pending" : `₹${currency(summary.pendingAmount)} still pending`}</strong>
+            <small>
+              {summary.cleared
+                ? "Confirm driver validation to unlock bank deposit."
+                : "Denomination is done on the cash sheet. Remaining today CIA needs feedback before deposit."}
+            </small>
+          </div>
+          {!summary.cleared ? (
+            <label style={{ display: "block", marginTop: 12 }}>
+              Feedback
+              <textarea
+                className="field"
+                rows={2}
+                value={remarks}
+                onChange={(event) => setRemarks(event.target.value)}
+                placeholder="Why deposit can continue while Cash In Associate is still pending"
+                required
+              />
+            </label>
+          ) : null}
+          <div className="form-actions" style={{ marginTop: 12 }}>
+            <button
+              className="button"
+              type="button"
+              disabled={!canEdit || submitting || (!summary.cleared && !remarks.trim())}
+              onClick={() => { void handleConfirm(); }}
+            >
+              {submitting
+                ? "Saving…"
+                : summary.cleared
+                  ? "Continue to deposit"
+                  : "Record feedback & continue"}
+            </button>
+          </div>
+          {submitError ? <p className="field-error">{submitError}</p> : null}
+        </div>
+      ) : null}
+
+      {alreadyUnlocked ? (
+        <p className="subtle" style={{ marginTop: 12 }}>
+          Driver validation is complete. Deposit & summary is unlocked.
         </p>
       ) : null}
     </div>

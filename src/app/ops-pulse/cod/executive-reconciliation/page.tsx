@@ -219,6 +219,10 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
           ? "Manual login required"
       : selectedClosure?.driver_exception_reason?.startsWith("Continued with SCC pending.")
         ? "Continued with pending · notified"
+        : selectedClosure?.driver_exception_reason?.startsWith("Continued with Cash In Associate pending")
+          ? "CIA pending · feedback recorded"
+        : selectedClosure?.driver_check_status === "Pending"
+          ? "Confirm on Driver validation"
         : selectedClosure?.driver_check_status ?? "Not run";
   const depositAmountDifference = Number((
     collectedTotal - amountValue(selectedClosure?.amazon_open_remittance_expected)
@@ -473,8 +477,11 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
                         stationCode={selectedStation.station_code}
                         businessDate={result.businessDate}
                         locationId={defaultLocationId}
+                        returnHref={returnHref}
                         canRefresh={permission.canEdit && !selectedClosure?.is_final_submitted}
                         cashSubmitted={cashSubmitted}
+                        canEdit={permission.canEdit && !selectedClosure?.is_final_submitted}
+                        driverCheckStatus={selectedClosure?.driver_check_status ?? null}
                       />
                     ) : (
                       <>

@@ -17,8 +17,12 @@ export type CashReconAssociate = {
   displayName: string;
   employeeId: string | null;
   expected: number;
+  /** Prior-day Cash In Associate — locks cash-sheet denominations. */
   pendingRecon: number;
   breakdown: CashReconPendingBreakdown[];
+  /** Today's Cash In Associate — shown on Driver validation, not a cash-sheet lock. */
+  sameDayPendingRecon?: number;
+  sameDayBreakdown?: CashReconPendingBreakdown[];
   source: "matched" | "extra" | "other" | "driver_only";
   shipmentType: string;
   /** True when ageing driver was not in getDrivers but name was resolved from workforce. */
@@ -104,6 +108,15 @@ export type CashReconRow = {
     variance?: CashMoney | null;
     overallPendingRecon?: CashMoney | null;
     overallPendingReconBreakdownList?: Array<{
+      trackingId?: string | null;
+      paymentMethod?: string | null;
+      moneyCollectionTime?: number | null;
+      transactionTime?: number | null;
+      amount?: CashMoney | null;
+      stationTimeZone?: string | null;
+    }> | null;
+    sameDayPendingRecon?: CashMoney | null;
+    sameDayPendingReconBreakdownList?: Array<{
       trackingId?: string | null;
       paymentMethod?: string | null;
       moneyCollectionTime?: number | null;
@@ -291,9 +304,8 @@ export function driverDisplayName(driverName: string) {
   return String(driverName ?? "").split("/")[0]?.trim() || String(driverName ?? "").trim();
 }
 
-function mapBreakdown(list: CashReconRow["paymentInfo"]): CashReconPendingBreakdown[] {
-  const rows = Array.isArray(list?.overallPendingReconBreakdownList) ? list.overallPendingReconBreakdownList : [];
-  return rows.map((row) => ({
+function mapBreakdownRows(rows: NonNullable<NonNullable<CashReconRow["paymentInfo"]>["overallPendingReconBreakdownList"]> | null | undefined): CashReconPendingBreakdown[] {
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
     trackingId: String(row?.trackingId ?? "").trim() || "-",
     paymentMethod: String(row?.paymentMethod ?? "").trim() || "-",
     moneyCollectionTime: typeof row?.moneyCollectionTime === "number"
@@ -304,6 +316,43 @@ function mapBreakdown(list: CashReconRow["paymentInfo"]): CashReconPendingBreakd
     amount: moneyValue(row?.amount),
     stationTimeZone: String(row?.stationTimeZone ?? "").trim() || "IST"
   }));
+}
+
+function mapBreakdown(list: CashReconRow["paymentInfo"]): CashReconPendingBreakdown[] {
+  return mapBreakdownRows(list?.overallPendingReconBreakdownList);
+}
+
+function mapSameDayBreakdown(list: CashReconRow["paymentInfo"]): CashReconPendingBreakdown[] {
+  return mapBreakdownRows(list?.sameDayPendingReconBreakdownList);
+}
+
+function pendingFromPayment(payment: CashReconRow["paymentInfo"]) {
+  return {
+    pendingRecon: moneyValue(payment?.overallPendingRecon),
+    sameDayPendingRecon: moneyValue(payment?.sameDayPendingRecon),
+    breakdown: mapBreakdown(payment),
+    sameDayBreakdown: mapSameDayBreakdown(payment)
+  };
+}
+
+export function associateCiaPendingAmount(row: { pendingRecon?: number; sameDayPendingRecon?: number }) {
+  return Number(((Number(row.pendingRecon) || 0) + (Number(row.sameDayPendingRecon) || 0)).toFixed(2));
+}
+
+function mergePaymentPending(current: CashReconAssociate, payment: CashReconRow["paymentInfo"]): CashReconAssociate {
+  const next = pendingFromPayment(payment);
+  const sameDay = Number(next.sameDayPendingRecon) || 0;
+  const hasPending = next.pendingRecon > 0.01 || sameDay > 0.01;
+  const hasBreakdown = next.breakdown.length > 0 || next.sameDayBreakdown.length > 0;
+  if (!hasPending && !hasBreakdown) return current;
+  return {
+    ...current,
+    pendingRecon: next.pendingRecon > 0.01 ? next.pendingRecon : current.pendingRecon,
+    sameDayPendingRecon: sameDay > 0.01 ? sameDay : current.sameDayPendingRecon,
+    breakdown: next.breakdown.length ? next.breakdown : current.breakdown,
+    sameDayBreakdown: next.sameDayBreakdown.length ? next.sameDayBreakdown : current.sameDayBreakdown,
+    source: current.source === "driver_only" ? "matched" : current.source
+  };
 }
 
 /** Index cash-only expected by employeeId and tasId for O(1) lookup. */
@@ -374,8 +423,7 @@ function fromRecon(
       hasExpectedCashPayload,
       reconExpected: payment?.expected
     }),
-    pendingRecon: moneyValue(payment?.overallPendingRecon),
-    breakdown: mapBreakdown(payment),
+    ...pendingFromPayment(payment),
     source,
     shipmentType: "Cash recon worker"
   };
@@ -566,8 +614,7 @@ export function buildCashReconAssociates(
         displayName: fullName,
         employeeId: driver?.employeeId == null ? null : String(driver.employeeId),
         expected: cashExpectedFor(employeeId, tasId, payment?.expected),
-        pendingRecon: moneyValue(payment?.overallPendingRecon),
-        breakdown: mapBreakdown(payment),
+        ...pendingFromPayment(payment),
         source: recon || driver ? "matched" as const : "driver_only" as const,
         shipmentType: "Shipment data"
       };
@@ -589,8 +636,7 @@ export function buildCashReconAssociates(
         displayName: String(driver.driverName ?? "").trim() || driverDisplayName(driver.driverName),
         employeeId: driver.employeeId == null ? null : String(driver.employeeId),
         expected: cashExpectedFor(driver.employeeId, driver.tasId, recon?.paymentInfo?.expected),
-        pendingRecon: moneyValue(recon?.paymentInfo?.overallPendingRecon),
-        breakdown: mapBreakdown(recon?.paymentInfo),
+        ...pendingFromPayment(recon?.paymentInfo),
         source: "extra",
         shipmentType: "Cash recon worker"
       });
@@ -599,8 +645,6 @@ export function buildCashReconAssociates(
     reconciliation.forEach((row) => {
       const id = String(row.driverInfo?.id ?? "").trim().toUpperCase();
       const nameKey = normalizeAssociateName(String(row.driverInfo?.name ?? ""));
-      const pendingRecon = moneyValue(row.paymentInfo?.overallPendingRecon);
-      const breakdown = mapBreakdown(row.paymentInfo);
 
       const associateIndex = associates.findIndex((associate) => {
         const associateId = String(associate.providerEmployeeId ?? "").trim().toUpperCase();
@@ -611,14 +655,7 @@ export function buildCashReconAssociates(
       if (associateIndex >= 0) {
         const current = associates[associateIndex];
         // Pending/breakdown from recon; do not overwrite cash-only expected with MPOS-inclusive recon.expected.
-        if (pendingRecon > 0.01 || (!current.breakdown.length && breakdown.length)) {
-          associates[associateIndex] = {
-            ...current,
-            pendingRecon: pendingRecon > 0.01 ? pendingRecon : current.pendingRecon,
-            breakdown: breakdown.length ? breakdown : current.breakdown,
-            source: current.source === "driver_only" ? "matched" : current.source
-          };
-        }
+        associates[associateIndex] = mergePaymentPending(current, row.paymentInfo);
         if (id) matchedReconIds.add(id);
         if (nameKey) matchedReconNames.add(nameKey);
         return;
@@ -664,8 +701,7 @@ export function buildCashReconAssociates(
       displayName: fullName,
       employeeId: driver.employeeId == null ? null : String(driver.employeeId),
       expected: cashExpectedFor(driver.employeeId, tasId, payment?.expected),
-      pendingRecon: moneyValue(payment?.overallPendingRecon),
-      breakdown: mapBreakdown(payment),
+      ...pendingFromPayment(payment),
       source: recon ? "matched" as const : "driver_only" as const,
       shipmentType: "Cash recon worker"
     };
@@ -674,8 +710,6 @@ export function buildCashReconAssociates(
   const missingFromDer: CashReconAssociate[] = [];
   reconciliation.forEach((row) => {
     const id = String(row.driverInfo?.id ?? "").trim().toUpperCase();
-    const pendingRecon = moneyValue(row.paymentInfo?.overallPendingRecon);
-    const breakdown = mapBreakdown(row.paymentInfo);
 
     const associateIndex = associates.findIndex((associate) => {
       const associateId = String(associate.providerEmployeeId ?? "").trim().toUpperCase();
@@ -685,14 +719,7 @@ export function buildCashReconAssociates(
     });
     if (associateIndex >= 0) {
       const current = associates[associateIndex];
-      if (pendingRecon > 0.01 || (!current.breakdown.length && breakdown.length)) {
-        associates[associateIndex] = {
-          ...current,
-          pendingRecon: pendingRecon > 0.01 ? pendingRecon : current.pendingRecon,
-          breakdown: breakdown.length ? breakdown : current.breakdown,
-          source: current.source === "driver_only" ? "matched" : current.source
-        };
-      }
+      associates[associateIndex] = mergePaymentPending(current, row.paymentInfo);
       if (id) matchedTasIds.add(id);
       return;
     }

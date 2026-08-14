@@ -15,3 +15,8 @@ export async function deleteExecutiveReconciliation(formData: FormData): Promise
   const actions = await import("./actions");
   return actions.deleteExecutiveReconciliation(formData);
 }
+
+export async function confirmDriverReconForDeposit(formData: FormData): Promise<CashEntryActionResult | void> {
+  const actions = await import("./actions");
+  return actions.confirmDriverReconForDeposit(formData);
+}

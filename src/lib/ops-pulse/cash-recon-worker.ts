@@ -1088,7 +1088,7 @@ export async function refreshCiaNetwork(): Promise<CiaNetworkRefreshResult> {
     const attempted = Number(refreshProgress?.stationsOk ?? 0) || 0;
     const total = Number(refreshProgress?.stationsTotal ?? run?.stationsTotal ?? 0) || 0;
     message = `Fresh snapshot run started; processed ${processedStation} (${attempted}/${total}). `
-      + "Next station in about 15 seconds while this page is open.";
+      + "Next stations follow automatically while this page stays open.";
   } else {
     run = peek.run ?? run;
     refreshProgress = peek.refreshProgress ?? refreshProgress;

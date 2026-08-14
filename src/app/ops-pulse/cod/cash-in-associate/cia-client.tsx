@@ -15,8 +15,6 @@ import {
 import { postCiaJson } from "./cia-fetch";
 
 const PAGE_SIZE = 12;
-/** Gap between stations while this page is open. Cron still uses 3 minutes. */
-const CIA_UI_ADVANCE_MS = 15_000;
 
 type SortKey = "pendingLiability" | "cashAtStationTotal" | "depositedTotal" | "cashDifference" | "stationCode";
 
@@ -96,8 +94,8 @@ export function CiaNetworkClient({
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [notice, setNotice] = useState<RefreshNotice | null>(null);
   const [liveProgress, setLiveProgress] = useState<CiaRefreshProgress | null>(initialRefreshProgress);
-  const [autoAdvance, setAutoAdvance] = useState(false);
   const advancingRef = useRef(false);
+  const rowRefreshRef = useRef(false);
 
   useEffect(() => {
     setLiveProgress(initialRefreshProgress);
@@ -110,40 +108,46 @@ export function CiaNetworkClient({
   const effectiveRunStatus = refreshActive ? "running" : (runStatus ?? null);
 
   const advanceNextStation = useCallback(async (source: "auto" | "manual") => {
-    if (advancingRef.current) return;
+    if (advancingRef.current) return false;
+    if (source === "auto" && rowRefreshRef.current) return false;
     advancingRef.current = true;
     if (source === "manual") setNotice(null);
-    setRefreshingAll(true);
+    if (source === "manual") setRefreshingAll(true);
     try {
       const result = await postCiaContinue();
       const nextProgress = parseRefreshProgress(result.refreshProgress);
       if (nextProgress) setLiveProgress(nextProgress);
       const station = result.processedStation ? String(result.processedStation) : null;
       const done = Boolean(result.done);
-      if (done) setAutoAdvance(false);
       setNotice({
         kind: station || done ? "ok" : "info",
         title: done
           ? "Network refresh finished"
           : station
             ? `Updated ${station}`
-            : "No station advanced",
+            : "Waiting for next station",
         detail: done
           ? "All stations in this run are finished. Reloading numbers…"
           : station
-            ? `${station} was fetched just now.${source === "auto" ? " Next station in about 15 seconds…" : ""}`
-            : "Refresh is still running, but no station was advanced this time. Retrying shortly…"
+            ? `${station} saved. Fetching the next station…`
+            : "Another fetch owns a station right now. Retrying…"
       });
       startTransition(() => router.refresh());
+      if (done) return false;
+      if (!station) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+      return true;
     } catch (error) {
       setNotice({
         kind: "error",
         title: "Could not advance refresh",
         detail: error instanceof Error ? error.message : "Unknown continue error"
       });
+      return false;
     } finally {
       advancingRef.current = false;
-      setRefreshingAll(false);
+      if (source === "manual") setRefreshingAll(false);
     }
   }, [router]);
 
@@ -191,8 +195,8 @@ export function CiaNetworkClient({
   }, [ranked]);
 
   async function handleStationRefresh(stationCode: string) {
-    if (busy) return;
-    setAutoAdvance(false);
+    if (busy || advancingRef.current) return;
+    rowRefreshRef.current = true;
     setNotice(null);
     setRefreshingStation(stationCode);
     try {
@@ -214,20 +218,23 @@ export function CiaNetworkClient({
       });
     } finally {
       setRefreshingStation(null);
+      rowRefreshRef.current = false;
     }
   }
 
   useEffect(() => {
-    if (!autoAdvance || !refreshActive) {
-      if (autoAdvance && !refreshActive) setAutoAdvance(false);
-      return;
-    }
-    if (busy) return;
-    const timer = window.setTimeout(() => {
-      void advanceNextStation("auto");
-    }, CIA_UI_ADVANCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [autoAdvance, refreshActive, busy, advanceNextStation, liveProgress?.stationsOk, liveProgress?.status]);
+    if (!refreshActive || refreshingStation || refreshingAll) return;
+    let cancelled = false;
+    void (async () => {
+      while (!cancelled && !rowRefreshRef.current) {
+        const keepGoing = await advanceNextStation("auto");
+        if (cancelled || keepGoing === false) break;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshActive, refreshingStation, refreshingAll, advanceNextStation]);
 
   async function handleUpdateNumbers() {
     if (busy) return;
@@ -243,13 +250,12 @@ export function CiaNetworkClient({
     const confirmed = window.confirm(
       "Refresh Cash In Associate for all stations?\n\n"
       + "This starts a fresh network run and fetches the first station now. "
-      + "While this page is open, the next station is fetched about every 15 seconds. "
-      + "Overnight, cron continues on its own (one week of one station every 3 minutes)."
+      + "While this page stays open, each next station starts as soon as the last one finishes (about 1–1.5 hours for all 38). "
+      + "Row Refresh still updates only that one station."
     );
     if (!confirmed) return;
 
     setNotice(null);
-    setAutoAdvance(true);
     setRefreshingAll(true);
     try {
       const result = await postCiaRefresh();
@@ -266,12 +272,11 @@ export function CiaNetworkClient({
         detail: firstStation
           ? `Processed ${firstStation}. Progress is now ${attempted}/${total}`
             + (succeeded > 0 ? ` (${succeeded} ok)` : "")
-            + ". Next station in about 15 seconds, or click Update numbers now."
-          : `New run started at ${attempted}/${total}. Next station in about 15 seconds.`
+            + ". Next stations will follow automatically while this page stays open."
+          : `New run started at ${attempted}/${total}. Next stations will follow automatically.`
       });
       startTransition(() => router.refresh());
     } catch (error) {
-      setAutoAdvance(false);
       setNotice({
         kind: "error",
         title: "Could not start network refresh",
@@ -295,9 +300,7 @@ export function CiaNetworkClient({
             <p className="subtle" style={{ marginTop: 6 }}>
               {progress.stationsOk} of {progress.stationsTotal} stations attempted so far
               {refreshProgressDetail(progress)}.
-              {autoAdvance
-                ? "Next station in about 15 seconds while this page is open, or click Update numbers now. Row Refresh still updates only that station."
-                : "Click Refresh all stations for the whole network, Update numbers for the next station, or Refresh on one row for that station only. Overnight cron runs on its own."}
+              Stations keep updating automatically while this page stays open (same path as Update numbers). Row Refresh still updates only that station.
             </p>
           </div>
         </section>

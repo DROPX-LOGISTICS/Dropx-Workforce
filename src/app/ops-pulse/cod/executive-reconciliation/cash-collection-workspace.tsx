@@ -188,6 +188,40 @@ function mapMissingFromDer(apiMissing: CashReconAssociate[]): AssociateOption[] 
   return rows;
 }
 
+function identityIdsFor(
+  row: { providerEmployeeId: string; name?: string },
+  drivers: CashReconDriver[]
+) {
+  const ids = new Set<string>();
+  const id = String(row.providerEmployeeId ?? "").trim().toUpperCase();
+  if (id && id !== "__OTHER__") ids.add(id);
+  const name = String(row.name ?? "").trim();
+  for (const driver of drivers) {
+    const employeeId = String(driver.employeeId ?? "").trim().toUpperCase();
+    const tasId = String(driver.tasId ?? "").trim().toUpperCase();
+    const idHit = Boolean(id) && (employeeId === id || tasId === id);
+    const nameHit = Boolean(name) && associateNamesMatch(name, String(driver.driverName ?? ""));
+    if (!idHit && !nameHit) continue;
+    if (employeeId) ids.add(employeeId);
+    if (tasId) ids.add(tasId);
+  }
+  return ids;
+}
+
+function isOnCollectCashList(
+  row: AssociateOption,
+  collect: AssociateOption[],
+  drivers: CashReconDriver[]
+) {
+  if (row.providerEmployeeId === "__other__") return false;
+  const rowIds = identityIdsFor(row, drivers);
+  return collect.some((associate) => {
+    const collectIds = identityIdsFor(associate, drivers);
+    if ([...rowIds].some((id) => collectIds.has(id))) return true;
+    return associateNamesMatch(row.name, associate.name);
+  });
+}
+
 function toCashReconAssociate(row: AssociateOption, source: CashReconAssociate["source"]): CashReconAssociate {
   return {
     providerEmployeeId: row.providerEmployeeId,
@@ -407,8 +441,10 @@ export function CashCollectionWorkspace({
   );
 
   const missing = useMemo(
-    () => mapMissingFromDer(apiMissingFromDer),
-    [apiMissingFromDer]
+    () => mapMissingFromDer(apiMissingFromDer).filter((row) =>
+      row.providerEmployeeId === "__other__" || !isOnCollectCashList(row, enriched, drivers)
+    ),
+    [apiMissingFromDer, drivers, enriched]
   );
 
   const requiredForGate = useMemo(() => {

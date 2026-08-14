@@ -248,6 +248,23 @@
   font-size: 12px;
 }
 
+.cia-preset-row .cia-chip.active {
+  background: #111827;
+  border-color: #111827;
+  color: #fff;
+}
+
+.cia-preset-row .cia-chip.cia-chip-today:not(.active) {
+  border-color: #ea580c;
+  color: #c2410c;
+}
+
+.cia-preset-row .cia-chip.cia-chip-today.active {
+  background: #c2410c;
+  border-color: #c2410c;
+  color: #fff;
+}
+
 .cia-range-form {
   display: flex;
   flex-wrap: wrap;

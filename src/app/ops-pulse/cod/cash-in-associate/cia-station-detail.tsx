@@ -80,18 +80,24 @@ export function CiaStationDetail({
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
 
-  const yesterday = addDaysYmd(todayIstYmd(), -1);
-  const earliestAllowed = addDaysYmd(yesterday, -(MAX_LOOKBACK_DAYS - 1));
+  const today = todayIstYmd();
+  const yesterday = addDaysYmd(today, -1);
+  const earliestAllowed = addDaysYmd(today, -(MAX_LOOKBACK_DAYS - 1));
+  const latestAllowed = today;
 
   const view = parseDetailView(searchParams.get("view"));
   const focusDay = searchParams.get("focusDay")?.trim() ?? "";
   const hasExplicitRange = validYmd(searchParams.get("from")) && validYmd(searchParams.get("to"));
   const appliedFrom = hasExplicitRange
-    ? clampYmd(String(searchParams.get("from")), earliestAllowed, yesterday)
-    : clampYmd(windowFrom || earliestAllowed, earliestAllowed, yesterday);
+    ? clampYmd(String(searchParams.get("from")), earliestAllowed, latestAllowed)
+    : yesterday;
   const appliedTo = hasExplicitRange
-    ? clampYmd(String(searchParams.get("to")), earliestAllowed, yesterday)
-    : clampYmd(windowTo || yesterday, earliestAllowed, yesterday);
+    ? clampYmd(String(searchParams.get("to")), earliestAllowed, latestAllowed)
+    : yesterday;
+  const showingFrom = hasExplicitRange ? appliedFrom : (windowFrom || yesterday);
+  const showingTo = hasExplicitRange ? appliedTo : (windowTo || yesterday);
+  const yesterdaySelected = hasExplicitRange && appliedFrom === yesterday && appliedTo === yesterday;
+  const todaySelected = hasExplicitRange && appliedFrom === today && appliedTo === today;
 
   // Draft values stay local until the user clicks Apply — avoids month-nav
   // in the native date picker accidentally navigating / collapsing the range.
@@ -146,15 +152,23 @@ export function CiaStationDetail({
 
   function applyPreset(days: number) {
     const to = yesterday;
-    const from = clampYmd(addDaysYmd(to, -(days - 1)), earliestAllowed, yesterday);
+    const from = clampYmd(addDaysYmd(to, -(days - 1)), earliestAllowed, latestAllowed);
     setDraftFrom(from);
     setDraftTo(to);
     setFormError(null);
   }
 
+  function applySingleDay(day: string) {
+    const next = clampYmd(day, earliestAllowed, latestAllowed);
+    setDraftFrom(next);
+    setDraftTo(next);
+    setFormError(null);
+    navigate({ fromDate: next, toDate: next, focusDay: null });
+  }
+
   function applyRange() {
-    const from = clampYmd(draftFrom, earliestAllowed, yesterday);
-    const to = clampYmd(draftTo, earliestAllowed, yesterday);
+    const from = clampYmd(draftFrom, earliestAllowed, latestAllowed);
+    const to = clampYmd(draftTo, earliestAllowed, latestAllowed);
     if (from > to) {
       setFormError("From date must be on or before To date.");
       setDraftFrom(from);
@@ -175,12 +189,31 @@ export function CiaStationDetail({
             <div>
               <h2>Check cash for a date range</h2>
               <p className="subtle">
-                Pick any period up to the last {MAX_LOOKBACK_DAYS} days, then click Show results.
-                Currently showing {formatCiaDisplayDate(appliedFrom)} to {formatCiaDisplayDate(appliedTo)}
-                {reportSavedAt ? ` · updated ${reportSavedAt}` : ""}.
+                Date pickers default to yesterday. Today is unlocked for live cash.
+                Currently showing {formatCiaDisplayDate(showingFrom)} to {formatCiaDisplayDate(showingTo)}
+                {reportSavedAt ? ` · updated ${reportSavedAt}` : ""}
+                {hasExplicitRange ? " · live range" : " · saved overnight report"}.
               </p>
             </div>
             <div className="cia-preset-row">
+              <button
+                type="button"
+                className={`button secondary cia-chip${yesterdaySelected ? " active" : ""}`}
+                aria-pressed={yesterdaySelected}
+                disabled={pending}
+                onClick={() => applySingleDay(yesterday)}
+              >
+                Yesterday
+              </button>
+              <button
+                type="button"
+                className={`button secondary cia-chip cia-chip-today${todaySelected ? " active" : ""}`}
+                aria-pressed={todaySelected}
+                disabled={pending}
+                onClick={() => applySingleDay(today)}
+              >
+                Today cash
+              </button>
               <button type="button" className="button secondary cia-chip" disabled={pending} onClick={() => applyPreset(7)}>
                 Last 7 days
               </button>
@@ -200,13 +233,13 @@ export function CiaStationDetail({
                 type="date"
                 className="field"
                 min={earliestAllowed}
-                max={yesterday}
+                max={latestAllowed}
                 value={draftFrom}
                 disabled={pending}
                 onChange={(event) => {
                   const next = event.target.value;
                   if (!validYmd(next)) return;
-                  setDraftFrom(clampYmd(next, earliestAllowed, yesterday));
+                  setDraftFrom(clampYmd(next, earliestAllowed, latestAllowed));
                   setFormError(null);
                 }}
               />
@@ -217,13 +250,13 @@ export function CiaStationDetail({
                 type="date"
                 className="field"
                 min={earliestAllowed}
-                max={yesterday}
+                max={latestAllowed}
                 value={draftTo}
                 disabled={pending}
                 onChange={(event) => {
                   const next = event.target.value;
                   if (!validYmd(next)) return;
-                  setDraftTo(clampYmd(next, earliestAllowed, yesterday));
+                  setDraftTo(clampYmd(next, earliestAllowed, latestAllowed));
                   setFormError(null);
                 }}
               />
@@ -232,7 +265,7 @@ export function CiaStationDetail({
               <button
                 type="button"
                 className="button"
-                disabled={pending || (!dirty && !formError)}
+                disabled={pending || (!dirty && hasExplicitRange && !formError)}
                 onClick={() => applyRange()}
               >
                 {pending ? <Loader2 size={16} className="cia-spin" /> : null}

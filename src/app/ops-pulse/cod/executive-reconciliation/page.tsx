@@ -140,28 +140,46 @@ export default async function ExecutiveReconciliationPage({ searchParams }: { se
     ? result.rows.filter((row) => row.location_id === defaultLocationId || row.station_code === selectedStation?.station_code)
     : result.rows;
   const savedRows = rows.filter((row) => row.reconciliation_id);
-  // Collect cash = shipment DB associates only (full names like "Shiva Yadav / DROP / 207546749").
-  // Never use cash-recon roster rows here — those belong in Missing from DER when unmatched.
-  const availableRows = rows.filter((row) =>
-    row.source === "shipment_data"
-    && row.source_associate_name
-    && !row.reconciliation_id
-  );
-  const dbAssociates = availableRows.map((row) => ({
-    name: String(row.source_associate_name ?? "").trim(),
-    providerEmployeeId: String(row.provider_employee_id ?? "").trim(),
-    shipmentType: row.shipment_type ?? "Shipment data",
-    pendingAmount: 0,
-    expectedAmount: 0,
-    pendingRecon: 0,
-    breakdown: [] as Array<{
-      trackingId: string;
-      paymentMethod: string;
-      moneyCollectionTime: number | null;
-      amount: number;
-      stationTimeZone: string;
-    }>
-  })).filter((row) => row.providerEmployeeId && row.name);
+  // Collect cash stays the station DB roster even after a cash row is saved.
+  // Dropping saved names here made them reappear under Missing from DER.
+  const dbAssociates = (() => {
+    const byId = new Map<string, {
+      name: string;
+      providerEmployeeId: string;
+      shipmentType: string;
+      pendingAmount: number;
+      expectedAmount: number;
+      pendingRecon: number;
+      breakdown: Array<{
+        trackingId: string;
+        paymentMethod: string;
+        moneyCollectionTime: number | null;
+        amount: number;
+        stationTimeZone: string;
+      }>;
+    }>();
+    for (const row of rows) {
+      const source = String(row.source ?? "").trim().toLowerCase();
+      const shipmentType = String(row.shipment_type ?? "").trim();
+      const isStationDb = source === "shipment_data" || shipmentType.toLowerCase() === "shipment data";
+      if (!isStationDb) continue;
+      const name = String(row.source_associate_name ?? "").trim();
+      const providerEmployeeId = String(row.provider_employee_id ?? "").trim();
+      if (!name || !providerEmployeeId) continue;
+      const key = providerEmployeeId.toUpperCase();
+      if (byId.has(key)) continue;
+      byId.set(key, {
+        name,
+        providerEmployeeId,
+        shipmentType: shipmentType || "Shipment data",
+        pendingAmount: 0,
+        expectedAmount: 0,
+        pendingRecon: 0,
+        breakdown: []
+      });
+    }
+    return Array.from(byId.values());
+  })();
   const completed = savedRows.filter((row) => row.reconciliation_status === "Completed").length;
   const expectedTotal = savedRows.reduce((sum, row) => sum + amountValue(row.expected_amount), 0);
   const collectedTotal = savedRows.reduce((sum, row) => sum + amountValue(row.collected_amount), 0);

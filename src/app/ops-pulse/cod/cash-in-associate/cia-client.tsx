@@ -118,7 +118,9 @@ export function CiaNetworkClient({
       const nextProgress = parseRefreshProgress(result.refreshProgress);
       if (nextProgress) setLiveProgress(nextProgress);
       const station = result.processedStation ? String(result.processedStation) : null;
-      const done = Boolean(result.done);
+      const blocked = (nextProgress?.stationsProcessing ?? 0) > 0
+        || (nextProgress?.stationsRetryQueued ?? 0) > 0;
+      const done = Boolean(result.done) && !blocked;
       const retrying = String(result.status ?? "") === "retry"
         || /resource limit|error 1102|1102/i.test(String(result.error ?? ""));
       if (retrying) {
@@ -147,7 +149,7 @@ export function CiaNetworkClient({
       startTransition(() => router.refresh());
       if (done) return false;
       if (!station) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, blocked ? 8000 : 2000));
       }
       return true;
     } catch (error) {

@@ -1034,13 +1034,33 @@ async function releaseCiaStationClaim(runId: string | undefined, stationCode: st
   }
 }
 
+async function touchCiaStationClaim(runId: string | undefined, stationCode: string) {
+  if (!runId) return;
+  try {
+    await postWorkerJsonOnce("/api/admin/internal/cia-snapshot/touch-claim", {
+      runId,
+      stationCode
+    });
+  } catch (error) {
+    console.error("Failed to touch CIA station claim", stationCode, error);
+  }
+}
+
+function isNetworkRunDone(done: boolean, refreshProgress: CiaRefreshProgress | null | undefined) {
+  const processing = Number(refreshProgress?.stationsProcessing ?? 0) || 0;
+  const retryQueued = Number(refreshProgress?.stationsRetryQueued ?? 0) || 0;
+  if (processing > 0 || retryQueued > 0) return false;
+  return Boolean(done);
+}
+
 /**
  * Refresh one station by loading live-range chunks (each stays under CF limits),
  * merging on the BFF, then saving the snapshot on the worker.
  */
 export async function refreshCiaStation(
   stationCode: string,
-  windowOverride?: { from: string; to: string }
+  windowOverride?: { from: string; to: string },
+  options?: { runId?: string }
 ): Promise<CiaStationRefreshResult> {
   const code = stationCode.trim().toUpperCase();
 
@@ -1065,6 +1085,7 @@ export async function refreshCiaStation(
       toDate: chunk.to
     });
     parts.push(raw);
+    await touchCiaStationClaim(options?.runId, code);
   }
 
   const precomputedPayload = mergeCiaLiveParts(parts, window);
@@ -1099,9 +1120,13 @@ export async function refreshCiaNetwork(): Promise<CiaNetworkRefreshResult> {
   let message = String(raw.message ?? "Snapshot run started.");
 
   const peek = await peekNextCiaStation(run?.id || undefined, { claim: true });
-  if (peek.stationCode && !peek.done) {
+  if (peek.stationCode && !isNetworkRunDone(peek.done, peek.refreshProgress)) {
     try {
-      const refreshed = await refreshCiaStation(peek.stationCode, peek.window ?? undefined);
+      const refreshed = await refreshCiaStation(
+        peek.stationCode,
+        peek.window ?? undefined,
+        { runId: peek.run?.id || run?.id }
+      );
       if (refreshed.snapshotStatus !== "ok") {
         throw new Error(refreshed.error || `Failed to refresh ${peek.stationCode}`);
       }
@@ -1150,18 +1175,22 @@ export async function continueCiaSnapshot(runId?: string): Promise<{
   error?: string | null;
 }> {
   const peek = await peekNextCiaStation(runId, { claim: true });
-  if (peek.done || !peek.stationCode) {
+  if (isNetworkRunDone(peek.done, peek.refreshProgress) || !peek.stationCode) {
     return {
       status: "ok",
       processedStation: null,
-      done: peek.done,
+      done: isNetworkRunDone(peek.done, peek.refreshProgress),
       run: peek.run,
       refreshProgress: peek.refreshProgress
     };
   }
 
   try {
-    const refreshed = await refreshCiaStation(peek.stationCode, peek.window ?? undefined);
+    const refreshed = await refreshCiaStation(
+      peek.stationCode,
+      peek.window ?? undefined,
+      { runId: peek.run?.id || runId }
+    );
     if (refreshed.snapshotStatus !== "ok") {
       throw new Error(refreshed.error || `Failed to refresh ${peek.stationCode}`);
     }
@@ -1170,7 +1199,7 @@ export async function continueCiaSnapshot(runId?: string): Promise<{
     return {
       status: "ok",
       processedStation: refreshed.stationCode,
-      done: after.done,
+      done: isNetworkRunDone(after.done, after.refreshProgress ?? peek.refreshProgress),
       run: after.run ?? peek.run,
       refreshProgress: after.refreshProgress ?? peek.refreshProgress
     };

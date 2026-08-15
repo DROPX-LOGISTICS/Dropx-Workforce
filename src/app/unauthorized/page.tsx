@@ -3,8 +3,17 @@ import { signOut } from "@/app/login/actions";
 import { SubmitButton } from "@/components/submit-button";
 
 const pageNames: Record<string, string> = {
-  service_network: "Service Network",
-  service_network_master: "Service Network Master"
+  capacity: "Capacity",
+  capacity_overview: "Capacity Overview",
+  capacity_associates: "Associate SPR",
+  capacity_delivery: "Delivery Data",
+  capacity_hiring: "Hiring Review",
+  capacity_master: "Capacity Master",
+  performance: "Performance",
+  performance_master: "Performance Master",
+  ops_reports: "Reports",
+  service_network: "Network Planning",
+  service_network_master: "Network Planning Master"
 };
 
 export default function UnauthorizedPage({ searchParams }: { searchParams?: { page?: string } }) {

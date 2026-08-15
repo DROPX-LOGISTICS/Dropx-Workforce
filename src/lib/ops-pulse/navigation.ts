@@ -3,13 +3,23 @@ import type { OperatingMode } from "@/lib/ops-pulse/operating-context";
 
 const commonStart: NavItem[] = [
   { code: "ops_pulse", label: "Command Center", href: "/", icon: "#" },
-  { code: "cod_reports", label: "Performance", href: "/performance", icon: "P" },
-  { code: "cps_associates", label: "Capacity", href: "/capacity", icon: "A" },
-  { code: "service_network", label: "Service Network", href: "/service-network", icon: "S" },
+  { code: "performance", label: "Performance", href: "/performance", icon: "P" },
+  {
+    code: "capacity",
+    label: "Capacity",
+    icon: "A",
+    children: [
+      { code: "capacity_overview", label: "Overview", href: "/capacity" },
+      { code: "capacity_associates", label: "Associate SPR", href: "/capacity/associates" },
+      { code: "capacity_delivery", label: "Delivery Data", href: "/performance/shipments" },
+      { code: "capacity_hiring", label: "Hiring Review", href: "/capacity/hiring" }
+    ]
+  },
+  { code: "service_network", label: "Network Planning", href: "/service-network", icon: "N" },
   { code: "delivery_associates", label: "Workforce Onboarding", href: "/field-executive", icon: "+" }
 ];
 
-const reports: NavItem = { code: "cod_reports", label: "Reports", href: "/reports", icon: "R" };
+const reports: NavItem = { code: "ops_reports", label: "Reports", href: "/reports", icon: "R" };
 
 const businessDocuments: NavItem = {
   code: "business_documents",
@@ -55,9 +65,9 @@ const administration: NavItem[] = [
       { code: "master_locations", label: "Station Master", href: "/master/location" },
       { code: "master_providers", label: "Client / Provider Master", href: "/master/providers" },
       { code: "master_models", label: "Operation Models", href: "/master/models" }
-      ,{ code: "cod_master", label: "Performance Master", href: "/master/performance-targets" }
-      ,{ code: "cod_master", label: "Capacity Master", href: "/master/capacity" }
-      ,{ code: "service_network_master", label: "Service Network Master", href: "/master/service-network" }
+      ,{ code: "performance_master", label: "Performance Master", href: "/master/performance-targets" }
+      ,{ code: "capacity_master", label: "Capacity Master", href: "/master/capacity" }
+      ,{ code: "service_network_master", label: "Network Planning Master", href: "/master/service-network" }
     ]
   },
   {
@@ -104,15 +114,13 @@ function modelOperations(mode: OperatingMode): NavItem {
       { code: "cod_executive_reconciliation", label: "Executive Reconciliation", href: "/cod/executive-reconciliation?client=amazon" },
       { code: "cod_submission", label: "COD Submission", href: "/cod/submission?client=amazon" },
       { code: "cod_reports", label: "COD Reports", href: "/cod/reports?client=amazon" },
-      // Same permission as COD Reports (dropx-ops-pulse 79f85aa).
-      { code: "cod_reports", label: "Cash In Associate", href: "/cod/cash-in-associate?client=amazon" }
+      { code: "cod_cash_in_associate", label: "Cash In Associate", href: "/cod/cash-in-associate?client=amazon" }
     ]
   };
 }
 
 export function opsNavItemsForMode(mode: OperatingMode): NavItem[] {
-  const start = mode === "amazon_now" ? commonStart.filter((item) => !["Capacity", "Service Network"].includes(item.label)) : commonStart;
-  return [...start, modelOperations(mode), businessDocuments, payments, cps, fleetNavItem, reports, ...administration];
+  return [...commonStart, modelOperations(mode), businessDocuments, payments, cps, fleetNavItem, reports, ...administration];
 }
 
 export function normalizeOpsClient(value: string | null | undefined) {

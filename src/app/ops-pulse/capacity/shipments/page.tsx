@@ -18,7 +18,7 @@ function validDate(value: unknown) { return /^\d{4}-\d{2}-\d{2}$/.test(String(va
 function n(value: unknown) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : null; }
 
 export default async function CapacityShipmentEvidencePage({ searchParams }: { searchParams?: SearchParams }) {
-  const authorization = await requirePagePermission("cps_associates", "access");
+  const authorization = await requirePagePermission("capacity_delivery", "access");
   const companyId = requireCompanyId(authorization);
   const locations = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const allowedCodes = new Set(locations.locations.map((row) => row.station_code));
@@ -47,7 +47,7 @@ export default async function CapacityShipmentEvidencePage({ searchParams }: { s
     return { ...row, classification: !complete ? "Unclassified" : volumetric ? "Volumetric" : "Small" };
   }).filter((row) => !size || row.classification.toLowerCase() === size);
 
-  return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">
+  return <AppShell active="Capacity" pageCode="capacity_delivery"><div className="ops-command-center capacity-workspace">
     <PageHead eyebrow="Shipment evidence" title={`${station || "Station"} tracking IDs`} subtitle="Tracking-level evidence behind capacity and shipment-size metrics." />
     <div className="capacity-station-toolbar"><a className="button secondary compact" href={`/ops-pulse/capacity/${station}?from=${from}&to=${to}`}>← Station capacity</a><span className="status-pill neutral">{classified.length}{(result.data?.length ?? 0) >= 1000 ? "+" : ""} rows</span></div>
     {result.error || sizeResult.error ? <div className="message-panel error">{result.error?.message || sizeResult.error}</div> : null}

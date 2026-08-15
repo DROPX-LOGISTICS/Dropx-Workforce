@@ -13,9 +13,9 @@ export const dynamic = "force-dynamic";
 type SearchParams = { saved?: string; deleted?: string; initialized?: string; map_saved?: string; map_deleted?: string; size_saved?: string; route_saved?: string; route_deleted?: string; error?: string };
 
 export default async function CapacityMasterPage({ searchParams }: { searchParams?: SearchParams }) {
-  const authorization = await requirePagePermission("cod_master", "access");
+  const authorization = await requirePagePermission("capacity_master", "access");
   const companyId = requireCompanyId(authorization);
-  const permission = authorization.permissions.cod_master;
+  const permission = authorization.permissions.capacity_master;
   const [ruleResult, locationResult, mapResult, sizeResult, routeResult] = await Promise.all([
     loadCapacityRules(companyId),
     loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess),
@@ -28,7 +28,7 @@ export default async function CapacityMasterPage({ searchParams }: { searchParam
   const capacityRules = ruleResult.rows.filter((rule) => eligibleStationCodes.has(rule.stationCode));
   const rules = new Map(capacityRules.map((row) => [row.stationCode, row]));
 
-  return <AppShell active="Capacity Master" pageCode="cod_master"><div className="ops-command-center">
+  return <AppShell active="Capacity Master" pageCode="capacity_master"><div className="ops-command-center">
     <PageHead eyebrow="Ops Masters" title="Capacity Master" subtitle="Station-level SPR, workload risk and workforce buffer assumptions. Nothing is hardcoded in Capacity." />
     {searchParams?.saved ? <div className="message-panel success">Capacity rule saved.</div> : null}
     {searchParams?.initialized ? <div className="message-panel success">{searchParams.initialized} station capacity rules initialized.</div> : null}

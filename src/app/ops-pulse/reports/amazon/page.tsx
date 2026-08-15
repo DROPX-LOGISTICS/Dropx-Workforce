@@ -11,7 +11,7 @@ import { uploadAmazonScorecard } from "./actions";
 export const dynamic = "force-dynamic";
 
 export default async function AmazonReportsPage() {
-  const authorization = await requirePagePermission("cod_reports", "access");
+  const authorization = await requirePagePermission("ops_reports", "access");
   const companyId = requireCompanyId(authorization);
   const locationsResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const context = resolveOperatingContext(locationsResult.locations);
@@ -23,7 +23,7 @@ export default async function AmazonReportsPage() {
     : { data: [], error: null };
 
   return (
-    <AppShell active="Performance Reports" pageCode="cod_reports">
+    <AppShell active="Performance Reports" pageCode="ops_reports">
       <div className="ops-command-center">
         <PageHead eyebrow={context.location ? locationLabel(context.location) : "Amazon"} title="Amazon Performance Review" subtitle="Daily operational reports and weekly SLA scorecards, retained by station and review period." />
         {error ? <section className="panel message-panel error"><div className="panel-body">{error.message}</div></section> : null}

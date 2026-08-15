@@ -14,7 +14,7 @@ function required(value: FormDataEntryValue | null, label: string) {
 }
 
 export async function uploadAmazonScorecard(formData: FormData) {
-  const authorization = await requirePagePermission("cod_reports", "add");
+  const authorization = await requirePagePermission("ops_reports", "add");
   const companyId = requireCompanyId(authorization);
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const locationId = required(formData.get("location_id"), "Location");

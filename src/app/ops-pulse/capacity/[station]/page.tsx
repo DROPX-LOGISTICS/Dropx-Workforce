@@ -5,6 +5,7 @@ import { CapacityWorkspaceTabs } from "@/components/capacity-workspace-tabs";
 import { PageHead } from "@/components/page-head";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { allowedCapacityWorkspaceTabs } from "@/lib/ops-pulse/capacity-access";
 import { loadApprovedCapacityAdHocUsage } from "@/lib/ops-pulse/capacity-ad-hoc";
 import { capacityMapEmbedUrl, loadCapacityRegionMaps, loadCapacityRules, loadCapacityServiceRoutes, loadGoogleMyMapsStationLayer, loadShipmentSizeRule } from "@/lib/ops-pulse/capacity";
 import { buildCapacityPlanningDecision } from "@/lib/ops-pulse/capacity-decision";
@@ -26,8 +27,9 @@ function num(value: unknown) { const parsed = Number(value ?? 0); return Number.
 function fmt(value: number, digits = 0) { return value.toLocaleString("en-IN", { maximumFractionDigits: digits }); }
 
 export default async function CapacityStationPage({ params, searchParams }: { params: { station: string }; searchParams?: SearchParams }) {
-  const authorization = await requirePagePermission("cps_associates", "access");
+  const authorization = await requirePagePermission("capacity_overview", "access");
   const companyId = requireCompanyId(authorization);
+  const workspaceTabs = allowedCapacityWorkspaceTabs(authorization);
   const stationCode = decodeURIComponent(params.station).trim().toUpperCase();
   const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const location = locationResult.locations.find((entry) => entry.station_code === stationCode);
@@ -111,9 +113,9 @@ export default async function CapacityStationPage({ params, searchParams }: { pa
   const stationLayer = showService && capacityMap ? await loadGoogleMyMapsStationLayer(companyId, capacityMap.mapUrl, stationCode) : { features: [], error: null };
   const action = planning.action;
 
-  return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">
+  return <AppShell active="Capacity" pageCode="capacity_overview"><div className="ops-command-center capacity-workspace">
     <PageHead eyebrow="Station Capacity" title={`${stationCode} · ${location.station_name || location.city || stationCode}`} subtitle="Road-ID headcount, capacity workload, inbound demand and allocation productivity." />
-    <CapacityWorkspaceTabs active="overview" />
+    <CapacityWorkspaceTabs active="overview" allowed={workspaceTabs} />
     <div className="capacity-station-toolbar"><a className="button secondary compact" href="/ops-pulse/capacity">← All stations</a><form method="get"><label>From<input type="date" name="from" defaultValue={start}/></label><label>To<input type="date" name="to" defaultValue={end}/></label><button className="button compact">Apply</button></form></div>
     {searchParams?.error || stationDailyResult.error || associateResult.error || pincodeResult.error || adHocResult.error || stationMapResult.error || rateCardResult.error || capacityMapResult.error || serviceRouteResult.error ? <div className="message-panel error">{searchParams?.error || stationDailyResult.error?.message || associateResult.error?.message || pincodeResult.error?.message || adHocResult.error || stationMapResult.error?.message || rateCardResult.error?.message || capacityMapResult.error || serviceRouteResult.error}</div> : null}
     <section className="performance-summary-grid"><article><span>Average road IDs</span><strong>{fmt(averageIds, 1)}</strong><small>Daily active IDs</small></article><article><span>Average workload</span><strong>{fmt(averageVolume)}</strong><small>Amazon + SMD + SWA + C-return</small></article><article><span>Average inbound</span><strong>{averageInbound ? fmt(averageInbound) : "—"}</strong><small>Expected packages at station</small></article><article><span>Average SPR</span><strong>{fmt(averageSpr, 1)}</strong><small>Workload ÷ road-active IDs</small></article><article><span>Required IDs</span><strong>{requiredIds ?? "—"}</strong><small>{targetSpr ? `SPR ${fmt(targetSpr, 1)} + ${fmt(buffer)}% buffer` : "Configure master"}</small></article></section>

@@ -155,7 +155,7 @@ function trendPath(values: number[], width = 240, height = 62) {
 }
 
 export default async function PerformancePage({ searchParams }: { searchParams?: SearchParams }) {
-  const authorization = await requirePagePermission("cod_reports", "access");
+  const authorization = await requirePagePermission("performance", "access");
   const companyId = requireCompanyId(authorization);
   const targetResult = await loadPerformanceTargets(companyId);
   const dailyMetricDefinitions = resolvePerformanceTargets(targetResult.rows, "daily").filter((target) => target.sourceIndex != null).map((target) => ({ ...target, index: target.sourceIndex as number }));
@@ -348,7 +348,7 @@ export default async function PerformancePage({ searchParams }: { searchParams?:
   const trendHref = (code: string) => `/ops-pulse/performance?view=daily&date=${selectedDate}${stationQuery}&trend=${encodeURIComponent(code)}#daily-trend`;
 
   return (
-    <AppShell active="Performance" pageCode="cod_reports">
+    <AppShell active="Performance" pageCode="performance">
       <div className="ops-command-center performance-workspace">
         <PageHead eyebrow="Performance" title="Station Performance" subtitle="Daily metrics, weekly scorecards and delivery data." />
         <PerformanceWorkspaceTabs active={view} />

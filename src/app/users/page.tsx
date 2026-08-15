@@ -604,7 +604,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                   </select>
                 </label>
               </div>
-              <PermissionMatrix pages={pages} />
+              <PermissionMatrix pages={pages} surface={accessSurface} />
               {error ? (
                 <p className="form-note">
                   Save is locked until the user-role database tables are created in Supabase.
@@ -673,7 +673,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                       </select>
                     </label>
                   </div>
-                  <PermissionMatrix pages={pages} initialPermissions={editRolePermissions} />
+                  <PermissionMatrix pages={pages} initialPermissions={editRolePermissions} surface={accessSurface} />
                   <div className="form-actions modal-actions">
                     <SubmitButton>Save role</SubmitButton>
                     <DismissModalButton className="button secondary">Cancel</DismissModalButton>

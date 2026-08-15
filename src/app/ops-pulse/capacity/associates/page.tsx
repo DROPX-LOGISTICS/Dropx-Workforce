@@ -6,6 +6,7 @@ import { CapacityWorkspaceTabs } from "@/components/capacity-workspace-tabs";
 import { PageHead } from "@/components/page-head";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { allowedCapacityWorkspaceTabs } from "@/lib/ops-pulse/capacity-access";
 import { loadCapacityRules } from "@/lib/ops-pulse/capacity";
 import { capacityWorkload, loadShipmentCountAssociateDays } from "@/lib/ops-pulse/capacity-shipments";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
@@ -27,8 +28,9 @@ function scopeCodes(value: string | undefined, allowed: string[]) {
 }
 
 export default async function SprAssociatesPage({ searchParams }: { searchParams?: SearchParams }) {
-  const authorization = await requirePagePermission("cps_associates", "access");
+  const authorization = await requirePagePermission("capacity_associates", "access");
   const companyId = requireCompanyId(authorization);
+  const workspaceTabs = allowedCapacityWorkspaceTabs(authorization);
   const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const locations = locationResult.locations.filter(isAmazonEdspXptLocation);
   const requestedStation = String(searchParams?.station ?? "").trim().toUpperCase();
@@ -215,9 +217,9 @@ export default async function SprAssociatesPage({ searchParams }: { searchParams
   };
   const scopeStations = locations.map((location) => ({ code: location.station_code, name: location.station_name || location.city || location.station_code, cluster: location.cluster || "", region: location.region || "" }));
 
-  return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">
+  return <AppShell active="Capacity" pageCode="capacity_associates"><div className="ops-command-center capacity-workspace">
     <PageHead eyebrow="Associate Productivity" title="Associate SPR" subtitle="Station and associate workload productivity across the selected period." />
-    <div className="capacity-tabs-toolbar"><CapacityWorkspaceTabs active="associates" /><CapacityScopeFilter selectedCodes={selectedCodes} stations={scopeStations}/></div>
+    <div className="capacity-tabs-toolbar"><CapacityWorkspaceTabs active="associates" allowed={workspaceTabs} /><CapacityScopeFilter selectedCodes={selectedCodes} stations={scopeStations}/></div>
     <CapacityAssociateViewTabs active={activeView} />
     {locationResult.error || ruleResult.error || associateResult.error ? <div className="message-panel error">{locationResult.error || ruleResult.error || associateResult.error?.message}</div> : null}
     <CapacityAssociateFilters band={band} end={end} preset={preset} start={start} station={selectedStation} stations={searchParams?.stations ?? ""} view={activeView === "recommendations" ? "recommendations" : ""}/>

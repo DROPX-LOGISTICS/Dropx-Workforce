@@ -127,6 +127,9 @@ export async function POST(request: Request) {
   const capacityIntent = /capacity|\bspr\b|headcount|workforce|hiring|ground update|ad.?hoc|peak flex/i.test(question)
     || pageContext.includes("/ops-pulse/capacity");
   if (capacityIntent) {
+    if (!hasPermission(authorization, "capacity", "access")) {
+      return Response.json({ error: "Capacity access denied." }, { status: 403 });
+    }
     const capacityPermitted = locationResult.locations.filter(isAmazonEdspXptLocation);
     const capacityMentioned = capacityPermitted.filter((location) => new RegExp(`\\b${location.station_code}\\b`, "i").test(question));
     const capacityLocations = capacityMentioned.length ? capacityMentioned : capacityPermitted;

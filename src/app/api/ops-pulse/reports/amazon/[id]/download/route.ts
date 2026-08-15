@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   const authorization = await getAuthorization();
-  if (!authorization || !hasPermission(authorization, "cod_reports", "access")) {
+  if (!authorization || !hasPermission(authorization, "ops_reports", "access")) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
   if (!supabaseAdmin || !authorization.companyId) return NextResponse.json({ error: "Database unavailable." }, { status: 500 });

@@ -9,7 +9,7 @@ import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { isAmazonEdspXptLocation } from "@/lib/ops-pulse/operating-context";
 
 export async function upsertCapacityRule(formData: FormData) {
-  const authorization = await requirePagePermission("cod_master", "edit");
+  const authorization = await requirePagePermission("capacity_master", "edit");
   const companyId = requireCompanyId(authorization);
   const stationCode = String(formData.get("station_code") ?? "").trim().toUpperCase();
   const targetSpr = Number(formData.get("target_spr"));
@@ -40,7 +40,7 @@ export async function upsertCapacityRule(formData: FormData) {
 }
 
 export async function removeCapacityRule(formData: FormData) {
-  const authorization = await requirePagePermission("cod_master", "edit");
+  const authorization = await requirePagePermission("capacity_master", "edit");
   const companyId = requireCompanyId(authorization);
   const error = await deleteCapacityRule(companyId, String(formData.get("id") ?? ""));
   revalidatePath("/master/capacity");
@@ -49,7 +49,7 @@ export async function removeCapacityRule(formData: FormData) {
 }
 
 export async function bulkInitializeCapacityRules(formData: FormData) {
-  const authorization = await requirePagePermission("cod_master", "edit");
+  const authorization = await requirePagePermission("capacity_master", "edit");
   const companyId = requireCompanyId(authorization);
   const targetSpr = Number(formData.get("target_spr"));
   const maxSafeSpr = Number(formData.get("max_safe_spr"));
@@ -78,7 +78,7 @@ export async function bulkInitializeCapacityRules(formData: FormData) {
 }
 
 export async function upsertCapacityRegionMap(formData: FormData) {
-  const authorization = await requirePagePermission("cod_master", "edit");
+  const authorization = await requirePagePermission("capacity_master", "edit");
   const companyId = requireCompanyId(authorization);
   const name = String(formData.get("name") ?? "").trim();
   const matchField = String(formData.get("match_field") ?? "");
@@ -105,7 +105,7 @@ export async function upsertCapacityRegionMap(formData: FormData) {
 }
 
 export async function removeCapacityRegionMap(formData: FormData) {
-  const authorization = await requirePagePermission("cod_master", "edit");
+  const authorization = await requirePagePermission("capacity_master", "edit");
   const companyId = requireCompanyId(authorization);
   const error = await deleteCapacityRegionMap(companyId, String(formData.get("id") ?? ""));
   revalidatePath("/master/capacity");
@@ -114,7 +114,7 @@ export async function removeCapacityRegionMap(formData: FormData) {
 }
 
 export async function importCapacityMapKml(formData: FormData) {
-  const authorization = await requirePagePermission("cod_master", "edit");
+  const authorization = await requirePagePermission("capacity_master", "edit");
   const companyId = requireCompanyId(authorization);
   const mapUrl = String(formData.get("map_url") ?? "").trim();
   const file = formData.get("kml_file");
@@ -127,7 +127,7 @@ export async function importCapacityMapKml(formData: FormData) {
 }
 
 export async function upsertShipmentSizeRule(formData: FormData) {
-  const authorization = await requirePagePermission("cod_master", "edit");
+  const authorization = await requirePagePermission("capacity_master", "edit");
   const companyId = requireCompanyId(authorization);
   const rule = {
     maxLengthCm: Number(formData.get("max_length_cm")),
@@ -146,7 +146,7 @@ export async function upsertShipmentSizeRule(formData: FormData) {
 }
 
 export async function upsertCapacityServiceRoute(formData: FormData) {
-  const authorization = await requirePagePermission("cod_master", "edit");
+  const authorization = await requirePagePermission("capacity_master", "edit");
   const companyId = requireCompanyId(authorization);
   const stationCode = String(formData.get("station_code") ?? "").trim().toUpperCase();
   const routeName = String(formData.get("route_name") ?? "").trim();
@@ -173,7 +173,7 @@ export async function upsertCapacityServiceRoute(formData: FormData) {
 }
 
 export async function removeCapacityServiceRoute(formData: FormData) {
-  const authorization = await requirePagePermission("cod_master", "edit");
+  const authorization = await requirePagePermission("capacity_master", "edit");
   const companyId = requireCompanyId(authorization);
   const error = await deleteCapacityServiceRoute(companyId, String(formData.get("id") ?? ""));
   revalidatePath("/master/capacity");

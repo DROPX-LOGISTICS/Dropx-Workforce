@@ -30,8 +30,15 @@ export const accessPages = [
   { code: "rate_cards", name: "Rate Cards", sort_order: 60 },
   { code: "imports", name: "Report Imports", sort_order: 70 },
   { code: "ops_pulse", name: "Ops Pulse", sort_order: 84 },
-  { code: "service_network", name: "Service Network", sort_order: 92 },
-  { code: "service_network_master", name: "Service Network Master", sort_order: 93 },
+  { code: "performance", name: "Performance", sort_order: 84 },
+  { code: "capacity", name: "Capacity", sort_order: 84 },
+  { code: "capacity_overview", name: "Capacity Overview", sort_order: 84 },
+  { code: "capacity_associates", name: "Associate SPR", sort_order: 84 },
+  { code: "capacity_delivery", name: "Delivery Data", sort_order: 84 },
+  { code: "capacity_hiring", name: "Hiring Review", sort_order: 84 },
+  { code: "ops_reports", name: "Ops Reports", sort_order: 84 },
+  { code: "service_network", name: "Network Planning", sort_order: 92 },
+  { code: "service_network_master", name: "Network Planning Master", sort_order: 93 },
   { code: "daily_submission", name: "Daily Submission", sort_order: 85 },
   { code: "cod", name: "COD", sort_order: 86 },
   { code: "cod_executive_reconciliation", name: "Executive Reconciliation", sort_order: 87 },
@@ -80,6 +87,8 @@ export const accessPages = [
   { code: "designations", name: "Designations", sort_order: 128 },
   { code: "biometric_devices", name: "Device Master", sort_order: 129 },
   { code: "cod_master", name: "COD Master", sort_order: 130 },
+  { code: "performance_master", name: "Performance Master", sort_order: 130 },
+  { code: "capacity_master", name: "Capacity Master", sort_order: 130 },
   { code: "master_documents", name: "Documents", sort_order: 131 },
   { code: "master_imports", name: "Import Master", sort_order: 132 },
   { code: "reports", name: "Reports", sort_order: 130 },
@@ -487,6 +496,15 @@ export async function ensureAccessPages(supabase: SupabaseClient, companyId: str
     await seedTargetPermissionsFromSources(supabase, companyId, ["cod_reports"], "executive_id_onboarding");
     await seedTargetPermissionsFromSources(supabase, companyId, ["cod_reports"], "cod_cash_in_associate");
     await seedTargetPermissionsFromSources(supabase, companyId, ["cod_executive_reconciliation"], "cod_cash_in_associate");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["cod_reports"], "performance");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["cps_associates"], "capacity");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["cps_associates"], "capacity_overview");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["cps_associates"], "capacity_associates");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["cps_associates"], "capacity_delivery");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["cps_associates"], "capacity_hiring");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["cod_reports"], "ops_reports");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["cod_master"], "performance_master");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["cod_master"], "capacity_master");
     await seedTargetPermissionsFromSources(supabase, companyId, ["designations"], "workforce_categories");
     await seedTargetPermissionsFromSources(supabase, companyId, ["designations"], "workforce_whatsapp");
     await seedTargetPermissionsFromSources(supabase, companyId, ["imports"], "master_imports");

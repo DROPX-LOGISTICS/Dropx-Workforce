@@ -7,7 +7,7 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { createPerformanceTarget, deletePerformanceTarget, performanceTargetSeeds, savePerformanceTarget } from "@/lib/ops-pulse/performance-targets";
 
 export async function updatePerformanceTarget(formData: FormData) {
-  const authorization = await requirePagePermission("cod_master", "edit");
+  const authorization = await requirePagePermission("performance_master", "edit");
   const companyId = requireCompanyId(authorization);
   const id = String(formData.get("id") ?? "");
   const reportType = formData.get("report_type") === "sls" ? "sls" : "daily";
@@ -32,7 +32,7 @@ export async function updatePerformanceTarget(formData: FormData) {
 }
 
 export async function addPerformanceMetric(formData: FormData) {
-  const authorization = await requirePagePermission("cod_master", "add");
+  const authorization = await requirePagePermission("performance_master", "add");
   const companyId = requireCompanyId(authorization);
   const reportType = formData.get("report_type") === "sls" ? "sls" : "daily";
   const sourceIndex = Number(formData.get("source_index"));
@@ -57,7 +57,7 @@ export async function addPerformanceMetric(formData: FormData) {
 }
 
 export async function removePerformanceMetric(formData: FormData) {
-  const authorization = await requirePagePermission("cod_master", "edit");
+  const authorization = await requirePagePermission("performance_master", "edit");
   const companyId = requireCompanyId(authorization);
   const reportType = formData.get("report_type") === "sls" ? "sls" : "daily";
   const error = await deletePerformanceTarget(companyId, String(formData.get("id") ?? ""));

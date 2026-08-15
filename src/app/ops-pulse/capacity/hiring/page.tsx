@@ -6,6 +6,7 @@ import { CapacityWorkspaceTabs } from "@/components/capacity-workspace-tabs";
 import { PageHead } from "@/components/page-head";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { allowedCapacityViewTabs, allowedCapacityWorkspaceTabs } from "@/lib/ops-pulse/capacity-access";
 import { loadApprovedCapacityAdHocUsage } from "@/lib/ops-pulse/capacity-ad-hoc";
 import { loadCapacityRules } from "@/lib/ops-pulse/capacity";
 import { buildCapacityPlanningDecision, type CapacityPlanningDecision } from "@/lib/ops-pulse/capacity-decision";
@@ -48,8 +49,10 @@ function decisionClass(status: CapacityPlanningDecision["status"]) {
 }
 
 export default async function CapacityPage({ searchParams }: { searchParams?: SearchParams }) {
-  const authorization = await requirePagePermission("cps_associates", "access");
+  const authorization = await requirePagePermission("capacity_hiring", "access");
   const companyId = requireCompanyId(authorization);
+  const workspaceTabs = allowedCapacityWorkspaceTabs(authorization);
+  const viewTabs = allowedCapacityViewTabs(authorization);
   const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const permittedLocations = locationResult.locations.filter(isAmazonEdspXptLocation);
   const selectedCodes = scopeCodes(searchParams?.stations, permittedLocations.map((location) => location.station_code));
@@ -160,10 +163,10 @@ export default async function CapacityPage({ searchParams }: { searchParams?: Se
   const maxDailyWorkload = Math.max(1, ...selectedDaily.map((day) => day.workload));
   const error = locationResult.error || ruleResult.error || baselineResult.error?.message || associateResult.error?.message || reviewResult.error;
 
-  return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">
+  return <AppShell active="Capacity" pageCode="capacity_hiring"><div className="ops-command-center capacity-workspace">
     <PageHead eyebrow="Workforce Planning" title="Capacity" subtitle="Amazon ID usage with internal and approved external DA coverage." />
-    <div className="capacity-tabs-toolbar"><CapacityWorkspaceTabs active="overview" /><CapacityScopeFilter selectedCodes={codes} stations={scopeStations}/></div>
-    <CapacityViewTabs active="hiring" />
+    <div className="capacity-tabs-toolbar"><CapacityWorkspaceTabs active="overview" allowed={workspaceTabs} /><CapacityScopeFilter selectedCodes={codes} stations={scopeStations}/></div>
+    <CapacityViewTabs active="hiring" allowed={viewTabs} />
     <div className="capacity-basis-strip"><strong>Planning cycle</strong><span>Amazon IDs stay unchanged · approved external DAs classify who operated those IDs · internal DA coverage = total IDs − external DAs</span></div>
     {error ? <div className="message-panel error">{error}</div> : null}
 

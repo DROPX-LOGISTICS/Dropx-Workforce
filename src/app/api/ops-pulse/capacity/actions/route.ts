@@ -18,7 +18,7 @@ function cleanActions(value: unknown, allowed: Set<string>) {
 
 export async function POST(request: Request) {
   const authorization = await getAuthorization();
-  if (!authorization || !hasPermission(authorization, "cps_associates", "access")) {
+  if (!authorization || !hasPermission(authorization, "capacity_hiring", "access")) {
     return Response.json({ error: "Capacity access denied." }, { status: 403 });
   }
   const body = await request.json().catch(() => ({}));

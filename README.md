@@ -28,6 +28,10 @@ CASH_RECON_ADMIN_KEY=
 
 Never expose `SUPABASE_SERVICE_ROLE_KEY` to browser or mobile code.
 
+OpsPulse Network Planning setup and operating notes are in `docs/ops-network-planning.md`.
+
+For independently assignable Ops menu permissions, run `scripts/ops_menu_permissions_v1.sql` before deploying the matching application release. The migration preserves current Performance, Capacity, Reports, Performance Master, and Capacity Master grants while separating their future access controls.
+
 ## Invitation Email Sender
 
 User invitations are sent by Supabase Auth when `Send email invitation` is checked while creating a user. To send from `notification@dropxlogistics.com`, configure custom SMTP in Supabase Auth with:

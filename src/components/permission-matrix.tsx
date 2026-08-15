@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
+import type { AccessSurface } from "@/lib/access-surface";
 
 type PermissionPage = {
   id: string;
@@ -26,27 +27,49 @@ const actions: Array<{ key: PermissionAction; label: string }> = [
 
 const workforceCategoryCodes = new Set(["employees", "delivery_associates", "contractors", "vendors", "workers"]);
 
-const groupDefinitions: PermissionGroup[] = [
+const dashboardGroups: PermissionGroup[] = [
+  { key: "dashboard", label: "Command Center", codes: ["dashboard"] },
   { key: "leads", label: "Leads", codes: ["leads_dashboard", "leads_all", "leads_followups", "leads_interviews", "leads_reports", "leads_ads", "leads_sop"], hiddenCodes: ["leads"] },
-  { key: "fleet", label: "Fleet", codes: ["fleet_action_center", "fleet_vehicle_view", "fleet_date_view", "fleet_station_view", "fleet_tracking", "fleet_fuel_log", "fleet_live_gps", "fleet_maintenance", "fleet_reports"], hiddenCodes: ["fleet"] },
-  { key: "operations", label: "Operations", codes: ["daily_submission", "cod_executive_reconciliation", "cod_submission", "cod_validation", "cod_reports", "cod_portal_checks"], hiddenCodes: ["cod"] },
-  { key: "service_network", label: "Service Network", codes: ["service_network", "service_network_master"] },
-  { key: "cps", label: "CPS", codes: ["cps_overview", "cps_daily", "cps_monthly", "cps_cost_breakup", "cps_stations", "cps_shipments", "cps_associates", "cps_reports", "cps_inputs", "cps_unmapped"], hiddenCodes: ["cps"] },
-  { key: "payments", label: "Payments", codes: ["expense_requests", "payment_requests", "payment_approvals", "payment_process", "payment_reports"], hiddenCodes: ["payments"] },
-  { key: "reports", label: "Reports", codes: ["attendance_reports", "verification_api_reports", "event_log_reports"], hiddenCodes: ["reports"] },
   {
-    key: "onboard",
+    key: "people",
     label: "People",
-    codes: ["people_all", "people_review", "executive_id_onboarding"],
+    codes: ["people_all", "people_review", "people_exceptions"],
     matches: (page) => workforceCategoryCodes.has(page.code) || page.code.startsWith("workforce_category_")
   },
-  { key: "master_data", label: "Master Data", codes: ["master_locations", "master_providers", "master_models", "payment_methods", "master_payment_banks", "master_payment_heads", "master_contacts", "workforce_categories", "workforce_whatsapp", "designations", "biometric_devices", "cod_master", "master_documents", "master_imports"] },
-  { key: "settings", label: "Settings", codes: ["app_settings", "ai_connector", "amazon_connector", "developer_mode"] }
+  { key: "executive_id_onboarding", label: "Executive ID Onboarding", codes: ["executive_id_onboarding"] },
+  { key: "provider_mapping", label: "ID Mapping", codes: ["provider_mapping"] },
+  { key: "fleet", label: "Fleet", codes: ["fleet_action_center", "fleet_vehicle_view", "fleet_date_view", "fleet_station_view", "fleet_tracking", "fleet_fuel_log", "fleet_live_gps", "fleet_maintenance", "fleet_reports"], hiddenCodes: ["fleet"] },
+  { key: "mapping", label: "Mapping", codes: ["mapping"] },
+  { key: "rate_cards", label: "Rate Cards", codes: ["rate_cards"] },
+  { key: "imports", label: "Report Imports", codes: ["imports"] },
+  { key: "earnings", label: "Earnings", codes: ["earnings"] },
+  { key: "exceptions", label: "Exceptions", codes: ["exceptions"] },
+  { key: "inbox", label: "Inbox", codes: ["inbox"] },
+  { key: "business_documents", label: "Business Documents", codes: ["business_documents"] },
+  { key: "payments", label: "Payments", codes: ["expense_requests", "payment_requests", "payment_approvals", "payment_process", "payment_reports"], hiddenCodes: ["payments"] },
+  { key: "reports", label: "Reports", codes: ["attendance_reports", "verification_api_reports", "event_log_reports"], hiddenCodes: ["reports"] },
+  { key: "trash", label: "Trash", codes: ["trash"] },
+  { key: "notifications", label: "Notifications", codes: ["notifications_whatsapp", "notifications_history", "notifications_email", "notifications_app"] },
+  { key: "users", label: "Users & Access", codes: ["users"] },
+  { key: "master_data", label: "Master Data", codes: ["master_locations", "master_providers", "master_models", "payment_methods", "master_payment_banks", "master_payment_heads", "master_contacts", "workforce_categories", "workforce_whatsapp", "designations", "biometric_devices", "master_documents", "master_imports"] },
+  { key: "settings", label: "Settings", codes: ["app_settings", "payment_settings", "ai_connector", "amazon_connector", "developer_mode"] }
 ];
 
-// OpsPulse is the application surface, not a configurable menu group. Its
-// runtime access is derived from the feature permissions assigned to the role.
-const globallyHiddenCodes = new Set(["ops_pulse"]);
+const opsGroups: PermissionGroup[] = [
+  { key: "ops_pulse", label: "Command Center", codes: ["ops_pulse"] },
+  { key: "performance", label: "Performance", codes: ["performance"] },
+  { key: "capacity", label: "Capacity", codes: ["capacity_overview", "capacity_associates", "capacity_delivery", "capacity_hiring"], hiddenCodes: ["capacity"] },
+  { key: "service_network", label: "Network Planning", codes: ["service_network"] },
+  { key: "workforce_onboarding", label: "Workforce Onboarding", codes: ["delivery_associates"] },
+  { key: "operations", label: "Operations", codes: ["daily_submission", "cod_executive_reconciliation", "cod_submission", "cod_validation", "cod_reports", "cod_portal_checks", "cod_cash_in_associate"], hiddenCodes: ["cod"] },
+  { key: "business_documents", label: "Business Documents", codes: ["business_documents"] },
+  { key: "payments", label: "Payments", codes: ["expense_requests", "payment_requests", "payment_approvals", "payment_reports"], hiddenCodes: ["payments"] },
+  { key: "cps", label: "CPS", codes: ["cps_overview", "cps_daily", "cps_monthly", "cps_cost_breakup", "cps_stations", "cps_shipments", "cps_associates", "cps_reports", "imports", "cps_inputs", "cps_unmapped"], hiddenCodes: ["cps"] },
+  { key: "fleet", label: "Fleet", codes: ["fleet_action_center", "fleet_vehicle_view", "fleet_date_view", "fleet_station_view", "fleet_tracking", "fleet_fuel_log", "fleet_live_gps", "fleet_maintenance", "fleet_reports"], hiddenCodes: ["fleet"] },
+  { key: "ops_reports", label: "Reports", codes: ["ops_reports"] },
+  { key: "ops_masters", label: "Ops Masters", codes: ["cod_master", "master_locations", "master_providers", "master_models", "performance_master", "capacity_master", "service_network_master"] },
+  { key: "users", label: "Users & Access", codes: ["users"] }
+];
 
 function emptyPermissionState(pages: PermissionPage[]) {
   return Object.fromEntries(pages.map((page) => [page.id, { view: false, add: false, edit: false }])) as Record<string, Record<PermissionAction, boolean>>;
@@ -54,10 +77,12 @@ function emptyPermissionState(pages: PermissionPage[]) {
 
 export function PermissionMatrix({
   initialPermissions = [],
-  pages
+  pages,
+  surface
 }: {
   initialPermissions?: Array<{ page_id: string; can_view: boolean; can_add: boolean; can_edit: boolean }>;
   pages: PermissionPage[];
+  surface: AccessSurface;
 }) {
   const [search, setSearch] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -73,20 +98,29 @@ export function PermissionMatrix({
     return state;
   });
 
-  const groups = useMemo(() => groupDefinitions.map((definition) => ({
-    ...definition,
-    pages: pages.filter((page) => definition.codes.includes(page.code) || definition.matches?.(page)),
-    hiddenPages: (definition.hiddenCodes ?? []).flatMap((code) => pages.filter((page) => page.code === code))
-  })).filter((group) => group.pages.length), [pages]);
-  const groupedPageIds = useMemo(() => new Set(groups.flatMap((group) => [...group.pages, ...group.hiddenPages].map((page) => page.id))), [groups]);
-  const standalonePages = useMemo(() => pages.filter((page) => !groupedPageIds.has(page.id) && !globallyHiddenCodes.has(page.code)), [pages, groupedPageIds]);
+  const groups = useMemo(() => {
+    const definitions = surface === "ops" ? opsGroups : dashboardGroups;
+    const definedGroups = definitions.map((definition) => ({
+      ...definition,
+      pages: pages.filter((page) => definition.codes.includes(page.code) || definition.matches?.(page)),
+      hiddenPages: (definition.hiddenCodes ?? []).flatMap((code) => pages.filter((page) => page.code === code))
+    })).filter((group) => group.pages.length);
+    const groupedPageIds = new Set(definedGroups.flatMap((group) => [...group.pages, ...group.hiddenPages].map((page) => page.id)));
+    const fallbackGroups = pages.filter((page) => !groupedPageIds.has(page.id)).map((page) => ({
+      key: `page_${page.code}`,
+      label: page.name,
+      codes: [page.code],
+      pages: [page],
+      hiddenPages: [] as PermissionPage[]
+    }));
+    return [...definedGroups, ...fallbackGroups];
+  }, [pages, surface]);
   const term = search.trim().toLowerCase();
   const visibleGroups = groups.map((group) => {
     const groupMatches = group.label.toLowerCase().includes(term);
     return { ...group, visiblePages: !term || groupMatches ? group.pages : group.pages.filter((page) => page.name.toLowerCase().includes(term)) };
   }).filter((group) => group.visiblePages.length);
-  const visibleStandalonePages = standalonePages.filter((page) => !term || page.name.toLowerCase().includes(term));
-  const filteredPages = [...visibleGroups.flatMap((group) => group.visiblePages), ...visibleStandalonePages];
+  const filteredPages = visibleGroups.flatMap((group) => group.visiblePages);
 
   function updatePages(pageIds: string[], action: PermissionAction, checked: boolean) {
     setPermissions((current) => {
@@ -200,12 +234,6 @@ export function PermissionMatrix({
                 </Fragment>
               );
             })}
-            {visibleStandalonePages.map((page) => (
-              <tr key={page.id}>
-                <td><strong>{page.name}</strong></td>
-                {permissionCells([page.id], page.id)}
-              </tr>
-            ))}
             {!filteredPages.length ? <tr><td className="empty-cell" colSpan={5}>No pages found.</td></tr> : null}
           </tbody>
         </table>

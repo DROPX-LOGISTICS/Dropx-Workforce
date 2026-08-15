@@ -3,6 +3,7 @@ import { CapacityWorkspaceTabs } from "@/components/capacity-workspace-tabs";
 import { PageHead } from "@/components/page-head";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { allowedCapacityWorkspaceTabs } from "@/lib/ops-pulse/capacity-access";
 import { loadCapacityRules } from "@/lib/ops-pulse/capacity";
 import {
   loadCapacityAssociateDeliveredDaily,
@@ -49,8 +50,9 @@ function addBreakdown(total: DeliveryTotals, row: CapacityDeliveryBreakdown) {
 }
 
 export default async function AssociateCapacityPage({ params, searchParams }: { params: { id: string }; searchParams?: SearchParams }) {
-  const authorization = await requirePagePermission("cps_associates", "access");
+  const authorization = await requirePagePermission("capacity_associates", "access");
   const companyId = requireCompanyId(authorization);
+  const workspaceTabs = allowedCapacityWorkspaceTabs(authorization);
   const id = decodeURIComponent(params.id);
   const locationResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const allowedCodes = locationResult.locations.map((location) => location.station_code);
@@ -111,9 +113,9 @@ export default async function AssociateCapacityPage({ params, searchParams }: { 
   const latestDetail = mtdDetail.at(-1);
   const detailError = selectedDetailResult.error?.message || mtdDetailResult.error?.message || pincodeResult.error?.message;
 
-  return <AppShell active="Capacity" pageCode="cps_associates"><div className="ops-command-center capacity-workspace">
+  return <AppShell active="Capacity" pageCode="capacity_associates"><div className="ops-command-center capacity-workspace">
     <PageHead eyebrow="Associate Allocation" title={name} subtitle={`${id} · ${station}`} />
-    <CapacityWorkspaceTabs active="associates" />
+    <CapacityWorkspaceTabs active="associates" allowed={workspaceTabs} />
     {locationResult.error || shipmentResult.error || ruleResult.error || detailError ? <div className="message-panel error">{locationResult.error || shipmentResult.error?.message || ruleResult.error || detailError}</div> : null}
     <div className="capacity-station-toolbar"><a className="button secondary compact" href={`/ops-pulse/capacity/associates?station=${station}&from=${start}&to=${end}`}>← Associate SPR</a><form method="get"><input type="hidden" name="station" value={station}/>{requestedName ? <input type="hidden" name="name" value={requestedName}/> : null}<label>From<input type="date" name="from" defaultValue={start}/></label><label>To<input type="date" name="to" defaultValue={end}/></label><button className="button compact">Apply</button></form></div>
     <section className="performance-summary-grid"><article><span>Days worked</span><strong>{daily.length}</strong><small>Shipment-active days</small></article><article><span>Total workload</span><strong>{fmt(total)}</strong><small>Amazon + SMD + SWA + C-return</small></article><article><span>Average allocation</span><strong>{fmt(average, 1)}</strong><small>Workload per active day</small></article><article><span>High-load days</span><strong>{highDays}</strong><small>Above safe SPR {fmt(safe)}</small></article></section>

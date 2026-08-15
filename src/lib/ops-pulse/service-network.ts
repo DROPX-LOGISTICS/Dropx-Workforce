@@ -36,7 +36,7 @@ export async function saveServiceNetworkRule(companyId: string, rule: ServiceNet
   const result = await supabaseAdmin.from("report_import_master").upsert({
     company_id: companyId,
     source_code: sourceCode(rule.stationCode),
-    name: `${rule.stationCode} Service Network`,
+    name: `${rule.stationCode} Network Planning`,
     description: JSON.stringify(rule),
     file_types: [],
     day_offset: 0,

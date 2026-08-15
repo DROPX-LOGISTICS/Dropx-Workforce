@@ -5,6 +5,7 @@ import { CapacityWorkspaceTabs } from "@/components/capacity-workspace-tabs";
 import { CapacityScopeFilter } from "@/components/capacity-scope-filter";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { allowedCapacityWorkspaceTabs } from "@/lib/ops-pulse/capacity-access";
 import {
   loadCapacityDeliveryBreakdown,
   loadCapacityPincodes,
@@ -33,8 +34,9 @@ function scopeCodes(value: string | undefined, allowed: string[]) {
   return allowed.filter((code) => requested.includes(code));
 }
 export default async function DeliveryDataPage({ searchParams }: { searchParams?: SearchParams }) {
-  const authorization = await requirePagePermission("cps_shipments", "access");
+  const authorization = await requirePagePermission("capacity_delivery", "access");
   const companyId = requireCompanyId(authorization);
+  const workspaceTabs = allowedCapacityWorkspaceTabs(authorization);
   const locationsResult = await loadCodLocations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
   const locations = locationsResult.locations.filter(isAmazonEdspXptLocation);
   const codes = scopeCodes(searchParams?.stations, locations.map((location) => location.station_code));
@@ -116,9 +118,9 @@ export default async function DeliveryDataPage({ searchParams }: { searchParams?
   const scopeStations = locations.map((location) => ({ code: location.station_code, name: location.station_name || location.city || location.station_code, cluster: location.cluster || "", region: location.region || "" }));
   const error = locationsResult.error || breakdownResult.error?.message || pincodeResult.error?.message;
 
-  return <AppShell active="Capacity" pageCode="cps_shipments"><div className="ops-command-center shipment-workspace">
+  return <AppShell active="Capacity" pageCode="capacity_delivery"><div className="ops-command-center shipment-workspace">
     <PageHead eyebrow="Capacity" title="Delivery Data" subtitle="Capacity workload = Amazon delivery + SMD + SWA delivery + C-return." />
-    <div className="capacity-tabs-toolbar"><CapacityWorkspaceTabs active="delivery" /><CapacityScopeFilter selectedCodes={codes} stations={scopeStations}/></div>
+    <div className="capacity-tabs-toolbar"><CapacityWorkspaceTabs active="delivery" allowed={workspaceTabs} /><CapacityScopeFilter selectedCodes={codes} stations={scopeStations}/></div>
     <section className="ops-control-strip"><div className="ops-context-summary"><span>{selectedDay ? "Associate detail" : selectedStation ? "Daily detail" : "Station overview"}</span><strong>{selectedDay || selectedStation || `${stationRows.length} stations with data`}</strong><small>{from} to {to}</small></div><form className="ops-date-controls"><input name="stations" type="hidden" value={searchParams?.stations ?? ""}/>{selectedStation ? <input name="station" type="hidden" value={selectedStation}/> : null}{selectedDay ? <input name="day" type="hidden" value={selectedDay}/> : null}<label>From<input name="from" type="date" defaultValue={from}/></label><label>To<input name="to" type="date" defaultValue={to}/></label><button>Apply range</button></form></section>
     <nav className="shipment-breadcrumbs"><Link href={`/ops-pulse/performance/shipments?${base}`}>All stations</Link>{selectedStation ? <><span>›</span><Link href={`/ops-pulse/performance/shipments?${base}&station=${selectedStation}`}>{selectedStation}</Link></> : null}{selectedDay ? <><span>›</span><strong>{selectedDay}</strong></> : null}</nav>
     {error ? <section className="panel message-panel error"><div className="panel-body">{error}</div></section> : null}

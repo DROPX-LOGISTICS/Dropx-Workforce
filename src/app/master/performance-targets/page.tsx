@@ -12,9 +12,9 @@ export const dynamic = "force-dynamic";
 type SearchParams = { view?: string; saved?: string; added?: string; deleted?: string; error?: string };
 
 export default async function PerformanceTargetMaster({ searchParams }: { searchParams?: SearchParams }) {
-  const authorization = await requirePagePermission("cod_master", "access");
+  const authorization = await requirePagePermission("performance_master", "access");
   const companyId = requireCompanyId(authorization);
-  const permission = authorization.permissions.cod_master;
+  const permission = authorization.permissions.performance_master;
   const view = searchParams?.view === "daily" ? "daily" : "sls";
   const result = await loadPerformanceTargets(companyId);
   const rows = result.rows.filter((row) => row.reportType === view).sort((a, b) => a.displayOrder - b.displayOrder);
@@ -38,7 +38,7 @@ export default async function PerformanceTargetMaster({ searchParams }: { search
     return { index, label: catalog?.label ?? `Source field ${index}` };
   });
   const totalWeight = rows.reduce((sum, row) => sum + row.weight, 0);
-  return <AppShell active="Performance Master" pageCode="cod_master"><div className="ops-command-center">
+  return <AppShell active="Performance Master" pageCode="performance_master"><div className="ops-command-center">
     <PageHead eyebrow="Ops Masters" title="Performance Master" subtitle="Choose which imported metrics are shown, then manage their targets and scoring." />
     <nav className="performance-tabs"><Link className={view === "sls" ? "active" : ""} href="/master/performance-targets?view=sls">Weekly SLS</Link><Link className={view === "daily" ? "active" : ""} href="/master/performance-targets?view=daily">Daily EDSP</Link></nav>
     {searchParams?.saved ? <section className="message-panel success">Metric updated.</section> : null}

@@ -4,6 +4,13 @@ export type AccessSurface = "dashboard" | "ops";
 
 export const opsAccessPageCodes = [
   "ops_pulse",
+  "performance",
+  "capacity",
+  "capacity_overview",
+  "capacity_associates",
+  "capacity_delivery",
+  "capacity_hiring",
+  "ops_reports",
   "daily_submission",
   "cod",
   "cod_executive_reconciliation",
@@ -35,6 +42,8 @@ export const opsAccessPageCodes = [
   "master_providers",
   "master_models",
   "cod_master",
+  "performance_master",
+  "capacity_master",
   "imports",
   "users",
   "fleet",

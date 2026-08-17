@@ -201,7 +201,10 @@ export async function createExpenseRequest(formData: FormData) {
 
     const requestNo = await nextPaymentRequestNo(companyId);
     const workDate = new Date().toISOString().slice(0, 10);
-    const startsWithFinalApproval = !initialApprovalRoleIds.length;
+    const requesterIsInitialApprover = Boolean(
+      authorization.roleId && initialApprovalRoleIds.includes(authorization.roleId)
+    );
+    const startsWithFinalApproval = !initialApprovalRoleIds.length || requesterIsInitialApprover;
     const currentApprovalRoleIds = startsWithFinalApproval ? finalApprovalRoleIds : initialApprovalRoleIds;
     const approver = await approverForRoles(
       companyId,
@@ -233,7 +236,7 @@ export async function createExpenseRequest(formData: FormData) {
         email: null,
         remarks,
         status: "pending",
-        approval_status: "PENDING",
+        approval_status: startsWithFinalApproval ? "APPROVED" : "PENDING",
         current_step_order: startsWithFinalApproval ? 2 : 1,
         current_approver_user_id: approver.userId,
         current_approver_role_id: approver.roleId,
@@ -416,7 +419,10 @@ export async function createPaymentRequest(formData: FormData) {
     const legacyAccountValue = bankAccountNo ?? paymentReference ?? paymentPortal ?? locationResult.data.station_code;
     const legacyIfscValue = ifsc ?? (isUpiPayment ? "UPI" : "ONLINE");
     const legacyHolderValue = accountHolderName ?? verifiedUpiHolderName ?? submittedUpiHolderName ?? paymentPortal ?? "Online Payment";
-    const startsWithFinalApproval = !initialApprovalRoleIds.length;
+    const requesterIsInitialApprover = Boolean(
+      authorization.roleId && initialApprovalRoleIds.includes(authorization.roleId)
+    );
+    const startsWithFinalApproval = !initialApprovalRoleIds.length || requesterIsInitialApprover;
     const currentApprovalRoleIds = startsWithFinalApproval ? finalApprovalRoleIds : initialApprovalRoleIds;
     const approver = await approverForRoles(
       companyId,
@@ -457,7 +463,7 @@ export async function createPaymentRequest(formData: FormData) {
       email,
       remarks,
       status: "pending",
-      approval_status: "PENDING",
+      approval_status: startsWithFinalApproval ? "APPROVED" : "PENDING",
       current_step_order: startsWithFinalApproval ? 2 : 1,
       current_approver_user_id: approver.userId,
       current_approver_role_id: approver.roleId,

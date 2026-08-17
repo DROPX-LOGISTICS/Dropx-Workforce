@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
+import { getAuthorization, hasPermission } from "@/lib/authorization";
 
 /**
  * IOCL and BPCL reject Cloudflare Browser Run and GitHub Actions egress at the
- * IP layer (plain fetch is refused before any browser is involved), and Browser
- * Run cannot be routed through a proxy. This route reports whether Vercel's
- * Mumbai region is accepted, since an in-country IP is the remaining option
- * that needs no self-hosted machine.
- *
- * Admin-key guarded and read-only. Safe to leave deployed as a diagnostic.
+ * IP layer. This route reports whether Vercel Mumbai is accepted.
  */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -33,10 +29,21 @@ const TARGETS = [
 ] as const;
 
 export async function GET(request: Request) {
-  const expected = (process.env.REPORT_AUTO_ADMIN_KEY || process.env.ADMIN_API_KEY || "").trim();
   const provided = (request.headers.get("x-admin-key") || "").trim();
-  if (!expected || provided !== expected) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const configuredKeys = [
+    process.env.REPORT_AUTO_ADMIN_KEY,
+    process.env.ADMIN_API_KEY,
+    process.env.CASH_RECON_ADMIN_KEY
+  ]
+    .map((value) => (value || "").trim())
+    .filter(Boolean);
+  const keyOk = Boolean(provided) && configuredKeys.includes(provided);
+  if (!keyOk) {
+    const authorization = await getAuthorization();
+    if (!authorization) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!hasPermission(authorization, "imports", "view") && !hasPermission(authorization, "imports", "add")) {
+      return NextResponse.json({ error: "Permission denied." }, { status: 403 });
+    }
   }
 
   const results = [];

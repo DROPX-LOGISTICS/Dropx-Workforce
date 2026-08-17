@@ -6,6 +6,7 @@ import {
   isReportAutoSource,
   isReportAutoWorkerConfigured,
   isoWeekFromYmd,
+  reportAutoFetchFile,
   reportAutoGet,
   reportAutoPost,
   type AutoRunResult,
@@ -21,6 +22,61 @@ function yesterdayIst(): string {
 function ymdOrNull(value: unknown): string | undefined {
   const raw = String(value ?? "").trim();
   return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : undefined;
+}
+
+type ImportOutcome = {
+  imported?: number;
+  skipped?: number;
+  totalRows?: number;
+  message: string;
+};
+
+/**
+ * The worker only stages portal files in Supabase Storage; Import Master needs a
+ * multipart POST from a logged-in session. Forward the caller's cookies so the
+ * batch lands in the Upload log instead of waiting for a worker-side cookie.
+ */
+async function importWorkerArtifact(
+  request: Request,
+  args: { downloadPath?: string; sourceType: string; reportDate: string; stationCode?: string }
+): Promise<ImportOutcome> {
+  if (!args.downloadPath) {
+    return { message: "Worker finished but returned no file to import. Use Manual upload." };
+  }
+  const file = await reportAutoFetchFile(args.downloadPath);
+  const form = new FormData();
+  form.set("source_type", args.sourceType);
+  form.set("report_date", args.reportDate);
+  if (args.stationCode) form.set("station_code", args.stationCode);
+  form.set("file", new File([file.bytes], file.fileName, { type: file.mime }));
+
+  const cookie = request.headers.get("cookie");
+  const response = await fetch(new URL("/api/report-imports", request.url), {
+    method: "POST",
+    headers: cookie ? { cookie } : undefined,
+    body: form,
+    cache: "no-store"
+  });
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    message?: string;
+    imported?: number;
+    skipped?: number;
+    totalRows?: number;
+  };
+  if (!response.ok) {
+    const error = new Error(payload.error || payload.message || `Import Master returned ${response.status}`) as Error & {
+      status?: number;
+    };
+    error.status = response.status;
+    throw error;
+  }
+  return {
+    imported: payload.imported,
+    skipped: payload.skipped,
+    totalRows: payload.totalRows,
+    message: payload.message || "Imported into Import Master."
+  };
 }
 
 export async function POST(request: Request) {
@@ -127,6 +183,7 @@ export async function POST(request: Request) {
       ok?: boolean;
       error?: string;
       reportDate?: string;
+      downloadPath?: string;
       run?: { id?: string; error?: string | null };
     }>(path, { reportDate, forceNew: true });
     if (run.error || run.run?.error) {
@@ -135,12 +192,21 @@ export async function POST(request: Request) {
         { status: 502 }
       );
     }
+    const effectiveDate = run.reportDate || reportDate;
+    const imported = await importWorkerArtifact(request, {
+      downloadPath: run.downloadPath,
+      sourceType,
+      reportDate: effectiveDate
+    });
     const result: AutoRunResult = {
       ok: true,
       sourceType,
       runId: run.run?.id,
-      reportDate: run.reportDate || reportDate,
-      message: `${sourceType} auto run completed for ${run.reportDate || reportDate}. Check Upload log for the Import Master batch.`
+      reportDate: effectiveDate,
+      imported: imported.imported,
+      skipped: imported.skipped,
+      totalRows: imported.totalRows,
+      message: `${sourceType} auto run completed for ${effectiveDate}. ${imported.message}`
     };
     return Response.json(result);
   } catch (err) {

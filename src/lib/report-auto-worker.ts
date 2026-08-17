@@ -89,6 +89,29 @@ export async function reportAutoPost<T>(path: string, body: Record<string, unkno
   return (await parseWorkerResponse(response, text)) as T;
 }
 
+/** Download a generated report artifact from the worker (binary, admin key auth). */
+export async function reportAutoFetchFile(path: string): Promise<{ bytes: ArrayBuffer; fileName: string; mime: string }> {
+  const { baseUrl, adminKey } = workerConfig();
+  if (!baseUrl || !adminKey) {
+    throw new Error("Report auto worker is not configured. Set REPORT_AUTO_WORKER_URL and REPORT_AUTO_ADMIN_KEY.");
+  }
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: "GET",
+    headers: { "x-admin-key": adminKey },
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    await parseWorkerResponse(response, await response.text());
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const fileName = /filename\*?="?([^";]+)"?/i.exec(disposition)?.[1]?.trim();
+  return {
+    bytes: await response.arrayBuffer(),
+    fileName: fileName || "report-auto-file",
+    mime: response.headers.get("content-type") || "application/octet-stream"
+  };
+}
+
 /** ISO week of an IST calendar YYYY-MM-DD. */
 export function isoWeekFromYmd(ymd: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
@@ -129,4 +152,7 @@ export type AutoRunResult = {
   done?: boolean;
   isoWeek?: string;
   reportDate?: string;
+  imported?: number;
+  skipped?: number;
+  totalRows?: number;
 };

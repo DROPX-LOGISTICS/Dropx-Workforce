@@ -189,9 +189,19 @@ export async function POST(request: Request) {
       error?: string;
       reportDate?: string;
       downloadPath?: string;
+      clientPortal?: boolean;
       run?: { id?: string; error?: string | null };
     }>(path, { reportDate, forceNew: true });
     if (run.error || run.run?.error) {
+      if (run.clientPortal && (sourceType === "iocl_fuel" || sourceType === "bpcl_fuel")) {
+        return Response.json({
+          ok: false,
+          sourceType,
+          reportDate,
+          clientPortal: true,
+          error: run.error || run.run?.error || "Worker portal browser blocked."
+        }, { status: 409 });
+      }
       return Response.json(
         { ok: false, sourceType, reportDate, error: run.error || run.run?.error },
         { status: 502 }

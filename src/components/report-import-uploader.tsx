@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
 import { isReportAutoSource, isWorkforceAutoSource } from "@/lib/report-auto-worker";
+import { isFuelPortalSource, runFuelPortalInBrowser } from "@/lib/portal-client/fuel-browser";
 import { supabase } from "@/lib/supabase";
 
 type ShipmentStation = { code: string; name: string; model: string; provider: string; parentStationId?: string | null; id?: string; childCodes?: string[] };
@@ -144,6 +145,39 @@ export function ReportImportUploader({
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
+        if (response.status === 409 && result.clientPortal && isFuelPortalSource(sourceType)) {
+          try {
+            const effectiveDate = String(result.reportDate || reportDate || indiaDate(-1));
+            const browser = await runFuelPortalInBrowser({
+              sourceType,
+              reportDate: effectiveDate
+            });
+            const form = new FormData();
+            form.set("source_type", sourceType);
+            form.set("report_date", effectiveDate);
+            form.set("file", browser.file);
+            const importResponse = await fetch("/api/report-imports", { method: "POST", body: form });
+            const imported = await importResponse.json().catch(() => ({}));
+            if (!importResponse.ok) {
+              setError(imported.error ?? `Import failed after browser download (${importResponse.status}).`);
+              return;
+            }
+            setMessage(imported.message ?? `${sourceType} auto upload completed via your browser network.`);
+            setSummary({
+              duplicateRows: Number(imported.duplicateRows ?? 0),
+              imported: Number(imported.imported ?? 0),
+              refreshedExisting: Number(imported.refreshedExisting ?? 0),
+              skipped: Number(imported.skipped ?? 0),
+              totalRows: Number(imported.totalRows ?? 0)
+            });
+            setAutoNotice(true);
+            router.refresh();
+            return;
+          } catch (browserErr) {
+            setError(browserErr instanceof Error ? browserErr.message : String(browserErr));
+            return;
+          }
+        }
         setError(result.error ?? `Auto upload failed (${response.status}).`);
         return;
       }

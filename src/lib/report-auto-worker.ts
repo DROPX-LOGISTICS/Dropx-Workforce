@@ -168,4 +168,6 @@ export type AutoRunResult = {
   imported?: number;
   skipped?: number;
   totalRows?: number;
+  /** Worker WAF blocked — retry via operator browser (IOCL/BPCL). */
+  clientPortal?: boolean;
 };

@@ -34,6 +34,26 @@ export function isCashReconWorkerConfigured() {
   return Boolean(baseUrl && adminKey);
 }
 
+/**
+ * Carries the worker's machine-readable `code` so callers can distinguish
+ * "database not migrated" from "no snapshot yet" — both arrive as a 404.
+ */
+export class CashReconWorkerError extends Error {
+  readonly code: string | null;
+  readonly status: number;
+
+  constructor(message: string, options: { code?: string | null; status: number }) {
+    super(message);
+    this.name = "CashReconWorkerError";
+    this.code = options.code ?? null;
+    this.status = options.status;
+  }
+}
+
+export function workerErrorCode(error: unknown): string | null {
+  return error instanceof CashReconWorkerError ? error.code : null;
+}
+
 async function parseWorkerResponse(response: Response, text: string) {
   let payload: unknown = null;
   try {
@@ -43,11 +63,15 @@ async function parseWorkerResponse(response: Response, text: string) {
   }
 
   if (!response.ok) {
+    const code = payload && typeof payload === "object" && "code" in payload
+      ? String((payload as { code?: unknown }).code)
+      : null;
     const htmlish = /^\s*</.test(text) || /<!DOCTYPE html/i.test(text);
     if (htmlish || /Worker exceeded resource limits/i.test(text) || response.status === 1102) {
-      throw new Error(
+      throw new CashReconWorkerError(
         "Cash recon worker hit Cloudflare resource limits (Error 1102). "
-          + "Try a shorter date range, or refresh again in a minute."
+          + "Try a shorter date range, or refresh again in a minute.",
+        { code: "WORKER_RESOURCE_LIMIT", status: response.status }
       );
     }
     const message = payload && typeof payload === "object" && "message" in payload
@@ -57,9 +81,12 @@ async function parseWorkerResponse(response: Response, text: string) {
         : (text && !htmlish ? text : null) || `Cash recon worker returned ${response.status}`;
     // Never surface raw HTML/error pages in the UI.
     if (/^\s*</.test(message) || message.length > 400) {
-      throw new Error(`Cash recon worker returned ${response.status}. Check worker logs.`);
+      throw new CashReconWorkerError(
+        `Cash recon worker returned ${response.status}. Check worker logs.`,
+        { code, status: response.status }
+      );
     }
-    throw new Error(message);
+    throw new CashReconWorkerError(message, { code, status: response.status });
   }
 
   return payload;

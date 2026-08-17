@@ -24,9 +24,23 @@ SUPABASE_SERVICE_ROLE_KEY=
 NEXT_PUBLIC_APP_URL=https://dashboard.dropxlogistics.com
 CASH_RECON_WORKER_URL=https://cash-recon-worker.withered-voice-1c40.workers.dev
 CASH_RECON_ADMIN_KEY=
+REPORT_AUTO_WORKER_URL=https://report-auto-worker.withered-voice-1c40.workers.dev
+REPORT_AUTO_ADMIN_KEY=
+# Set to false to hide the Auto upload button until the worker is deployed
+# REPORT_AUTO_UI_ENABLED=true
 ```
 
 Never expose `SUPABASE_SERVICE_ROLE_KEY` to browser or mobile code.
+
+## Report Auto upload
+
+On **Report Imports**, each worker-backed source has **Upload file** (manual) and **Auto upload**.
+
+Auto calls `POST /api/report-imports/auto-run`, which proxies `REPORT_AUTO_WORKER_URL` with `x-admin-key`. Sources: `amazon_shipments`, `daily_edsp_metrics`, `delivered_shipment_detail`, `iocl_fuel`, `bpcl_fuel`, `cashbook`.
+
+Workforce Auto first checks `formattedCreationDate` on Amazon’s weekly-supp catalog. If Amazon has not published today’s files (often 8am–12pm IST), the API returns 409 — use Manual upload.
+
+Morning automation lives on the worker (06:00 IST kickoff + 08:00–15:00 IST poll). Set `REPORT_UPLOAD_ENABLED=true` and `DASHBOARD_IMPORT_COOKIE` on the worker so files land in Import Master. Hide the button with `REPORT_AUTO_UI_ENABLED=false` until that worker is deployed.
 
 OpsPulse Network Planning setup and operating notes are in `docs/ops-network-planning.md`.
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import { ReportImportUploader } from "@/components/report-import-uploader";
+import { isReportAutoUiEnabled } from "@/lib/report-auto-worker";
 import { ShipmentCoverageVisibility } from "@/components/shipment-coverage-visibility";
 import { StatusPill } from "@/components/status-pill";
 import { requirePagePermission } from "@/lib/authorization";
@@ -299,7 +300,7 @@ export async function ReportUploadPageContent({
           <div><h2>Upload report</h2></div>
           <Link className="button secondary compact" href="/master/imports">Manage reports</Link>
         </div>
-        <ReportImportUploader reports={reports} stations={shipmentStations} compact />
+        <ReportImportUploader reports={reports} stations={shipmentStations} compact autoEnabled={isReportAutoUiEnabled()} />
       </section>
 
       <ShipmentCoverageVisibility defaultVisible={showShipmentCoverage}>

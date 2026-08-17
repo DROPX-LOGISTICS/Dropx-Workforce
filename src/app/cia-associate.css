@@ -530,6 +530,20 @@
   color: #b54708;
 }
 
+.cia-empty-steps {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.cia-empty-steps code {
+  background: rgba(15, 23, 42, 0.06);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.92em;
+}
+
 .cia-run-meta {
   margin-top: 0;
 }

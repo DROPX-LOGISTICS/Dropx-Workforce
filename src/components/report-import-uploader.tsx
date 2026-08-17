@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
+import { isReportAutoSource } from "@/lib/report-auto-worker";
 import { supabase } from "@/lib/supabase";
 
 type ShipmentStation = { code: string; name: string; model: string; provider: string; parentStationId?: string | null; id?: string; childCodes?: string[] };
@@ -13,7 +14,17 @@ function indiaDate(days = 0) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(now);
 }
 
-export function ReportImportUploader({ reports, stations = [], compact = false }: { reports: ReportImportMaster[]; stations?: ShipmentStation[]; compact?: boolean }) {
+export function ReportImportUploader({
+  reports,
+  stations = [],
+  compact = false,
+  autoEnabled = false
+}: {
+  reports: ReportImportMaster[];
+  stations?: ShipmentStation[];
+  compact?: boolean;
+  autoEnabled?: boolean;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -23,15 +34,19 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
   const [stationCode, setStationCode] = useState(stations[0]?.code ?? "");
   const [reportDate, setReportDate] = useState(indiaDate());
   const [message, setMessage] = useState<string | null>(null);
+  const [autoNotice, setAutoNotice] = useState(false);
   const [hasFile, setHasFile] = useState(false);
   const [summary, setSummary] = useState<{ duplicateRows?: number; imported?: number; refreshedExisting?: number; skipped?: number; totalRows?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isAutoPending, startAuto] = useTransition();
+  const busy = isPending || isAutoPending;
 
   async function upload() {
     setMessage(null);
     setSummary(null);
     setError(null);
+    setAutoNotice(false);
     if (!sourceType) {
       setError("Select the report you are uploading.");
       return;
@@ -94,6 +109,50 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
     });
   }
 
+  async function autoUpload() {
+    setMessage(null);
+    setSummary(null);
+    setError(null);
+    setAutoNotice(false);
+    if (!sourceType) {
+      setError("Select the report you want to auto-upload.");
+      return;
+    }
+    if (!isReportAutoSource(sourceType)) {
+      setError("Auto upload is not available for this report. Choose a file and use Upload file.");
+      return;
+    }
+    if (requiresStation && !effectiveStationCode) {
+      setError("Select a station first.");
+      return;
+    }
+    if (requiresReportDate && !reportDate) {
+      setError("Select a data date first.");
+      return;
+    }
+    startAuto(async () => {
+      const response = await fetch("/api/report-imports/auto-run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source_type: sourceType,
+          report_date: sourceType === "amazon_shipments" || sourceType === "daily_edsp_metrics"
+            ? undefined
+            : (reportDate || undefined),
+          station_code: requiresStation ? effectiveStationCode : undefined
+        })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(result.error ?? `Auto upload failed (${response.status}).`);
+        return;
+      }
+      setMessage(result.message ?? "Auto upload started.");
+      setAutoNotice(true);
+      router.refresh();
+    });
+  }
+
   const selected = sourceOptions.find((option) => option.source_code === sourceType);
   const requiresStation = Boolean(selected?.requires_station);
   const requiresReportDate = Boolean(selected?.requires_report_date);
@@ -106,6 +165,37 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
     : eligibleStations[0]?.code ?? "";
   const accepted = selected?.file_types.map((type) => `.${type}`).join(",") ?? "";
   const isShipmentImport = selected?.parser_type === "delivered_shipment_detail" || selected?.parser_type === "inbound_shipment_detail";
+  const canAuto = autoEnabled && Boolean(sourceType) && isReportAutoSource(sourceType);
+  const autoTitle = !sourceType
+    ? "Select a report first"
+    : !autoEnabled
+      ? "Auto upload is not configured"
+      : !isReportAutoSource(sourceType)
+        ? "Auto upload is not available for this report — use Upload file"
+        : "Fetch this report from the portal and import it (no file needed)";
+
+  const autoButton = (
+    <button
+      className={`button secondary ${isAutoPending ? "loading" : ""}`}
+      disabled={busy || !canAuto || (requiresStation && !effectiveStationCode) || (requiresReportDate && !reportDate)}
+      onClick={autoUpload}
+      title={autoTitle}
+      type="button"
+    >
+      {isAutoPending ? "Auto uploading..." : "Auto upload"}
+    </button>
+  );
+  const manualButton = (
+    <button
+      className={`button ${isPending ? "loading" : ""}`}
+      disabled={busy || !sourceType || !hasFile || (requiresStation && !effectiveStationCode) || (requiresReportDate && !reportDate)}
+      onClick={upload}
+      title="Import a file you already downloaded"
+      type="button"
+    >
+      {isPending ? "Processing..." : compact ? "Upload file" : "Import file"}
+    </button>
+  );
 
   return (
     <div className="panel-body stacked">
@@ -169,24 +259,22 @@ export function ReportImportUploader({ reports, stations = [], compact = false }
           <span>File</span>
           <input ref={fileRef} className="field" type="file" accept={accepted} onChange={(event) => setHasFile(Boolean(event.target.files?.length))} />
         </label>
-        {compact ? (
-          <button className={`button ${isPending ? "loading" : ""}`} disabled={isPending || !sourceType || !hasFile || (requiresStation && !effectiveStationCode) || (requiresReportDate && !reportDate)} onClick={upload} type="button">
-            {isPending ? "Processing..." : "Upload file"}
-          </button>
-        ) : null}
+        {compact ? <div className="compact-upload-actions">{manualButton}{autoButton}</div> : null}
       </div>
       {compact && isShipmentImport ? <p className="shipment-upload-note">Station is detected from the file or filename; the selected checklist date is used when the file has no date. Existing IDs are refreshed without double-counting.</p> : null}
+      {compact && canAuto ? <p className="shipment-upload-note">Auto upload pulls the file from the portal — no file picker needed. Use Upload file when Amazon has not published yet or Auto fails.</p> : null}
       {!compact ? <div className="dropzone" style={{ minHeight: 120 }}>
         <div>
           <h2>{selected?.name ?? "No active reports"}</h2>
           <p className="subtle" style={{ marginTop: 8 }}>{selected?.description}</p>
           {selected ? <p className="subtle" style={{ marginTop: 6 }}>{reportSchedule(selected)} · accepts {selected.file_types.map((type) => `.${type}`).join(", ")}</p> : null}
-          <button className={`button ${isPending ? "loading" : ""}`} disabled={isPending} onClick={upload} style={{ marginTop: 16 }} type="button">
-            {isPending ? "Importing..." : "Import file"}
-          </button>
+          <div className="compact-upload-actions" style={{ marginTop: 16 }}>
+            {manualButton}
+            {autoButton}
+          </div>
         </div>
       </div> : null}
-      {message ? <div className="message-panel success"><strong>Import completed.</strong> <span>{message}</span></div> : null}
+      {message ? <div className="message-panel success"><strong>{autoNotice ? "Auto upload." : "Import completed."}</strong> <span>{message}</span></div> : null}
       {summary ? (
         <div className="report-import-summary">
           <span>Source rows <strong>{summary.totalRows}</strong></span>

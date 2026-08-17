@@ -2,8 +2,9 @@ import { CodSectionTabs } from "@/components/cod-section-tabs";
 import { PageHead } from "@/components/page-head";
 import { requireCiaAccess } from "@/lib/ops-pulse/cia-access";
 import { formatAmount, formatDateTime } from "@/lib/ops-pulse/cod";
-import { fetchCiaNetwork, isCashReconWorkerConfigured } from "@/lib/ops-pulse/cash-recon-worker";
+import { fetchCiaNetwork, isCashReconWorkerConfigured, workerErrorCode } from "@/lib/ops-pulse/cash-recon-worker";
 import { CiaNetworkClient } from "./cia-client";
+import { CiaEmptyState } from "./cia-empty-state";
 import { CiaSummaryMetrics } from "./cia-summary-metrics";
 
 export const dynamic = "force-dynamic";
@@ -13,15 +14,18 @@ export default async function CashInAssociateNetworkPage() {
   await requireCiaAccess();
 
   let error: string | null = null;
+  let errorCode: string | null = null;
   let payload: Awaited<ReturnType<typeof fetchCiaNetwork>> | null = null;
 
   if (!isCashReconWorkerConfigured()) {
     error = "Cash recon worker is not configured. Set CASH_RECON_WORKER_URL and CASH_RECON_ADMIN_KEY.";
+    errorCode = "WORKER_NOT_CONFIGURED";
   } else {
     try {
       payload = await fetchCiaNetwork();
     } catch (err) {
       error = err instanceof Error ? err.message : "Unable to load Cash In Associate network snapshot.";
+      errorCode = workerErrorCode(err);
     }
   }
 
@@ -41,22 +45,19 @@ export default async function CashInAssociateNetworkPage() {
               ? `Refresh ${refresh?.stationsOk ?? 0}/${refresh?.stationsTotal ?? "…"}`
               : payload?.run?.status
                 ? `Report ${payload.run.status}`
-                : error
-                  ? "Unavailable"
-                  : "Loading"}
+                : errorCode === "NO_CIA_SNAPSHOT"
+                  ? "No snapshot"
+                  : errorCode === "CIA_SCHEMA_MISSING" || errorCode === "WORKER_NOT_CONFIGURED"
+                    ? "Setup needed"
+                    : error
+                      ? "Unavailable"
+                      : "Loading"}
           </span>
         }
       />
       <CodSectionTabs active="cash-in-associate" />
 
-      {error ? (
-        <section className="panel message-panel error">
-          <div className="panel-body">
-            <strong>Unable to load Cash In Associate</strong>
-            <p className="subtle" style={{ marginTop: 6 }}>{error}</p>
-          </div>
-        </section>
-      ) : null}
+      {error ? <CiaEmptyState code={errorCode} message={error} /> : null}
 
       {payload && totals ? (
         <>

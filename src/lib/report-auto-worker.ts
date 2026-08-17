@@ -1,6 +1,8 @@
 export const REPORT_AUTO_SOURCE_CODES = [
   "amazon_shipments",
   "daily_edsp_metrics",
+  "da_inapp_onboarding",
+  "edsp_outstanding_cash",
   "delivered_shipment_detail",
   "iocl_fuel",
   "bpcl_fuel",
@@ -11,6 +13,17 @@ export type ReportAutoSourceCode = (typeof REPORT_AUTO_SOURCE_CODES)[number];
 
 export function isReportAutoSource(value: string): value is ReportAutoSourceCode {
   return (REPORT_AUTO_SOURCE_CODES as readonly string[]).includes(value);
+}
+
+export const WORKFORCE_AUTO_SOURCE_CODES = [
+  "amazon_shipments",
+  "daily_edsp_metrics",
+  "da_inapp_onboarding",
+  "edsp_outstanding_cash"
+] as const;
+
+export function isWorkforceAutoSource(value: string) {
+  return (WORKFORCE_AUTO_SOURCE_CODES as readonly string[]).includes(value);
 }
 
 function workerConfig() {

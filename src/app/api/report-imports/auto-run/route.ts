@@ -5,6 +5,7 @@ import { getAuthorization, hasPermission } from "@/lib/authorization";
 import {
   isReportAutoSource,
   isReportAutoWorkerConfigured,
+  isWorkforceAutoSource,
   isoWeekFromYmd,
   reportAutoFetchFile,
   reportAutoGet,
@@ -112,7 +113,7 @@ export async function POST(request: Request) {
   const reportDate = ymdOrNull(body.report_date) || yesterdayIst();
 
   try {
-    if (sourceType === "amazon_shipments" || sourceType === "daily_edsp_metrics") {
+    if (isWorkforceAutoSource(sourceType)) {
       const isoWeek = isoWeekFromYmd(ymdOrNull(body.report_date) || todayIst());
       const ready = await reportAutoGet<WorkforceReadyResponse>(
         "/api/admin/reports/workforce-supp/ready",

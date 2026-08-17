@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
-import { isReportAutoSource } from "@/lib/report-auto-worker";
+import { isReportAutoSource, isWorkforceAutoSource } from "@/lib/report-auto-worker";
 import { supabase } from "@/lib/supabase";
 
 type ShipmentStation = { code: string; name: string; model: string; provider: string; parentStationId?: string | null; id?: string; childCodes?: string[] };
@@ -136,7 +136,7 @@ export function ReportImportUploader({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           source_type: sourceType,
-          report_date: sourceType === "amazon_shipments" || sourceType === "daily_edsp_metrics"
+          report_date: isWorkforceAutoSource(sourceType)
             ? undefined
             : (reportDate || undefined),
           station_code: requiresStation ? effectiveStationCode : undefined

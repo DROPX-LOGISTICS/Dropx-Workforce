@@ -164,6 +164,19 @@ function isRetryableWorkerError(message: string) {
   return isTransientPortalSessionError(message) || isTransientWorkerLimitError(message);
 }
 
+/**
+ * Cloudflare Browser Rendering quota. Retrying cannot clear this, so the
+ * network loop has to stop rather than burn through the remaining stations.
+ */
+export function isBrowserQuotaError(message: string) {
+  const normalized = message.toLowerCase();
+  return normalized.includes("browser rendering")
+    || normalized.includes("browser-time")
+    || normalized.includes("browser time")
+    || (normalized.includes("rate limit exceeded") && normalized.includes("browser"))
+    || normalized.includes("unable to create new browser");
+}
+
 async function postWorker<T>(
   path: string,
   body: { stationCode: string; date: string } & Record<string, unknown>
@@ -1238,6 +1251,16 @@ export async function continueCiaSnapshot(runId?: string): Promise<{
       return {
         status: "retry",
         processedStation: peek.stationCode,
+        done: false,
+        run: after.run ?? peek.run,
+        refreshProgress: after.refreshProgress ?? peek.refreshProgress,
+        error: message
+      };
+    }
+    if (isBrowserQuotaError(message)) {
+      return {
+        status: "blocked",
+        processedStation: null,
         done: false,
         run: after.run ?? peek.run,
         refreshProgress: after.refreshProgress ?? peek.refreshProgress,

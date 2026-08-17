@@ -121,6 +121,18 @@ export function CiaNetworkClient({
       const blocked = (nextProgress?.stationsProcessing ?? 0) > 0
         || (nextProgress?.stationsRetryQueued ?? 0) > 0;
       const done = Boolean(result.done) && !blocked;
+      // Browser Rendering quota cannot recover by retrying, so stop the loop
+      // instead of walking the remaining stations into the same 429.
+      if (String(result.status ?? "") === "blocked") {
+        setNotice({
+          kind: "error",
+          title: "Amazon login paused — browser quota spent",
+          detail: String(result.error ?? "")
+            || "Cloudflare Browser Rendering hit its daily limit, so the Amazon session cannot be renewed right now."
+        });
+        startTransition(() => router.refresh());
+        return false;
+      }
       const retrying = String(result.status ?? "") === "retry"
         || /resource limit|error 1102|1102/i.test(String(result.error ?? ""));
       if (retrying) {

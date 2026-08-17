@@ -59,7 +59,7 @@ const EMPTY_BADGES = {
   payment_reports: 0
 };
 
-const CLOSED_STATUSES = new Set(["APPROVED", "REJECTED", "RETURNED", "CANCELLED", "PROCESSING", "PROCESSED"]);
+const TERMINAL_APPROVAL_STATUSES = new Set(["RE_APPROVED", "REJECTED", "RETURNED", "CANCELLED", "PROCESSING", "PROCESSED"]);
 
 export function emptyPaymentNotificationSnapshot(): PaymentNotificationSnapshot {
   return {
@@ -114,8 +114,7 @@ function needsPaymentDetails(request: PaymentNotificationRequest) {
 
 function isPendingApproval(request: PaymentNotificationRequest) {
   const status = requestStatus(request);
-  if (status === "RE_APPROVED") return false;
-  if (CLOSED_STATUSES.has(status)) return false;
+  if (TERMINAL_APPROVAL_STATUSES.has(status)) return false;
   return Boolean(request.current_approver_user_id || request.current_approver_role_id || request.current_approver_role_ids?.length || status === "PENDING" || !status);
 }
 

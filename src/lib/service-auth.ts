@@ -32,13 +32,22 @@ export async function getServiceAuthorization(request: Request): Promise<Authori
   const serviceEmail = (process.env.REPORT_IMPORT_SERVICE_EMAIL ?? "").trim().toLowerCase();
   if (!serviceEmail) throw new ServiceAuthError("REPORT_IMPORT_SERVICE_EMAIL is not set.");
 
-  const { data: profile, error } = await supabaseAdmin
+  const serviceCompanyId = (process.env.REPORT_IMPORT_SERVICE_COMPANY_ID ?? "").trim();
+  let query = supabaseAdmin
     .from("profiles")
     .select("id, email, full_name, company_id, role_id, is_active")
     .ilike("email", serviceEmail)
-    .eq("is_active", true)
-    .maybeSingle();
+    .eq("is_active", true);
+  if (serviceCompanyId) query = query.eq("company_id", serviceCompanyId);
+  const { data: profiles, error } = await query;
   if (error) throw new ServiceAuthError(error.message);
+  // The same address can exist in several companies, so never guess a scope.
+  if ((profiles ?? []).length > 1) {
+    throw new ServiceAuthError(
+      `${serviceEmail} matches ${profiles!.length} active profiles. Set REPORT_IMPORT_SERVICE_COMPANY_ID.`
+    );
+  }
+  const profile = profiles?.[0];
   if (!profile?.company_id) {
     throw new ServiceAuthError(`No active profile with a company for ${serviceEmail}.`);
   }

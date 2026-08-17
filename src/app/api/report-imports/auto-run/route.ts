@@ -13,6 +13,10 @@ import {
   type WorkforceReadyResponse
 } from "@/lib/report-auto-worker";
 
+function todayIst(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+}
+
 function yesterdayIst(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(
     new Date(Date.now() - 24 * 60 * 60 * 1000)
@@ -109,10 +113,10 @@ export async function POST(request: Request) {
 
   try {
     if (sourceType === "amazon_shipments" || sourceType === "daily_edsp_metrics") {
-      const isoWeek = ymdOrNull(body.report_date) ? isoWeekFromYmd(String(body.report_date)) : undefined;
+      const isoWeek = isoWeekFromYmd(ymdOrNull(body.report_date) || todayIst());
       const ready = await reportAutoGet<WorkforceReadyResponse>(
         "/api/admin/reports/workforce-supp/ready",
-        isoWeek ? { isoWeek } : undefined
+        { isoWeek }
       );
       if (!ready.ready && !ready.alreadyUploaded) {
         return Response.json(
@@ -130,7 +134,7 @@ export async function POST(request: Request) {
       }
       const run = await reportAutoPost<{ ok: boolean; run?: { id?: string }; isoWeek?: string }>(
         "/api/admin/reports/workforce-supp/run",
-        { ...(isoWeek ? { isoWeek } : {}), forceNew: true }
+        { isoWeek, forceNew: true }
       );
       const week = run.isoWeek || ready.isoWeek || isoWeek;
       const result: AutoRunResult = {

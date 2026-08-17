@@ -117,7 +117,7 @@ export async function POST(request: Request) {
       const isoWeek = isoWeekFromYmd(ymdOrNull(body.report_date) || todayIst());
       const ready = await reportAutoGet<WorkforceReadyResponse>(
         "/api/admin/reports/workforce-supp/ready",
-        { isoWeek }
+        { isoWeek, reportId: sourceType }
       );
       if (!ready.ready && !ready.alreadyUploaded) {
         return Response.json(
@@ -135,7 +135,7 @@ export async function POST(request: Request) {
       }
       const run = await reportAutoPost<{ ok: boolean; run?: { id?: string }; isoWeek?: string }>(
         "/api/admin/reports/workforce-supp/run",
-        { isoWeek, forceNew: true }
+        { isoWeek, reportId: sourceType, forceNew: true }
       );
       const week = run.isoWeek || ready.isoWeek || isoWeek;
       const result: AutoRunResult = {
@@ -144,7 +144,7 @@ export async function POST(request: Request) {
         runId: run.run?.id,
         isoWeek: week,
         ready: true,
-        message: `Workforce weekly-supp run started for ${week}. Files upload to Import Master when the worker finishes.`
+        message: `${sourceType} auto run started for ${week}. Check Upload log for the Import Master batch.`
       };
       return Response.json(result);
     }

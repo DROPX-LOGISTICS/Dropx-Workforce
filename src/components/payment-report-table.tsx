@@ -30,6 +30,7 @@ export type PaymentReportLog = {
 export type PaymentReportRequest = {
   id: string;
   request_no: string;
+  category: string | null;
   location_code: string;
   payment_head_name: string;
   payment_head_external_id: string;
@@ -83,6 +84,10 @@ function isProcessingStarted(request: PaymentReportRequest) {
 
 function reportStatusLabel(request: PaymentReportRequest) {
   return paymentStatusLabel(request);
+}
+
+function requestTypeLabel(request: PaymentReportRequest) {
+  return String(request.category ?? "payment").toLowerCase() === "expense" ? "Expense Request" : "Payment Request";
 }
 
 function buildHistory(request: PaymentReportRequest) {
@@ -229,8 +234,12 @@ export function PaymentReportTable({ requests }: { requests: PaymentReportReques
   const [search, setSearch] = useState("");
   const [locationsSelected, setLocationsSelected] = useState<string[]>([]);
   const [headsSelected, setHeadsSelected] = useState<string[]>([]);
+  const [externalIdsSelected, setExternalIdsSelected] = useState<string[]>([]);
+  const [requestTypesSelected, setRequestTypesSelected] = useState<string[]>([]);
   const [statusesSelected, setStatusesSelected] = useState<string[]>([]);
   const [paymentModesSelected, setPaymentModesSelected] = useState<string[]>([]);
+  const [requestersSelected, setRequestersSelected] = useState<string[]>([]);
+  const [accountHoldersSelected, setAccountHoldersSelected] = useState<string[]>([]);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [pageSize, setPageSize] = useState("20");
@@ -238,8 +247,12 @@ export function PaymentReportTable({ requests }: { requests: PaymentReportReques
   const history = selectedRequest ? buildHistory(selectedRequest) : [];
   const locations = useMemo(() => [...new Set(requests.map((item) => item.location_code).filter(Boolean))].sort(), [requests]);
   const heads = useMemo(() => [...new Set(requests.map((item) => item.payment_head_name).filter(Boolean))].sort(), [requests]);
+  const externalIds = useMemo(() => [...new Set(requests.map((item) => item.payment_head_external_id).filter((item) => item && item !== "-"))].sort(), [requests]);
+  const requestTypes = useMemo(() => [...new Set(requests.map(requestTypeLabel))].sort(), [requests]);
   const statuses = useMemo(() => [...new Set(requests.map(reportStatusLabel).filter(Boolean))].sort(), [requests]);
   const paymentModes = useMemo(() => [...new Set(requests.map((item) => item.payment_mode).filter(Boolean) as string[])].sort(), [requests]);
+  const requesters = useMemo(() => [...new Set(requests.map((item) => item.requested_by_name ?? item.requested_by_email).filter(Boolean) as string[])].sort(), [requests]);
+  const accountHolders = useMemo(() => [...new Set(requests.map((item) => item.account_holder_name).filter(Boolean) as string[])].sort(), [requests]);
   const filteredRequests = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return requests.filter((request) => {
@@ -250,17 +263,21 @@ export function PaymentReportTable({ requests }: { requests: PaymentReportReques
       return (!needle || searchable.includes(needle)) &&
         (!locationsSelected.length || locationsSelected.includes(request.location_code)) &&
         (!headsSelected.length || headsSelected.includes(request.payment_head_name)) &&
+        (!externalIdsSelected.length || externalIdsSelected.includes(request.payment_head_external_id)) &&
+        (!requestTypesSelected.length || requestTypesSelected.includes(requestTypeLabel(request))) &&
         (!statusesSelected.length || statusesSelected.includes(reportStatusLabel(request))) &&
         (!paymentModesSelected.length || (request.payment_mode != null && paymentModesSelected.includes(request.payment_mode))) &&
+        (!requestersSelected.length || requestersSelected.includes(request.requested_by_name ?? request.requested_by_email ?? "")) &&
+        (!accountHoldersSelected.length || accountHoldersSelected.includes(request.account_holder_name ?? "")) &&
         (!fromDate || createdDate >= fromDate) &&
         (!toDate || createdDate <= toDate);
     });
-  }, [requests, search, locationsSelected, headsSelected, statusesSelected, paymentModesSelected, fromDate, toDate]);
+  }, [requests, search, locationsSelected, headsSelected, externalIdsSelected, requestTypesSelected, statusesSelected, paymentModesSelected, requestersSelected, accountHoldersSelected, fromDate, toDate]);
   const effectivePageSize = pageSize === "all" ? Math.max(filteredRequests.length, 1) : Number(pageSize);
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / effectivePageSize));
   const visibleRequests = pageSize === "all" ? filteredRequests : filteredRequests.slice((page - 1) * effectivePageSize, page * effectivePageSize);
 
-  useEffect(() => setPage(1), [search, locationsSelected, headsSelected, statusesSelected, paymentModesSelected, fromDate, toDate, pageSize]);
+  useEffect(() => setPage(1), [search, locationsSelected, headsSelected, externalIdsSelected, requestTypesSelected, statusesSelected, paymentModesSelected, requestersSelected, accountHoldersSelected, fromDate, toDate, pageSize]);
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
 
   return (
@@ -269,8 +286,12 @@ export function PaymentReportTable({ requests }: { requests: PaymentReportReques
         <label className="payment-report-search">Search<input className="field" onChange={(event) => setSearch(event.target.value)} placeholder="Request, person, account, IFSC, UTR..." type="search" value={search} /></label>
         <MultiCheckFilter allLabel="All locations" label="Location" options={locations} selected={locationsSelected} setSelected={setLocationsSelected} />
         <MultiCheckFilter allLabel="All heads" label="Payment head" options={heads} selected={headsSelected} setSelected={setHeadsSelected} />
+        <MultiCheckFilter allLabel="All external IDs" label="External ID" options={externalIds} selected={externalIdsSelected} setSelected={setExternalIdsSelected} />
+        <MultiCheckFilter allLabel="All request types" label="Request type" options={requestTypes} selected={requestTypesSelected} setSelected={setRequestTypesSelected} />
         <MultiCheckFilter allLabel="All statuses" label="Status" options={statuses} selected={statusesSelected} setSelected={setStatusesSelected} />
         <MultiCheckFilter allLabel="All methods" displayValue={(item) => item.replaceAll("_", " ")} label="Payment method" options={paymentModes} selected={paymentModesSelected} setSelected={setPaymentModesSelected} />
+        <MultiCheckFilter allLabel="All requesters" label="Requester" options={requesters} selected={requestersSelected} setSelected={setRequestersSelected} />
+        <MultiCheckFilter allLabel="All account holders" label="Account holder" options={accountHolders} selected={accountHoldersSelected} setSelected={setAccountHoldersSelected} />
         <label>From<input className="field" onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} /></label>
         <label>To<input className="field" onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} /></label>
         <label>Rows<select className="select" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>{["20", "100", "500", "1000"].map((size) => <option key={size}>{size}</option>)}<option value="all">All</option></select></label>
@@ -280,8 +301,9 @@ export function PaymentReportTable({ requests }: { requests: PaymentReportReques
         <table>
           <thead>
             <tr>
-              <th>Request</th>
-              <th>Location</th>
+                <th>Request</th>
+                <th>Request Type</th>
+                <th>Location</th>
               <th>Payment Head</th>
               <th>External ID</th>
               <th>Amount</th>
@@ -298,6 +320,7 @@ export function PaymentReportTable({ requests }: { requests: PaymentReportReques
             {visibleRequests.length ? visibleRequests.map((request) => (
               <tr key={request.id}>
                 <td><strong>{request.request_no}</strong></td>
+                <td>{requestTypeLabel(request)}</td>
                 <td>{request.location_code}</td>
                 <td>{request.payment_head_name}</td>
                 <td>{request.payment_head_external_id}</td>
@@ -315,7 +338,7 @@ export function PaymentReportTable({ requests }: { requests: PaymentReportReques
                 </td>
               </tr>
             )) : (
-              <tr><td className="empty-cell" colSpan={12}>No payment requests found.</td></tr>
+              <tr><td className="empty-cell" colSpan={13}>No payment requests found.</td></tr>
             )}
           </tbody>
         </table>

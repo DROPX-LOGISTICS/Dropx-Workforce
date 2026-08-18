@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useFormStatus } from "react-dom";
+import { useFormState, useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { PageHead } from "@/components/page-head";
 import { StatusPill } from "@/components/status-pill";
@@ -104,8 +105,27 @@ type Props = {
   requests: PaymentProcessRequest[];
   finalizeAction: (formData: FormData) => Promise<void>;
   finalizeResultKey?: string;
-  processAction: (formData: FormData) => Promise<void>;
+  processAction: (
+    previousState: ProcessActionState,
+    formData: FormData
+  ) => Promise<ProcessActionState>;
   today: string;
+};
+
+type ProcessActionState = {
+  ok: boolean;
+  error: string;
+  notice: string;
+  requestId: string;
+  resultKey: string;
+};
+
+const initialProcessActionState: ProcessActionState = {
+  ok: false,
+  error: "",
+  notice: "",
+  requestId: "",
+  resultKey: ""
 };
 
 function FinalizeSubmitButton() {
@@ -137,6 +157,8 @@ function ProcessActionButton({
 }
 
 export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeResultKey, processAction, today }: Props) {
+  const router = useRouter();
+  const [processResult, processFormAction] = useFormState(processAction, initialProcessActionState);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [finalizeOpen, setFinalizeOpen] = useState(false);
   const [processRequest, setProcessRequest] = useState<PaymentProcessRequest | null>(null);
@@ -145,10 +167,22 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
   const [status, setStatus] = useState("approved");
   const [selectedBankId, setSelectedBankId] = useState("");
   const [fileType, setFileType] = useState("");
+  const [hiddenProcessResultKey, setHiddenProcessResultKey] = useState("");
 
   useEffect(() => {
     if (finalizeResultKey) setFinalizeOpen(false);
   }, [finalizeResultKey]);
+
+  useEffect(() => {
+    if (!processResult.ok || !processResult.resultKey || processResult.resultKey === hiddenProcessResultKey) return;
+    setProcessRequest(null);
+    router.refresh();
+  }, [hiddenProcessResultKey, processResult, router]);
+
+  function openProcessRequest(request: PaymentProcessRequest) {
+    setHiddenProcessResultKey(processResult.resultKey);
+    setProcessRequest(request);
+  }
 
   const filteredRequests = useMemo(() => {
     return requests.filter((request) => {
@@ -328,7 +362,7 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
                   <td><StatusPill status={statusLabel(request)} /></td>
                   <td>{displayDate(request.created_at)}</td>
                   <td>
-                    <button className="button secondary compact" onClick={() => setProcessRequest(request)} type="button">
+                    <button className="button secondary compact" onClick={() => openProcessRequest(request)} type="button">
                       Action
                     </button>
                   </td>
@@ -380,7 +414,7 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
               </div>
               <button className="modal-close" onClick={() => setProcessRequest(null)} type="button">x</button>
             </div>
-            <form action={processAction} className="panel-body">
+            <form action={processFormAction} className="panel-body">
               <input name="request_id" type="hidden" value={processRequest.id} />
               {statusKey(processRequest) === "processed" ? (
                 <div className="modal-inline-message warn">
@@ -400,13 +434,6 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
                 </label>
                 <label>Status
                   <input className="field" readOnly value={statusLabel(processRequest)} />
-                </label>
-                <label>Remarks
-                  <input
-                    className="field"
-                    name="process_remarks"
-                    placeholder={statusKey(processRequest) === "processed" ? "Reason for return" : "UTR No / error remarks"}
-                  />
                 </label>
               </div>
               <div style={{ marginTop: 16 }}>
@@ -475,6 +502,22 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
                   </>
                 ) : null}
               </div>
+              <div className="section-divider" />
+              <label>UTR / Error Remarks
+                <input
+                  className="field"
+                  name="process_remarks"
+                  placeholder={statusKey(processRequest) === "processed" ? "Reason for return" : "Enter UTR No or error remarks"}
+                />
+              </label>
+              {processResult.requestId === processRequest.id &&
+              processResult.resultKey !== hiddenProcessResultKey &&
+              processResult.error ? (
+                <div className="modal-inline-message error" role="alert" style={{ marginTop: 10 }}>
+                  <strong>Payment process not finalized</strong>
+                  <span>{processResult.error}</span>
+                </div>
+              ) : null}
               <div className="form-actions modal-actions">
                 <button className="button secondary" onClick={() => setProcessRequest(null)} type="button">Cancel</button>
                 {statusKey(processRequest) !== "processing" && statusKey(processRequest) !== "processed" ? (

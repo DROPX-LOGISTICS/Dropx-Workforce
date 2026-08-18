@@ -12886,6 +12886,35 @@ tbody tr:hover td {
   color: #9a3412;
 }
 
+.payment-process-remarks-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 150px minmax(320px, 640px);
+  justify-content: start;
+  width: 100%;
+}
+
+.payment-process-remarks-row > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.payment-process-remarks-row > .field {
+  min-width: 0;
+  width: 100%;
+}
+
+@media (max-width: 700px) {
+  .payment-process-remarks-row {
+    gap: 6px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .connect-page {
   min-height: 100vh;
   background:

@@ -503,7 +503,8 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
                 ) : null}
               </div>
               <div className="section-divider" />
-              <label>UTR / Error Remarks
+              <label className="payment-process-remarks-row">
+                <span>UTR / Error Remarks</span>
                 <input
                   className="field"
                   name="process_remarks"

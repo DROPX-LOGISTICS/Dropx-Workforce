@@ -117,16 +117,17 @@ export async function runIoclFuelInBrowser(args: {
   const password = String(args.session.password || "").trim();
   if (!username || !password) throw new Error("IOCL credentials are missing.");
 
-  const login = await postEncrypted(args.proxyFetch, loginBase, "Login", { UserName: username, Password: password });
-  const info = (login.info || {}) as { message?: string; isSuccess?: boolean };
-  const data = login.data as Record<string, unknown> | string | null;
+  const login = await postEncrypted(args.proxyFetch, loginBase, "Login/FetchedLoginInfo", { UserName: username });
+  const loginRes = await postEncrypted(args.proxyFetch, apiBase, "Login", { UserName: username, Password: password });
+  const info = (loginRes.info || {}) as { message?: string; isSuccess?: boolean };
+  const data = loginRes.data as Record<string, unknown> | string | null;
   let token = "";
   if (data && typeof data === "object") {
     token = String(data.token || data.Token || data.accessToken || "");
   }
-  if (!token && typeof login.data === "string") {
+  if (!token && typeof loginRes.data === "string") {
     try {
-      const parsed = JSON.parse(login.data) as Record<string, unknown>;
+      const parsed = JSON.parse(loginRes.data) as Record<string, unknown>;
       token = String(parsed.token || parsed.Token || "");
     } catch {
       /* ignore */

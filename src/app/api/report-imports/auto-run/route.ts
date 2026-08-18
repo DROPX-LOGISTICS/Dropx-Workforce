@@ -244,6 +244,24 @@ export async function POST(request: Request) {
     return Response.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const payload = (err as { payload?: { clientPortal?: boolean } }).payload;
+    const fuel = sourceType === "iocl_fuel" || sourceType === "bpcl_fuel";
+    if (
+      fuel &&
+      (payload?.clientPortal
+        || /timeout|502|internal server error|request rejected|waf/i.test(message))
+    ) {
+      return Response.json(
+        {
+          ok: false,
+          sourceType,
+          reportDate,
+          clientPortal: true,
+          error: message,
+        },
+        { status: 409 }
+      );
+    }
     const status = (err as { status?: number }).status === 409 ? 409 : 502;
     return Response.json({ ok: false, sourceType, error: message }, { status });
   }

@@ -1,77 +1,84 @@
 export type FuelPortalSource = "iocl_fuel" | "bpcl_fuel";
 
-const HIDDEN_FRAME_STYLE: Partial<CSSStyleDeclaration> = {
-  position: "fixed",
-  width: "0",
-  height: "0",
-  opacity: "0",
-  pointerEvents: "none",
-  border: "0",
-  left: "-9999px",
-  top: "-9999px"
+export type FuelPortalSession = {
+  ok: boolean;
+  portal: FuelPortalSource;
+  username?: string;
+  userId?: string;
+  password: string;
+  customerId?: string;
+  loginUrl: string;
+  txnUrl?: string;
+  error?: string;
 };
 
-function waitForFuelPortalMessage(timeoutMs: number) {
-  return new Promise<{ ok: boolean; file?: File; error?: string }>((resolve, reject) => {
-    const timer = window.setTimeout(() => {
-      window.removeEventListener("message", onMessage);
-      reject(new Error("Browser portal auto-upload timed out."));
-    }, timeoutMs);
+function proxyUrl(target: string) {
+  return `/portal-fuel-proxy/?url=${encodeURIComponent(target)}`;
+}
 
-    function onMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin) return;
-      const data = event.data as {
-        type?: string;
-        ok?: boolean;
-        error?: string;
-        fileName?: string;
-        mime?: string;
-        buffer?: ArrayBuffer;
-      };
-      if (data?.type !== "fuel-portal-done") return;
-      window.clearTimeout(timer);
-      window.removeEventListener("message", onMessage);
-      if (data.ok && data.buffer && data.fileName) {
-        resolve({
-          ok: true,
-          file: new File([data.buffer], data.fileName, { type: data.mime || "application/octet-stream" })
-        });
-        return;
-      }
-      resolve({ ok: false, error: data.error || "Browser portal run failed." });
-    }
-
-    window.addEventListener("message", onMessage);
+async function ensureFuelServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    throw new Error("Service workers are unavailable in this browser.");
+  }
+  await navigator.serviceWorker.register("/portal-fuel-proxy/sw.js", {
+    scope: "/portal-fuel-proxy/"
   });
+  await navigator.serviceWorker.ready;
 }
 
-function mountHiddenFrame(url: string): HTMLIFrameElement {
-  const frame = document.createElement("iframe");
-  frame.src = url;
-  frame.setAttribute("aria-hidden", "true");
-  frame.tabIndex = -1;
-  Object.assign(frame.style, HIDDEN_FRAME_STYLE);
-  document.body.appendChild(frame);
-  return frame;
+async function loadPortalSession(sourceType: FuelPortalSource): Promise<FuelPortalSession> {
+  const portal = sourceType === "iocl_fuel" ? "iocl" : "bpcl";
+  const response = await fetch(`/api/report-imports/portal-session?portal=${portal}`, { cache: "no-store" });
+  const payload = (await response.json().catch(() => ({}))) as FuelPortalSession;
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || `Unable to load ${sourceType} portal session (${response.status}).`);
+  }
+  return payload;
 }
 
-/** Silent browser-side fuel download using operator ISP + SW proxy (no worker API). */
+async function probePortalFromBrowser(loginUrl: string) {
+  const response = await fetch(loginUrl, {
+    headers: { "accept-language": "en-IN,en;q=0.9" },
+    credentials: "omit",
+    cache: "no-store"
+  });
+  const body = await response.text();
+  const blocked = response.status === 403
+    || /Request Rejected|support ID|403 Forbidden|Application-Gateway/i.test(body);
+  return { ok: !blocked && response.ok, status: response.status };
+}
+
+/** Runs IOCL/BPCL download inline on the current page (no popup/iframe). */
+export async function runFuelPortalInline(args: {
+  sourceType: FuelPortalSource;
+  reportDate: string;
+}): Promise<{ file: File; fileName: string }> {
+  await ensureFuelServiceWorker();
+  const session = await loadPortalSession(args.sourceType);
+  const probe = await probePortalFromBrowser(session.loginUrl);
+  if (!probe.ok) {
+    throw new Error(`Portal login page blocked from your browser (HTTP ${probe.status}).`);
+  }
+
+  if (args.sourceType === "iocl_fuel") {
+    const { runIoclFuelInBrowser } = await import("@/lib/portal-client/iocl-browser");
+    const file = await runIoclFuelInBrowser({
+      session,
+      reportDate: args.reportDate,
+      proxyFetch: (url: string, init?: RequestInit) => fetch(proxyUrl(url), init)
+    });
+    return { file, fileName: file.name };
+  }
+
+  throw new Error("BPCL browser auto-upload is not available yet — use Manual upload.");
+}
+
+/** @deprecated Use runFuelPortalInline — iframe/postMessage was timing out in production. */
 export async function runFuelPortalInBrowser(args: {
   sourceType: FuelPortalSource;
   reportDate: string;
 }): Promise<{ file: File; fileName: string }> {
-  const url = `/portal-client/fuel-runner?portal=${encodeURIComponent(args.sourceType)}&reportDate=${encodeURIComponent(args.reportDate)}`;
-  const frame = mountHiddenFrame(url);
-
-  try {
-    const result = await waitForFuelPortalMessage(args.sourceType === "iocl_fuel" ? 180_000 : 240_000);
-    if (!result.ok || !result.file) {
-      throw new Error(result.error || "Browser portal auto-upload failed.");
-    }
-    return { file: result.file, fileName: result.file.name };
-  } finally {
-    frame.remove();
-  }
+  return runFuelPortalInline(args);
 }
 
 export function isFuelPortalSource(value: string): value is FuelPortalSource {

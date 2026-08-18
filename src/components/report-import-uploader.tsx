@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
 import { isReportAutoSource, isWorkforceAutoSource } from "@/lib/report-auto-worker";
-import { isFuelPortalSource, runFuelPortalInBrowser } from "@/lib/portal-client/fuel-browser";
+import { isFuelPortalSource, runFuelPortalInline } from "@/lib/portal-client/fuel-browser";
 import { supabase } from "@/lib/supabase";
 
 type ShipmentStation = { code: string; name: string; model: string; provider: string; parentStationId?: string | null; id?: string; childCodes?: string[] };
@@ -148,7 +148,7 @@ export function ReportImportUploader({
         if (response.status === 409 && result.clientPortal && isFuelPortalSource(sourceType)) {
           try {
             const effectiveDate = String(result.reportDate || reportDate || indiaDate(-1));
-            const browser = await runFuelPortalInBrowser({
+            const browser = await runFuelPortalInline({
               sourceType,
               reportDate: effectiveDate
             });

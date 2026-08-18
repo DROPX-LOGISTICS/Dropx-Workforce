@@ -17,7 +17,7 @@ self.addEventListener("fetch", (event) => {
       headers,
       body: event.request.method === "GET" || event.request.method === "HEAD" ? undefined : event.request.body,
       redirect: "follow",
-      credentials: "omit"
+      credentials: "include"
     })
   );
 });

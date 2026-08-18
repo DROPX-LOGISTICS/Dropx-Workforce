@@ -38,6 +38,14 @@ type PaymentRequestFinalizeRow = {
 
 type PaymentProcessAction = "processing" | "processed" | "returned";
 
+export type PaymentProcessActionState = {
+  ok: boolean;
+  error: string;
+  notice: string;
+  requestId: string;
+  resultKey: string;
+};
+
 function cleanCell(value: unknown) {
   return String(value ?? "")
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
@@ -197,13 +205,16 @@ function cleanFormText(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
 }
 
-export async function updatePaymentProcessStatus(formData: FormData) {
+export async function updatePaymentProcessStatus(
+  _previousState: PaymentProcessActionState,
+  formData: FormData
+): Promise<PaymentProcessActionState> {
+  const requestId = cleanFormText(formData.get("request_id"));
   try {
     const authorization = await requirePagePermission("payment_process", "edit");
     const companyId = requireCompanyId(authorization);
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
 
-    const requestId = cleanFormText(formData.get("request_id"));
     const action = cleanFormText(formData.get("process_action")).toLowerCase() as PaymentProcessAction;
     const remarks = cleanFormText(formData.get("process_remarks"));
     if (!requestId) throw new Error("Payment request is missing.");
@@ -241,7 +252,13 @@ export async function updatePaymentProcessStatus(formData: FormData) {
       }, companyId);
       revalidatePath("/payments/process");
       revalidatePath("/payments/report");
-      processRedirect({ processNotice: `${request.request_no} marked as processing.` });
+      return {
+        ok: true,
+        error: "",
+        notice: `${request.request_no} marked as processing.`,
+        requestId,
+        resultKey: crypto.randomUUID()
+      };
     }
 
     if (action === "processed") {
@@ -266,7 +283,13 @@ export async function updatePaymentProcessStatus(formData: FormData) {
       }, companyId);
       revalidatePath("/payments/process");
       revalidatePath("/payments/report");
-      processRedirect({ processNotice: `${request.request_no} marked as processed.` });
+      return {
+        ok: true,
+        error: "",
+        notice: `${request.request_no} marked as processed.`,
+        requestId,
+        resultKey: crypto.randomUUID()
+      };
     }
 
     await updatePaymentRequest(companyId, requestId, {
@@ -289,10 +312,21 @@ export async function updatePaymentProcessStatus(formData: FormData) {
     revalidatePath("/payments/process");
     revalidatePath("/payments/requests");
     revalidatePath("/payments/report");
-    processRedirect({ processNotice: `${request.request_no} returned to requester.` });
+    return {
+      ok: true,
+      error: "",
+      notice: `${request.request_no} returned to requester.`,
+      requestId,
+      resultKey: crypto.randomUUID()
+    };
   } catch (error) {
-    if (isNextRedirect(error)) throw error;
-    processRedirect({ processError: errorMessage(error) });
+    return {
+      ok: false,
+      error: errorMessage(error),
+      notice: "",
+      requestId,
+      resultKey: crypto.randomUUID()
+    };
   }
 }
 

@@ -1,6 +1,8 @@
 import CryptoJS from "crypto-js";
 
 const TOKEN = "8080808080808080";
+const GUEST_PROVIDER_KEY = "103C594B-19B4-49E1-847C-67FEC502DC87";
+const GUEST_USER = "GuestUser";
 
 type IoclSession = {
   username?: string;
@@ -10,6 +12,12 @@ type IoclSession = {
 
 function encryptJson(obj: unknown): string {
   const plain = JSON.stringify(obj);
+  const key = CryptoJS.enc.Utf8.parse(TOKEN);
+  const iv = CryptoJS.lib.WordArray.create([0, 0, 0, 0]);
+  return CryptoJS.AES.encrypt(plain, key, { iv }).toString();
+}
+
+function encryptString(plain: string): string {
   const key = CryptoJS.enc.Utf8.parse(TOKEN);
   const iv = CryptoJS.lib.WordArray.create([0, 0, 0, 0]);
   return CryptoJS.AES.encrypt(plain, key, { iv }).toString();
@@ -57,6 +65,24 @@ function uniqueKey(userName: string) {
   return `${userName}|${stamp}|${rand}`;
 }
 
+function guestAuthHeaders(userName = GUEST_USER) {
+  const stamp = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).format(new Date()).replace(",", "");
+  const rand = Math.floor(Math.random() * 900_000) + 100_000;
+  return {
+    Authorization: `Bearer ${GUEST_PROVIDER_KEY}`,
+    UserName: `Bearer ${encryptString(`${userName},${stamp},${rand}`)}`
+  };
+}
+
 function ymdToIoclUi(ymd: string) {
   const [y, m, d] = ymd.split("-");
   return `${d}/${m}/${y}`;
@@ -68,8 +94,10 @@ function addDaysYmd(ymd: string, days: number) {
   return dt.toISOString().slice(0, 10);
 }
 
+export type PortalProxyFetch = (url: string, init?: RequestInit) => Promise<Response>;
+
 async function postEncrypted(
-  proxyFetch: typeof fetch,
+  proxyFetch: PortalProxyFetch,
   base: string,
   path: string,
   body: Record<string, unknown>,
@@ -83,6 +111,7 @@ async function postEncrypted(
       accept: "application/json",
       origin: "https://beta.iocxtrapower.com",
       referer: "https://beta.iocxtrapower.com/account/login",
+      ...guestAuthHeaders(String(body.UserName || body.userName || GUEST_USER)),
       ...headers
     },
     body: JSON.stringify({ Request: encryptJson(payload) })
@@ -109,7 +138,7 @@ function rowsToCsv(rows: unknown[]): string {
 export async function runIoclFuelInBrowser(args: {
   session: IoclSession;
   reportDate: string;
-  proxyFetch: typeof fetch;
+  proxyFetch: PortalProxyFetch;
 }): Promise<File> {
   const loginBase = "https://betaapi.iocxtrapower.com/LoginAPI/api/";
   const apiBase = "https://betaapi.iocxtrapower.com/APIGateway/api/";

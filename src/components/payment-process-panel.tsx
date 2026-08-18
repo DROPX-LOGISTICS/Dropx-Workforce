@@ -19,6 +19,7 @@ export type PaymentProcessRequest = {
   id: string;
   request_no: string;
   location_code: string;
+  location_name: string | null;
   amount: number | null;
   amount_requested: number | null;
   payment_mode: string | null;
@@ -50,6 +51,10 @@ function paymentMethodLabel(request: PaymentProcessRequest) {
   if (request.payment_mode === "upi_payment") return "UPI Payment";
   if (request.payment_mode === "online_payment") return "Online Payment";
   return "Bank Transfer";
+}
+
+function locationLabel(request: PaymentProcessRequest) {
+  return `${request.location_code}${request.location_name ? ` - ${request.location_name}` : ""}`;
 }
 
 function UpiPaymentQr({ request }: { request: PaymentProcessRequest }) {
@@ -410,7 +415,10 @@ export function PaymentProcessPanel({ banks, requests, finalizeAction, finalizeR
             <div className="panel-head">
               <div>
                 <h2>Process payment</h2>
-                <p className="subtle">{processRequest.request_no} - {processRequest.location_code}</p>
+                <div className="payment-modal-reference">
+                  <span>{processRequest.request_no}</span>
+                  <strong className="payment-location-highlight">{locationLabel(processRequest)}</strong>
+                </div>
               </div>
               <button className="modal-close" onClick={() => setProcessRequest(null)} type="button">x</button>
             </div>

@@ -265,6 +265,18 @@ export default async function PaymentApprovalsPage({
   const { requests, canDownloadProcessData, error } = await loadApprovals(companyId, authorization, currentStatus, currentSearch);
   const manageId = searchParams?.manage;
   const selectedRequest = manageId ? requests.find((request) => request.id === manageId) ?? null : null;
+  const selectedLocationResult = selectedRequest && supabaseAdmin
+    ? await supabaseAdmin
+        .from("stations")
+        .select("station_code, station_name, city")
+        .eq("company_id", companyId)
+        .eq(selectedRequest.location_id ? "id" : "station_code", selectedRequest.location_id || selectedRequest.location_code)
+        .maybeSingle()
+    : null;
+  const selectedLocationName = selectedLocationResult?.data?.station_name || selectedLocationResult?.data?.city || "";
+  const selectedLocationLabel = selectedRequest
+    ? `${selectedRequest.location_code}${selectedLocationName ? ` - ${selectedLocationName}` : ""}`
+    : "";
   const detailData = selectedRequest && supabaseAdmin ? await Promise.all([
     supabaseAdmin
       .from("payment_request_answers")
@@ -295,14 +307,18 @@ export default async function PaymentApprovalsPage({
           actor: selectedRequest.profiles?.full_name ?? selectedRequest.profiles?.email ?? "Requester",
           role: "Requester"
         },
-        ...logs.map((log) => ({
-          id: log.id,
-          action: log.action,
-          comments: log.comments,
-          created_at: log.created_at,
-          actor: log.profiles?.full_name ?? log.profiles?.email ?? "System",
-          role: log.user_roles?.name ?? log.user_roles?.code ?? "-"
-        })),
+        ...logs.map((log) => {
+          const role = log.user_roles?.name ?? log.user_roles?.code ?? "-";
+          const isLocationEntry = String(log.user_roles?.code || log.user_roles?.name || "").trim().toLowerCase() === "location";
+          return {
+            id: log.id,
+            action: log.action,
+            comments: log.comments,
+            created_at: log.created_at,
+            actor: isLocationEntry ? selectedLocationLabel : log.profiles?.full_name ?? log.profiles?.email ?? "System",
+            role
+          };
+        }),
         ...(selectedRequest.processed_at && !logs.some((log) => log.action.toLowerCase() === "processed")
           ? [{
               id: `processed-${selectedRequest.id}`,
@@ -403,7 +419,10 @@ export default async function PaymentApprovalsPage({
             <div className="panel-head">
               <div>
                 <h2>Manage payment request</h2>
-                <p className="subtle">{selectedRequest.request_no} · {selectedRequest.location_code}</p>
+                <div className="payment-modal-reference">
+                  <span>{selectedRequest.request_no}</span>
+                  <strong className="payment-location-highlight">{selectedLocationLabel}</strong>
+                </div>
               </div>
               <PendingLink className="icon-button" href={`/payments/approvals?${currentParams.toString()}`} scroll={false} aria-label="Close">x</PendingLink>
             </div>

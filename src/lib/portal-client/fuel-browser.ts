@@ -1,8 +1,15 @@
 export type FuelPortalSource = "iocl_fuel" | "bpcl_fuel";
 
-function runnerFeatures() {
-  return "popup=yes,width=1,height=1,left=-12000,top=-12000,toolbar=no,menubar=no,location=no,status=no";
-}
+const HIDDEN_FRAME_STYLE: Partial<CSSStyleDeclaration> = {
+  position: "fixed",
+  width: "0",
+  height: "0",
+  opacity: "0",
+  pointerEvents: "none",
+  border: "0",
+  left: "-9999px",
+  top: "-9999px"
+};
 
 function waitForFuelPortalMessage(timeoutMs: number) {
   return new Promise<{ ok: boolean; file?: File; error?: string }>((resolve, reject) => {
@@ -38,28 +45,33 @@ function waitForFuelPortalMessage(timeoutMs: number) {
   });
 }
 
+function mountHiddenFrame(url: string): HTMLIFrameElement {
+  const frame = document.createElement("iframe");
+  frame.src = url;
+  frame.setAttribute("aria-hidden", "true");
+  frame.tabIndex = -1;
+  Object.assign(frame.style, HIDDEN_FRAME_STYLE);
+  document.body.appendChild(frame);
+  return frame;
+}
+
 /** Silent browser-side fuel download using operator ISP + SW proxy (no worker API). */
 export async function runFuelPortalInBrowser(args: {
   sourceType: FuelPortalSource;
   reportDate: string;
 }): Promise<{ file: File; fileName: string }> {
   const url = `/portal-client/fuel-runner?portal=${encodeURIComponent(args.sourceType)}&reportDate=${encodeURIComponent(args.reportDate)}`;
-  const popup = window.open(url, `fuelPortal_${Date.now()}`, runnerFeatures());
-  if (!popup) {
-    throw new Error("Unable to open a hidden portal window. Allow pop-ups for Ops Pulse and retry.");
-  }
+  const frame = mountHiddenFrame(url);
 
-  const result = await waitForFuelPortalMessage(args.sourceType === "iocl_fuel" ? 180_000 : 240_000);
   try {
-    popup.close();
-  } catch {
-    /* ignore */
+    const result = await waitForFuelPortalMessage(args.sourceType === "iocl_fuel" ? 180_000 : 240_000);
+    if (!result.ok || !result.file) {
+      throw new Error(result.error || "Browser portal auto-upload failed.");
+    }
+    return { file: result.file, fileName: result.file.name };
+  } finally {
+    frame.remove();
   }
-
-  if (!result.ok || !result.file) {
-    throw new Error(result.error || "Browser portal auto-upload failed.");
-  }
-  return { file: result.file, fileName: result.file.name };
 }
 
 export function isFuelPortalSource(value: string): value is FuelPortalSource {

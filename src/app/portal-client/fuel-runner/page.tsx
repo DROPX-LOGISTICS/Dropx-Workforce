@@ -65,7 +65,12 @@ function FuelPortalRunnerInner() {
 
     const portal = (params.get("portal") || "").trim() as FuelPortalSource;
     const reportDate = (params.get("reportDate") || "").trim();
-    const openerOrigin = window.location.origin;
+    const targetOrigin = window.location.origin;
+    const notifyParent = (payload: Record<string, unknown>, transfer?: Transferable[]) => {
+      const target = window.opener || window.parent;
+      if (!target || target === window) return;
+      target.postMessage(payload, targetOrigin, transfer || []);
+    };
 
     void (async () => {
       try {
@@ -91,7 +96,7 @@ function FuelPortalRunnerInner() {
             proxyFetch: (url: string, init?: RequestInit) => fetch(proxyUrl(url), init)
           });
           const buffer = await file.arrayBuffer();
-          window.opener?.postMessage(
+          notifyParent(
             {
               type: "fuel-portal-done",
               ok: true,
@@ -101,21 +106,17 @@ function FuelPortalRunnerInner() {
               mime: file.type,
               buffer
             },
-            openerOrigin,
             [buffer]
           );
-          window.close();
+          if (window.opener) window.close();
           return;
         }
 
         throw new Error("BPCL browser auto-upload is not available yet — use Manual upload.");
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        window.opener?.postMessage(
-          { type: "fuel-portal-done", ok: false, portal, reportDate, error: message },
-          openerOrigin
-        );
-        window.close();
+        notifyParent({ type: "fuel-portal-done", ok: false, portal, reportDate, error: message });
+        if (window.opener) window.close();
       }
     })();
   }, [params]);

@@ -1,8 +1,11 @@
 import CryptoJS from "crypto-js";
+import { getIoclRecaptchaToken } from "./iocl-recaptcha";
 
 const TOKEN = "8080808080808080";
 const GUEST_PROVIDER_KEY = "103C594B-19B4-49E1-847C-67FEC502DC87";
 const GUEST_USER = "GuestUser";
+const LOGIN_BASE = "https://betaapi.iocxtrapower.com/LoginAPI/api/";
+const API_BASE = "https://betaapi.iocxtrapower.com/APIGateway/api/";
 
 type IoclSession = {
   username?: string;
@@ -29,25 +32,56 @@ function decryptString(cipherText: string): string {
   return CryptoJS.AES.decrypt(cipherText, key, { iv }).toString(CryptoJS.enc.Utf8);
 }
 
-function unwrapPayload(payload: unknown): unknown {
-  if (!payload || typeof payload !== "object") return payload;
-  const obj = payload as Record<string, unknown>;
-  if (typeof obj.data !== "string") return payload;
-  const dataStr = obj.data.trim();
-  if (dataStr.startsWith("{") || dataStr.startsWith("[")) {
+function unwrapPayload(payload: unknown): Record<string, unknown> {
+  if (!payload || typeof payload !== "object") return {};
+  const obj = { ...(payload as Record<string, unknown>) };
+  const info = obj.info as { refreshToken?: string } | undefined;
+
+  let chkIsActive = "";
+  if (typeof obj.isActive === "string" && obj.isActive.includes(",")) {
+    chkIsActive = obj.isActive.split(",")[0];
+  } else if (typeof obj.isActive === "string" && obj.isActive.length > 4) {
+    const dec = decryptString(obj.isActive);
+    if (dec) chkIsActive = dec.split(",")[0];
+  }
+
+  const ipRaw = obj.ipAddress;
+  let ipParts: string[] = [];
+  if (typeof ipRaw === "string" && ipRaw && ipRaw !== "false") {
+    const ipDec = decryptString(ipRaw) || ipRaw;
+    ipParts = ipDec.split(",");
+  } else if (ipRaw === "false" || ipRaw === false) {
+    ipParts = ["false"];
+  }
+
+  const shouldDecryptData =
+    chkIsActive === "true" &&
+    ipParts.length === 1 &&
+    typeof obj.data === "string" &&
+    obj.data.length > 8;
+
+  if (shouldDecryptData || (typeof obj.data === "string" && obj.data.length > 8 && !String(obj.data).startsWith("{"))) {
+    const plain = decryptString(String(obj.data));
+    if (plain) {
+      try {
+        obj.data = JSON.parse(plain);
+      } catch {
+        obj.data = plain;
+      }
+    }
+  } else if (typeof obj.data === "string" && (obj.data.startsWith("{") || obj.data.startsWith("["))) {
     try {
-      return { ...obj, data: JSON.parse(dataStr) };
+      obj.data = JSON.parse(obj.data);
     } catch {
-      return payload;
+      /* keep string */
     }
   }
-  const plain = decryptString(dataStr);
-  if (!plain) return payload;
-  try {
-    return { ...obj, data: JSON.parse(plain) };
-  } catch {
-    return { ...obj, data: plain };
+
+  if (info?.refreshToken && info.refreshToken.length > 20) {
+    obj.sessionToken = info.refreshToken;
   }
+
+  return obj;
 }
 
 function uniqueKey(userName: string) {
@@ -80,6 +114,25 @@ function guestAuthHeaders(userName = GUEST_USER) {
   return {
     Authorization: `Bearer ${GUEST_PROVIDER_KEY}`,
     UserName: `Bearer ${encryptString(`${userName},${stamp},${rand}`)}`
+  };
+}
+
+function sessionAuthHeaders(token: string, userName: string) {
+  const stamp = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).format(new Date()).replace(",", "");
+  const rand = Math.floor(Math.random() * 900_000) + 100_000;
+  return {
+    Authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}`,
+    UserName: `Bearer ${encryptString(`${userName},${stamp},${rand}`)}`,
+    username: userName
   };
 }
 
@@ -117,7 +170,23 @@ async function postEncrypted(
     body: JSON.stringify({ Request: encryptJson(payload) })
   });
   const json = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-  return unwrapPayload(json) as Record<string, unknown>;
+  return path.includes("Login") ? unwrapPayload(json) : unwrapPayload(json);
+}
+
+function extractToken(login: Record<string, unknown>): string {
+  const info = login.info as { refreshToken?: string; message?: string } | undefined;
+  if (info?.refreshToken && info.refreshToken.length > 20) return info.refreshToken;
+  const sessionToken = String(login.sessionToken ?? "").trim();
+  if (sessionToken.length > 20) return sessionToken;
+  const data = login.data;
+  if (data && typeof data === "object") {
+    const obj = data as Record<string, unknown>;
+    for (const key of ["token", "Token", "accessToken", "userKey"]) {
+      const val = String(obj[key] ?? "").trim();
+      if (val.length > 20) return val;
+    }
+  }
+  return "";
 }
 
 function rowsToCsv(rows: unknown[]): string {
@@ -135,48 +204,57 @@ function rowsToCsv(rows: unknown[]): string {
   ].join("\n");
 }
 
+async function loginIocl(
+  proxyFetch: PortalProxyFetch,
+  username: string,
+  password: string
+): Promise<{ token: string; login: Record<string, unknown> }> {
+  await postEncrypted(proxyFetch, LOGIN_BASE, "Login/FetchedLoginInfo", { UserName: username });
+
+  const captchaToken = await getIoclRecaptchaToken("login");
+  const captchaFields: Record<string, string>[] = [
+    { Token: captchaToken },
+    { CaptchaToken: captchaToken },
+    { RecaptchaToken: captchaToken }
+  ];
+
+  let lastMessage = "";
+  for (const captchaField of captchaFields) {
+    const login = await postEncrypted(proxyFetch, LOGIN_BASE, "Login/Login", {
+      UserName: username,
+      Password: password,
+      ...captchaField
+    });
+    const info = (login.info || {}) as { message?: string; isSuccess?: boolean };
+    lastMessage = String(info.message ?? "");
+    if (/recaptcha|captcha/i.test(lastMessage)) continue;
+    const token = extractToken(login);
+    if (token) return { token, login };
+    if (info.isSuccess === false && lastMessage) break;
+  }
+
+  throw new Error(lastMessage || "IOCL login did not return a token (browser path). Use Manual upload.");
+}
+
 export async function runIoclFuelInBrowser(args: {
   session: IoclSession;
   reportDate: string;
   proxyFetch: PortalProxyFetch;
 }): Promise<File> {
-  const loginBase = "https://betaapi.iocxtrapower.com/LoginAPI/api/";
-  const apiBase = "https://betaapi.iocxtrapower.com/APIGateway/api/";
   const username = String(args.session.username || "").trim();
   const password = String(args.session.password || "").trim();
   if (!username || !password) throw new Error("IOCL credentials are missing.");
 
-  const login = await postEncrypted(args.proxyFetch, loginBase, "Login/FetchedLoginInfo", { UserName: username });
-  const loginRes = await postEncrypted(args.proxyFetch, apiBase, "Login", { UserName: username, Password: password });
-  const info = (loginRes.info || {}) as { message?: string; isSuccess?: boolean };
-  const data = loginRes.data as Record<string, unknown> | string | null;
-  let token = "";
-  if (data && typeof data === "object") {
-    token = String(data.token || data.Token || data.accessToken || "");
-  }
-  if (!token && typeof loginRes.data === "string") {
-    try {
-      const parsed = JSON.parse(loginRes.data) as Record<string, unknown>;
-      token = String(parsed.token || parsed.Token || "");
-    } catch {
-      /* ignore */
-    }
-  }
-  if (!token) {
-    throw new Error(info.message || "IOCL login did not return a token (browser path). Use Manual upload.");
-  }
+  const { token } = await loginIocl(args.proxyFetch, username, password);
+  const authHeaders = sessionAuthHeaders(token, username);
 
   const fromUi = ymdToIoclUi(args.reportDate);
   const toUi = ymdToIoclUi(addDaysYmd(args.reportDate, 1));
   const customerId = String(args.session.customerId || "1002424122").trim();
-  const authHeaders = {
-    authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}`,
-    username
-  };
 
   const summary = await postEncrypted(
     args.proxyFetch,
-    apiBase,
+    API_BASE,
     "Transaction/GetTransactionSummary",
     {
       CustomerId: customerId,
@@ -198,7 +276,7 @@ export async function runIoclFuelInBrowser(args: {
   if (!csv || csv.length < 40) {
     const exp = await postEncrypted(
       args.proxyFetch,
-      apiBase,
+      API_BASE,
       "Transaction/GetTransactionSummaryEXP",
       {
         CustomerId: customerId,

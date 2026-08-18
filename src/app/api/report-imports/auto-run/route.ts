@@ -36,6 +36,10 @@ type ImportOutcome = {
   message: string;
 };
 
+function workerUploadsDirectly(sourceType: string) {
+  return sourceType === "cashbook" || sourceType === "iocl_fuel" || sourceType === "bpcl_fuel";
+}
+
 /**
  * The worker only stages portal files in Supabase Storage; Import Master needs a
  * multipart POST from a logged-in session. Forward the caller's cookies so the
@@ -190,6 +194,7 @@ export async function POST(request: Request) {
       reportDate?: string;
       downloadPath?: string;
       clientPortal?: boolean;
+      upload?: { ok?: boolean; reason?: string; skipped?: boolean } | null;
       run?: { id?: string; error?: string | null };
     }>(path, { reportDate, forceNew: true });
     if (run.error || run.run?.error) {
@@ -208,6 +213,19 @@ export async function POST(request: Request) {
       );
     }
     const effectiveDate = run.reportDate || reportDate;
+    if (workerUploadsDirectly(sourceType) && (run.upload?.ok || run.upload?.skipped)) {
+      const result: AutoRunResult = {
+        ok: true,
+        sourceType,
+        runId: run.run?.id,
+        reportDate: effectiveDate,
+        message:
+          run.upload?.skipped
+            ? `${sourceType} auto run completed for ${effectiveDate}. Worker upload already existed in Import Master, so the dashboard skipped a duplicate import.`
+            : `${sourceType} auto run completed for ${effectiveDate}. Worker uploaded the file directly into Import Master.`
+      };
+      return Response.json(result);
+    }
     const imported = await importWorkerArtifact(request, {
       downloadPath: run.downloadPath,
       sourceType,

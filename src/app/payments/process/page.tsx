@@ -18,6 +18,7 @@ type PaymentRequestRow = {
   id: string;
   request_no: string;
   location_code: string;
+  location_name?: string | null;
   payment_head_id: string;
   amount: number | null;
   amount_requested: number | null;
@@ -173,14 +174,17 @@ async function loadPaymentProcess(companyId: string, userId: string | null, role
     ...approvalRows.map((approval) => approval.approver_user_id)
   ].filter(Boolean))) as string[];
   const roleIds = Array.from(new Set(approvalRows.map((approval) => approval.approver_role_id).filter(Boolean))) as string[];
-  const [profilesResult, rolesResult] = await Promise.all([
+  const locationCodes = Array.from(new Set(requestRows.map((request) => request.location_code).filter(Boolean)));
+  const [profilesResult, rolesResult, locationsResult] = await Promise.all([
     profileIds.length ? supabaseAdmin.from("profiles").select("id, full_name, email").eq("company_id", companyId).in("id", profileIds) : { data: [], error: null },
-    roleIds.length ? supabaseAdmin.from("user_roles").select("id, name, code").eq("company_id", companyId).in("id", roleIds) : { data: [], error: null }
+    roleIds.length ? supabaseAdmin.from("user_roles").select("id, name, code").eq("company_id", companyId).in("id", roleIds) : { data: [], error: null },
+    locationCodes.length ? supabaseAdmin.from("stations").select("station_code, station_name, city").eq("company_id", companyId).in("station_code", locationCodes) : { data: [], error: null }
   ]);
-  const identityError = profilesResult.error?.message || rolesResult.error?.message;
+  const identityError = profilesResult.error?.message || rolesResult.error?.message || locationsResult.error?.message;
   if (identityError) return { banks: [] as PaymentBankRow[], requests: [] as PaymentRequestRow[], error: identityError };
   const profilesById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));
   const rolesById = new Map((rolesResult.data ?? []).map((role) => [role.id, role]));
+  const locationsByCode = new Map((locationsResult.data ?? []).map((location) => [location.station_code, location.station_name || location.city || null]));
   const approvalsByRequest = new Map<string, PaymentApprovalRow[]>();
   approvalRows.forEach((approval) => {
     const rows = approvalsByRequest.get(approval.payment_request_id) ?? [];
@@ -191,6 +195,7 @@ async function loadPaymentProcess(companyId: string, userId: string | null, role
     banks: (banksResult.data ?? []) as PaymentBankRow[],
     requests: requestRows.map((request) => ({
         ...request,
+        location_name: locationsByCode.get(request.location_code) ?? null,
         payment_heads: firstRelation(request.payment_heads),
         payment_details: detailsByRequest.get(request.id) ?? [],
         payment_history: (() => {
@@ -199,11 +204,14 @@ async function loadPaymentProcess(companyId: string, userId: string | null, role
           const history: PaymentHistoryRow[] = approvalHistory.map((approval) => {
             const actor = approval.approver_user_id ? profilesById.get(approval.approver_user_id) : null;
             const role = approval.approver_role_id ? rolesById.get(approval.approver_role_id) : null;
+            const roleLabel = role?.name ?? role?.code ?? (approval.action.toLowerCase() === "created" ? "Requester" : "-");
+            const locationLabel = `${request.location_code}${locationsByCode.get(request.location_code) ? ` - ${locationsByCode.get(request.location_code)}` : ""}`;
+            const isLocationEntry = String(role?.code || role?.name || "").trim().toLowerCase() === "location";
             return {
               id: approval.id,
               action: approval.action,
-              actor: actor?.full_name ?? actor?.email ?? "System",
-              role: role?.name ?? role?.code ?? (approval.action.toLowerCase() === "created" ? "Requester" : "-"),
+              actor: isLocationEntry ? locationLabel : actor?.full_name ?? actor?.email ?? "System",
+              role: roleLabel,
               comments: approval.comments,
               created_at: approval.created_at
             };
@@ -281,6 +289,7 @@ export default async function PaymentProcessPage({
             id: request.id,
             request_no: request.request_no,
             location_code: request.location_code,
+            location_name: request.location_name ?? null,
             amount: request.amount,
             amount_requested: request.amount_requested,
             payment_mode: request.payment_mode,

@@ -45,9 +45,11 @@ export function ReportImportUploader({
   const fileRef = useRef<HTMLInputElement>(null);
   const sourceOptions = reports.filter((report) => report.is_active);
   const requestedSource = searchParams.get("report") ?? "";
+  const urlDate = searchParams.get("date") ?? "";
   const [sourceType, setSourceType] = useState(sourceOptions.some((report) => report.source_code === requestedSource) ? requestedSource : "");
   const [stationCode, setStationCode] = useState(stations[0]?.code ?? "");
-  const [reportDate, setReportDate] = useState(indiaDate());
+  const initialDate = /^\d{4}-\d{2}-\d{2}$/.test(urlDate) ? urlDate : indiaDate();
+  const [reportDate, setReportDate] = useState(initialDate);
   const [message, setMessage] = useState<string | null>(null);
   const [autoNotice, setAutoNotice] = useState(false);
   const [hasFile, setHasFile] = useState(false);

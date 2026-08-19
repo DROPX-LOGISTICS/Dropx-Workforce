@@ -23,16 +23,6 @@ type AutoProgress = {
   steps: AutoStep[];
 };
 
-type ShipmentStation = {
-  id: string;
-  code: string;
-  name: string;
-  model: string;
-  provider: string;
-  parentStationId: string | null;
-  childCodes: string[];
-};
-
 function indiaDate(days = 0) {
   const now = new Date();
   now.setUTCDate(now.getUTCDate() + days);

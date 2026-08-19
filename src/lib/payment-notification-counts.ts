@@ -119,7 +119,9 @@ function isPendingApproval(request: PaymentNotificationRequest) {
 }
 
 function isReadyForPaymentProcess(request: PaymentNotificationRequest) {
-  return isFinalApproved(request) && hasPaymentDetails(request) && requestStatus(request) !== "PROCESSED";
+  const status = requestStatus(request);
+  if (status === "RE_APPROVED") return hasPaymentDetails(request);
+  return isFinalApproved(request) && hasPaymentDetails(request) && status !== "PROCESSED";
 }
 
 function canProcessPayment(request: PaymentNotificationRequest, authorization: AuthorizationContext) {
@@ -268,6 +270,7 @@ export async function loadPaymentNotificationSnapshot(authorization: Authorizati
     badges.payment_process = requests
       .filter((request) => canProcessPayment(request, authorization))
       .filter(isReadyForPaymentProcess)
+      .filter((request) => requestStatus(request) !== "RE_APPROVED" || request.current_approver_user_id === authorization.userId)
       .length;
     addItem(
       items,

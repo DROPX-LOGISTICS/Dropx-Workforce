@@ -7,6 +7,8 @@ import { isReportAutoSource, isWorkforceAutoSource } from "@/lib/report-auto-wor
 import { isFuelPortalSource, runFuelPortalInline } from "@/lib/portal-client/fuel-browser";
 import { supabase } from "@/lib/supabase";
 
+type ShipmentStation = { code: string; name: string; model: string; provider: string; parentStationId?: string | null; id?: string; childCodes?: string[] };
+
 type AutoStep = {
   label: string;
   detail?: string;

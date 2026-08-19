@@ -46,10 +46,15 @@ export function ReportImportUploader({
   const sourceOptions = reports.filter((report) => report.is_active);
   const requestedSource = searchParams.get("report") ?? "";
   const urlDate = searchParams.get("date") ?? "";
-  const [sourceType, setSourceType] = useState(sourceOptions.some((report) => report.source_code === requestedSource) ? requestedSource : "");
+  const initialSource = sourceOptions.some((report) => report.source_code === requestedSource) ? requestedSource : "";
+  const [sourceType, setSourceType] = useState(initialSource);
   const [stationCode, setStationCode] = useState(stations[0]?.code ?? "");
-  const initialDate = /^\d{4}-\d{2}-\d{2}$/.test(urlDate) ? urlDate : indiaDate();
-  const [reportDate, setReportDate] = useState(initialDate);
+  const initialReport = sourceOptions.find((r) => r.source_code === initialSource);
+  const initialOffset = initialReport?.date_default_offset ?? 0;
+  const initialBaseDate = /^\d{4}-\d{2}-\d{2}$/.test(urlDate) ? urlDate : indiaDate();
+  const initD = new Date(initialBaseDate + "T00:00:00");
+  initD.setDate(initD.getDate() + initialOffset);
+  const [reportDate, setReportDate] = useState(initD.toISOString().slice(0, 10));
   const [message, setMessage] = useState<string | null>(null);
   const [autoNotice, setAutoNotice] = useState(false);
   const [hasFile, setHasFile] = useState(false);
@@ -396,14 +401,19 @@ export function ReportImportUploader({
             setSummary(null);
             setError(null);
             const next = sourceOptions.find((option) => option.source_code === nextType);
-            const nextReportDate = indiaDate(next?.date_default_offset ?? 0);
+            const currentUrlDate = new URLSearchParams(window.location.search).get("date") ?? "";
+            const baseDate = /^\d{4}-\d{2}-\d{2}$/.test(currentUrlDate) ? currentUrlDate : indiaDate();
+            const offset = next?.date_default_offset ?? 0;
+            const d = new Date(baseDate + "T00:00:00");
+            d.setDate(d.getDate() + offset);
+            const nextReportDate = d.toISOString().slice(0, 10);
             setReportDate(nextReportDate);
             const nextUrl = new URL(window.location.href);
             if (nextType) nextUrl.searchParams.set("report", nextType);
             else nextUrl.searchParams.delete("report");
             if (next && ["delivered_shipment_detail", "inbound_shipment_detail"].includes(next.parser_type)) {
               nextUrl.searchParams.set("shipment", "1");
-              nextUrl.searchParams.set("date", indiaDate());
+              if (!nextUrl.searchParams.has("date")) nextUrl.searchParams.set("date", baseDate);
               router.replace(`${nextUrl.pathname}?${nextUrl.searchParams.toString()}`);
             } else {
               nextUrl.searchParams.delete("shipment");

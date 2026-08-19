@@ -15,6 +15,7 @@ type PaymentBankRow = {
 type RequestRow = {
   id: string;
   request_no: string;
+  location_code: string;
   amount: number | null;
   amount_requested: number | null;
   payment_mode: string | null;
@@ -31,7 +32,7 @@ type RequestRow = {
   current_approver_user_id: string | null;
   current_approver_role_id: string | null;
   payment_process_role_ids: string[] | null;
-  payment_heads?: { name: string; code: string } | null;
+  payment_heads?: { name: string; code: string; external_id: string | null } | null;
 };
 
 function firstRelation<T>(value: T | T[] | null | undefined) {
@@ -64,7 +65,7 @@ function isReadyForPaymentProcess(request: RequestRow) {
 function fedOneRows(requests: RequestRow[], debitAccountNumber: string, valueDate: string) {
   return requests.map((request) => {
     const beneficiaryIfsc = safe(request.beneficiary_ifsc || request.ifsc).trim().toUpperCase();
-    const paymentHead = request.payment_heads?.name ?? request.payment_heads?.code ?? "";
+    const paymentHeadExternalId = request.payment_heads?.external_id ?? "";
     return {
       "Transaction Type": beneficiaryIfsc.startsWith("FDRL") ? "IFT" : "NEFT",
       "Debit Account Number": debitAccountNumber,
@@ -75,8 +76,8 @@ function fedOneRows(requests: RequestRow[], debitAccountNumber: string, valueDat
       "IFSC Code": beneficiaryIfsc,
       "Beneficiary Email ID": safe(request.email),
       "Beneficiary ID": "",
-      "Credit Remarks": paymentHead,
-      "Debit Remarks": paymentHead,
+      "Credit Remarks": request.location_code,
+      "Debit Remarks": paymentHeadExternalId,
       "Unique Customer Reference Number": request.request_no
     };
   });
@@ -165,6 +166,7 @@ export async function GET(request: Request) {
       .select(`
         id,
         request_no,
+        location_code,
         amount,
         amount_requested,
         payment_mode,
@@ -181,7 +183,7 @@ export async function GET(request: Request) {
         current_approver_user_id,
         current_approver_role_id,
         payment_process_role_ids,
-        payment_heads ( name, code )
+        payment_heads ( name, code, external_id )
       `)
       .eq("company_id", companyId)
       .in("id", requestIds)

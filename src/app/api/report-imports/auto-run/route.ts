@@ -168,7 +168,9 @@ export async function POST(request: Request) {
         };
       }>("/api/admin/reports/delivered-shipment/refresh", {
         reportDate,
-        forceNew: true,
+        // Resume the same in-flight run for the date instead of starting over
+        // and re-uploading stations that already finished.
+        forceNew: false,
         processTicks: 1
       });
       const runId = run.run?.id;

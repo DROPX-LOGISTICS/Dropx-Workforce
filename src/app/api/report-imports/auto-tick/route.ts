@@ -27,35 +27,47 @@ export async function POST(request: Request) {
     return Response.json({ error: "Tick is only used for Delivered data." }, { status: 400 });
   }
 
-  const tick = await reportAutoPost<{
-    ok?: boolean;
-    done?: boolean;
-    stationCode?: string | null;
-    run?: {
-      id?: string;
-      status?: string;
-      stationsOk?: number;
-      stationsFailed?: number;
-      stationsTotal?: number;
-      error?: string | null;
-    };
-  }>("/api/admin/reports/delivered-shipment/tick", {
-    reportDate: body.report_date,
-    runId: body.run_id
-  });
+  try {
+    const tick = await reportAutoPost<{
+      ok?: boolean;
+      done?: boolean;
+      stationCode?: string | null;
+      run?: {
+        id?: string;
+        status?: string;
+        stationsOk?: number;
+        stationsFailed?: number;
+        stationsTotal?: number;
+        error?: string | null;
+      };
+    }>("/api/admin/reports/delivered-shipment/tick", {
+      reportDate: body.report_date,
+      runId: body.run_id
+    });
 
-  const run = tick.run;
-  return Response.json({
-    ok: true,
-    sourceType: "delivered_shipment_detail",
-    runId: run?.id || body.run_id,
-    reportDate: body.report_date,
-    done: Boolean(tick.done),
-    lastStationCode: tick.stationCode ?? null,
-    stationsOk: run?.stationsOk,
-    stationsFailed: run?.stationsFailed,
-    stationsTotal: run?.stationsTotal,
-    status: run?.status,
-    error: run?.error || undefined
-  });
+    const run = tick.run;
+    return Response.json({
+      ok: true,
+      sourceType: "delivered_shipment_detail",
+      runId: run?.id || body.run_id,
+      reportDate: body.report_date,
+      done: Boolean(tick.done),
+      lastStationCode: tick.stationCode ?? null,
+      stationsOk: run?.stationsOk,
+      stationsFailed: run?.stationsFailed,
+      stationsTotal: run?.stationsTotal,
+      status: run?.status,
+      error: run?.error || undefined
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const status = (err as { status?: number }).status || 502;
+    return Response.json({
+      ok: false,
+      sourceType: "delivered_shipment_detail",
+      runId: body.run_id,
+      reportDate: body.report_date,
+      error: message,
+    }, { status });
+  }
 }

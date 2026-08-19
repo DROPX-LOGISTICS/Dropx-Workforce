@@ -274,8 +274,12 @@ function readWorkbookRows(buffer: ArrayBuffer, includeAllSheets = false) {
       combined.push(...rows);
       return;
     }
-    const headerIndex = locateHeader(rows, ["Tracking ID"]);
-    combined.push(...rows.slice(headerIndex + 1));
+    try {
+      const headerIndex = locateHeader(rows, ["Tracking ID"]);
+      combined.push(...rows.slice(headerIndex + 1));
+    } catch {
+      // Skip non-data sheets (e.g. legacy Meta tabs from auto-upload workbooks).
+    }
   });
   return combined;
 }

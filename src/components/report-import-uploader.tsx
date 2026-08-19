@@ -307,7 +307,7 @@ export function ReportImportUploader({
             { label: "Refresh checklist", status: "done" }
           ]
         });
-        setMessage(`Delivered data finished for ${result.reportDate || reportDate}. ${stationsOk} station${stationsOk === 1 ? "" : "s"} imported.`);
+        setMessage(`Delivered data finished for ${result.reportDate || reportDate}. ${stationsOk} station${stationsOk === 1 ? "" : "s"} fetched — check Import Master for upload status.`);
         setAutoNotice(true);
         setAutoProgress(null);
         router.refresh();

@@ -178,9 +178,7 @@ export function ReportImportUploader({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           source_type: sourceType,
-          report_date: isWorkforceAutoSource(sourceType)
-            ? undefined
-            : (reportDate || undefined),
+          report_date: reportDate || undefined,
           station_code: requiresStation ? effectiveStationCode : undefined
         })
       });

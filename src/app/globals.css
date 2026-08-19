@@ -15461,6 +15461,80 @@ td strong,
   font-size: 10px;
 }
 
+.auto-run-progress {
+  margin-top: 8px;
+  padding: 14px 16px;
+  border: 1px solid #d9e2ec;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+}
+
+.auto-run-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 13px;
+}
+
+.auto-run-progress-head span {
+  color: #667085;
+  font-variant-numeric: tabular-nums;
+}
+
+.auto-run-progress-bar {
+  margin: 10px 0 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: #e4eaf1;
+  overflow: hidden;
+}
+
+.auto-run-progress-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: #2563eb;
+  transition: width 0.25s ease;
+}
+
+.auto-run-progress-now {
+  margin: 0 0 10px;
+  color: #344054;
+  font-size: 12px;
+}
+
+.auto-run-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.auto-run-steps li {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 8px;
+  align-items: start;
+  font-size: 12px;
+}
+
+.auto-run-steps li span {
+  color: #98a2b3;
+  font-weight: 600;
+}
+
+.auto-run-steps li.active span { color: #2563eb; }
+.auto-run-steps li.done span { color: #067647; }
+.auto-run-steps li.error span { color: #b42318; }
+
+.auto-run-steps small {
+  display: block;
+  color: #667085;
+  margin-top: 2px;
+}
+
 .import-gap-panel > summary {
   cursor: pointer;
   list-style: none;

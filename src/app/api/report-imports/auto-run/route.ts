@@ -158,8 +158,14 @@ export async function POST(request: Request) {
         ok: boolean;
         done?: boolean;
         reportDate?: string;
-        run?: { id?: string };
-        lastStationCode?: string;
+        lastStationCode?: string | null;
+        run?: {
+          id?: string;
+          status?: string;
+          stationsOk?: number;
+          stationsFailed?: number;
+          stationsTotal?: number;
+        };
       }>("/api/admin/reports/delivered-shipment/refresh", {
         reportDate,
         forceNew: true,
@@ -172,12 +178,17 @@ export async function POST(request: Request) {
         runId,
         reportDate: run.reportDate || reportDate,
         done: Boolean(run.done),
+        lastStationCode: run.lastStationCode ?? null,
+        stationsOk: run.run?.stationsOk,
+        stationsFailed: run.run?.stationsFailed,
+        stationsTotal: run.run?.stationsTotal,
+        status: run.run?.status,
         statusUrl: runId
           ? `/api/admin/reports/delivered-shipment/status?reportDate=${encodeURIComponent(run.reportDate || reportDate)}&runId=${encodeURIComponent(runId)}`
           : undefined,
         message: run.done
           ? `Delivered data finished for ${run.reportDate || reportDate}.`
-          : `Delivered data started (${run.lastStationCode || "first station"}). Remaining stations continue on the worker ticker — check Upload log shortly.`
+          : `Fetching ${run.lastStationCode || "next station"}…`
       };
       return Response.json(result);
     }

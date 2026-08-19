@@ -7,7 +7,19 @@ import { isReportAutoSource, isWorkforceAutoSource } from "@/lib/report-auto-wor
 import { isFuelPortalSource, runFuelPortalInline } from "@/lib/portal-client/fuel-browser";
 import { supabase } from "@/lib/supabase";
 
-type ShipmentStation = { code: string; name: string; model: string; provider: string; parentStationId?: string | null; id?: string; childCodes?: string[] };
+type AutoStep = {
+  label: string;
+  detail?: string;
+  status: "done" | "active" | "pending" | "error";
+};
+
+type AutoProgress = {
+  title: string;
+  current: number;
+  total: number;
+  station?: string | null;
+  steps: AutoStep[];
+};
 
 function indiaDate(days = 0) {
   const now = new Date();
@@ -41,7 +53,9 @@ export function ReportImportUploader({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [isAutoPending, startAuto] = useTransition();
+  const [autoProgress, setAutoProgress] = useState<AutoProgress | null>(null);
   const busy = isPending || isAutoPending;
+  const networkStationCount = stations.filter((station) => !station.parentStationId && station.code.toUpperCase() !== "TEST").length;
 
   async function upload() {
     setMessage(null);
@@ -131,7 +145,25 @@ export function ReportImportUploader({
       setError("Select a data date first.");
       return;
     }
+    const isDelivered = sourceType === "delivered_shipment_detail";
     startAuto(async () => {
+      setAutoProgress({
+        title: isDelivered ? "Fetching delivered data for every station" : "Auto upload",
+        current: 0,
+        total: isDelivered ? Math.max(networkStationCount, 1) : 3,
+        station: null,
+        steps: isDelivered
+          ? [
+              { label: "Start network run", status: "active" },
+              { label: "Fetch stations one by one", status: "pending" },
+              { label: "Refresh checklist", status: "pending" }
+            ]
+          : [
+              { label: "Ask the report worker", status: "active" },
+              { label: "Download from the portal", status: "pending" },
+              { label: "Import into Master", status: "pending" }
+            ]
+      });
       const response = await fetch("/api/report-imports/auto-run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -147,11 +179,30 @@ export function ReportImportUploader({
       if (!response.ok) {
         if (response.status === 409 && result.clientPortal && isFuelPortalSource(sourceType)) {
           try {
+            setAutoProgress((prev) => prev ? {
+              ...prev,
+              current: 2,
+              total: 3,
+              steps: [
+                { label: "Ask the report worker", status: "done", detail: "Worker is blocked — using this browser" },
+                { label: "Download from the portal", status: "active" },
+                { label: "Import into Master", status: "pending" }
+              ]
+            } : prev);
             const effectiveDate = String(result.reportDate || reportDate || indiaDate(-1));
             const browser = await runFuelPortalInline({
               sourceType,
               reportDate: effectiveDate
             });
+            setAutoProgress((prev) => prev ? {
+              ...prev,
+              current: 3,
+              steps: [
+                { label: "Ask the report worker", status: "done" },
+                { label: "Download from the portal", status: "done" },
+                { label: "Import into Master", status: "active" }
+              ]
+            } : prev);
             const form = new FormData();
             form.set("source_type", sourceType);
             form.set("report_date", effectiveDate);
@@ -159,9 +210,11 @@ export function ReportImportUploader({
             const importResponse = await fetch("/api/report-imports", { method: "POST", body: form });
             const imported = await importResponse.json().catch(() => ({}));
             if (!importResponse.ok) {
+              setAutoProgress(null);
               setError(imported.error ?? `Import failed after browser download (${importResponse.status}).`);
               return;
             }
+            setAutoProgress(null);
             setMessage(imported.message ?? `${sourceType} auto upload completed via your browser network.`);
             setSummary({
               duplicateRows: Number(imported.duplicateRows ?? 0),
@@ -174,13 +227,92 @@ export function ReportImportUploader({
             router.refresh();
             return;
           } catch (browserErr) {
+            setAutoProgress(null);
             setError(browserErr instanceof Error ? browserErr.message : String(browserErr));
             return;
           }
         }
+        setAutoProgress(null);
         setError(result.error ?? `Auto upload failed (${response.status}).`);
         return;
       }
+
+      if (isDelivered && result.runId && !result.done) {
+        let done = false;
+        let runId = String(result.runId);
+        let lastStation = String(result.lastStationCode || "");
+        let stationsOk = Number(result.stationsOk || 1);
+        let stationsTotal = Number(result.stationsTotal || networkStationCount || 27);
+        const seen = lastStation ? [lastStation] : [];
+        let ticks = 0;
+        while (!done && ticks < 80) {
+          ticks += 1;
+          setAutoProgress({
+            title: "Fetching delivered data for every station",
+            current: stationsOk,
+            total: stationsTotal,
+            station: lastStation,
+            steps: [
+              { label: "Start network run", status: "done" },
+              {
+                label: "Fetch stations one by one",
+                status: "active",
+                detail: lastStation
+                  ? `${stationsOk}/${stationsTotal} · now ${lastStation}`
+                  : `${stationsOk}/${stationsTotal}`
+              },
+              { label: "Refresh checklist", status: "pending" }
+            ]
+          });
+          const tickResponse = await fetch("/api/report-imports/auto-tick", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              source_type: sourceType,
+              report_date: result.reportDate || reportDate,
+              run_id: runId
+            })
+          });
+          const tick = await tickResponse.json().catch(() => ({}));
+          if (!tickResponse.ok) {
+            setAutoProgress(null);
+            setError(tick.error ?? `Station fetch failed (${tickResponse.status}).`);
+            return;
+          }
+          done = Boolean(tick.done);
+          runId = String(tick.runId || runId);
+          lastStation = String(tick.lastStationCode || lastStation);
+          stationsOk = Number(tick.stationsOk ?? stationsOk);
+          stationsTotal = Number(tick.stationsTotal || stationsTotal);
+          if (tick.lastStationCode && !seen.includes(tick.lastStationCode)) {
+            seen.push(tick.lastStationCode);
+          }
+          if (tick.error && done) {
+            setAutoProgress(null);
+            setError(tick.error);
+            router.refresh();
+            return;
+          }
+        }
+        setAutoProgress({
+          title: "Fetching delivered data for every station",
+          current: stationsTotal,
+          total: stationsTotal,
+          station: lastStation,
+          steps: [
+            { label: "Start network run", status: "done" },
+            { label: "Fetch stations one by one", status: "done", detail: `${stationsOk}/${stationsTotal} stations` },
+            { label: "Refresh checklist", status: "done" }
+          ]
+        });
+        setMessage(`Delivered data finished for ${result.reportDate || reportDate}. ${stationsOk} station${stationsOk === 1 ? "" : "s"} imported.`);
+        setAutoNotice(true);
+        setAutoProgress(null);
+        router.refresh();
+        return;
+      }
+
+      setAutoProgress(null);
       setMessage(result.message ?? "Auto upload started.");
       setAutoNotice(true);
       router.refresh();
@@ -206,6 +338,8 @@ export function ReportImportUploader({
       ? "Auto upload is not configured"
       : !isReportAutoSource(sourceType)
         ? "Auto upload is not available for this report — use Upload file"
+        : isShipmentImport
+          ? "Fetches every station one by one — you do not pick a station"
         : "Fetch this report from the portal and import it (no file needed)";
 
   const autoButton = (
@@ -216,7 +350,7 @@ export function ReportImportUploader({
       title={autoTitle}
       type="button"
     >
-      {isAutoPending ? "Auto uploading..." : "Auto upload"}
+      {isAutoPending ? (autoProgress?.station ? `Fetching ${autoProgress.station}…` : "Auto uploading…") : "Auto upload"}
     </button>
   );
   const manualButton = (
@@ -295,8 +429,31 @@ export function ReportImportUploader({
         </label>
         {compact ? <div className="compact-upload-actions">{manualButton}{autoButton}</div> : null}
       </div>
-      {compact && isShipmentImport ? <p className="shipment-upload-note">Station is detected from the file or filename; the selected checklist date is used when the file has no date. Existing IDs are refreshed without double-counting.</p> : null}
-      {compact && canAuto ? <p className="shipment-upload-note">Auto upload pulls the file from the portal — no file picker needed. Use Upload file when Amazon has not published yet or Auto fails.</p> : null}
+      {compact && isShipmentImport ? <p className="shipment-upload-note">Manual upload: station is read from the file. Auto upload: every Amazon station is fetched one by one for the date above — no station picker.</p> : null}
+      {compact && canAuto && !isShipmentImport ? <p className="shipment-upload-note">Auto upload pulls the file from the portal — no file picker needed. Use Upload file when the portal is blocked or Auto fails.</p> : null}
+      {autoProgress ? (
+        <div className="auto-run-progress" role="status" aria-live="polite">
+          <div className="auto-run-progress-head">
+            <strong>{autoProgress.title}</strong>
+            <span>{autoProgress.current}/{autoProgress.total}</span>
+          </div>
+          <div className="auto-run-progress-bar">
+            <i style={{ width: `${Math.min(100, autoProgress.total ? (autoProgress.current / autoProgress.total) * 100 : 8)}%` }} />
+          </div>
+          {autoProgress.station ? <p className="auto-run-progress-now">Now fetching <strong>{autoProgress.station}</strong></p> : null}
+          <ol className="auto-run-steps">
+            {autoProgress.steps.map((step) => (
+              <li className={step.status} key={step.label}>
+                <span>{step.status === "done" ? "Done" : step.status === "active" ? "Now" : step.status === "error" ? "Failed" : "Next"}</span>
+                <div>
+                  <strong>{step.label}</strong>
+                  {step.detail ? <small>{step.detail}</small> : null}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
       {!compact ? <div className="dropzone" style={{ minHeight: 120 }}>
         <div>
           <h2>{selected?.name ?? "No active reports"}</h2>

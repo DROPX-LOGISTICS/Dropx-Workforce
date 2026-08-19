@@ -170,4 +170,9 @@ export type AutoRunResult = {
   totalRows?: number;
   /** Worker WAF blocked — retry via operator browser (IOCL/BPCL). */
   clientPortal?: boolean;
+  lastStationCode?: string | null;
+  stationsOk?: number;
+  stationsFailed?: number;
+  stationsTotal?: number;
+  status?: string;
 };

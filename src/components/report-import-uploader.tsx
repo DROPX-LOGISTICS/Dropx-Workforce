@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
 import { isReportAutoSource, isWorkforceAutoSource } from "@/lib/report-auto-worker";
-import { isFuelPortalSource, runFuelPortalInPopup, runFuelPortalInline } from "@/lib/portal-client/fuel-browser";
+import { isFuelPortalSource, runFuelPortalInPopup } from "@/lib/portal-client/fuel-browser";
 import { supabase } from "@/lib/supabase";
 
 type ShipmentStation = { code: string; name: string; model: string; provider: string; parentStationId?: string | null; id?: string; childCodes?: string[] };
@@ -188,22 +188,7 @@ export function ReportImportUploader({
             ]
           });
           let browser: { file: File; fileName: string };
-          try {
-            browser = await runFuelPortalInPopup({ sourceType, reportDate: effectiveDate });
-          } catch (popupErr) {
-            const detail = popupErr instanceof Error ? popupErr.message : String(popupErr);
-            setAutoProgress({
-              title: "IOCL portal runner",
-              current: 1,
-              total: 2,
-              station: null,
-              steps: [
-                { label: "Download from the portal", status: "active", detail: `${detail} — retrying in this tab` },
-                { label: "Import into Master", status: "pending" }
-              ]
-            });
-            browser = await runFuelPortalInline({ sourceType, reportDate: effectiveDate });
-          }
+          browser = await runFuelPortalInPopup({ sourceType, reportDate: effectiveDate });
           setAutoProgress({
             title: "IOCL portal runner",
             current: 2,

@@ -167,7 +167,84 @@ export function ReportImportUploader({
       return;
     }
     const isDelivered = sourceType === "delivered_shipment_detail";
+
+    // IOCL: skip cloud worker (always blocked) — open portal runner directly.
+    if (isFuelPortalSource(sourceType)) {
+      if (sourceType !== "iocl_fuel") {
+        setError("BPCL browser auto-upload is not available yet — use Manual upload, or open Portal runner.");
+        return;
+      }
+      startAuto(async () => {
+        const effectiveDate = reportDate || indiaDate(-1);
+        try {
+          setAutoProgress({
+            title: "IOCL portal runner",
+            current: 1,
+            total: 2,
+            station: null,
+            steps: [
+              { label: "Download from the portal", status: "active", detail: "Opening portal runner popup" },
+              { label: "Import into Master", status: "pending" }
+            ]
+          });
+          let browser: { file: File; fileName: string };
+          try {
+            browser = await runFuelPortalInPopup({ sourceType, reportDate: effectiveDate });
+          } catch (popupErr) {
+            const detail = popupErr instanceof Error ? popupErr.message : String(popupErr);
+            setAutoProgress({
+              title: "IOCL portal runner",
+              current: 1,
+              total: 2,
+              station: null,
+              steps: [
+                { label: "Download from the portal", status: "active", detail: `${detail} — retrying in this tab` },
+                { label: "Import into Master", status: "pending" }
+              ]
+            });
+            browser = await runFuelPortalInline({ sourceType, reportDate: effectiveDate });
+          }
+          setAutoProgress({
+            title: "IOCL portal runner",
+            current: 2,
+            total: 2,
+            station: null,
+            steps: [
+              { label: "Download from the portal", status: "done", detail: browser.fileName },
+              { label: "Import into Master", status: "active" }
+            ]
+          });
+          const form = new FormData();
+          form.set("source_type", sourceType);
+          form.set("report_date", effectiveDate);
+          form.set("file", browser.file);
+          const importResponse = await fetch("/api/report-imports", { method: "POST", body: form });
+          const imported = await importResponse.json().catch(() => ({}));
+          if (!importResponse.ok) {
+            setError(imported.error ?? `Import failed after browser download (${importResponse.status}).`);
+            return;
+          }
+          setMessage(imported.message ?? "IOCL auto upload completed via portal runner.");
+          setSummary({
+            duplicateRows: Number(imported.duplicateRows ?? 0),
+            imported: Number(imported.imported ?? 0),
+            refreshedExisting: Number(imported.refreshedExisting ?? 0),
+            skipped: Number(imported.skipped ?? 0),
+            totalRows: Number(imported.totalRows ?? 0)
+          });
+          setAutoNotice(true);
+          router.refresh();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err));
+        } finally {
+          setAutoProgress(null);
+        }
+      });
+      return;
+    }
+
     startAuto(async () => {
+      try {
       setAutoProgress({
         title: isDelivered ? "Fetching delivered data for every station" : "Auto upload",
         current: 0,
@@ -196,87 +273,6 @@ export function ReportImportUploader({
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const fuelFallback =
-          isFuelPortalSource(sourceType) &&
-          (Boolean(result.clientPortal) ||
-            response.status === 409 ||
-            /recaptcha|captcha|request rejected|waf|login_failed|google recaptcha|browser login/i.test(
-              String(result.error || "")
-            ));
-        if (fuelFallback) {
-          try {
-            setAutoProgress((prev) => prev ? {
-              ...prev,
-              current: 2,
-              total: 3,
-              steps: [
-                { label: "Ask the report worker", status: "done", detail: "Worker is blocked — using this browser" },
-                { label: "Download from the portal", status: "active", detail: "Opening portal runner popup" },
-                { label: "Import into Master", status: "pending" }
-              ]
-            } : prev);
-            const effectiveDate = String(result.reportDate || reportDate || indiaDate(-1));
-            let browser: { file: File; fileName: string };
-            try {
-              browser = await runFuelPortalInPopup({
-                sourceType,
-                reportDate: effectiveDate
-              });
-            } catch (popupErr) {
-              // Popup blocked or failed — fall back to inline in this tab.
-              const detail = popupErr instanceof Error ? popupErr.message : String(popupErr);
-              setAutoProgress((prev) => prev ? {
-                ...prev,
-                steps: [
-                  { label: "Ask the report worker", status: "done", detail: "Worker is blocked — using this browser" },
-                  { label: "Download from the portal", status: "active", detail },
-                  { label: "Import into Master", status: "pending" }
-                ]
-              } : prev);
-              browser = await runFuelPortalInline({
-                sourceType,
-                reportDate: effectiveDate
-              });
-            }
-            setAutoProgress((prev) => prev ? {
-              ...prev,
-              current: 3,
-              steps: [
-                { label: "Ask the report worker", status: "done" },
-                { label: "Download from the portal", status: "done" },
-                { label: "Import into Master", status: "active" }
-              ]
-            } : prev);
-            const form = new FormData();
-            form.set("source_type", sourceType);
-            form.set("report_date", effectiveDate);
-            form.set("file", browser.file);
-            const importResponse = await fetch("/api/report-imports", { method: "POST", body: form });
-            const imported = await importResponse.json().catch(() => ({}));
-            if (!importResponse.ok) {
-              setAutoProgress(null);
-              setError(imported.error ?? `Import failed after browser download (${importResponse.status}).`);
-              return;
-            }
-            setAutoProgress(null);
-            setMessage(imported.message ?? `${sourceType} auto upload completed via your browser network.`);
-            setSummary({
-              duplicateRows: Number(imported.duplicateRows ?? 0),
-              imported: Number(imported.imported ?? 0),
-              refreshedExisting: Number(imported.refreshedExisting ?? 0),
-              skipped: Number(imported.skipped ?? 0),
-              totalRows: Number(imported.totalRows ?? 0)
-            });
-            setAutoNotice(true);
-            router.refresh();
-            return;
-          } catch (browserErr) {
-            setAutoProgress(null);
-            setError(browserErr instanceof Error ? browserErr.message : String(browserErr));
-            return;
-          }
-        }
-        setAutoProgress(null);
         setError(result.error ?? `Auto upload failed (${response.status}).`);
         return;
       }
@@ -319,7 +315,6 @@ export function ReportImportUploader({
           });
           const tick = await tickResponse.json().catch(() => ({}));
           if (!tickResponse.ok) {
-            setAutoProgress(null);
             setError(tick.error ?? `Station fetch failed (${tickResponse.status}).`);
             return;
           }
@@ -332,34 +327,25 @@ export function ReportImportUploader({
             seen.push(tick.lastStationCode);
           }
           if (tick.error && done) {
-            setAutoProgress(null);
             setError(tick.error);
             router.refresh();
             return;
           }
         }
-        setAutoProgress({
-          title: "Fetching delivered data for every station",
-          current: stationsTotal,
-          total: stationsTotal,
-          station: lastStation,
-          steps: [
-            { label: "Start network run", status: "done" },
-            { label: "Fetch stations one by one", status: "done", detail: `${stationsOk}/${stationsTotal} stations` },
-            { label: "Refresh checklist", status: "done" }
-          ]
-        });
         setMessage(`Delivered data finished for ${result.reportDate || reportDate}. ${stationsOk} station${stationsOk === 1 ? "" : "s"} fetched — check Import Master for upload status.`);
         setAutoNotice(true);
-        setAutoProgress(null);
         router.refresh();
         return;
       }
 
-      setAutoProgress(null);
       setMessage(result.message ?? "Auto upload started.");
       setAutoNotice(true);
       router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setAutoProgress(null);
+      }
     });
   }
 
@@ -382,6 +368,8 @@ export function ReportImportUploader({
       ? "Auto upload is not configured"
       : !isReportAutoSource(sourceType)
         ? "Auto upload is not available for this report — use Upload file"
+        : isFuelPortalSource(sourceType)
+          ? "Opens portal runner in a small popup (uses your browser network)"
         : isShipmentImport
           ? "Fetches every station one by one — you do not pick a station"
         : "Fetch this report from the portal and import it (no file needed)";
@@ -476,7 +464,8 @@ export function ReportImportUploader({
         {compact ? <div className="compact-upload-actions">{manualButton}{autoButton}</div> : null}
       </div>
       {compact && isShipmentImport ? <p className="shipment-upload-note">Manual upload: station is read from the file. Auto upload: every Amazon station is fetched one by one for the date above — no station picker.</p> : null}
-      {compact && canAuto && !isShipmentImport ? <p className="shipment-upload-note">Auto upload pulls the file from the portal — no file picker needed. Use Upload file when the portal is blocked or Auto fails.</p> : null}
+      {compact && canAuto && isFuelPortalSource(sourceType) ? <p className="shipment-upload-note">Auto upload opens a small portal runner popup on your network, then imports the file. Allow popups if nothing opens. Use Upload file for a manual CSV/XLSX.</p> : null}
+      {compact && canAuto && !isShipmentImport && !isFuelPortalSource(sourceType) ? <p className="shipment-upload-note">Auto upload pulls the file from the portal — no file picker needed. Use Upload file when the portal is blocked or Auto fails.</p> : null}
       {autoProgress ? (
         <div className="auto-run-progress" role="status" aria-live="polite">
           <div className="auto-run-progress-head">

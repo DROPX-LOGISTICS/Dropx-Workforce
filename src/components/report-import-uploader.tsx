@@ -29,6 +29,20 @@ function indiaDate(days = 0) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(now);
 }
 
+/** Local calendar YYYY-MM-DD — never use toISOString() (UTC shift breaks IST). */
+function localYmd(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function applyDateOffset(ymd: string, offsetDays: number) {
+  const date = new Date(`${ymd}T12:00:00`);
+  date.setDate(date.getDate() + offsetDays);
+  return localYmd(date);
+}
+
 export function ReportImportUploader({
   reports,
   stations = [],
@@ -52,9 +66,7 @@ export function ReportImportUploader({
   const initialReport = sourceOptions.find((r) => r.source_code === initialSource);
   const initialOffset = initialReport?.date_default_offset ?? 0;
   const initialBaseDate = /^\d{4}-\d{2}-\d{2}$/.test(urlDate) ? urlDate : indiaDate();
-  const initD = new Date(initialBaseDate + "T00:00:00");
-  initD.setDate(initD.getDate() + initialOffset);
-  const [reportDate, setReportDate] = useState(initD.toISOString().slice(0, 10));
+  const [reportDate, setReportDate] = useState(applyDateOffset(initialBaseDate, initialOffset));
   const [message, setMessage] = useState<string | null>(null);
   const [autoNotice, setAutoNotice] = useState(false);
   const [hasFile, setHasFile] = useState(false);
@@ -402,10 +414,7 @@ export function ReportImportUploader({
             const currentUrlDate = new URLSearchParams(window.location.search).get("date") ?? "";
             const baseDate = /^\d{4}-\d{2}-\d{2}$/.test(currentUrlDate) ? currentUrlDate : indiaDate();
             const offset = next?.date_default_offset ?? 0;
-            const d = new Date(baseDate + "T00:00:00");
-            d.setDate(d.getDate() + offset);
-            const nextReportDate = d.toISOString().slice(0, 10);
-            setReportDate(nextReportDate);
+            setReportDate(applyDateOffset(baseDate, offset));
             const nextUrl = new URL(window.location.href);
             if (nextType) nextUrl.searchParams.set("report", nextType);
             else nextUrl.searchParams.delete("report");

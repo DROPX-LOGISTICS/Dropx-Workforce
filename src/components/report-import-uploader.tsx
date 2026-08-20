@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
 import { isReportAutoSource, isWorkforceAutoSource } from "@/lib/report-auto-worker";
-import { isFuelPortalSource, runFuelPortalInline } from "@/lib/portal-client/fuel-browser";
+import { isFuelPortalSource, runFuelPortalInPopup, runFuelPortalInline } from "@/lib/portal-client/fuel-browser";
 import { supabase } from "@/lib/supabase";
 
 type ShipmentStation = { code: string; name: string; model: string; provider: string; parentStationId?: string | null; id?: string; childCodes?: string[] };
@@ -196,7 +196,14 @@ export function ReportImportUploader({
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
-        if (response.status === 409 && result.clientPortal && isFuelPortalSource(sourceType)) {
+        const fuelFallback =
+          isFuelPortalSource(sourceType) &&
+          (Boolean(result.clientPortal) ||
+            response.status === 409 ||
+            /recaptcha|captcha|request rejected|waf|login_failed|google recaptcha|browser login/i.test(
+              String(result.error || "")
+            ));
+        if (fuelFallback) {
           try {
             setAutoProgress((prev) => prev ? {
               ...prev,
@@ -204,15 +211,33 @@ export function ReportImportUploader({
               total: 3,
               steps: [
                 { label: "Ask the report worker", status: "done", detail: "Worker is blocked — using this browser" },
-                { label: "Download from the portal", status: "active" },
+                { label: "Download from the portal", status: "active", detail: "Opening portal runner popup" },
                 { label: "Import into Master", status: "pending" }
               ]
             } : prev);
             const effectiveDate = String(result.reportDate || reportDate || indiaDate(-1));
-            const browser = await runFuelPortalInline({
-              sourceType,
-              reportDate: effectiveDate
-            });
+            let browser: { file: File; fileName: string };
+            try {
+              browser = await runFuelPortalInPopup({
+                sourceType,
+                reportDate: effectiveDate
+              });
+            } catch (popupErr) {
+              // Popup blocked or failed — fall back to inline in this tab.
+              const detail = popupErr instanceof Error ? popupErr.message : String(popupErr);
+              setAutoProgress((prev) => prev ? {
+                ...prev,
+                steps: [
+                  { label: "Ask the report worker", status: "done", detail: "Worker is blocked — using this browser" },
+                  { label: "Download from the portal", status: "active", detail },
+                  { label: "Import into Master", status: "pending" }
+                ]
+              } : prev);
+              browser = await runFuelPortalInline({
+                sourceType,
+                reportDate: effectiveDate
+              });
+            }
             setAutoProgress((prev) => prev ? {
               ...prev,
               current: 3,

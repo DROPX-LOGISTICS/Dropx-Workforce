@@ -211,13 +211,18 @@ export async function POST(request: Request) {
       run?: { id?: string; error?: string | null };
     }>(path, { reportDate, forceNew: true });
     if (run.error || run.run?.error) {
-      if (run.clientPortal && (sourceType === "iocl_fuel" || sourceType === "bpcl_fuel")) {
+      const errText = String(run.error || run.run?.error || "");
+      const fuelNeedsBrowser =
+        (sourceType === "iocl_fuel" || sourceType === "bpcl_fuel") &&
+        (run.clientPortal ||
+          /recaptcha|captcha|request rejected|waf|login_failed|browser login|client.?portal/i.test(errText));
+      if (fuelNeedsBrowser) {
         return Response.json({
           ok: false,
           sourceType,
           reportDate,
           clientPortal: true,
-          error: run.error || run.run?.error || "Worker portal browser blocked."
+          error: errText || "Worker portal browser blocked."
         }, { status: 409 });
       }
       return Response.json(
@@ -262,7 +267,7 @@ export async function POST(request: Request) {
     if (
       fuel &&
       (payload?.clientPortal
-        || /timeout|502|internal server error|request rejected|waf/i.test(message))
+        || /timeout|502|internal server error|request rejected|waf|recaptcha|captcha|login_failed|google recaptcha/i.test(message))
     ) {
       return Response.json(
         {

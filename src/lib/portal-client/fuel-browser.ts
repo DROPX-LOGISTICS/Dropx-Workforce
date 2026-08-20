@@ -109,10 +109,11 @@ export async function runFuelPortalInPopup(args: {
   }
 
   const url = `/portal-client/fuel-runner?portal=${encodeURIComponent(args.sourceType)}&reportDate=${encodeURIComponent(args.reportDate)}`;
-  const runnerWindow = openFuelPortalPopup(url, `dropx-fuel-${args.sourceType}-${Date.now()}`);
-  if (!runnerWindow) {
+  const popup = openFuelPortalPopup(url, `dropx-fuel-${args.sourceType}-${Date.now()}`);
+  if (!popup) {
     throw new Error("Popup blocked. Allow popups for this site and try again.");
   }
+  const runnerWindow: Window = popup;
 
   return new Promise((resolve, reject) => {
     const origin = window.location.origin;

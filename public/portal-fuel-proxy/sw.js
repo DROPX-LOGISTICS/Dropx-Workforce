@@ -28,15 +28,28 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  const headers = new Headers(event.request.headers);
-  headers.delete("host");
-  event.respondWith(
-    fetch(target, {
-      method: event.request.method,
-      headers,
-      body: event.request.method === "GET" || event.request.method === "HEAD" ? undefined : event.request.body,
-      redirect: "follow",
-      credentials: "include"
-    }).catch((err) => new Response(String(err && err.message ? err.message : err), { status: 502 }))
-  );
+  event.respondWith((async () => {
+    const headers = new Headers(event.request.headers);
+    headers.delete("host");
+    // Buffer the body — streaming request.body without duplex drops POSTs in Chrome.
+    const method = event.request.method;
+    const body =
+      method === "GET" || method === "HEAD" ? undefined : await event.request.arrayBuffer();
+
+    try {
+      return await fetch(target, {
+        method,
+        headers,
+        body,
+        redirect: "follow",
+        credentials: "include"
+      });
+    } catch (err) {
+      const message = err && err.message ? err.message : String(err);
+      return new Response(JSON.stringify({ error: message }), {
+        status: 502,
+        headers: { "content-type": "application/json" }
+      });
+    }
+  })());
 });

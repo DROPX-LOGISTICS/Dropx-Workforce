@@ -26,7 +26,7 @@ async function ensureFuelServiceWorker() {
     throw new Error("Service workers are unavailable in this browser.");
   }
 
-  const reg = await navigator.serviceWorker.register("/portal-fuel-proxy/sw.js", {
+  const reg = await navigator.serviceWorker.register("/portal-fuel-proxy/sw.js?v=2", {
     scope: "/portal-fuel-proxy/"
   });
 
@@ -181,9 +181,8 @@ function FuelPortalRunnerInner() {
         setDetail(message);
         pushLog(`Error: ${message}`);
         notifyParent({ type: "fuel-portal-done", ok: false, portal, reportDate, error: message });
-        window.setTimeout(() => {
-          if (window.opener) window.close();
-        }, 4000);
+        // Keep popup open so the operator can read the error (parent no longer force-closes on failure).
+        setDetail(`${message} — you can close this window`);
       }
     })();
   }, [params]);

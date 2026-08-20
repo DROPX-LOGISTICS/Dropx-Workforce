@@ -59,8 +59,31 @@ export async function runFuelPortalInPopup(args: {
     const origin = window.location.origin;
     let settled = false;
     const timeout = window.setTimeout(() => {
-      finish(() => reject(new Error("Portal runner timed out after 3 minutes. Check the popup for the error log.")));
+      finish(() => reject(new Error("Portal runner timed out after 3 minutes. Check the popup for the error log.")), false);
     }, POPUP_TIMEOUT_MS);
+
+    const onClosePoll = window.setInterval(() => {
+      if (runnerWindow.closed && !settled) {
+        finish(() => reject(new Error("Portal runner window was closed before the download finished.")), false);
+      }
+    }, 500);
+
+    function finish(action: () => void, closePopup = true) {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      window.clearInterval(onClosePoll);
+      window.removeEventListener("message", onMessage);
+      // On failure, leave the popup open so the operator can read the error log.
+      if (closePopup) {
+        try {
+          if (!runnerWindow.closed) runnerWindow.close();
+        } catch {
+          /* ignore */
+        }
+      }
+      action();
+    }
 
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== origin) return;
@@ -74,34 +97,14 @@ export async function runFuelPortalInPopup(args: {
       } | null;
       if (!data || data.type !== "fuel-portal-done") return;
       if (!data.ok || !data.buffer) {
-        finish(() => reject(new Error(String(data.error || "Portal download failed."))));
+        finish(() => reject(new Error(String(data.error || "Portal download failed."))), false);
         return;
       }
       const buffer = data.buffer;
       const fileName = String(data.fileName || `${args.sourceType}_${args.reportDate}.csv`);
       const mime = String(data.mime || "text/csv");
-      finish(() => resolve({ file: new File([buffer], fileName, { type: mime }), fileName }));
+      finish(() => resolve({ file: new File([buffer], fileName, { type: mime }), fileName }), true);
     };
-
-    const onClosePoll = window.setInterval(() => {
-      if (runnerWindow.closed && !settled) {
-        finish(() => reject(new Error("Portal runner window was closed before the download finished.")));
-      }
-    }, 500);
-
-    function finish(action: () => void) {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      window.clearInterval(onClosePoll);
-      window.removeEventListener("message", onMessage);
-      try {
-        if (!runnerWindow.closed) runnerWindow.close();
-      } catch {
-        /* ignore */
-      }
-      action();
-    }
 
     window.addEventListener("message", onMessage);
   });

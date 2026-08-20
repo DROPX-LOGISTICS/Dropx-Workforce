@@ -164,13 +164,30 @@ async function postEncrypted(
       accept: "application/json",
       origin: "https://beta.iocxtrapower.com",
       referer: "https://beta.iocxtrapower.com/account/login",
+      "accept-language": "en-IN,en;q=0.9",
       ...guestAuthHeaders(String(body.UserName || body.userName || GUEST_USER)),
       ...headers
     },
     body: JSON.stringify({ Request: encryptJson(payload) })
   });
-  const json = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-  return path.includes("Login") ? unwrapPayload(json) : unwrapPayload(json);
+  const text = await response.text();
+  let json: Record<string, unknown> = {};
+  try {
+    json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+  } catch {
+    throw new Error(
+      `IOCL ${path} returned non-JSON (HTTP ${response.status}): ${text.slice(0, 180).replace(/\s+/g, " ")}`
+    );
+  }
+  if (!response.ok) {
+    const info = json.info as { message?: string } | undefined;
+    throw new Error(
+      info?.message ||
+        (typeof json.error === "string" ? json.error : null) ||
+        `IOCL ${path} failed (HTTP ${response.status})`
+    );
+  }
+  return unwrapPayload(json);
 }
 
 function extractToken(login: Record<string, unknown>): string {
@@ -178,15 +195,29 @@ function extractToken(login: Record<string, unknown>): string {
   if (info?.refreshToken && info.refreshToken.length > 20) return info.refreshToken;
   const sessionToken = String(login.sessionToken ?? "").trim();
   if (sessionToken.length > 20) return sessionToken;
-  const data = login.data;
-  if (data && typeof data === "object") {
-    const obj = data as Record<string, unknown>;
-    for (const key of ["token", "Token", "accessToken", "userKey"]) {
+
+  const seen = new Set<unknown>();
+  const visit = (node: unknown, depth: number): string => {
+    if (depth > 5 || node == null || seen.has(node)) return "";
+    if (typeof node === "object") seen.add(node);
+    if (typeof node === "string") {
+      const v = node.trim();
+      if (v.length > 20 && /eyJ|[A-Za-z0-9_\-]{24,}/.test(v) && !v.startsWith("{")) return v;
+      return "";
+    }
+    if (typeof node !== "object") return "";
+    const obj = node as Record<string, unknown>;
+    for (const key of ["token", "Token", "accessToken", "AccessToken", "authToken", "jwt", "JwtToken", "userKey"]) {
       const val = String(obj[key] ?? "").trim();
       if (val.length > 20) return val;
     }
-  }
-  return "";
+    for (const child of Object.values(obj)) {
+      const found = visit(child, depth + 1);
+      if (found) return found;
+    }
+    return "";
+  };
+  return visit(login.data, 0);
 }
 
 function rowsToCsv(rows: unknown[]): string {
@@ -211,29 +242,50 @@ async function loginIocl(
 ): Promise<{ token: string; login: Record<string, unknown> }> {
   await postEncrypted(proxyFetch, LOGIN_BASE, "Login/FetchedLoginInfo", { UserName: username });
 
-  const captchaToken = await getIoclRecaptchaToken("login");
-  const captchaFields: Record<string, string>[] = [
-    { Token: captchaToken },
-    { CaptchaToken: captchaToken },
-    { RecaptchaToken: captchaToken }
-  ];
+  // Residential browser IP often works without captcha (cloud IPs get reCAPTCHA).
+  const attempts: Array<Record<string, string>> = [{}];
+
+  try {
+    const captchaToken = await getIoclRecaptchaToken("login");
+    attempts.push(
+      { Token: captchaToken },
+      { CaptchaToken: captchaToken },
+      { RecaptchaToken: captchaToken },
+      { gRecaptchaResponse: captchaToken }
+    );
+  } catch (captchaErr) {
+    // Continue with no-captcha attempt; include note if all fail.
+    attempts.push({ __captchaError: captchaErr instanceof Error ? captchaErr.message : String(captchaErr) });
+  }
 
   let lastMessage = "";
-  for (const captchaField of captchaFields) {
+  let lastKeys = "";
+  for (const captchaField of attempts) {
+    if ("__captchaError" in captchaField) {
+      lastMessage = lastMessage || String(captchaField.__captchaError);
+      continue;
+    }
     const login = await postEncrypted(proxyFetch, LOGIN_BASE, "Login/Login", {
       UserName: username,
       Password: password,
       ...captchaField
     });
-    const info = (login.info || {}) as { message?: string; isSuccess?: boolean };
-    lastMessage = String(info.message ?? "");
+    const info = (login.info || {}) as { message?: string; isSuccess?: boolean; code?: number };
+    lastMessage = String(info.message ?? lastMessage ?? "");
+    lastKeys = login.data && typeof login.data === "object"
+      ? Object.keys(login.data as object).slice(0, 8).join(",")
+      : typeof login.data;
     if (/recaptcha|captcha/i.test(lastMessage)) continue;
     const token = extractToken(login);
     if (token) return { token, login };
-    if (info.isSuccess === false && lastMessage) break;
+    if (info.isSuccess === false && lastMessage && !/recaptcha|captcha/i.test(lastMessage)) break;
   }
 
-  throw new Error(lastMessage || "IOCL login did not return a token (browser path). Use Manual upload.");
+  throw new Error(
+    lastMessage
+      ? `IOCL login failed: ${lastMessage}`
+      : `IOCL login did not return a token (data=${lastKeys || "empty"}). Use Manual upload.`
+  );
 }
 
 export async function runIoclFuelInBrowser(args: {

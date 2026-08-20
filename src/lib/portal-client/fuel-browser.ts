@@ -77,9 +77,10 @@ export async function runFuelPortalInPopup(args: {
         finish(() => reject(new Error(String(data.error || "Portal download failed."))));
         return;
       }
+      const buffer = data.buffer;
       const fileName = String(data.fileName || `${args.sourceType}_${args.reportDate}.csv`);
       const mime = String(data.mime || "text/csv");
-      finish(() => resolve({ file: new File([data.buffer], fileName, { type: mime }), fileName }));
+      finish(() => resolve({ file: new File([buffer], fileName, { type: mime }), fileName }));
     };
 
     const onClosePoll = window.setInterval(() => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type FuelPortalSource = "iocl_fuel" | "bpcl_fuel";
@@ -54,10 +54,12 @@ async function probePortalFromBrowser(loginUrl: string) {
   return { ok: !blocked && response.ok, status: response.status };
 }
 
-/** Hidden popup runner — uses SW proxy + operator ISP for IOCL portal APIs. */
+/** Corner popup runner — uses SW proxy + operator ISP for IOCL portal APIs. */
 function FuelPortalRunnerInner() {
   const params = useSearchParams();
   const started = useRef(false);
+  const [status, setStatus] = useState("Starting…");
+  const [detail, setDetail] = useState<string | null>(null);
 
   useEffect(() => {
     if (started.current) return;
@@ -81,14 +83,19 @@ function FuelPortalRunnerInner() {
           throw new Error("reportDate must be YYYY-MM-DD.");
         }
 
+        setStatus("Preparing proxy…");
         await ensureFuelServiceWorker();
+        setStatus("Loading credentials…");
         const session = await loadPortalSession(portal);
+        setStatus("Checking portal access…");
         const probe = await probePortalFromBrowser(session.loginUrl);
         if (!probe.ok) {
           throw new Error(`Portal login page blocked from your browser (HTTP ${probe.status}).`);
         }
 
         if (portal === "iocl_fuel") {
+          setStatus("Downloading IOCL report…");
+          setDetail("Logging in and fetching transactions");
           const { runIoclFuelInBrowser } = await import("@/lib/portal-client/iocl-browser");
           const file = await runIoclFuelInBrowser({
             session,
@@ -96,6 +103,8 @@ function FuelPortalRunnerInner() {
             proxyFetch: (url: string, init?: RequestInit) => fetch(proxyUrl(url), init)
           });
           const buffer = await file.arrayBuffer();
+          setStatus("Download complete");
+          setDetail("Sending to dashboard…");
           notifyParent(
             {
               type: "fuel-portal-done",
@@ -108,20 +117,49 @@ function FuelPortalRunnerInner() {
             },
             [buffer]
           );
-          if (window.opener) window.close();
+          window.setTimeout(() => {
+            if (window.opener) window.close();
+          }, 400);
           return;
         }
 
         throw new Error("BPCL browser auto-upload is not available yet — use Manual upload.");
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        setStatus("Failed");
+        setDetail(message);
         notifyParent({ type: "fuel-portal-done", ok: false, portal, reportDate, error: message });
-        if (window.opener) window.close();
+        window.setTimeout(() => {
+          if (window.opener) window.close();
+        }, 2500);
       }
     })();
   }, [params]);
 
-  return null;
+  const portal = (params.get("portal") || "").trim();
+  const label = portal === "bpcl_fuel" ? "BPCL" : "IOCL";
+
+  return (
+    <main style={{
+      margin: 0,
+      minHeight: "100vh",
+      display: "grid",
+      placeItems: "center",
+      padding: "20px",
+      fontFamily: "system-ui, sans-serif",
+      background: "#0f172a",
+      color: "#e2e8f0"
+    }}>
+      <div style={{ textAlign: "center", maxWidth: 320 }}>
+        <p style={{ margin: "0 0 8px", fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: "#38bdf8" }}>
+          Dropx {label} runner
+        </p>
+        <strong style={{ display: "block", fontSize: 18, marginBottom: 8 }}>{status}</strong>
+        {detail ? <span style={{ color: "#94a3b8", fontSize: 13 }}>{detail}</span> : null}
+        <p style={{ marginTop: 16, color: "#64748b", fontSize: 12 }}>This window closes automatically when finished.</p>
+      </div>
+    </main>
+  );
 }
 
 export default function FuelPortalRunnerPage() {

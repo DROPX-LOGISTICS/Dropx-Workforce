@@ -298,7 +298,10 @@ export async function ReportUploadPageContent({
       <section className="panel">
         <div className="panel-head compact-import-head">
           <div><h2>Upload report</h2></div>
-          <Link className="button secondary compact" href="/master/imports">Manage reports</Link>
+          <div className="toolbar-actions">
+            <Link className="button secondary compact" href="/imports/portal-runner">Portal runner</Link>
+            <Link className="button secondary compact" href="/master/imports">Manage reports</Link>
+          </div>
         </div>
         <ReportImportUploader reports={reports} stations={shipmentStations} compact autoEnabled={isReportAutoUiEnabled()} />
       </section>

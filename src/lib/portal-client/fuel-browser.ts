@@ -73,7 +73,98 @@ export async function runFuelPortalInline(args: {
   throw new Error("BPCL browser auto-upload is not available yet — use Manual upload.");
 }
 
-/** @deprecated Use runFuelPortalInline — iframe/postMessage was timing out in production. */
+const POPUP_TIMEOUT_MS = 180_000;
+
+function openFuelPortalPopup(url: string, name: string) {
+  const width = 380;
+  const height = 240;
+  const left = Math.max(0, window.screen.availWidth - width - 16);
+  const top = Math.max(0, window.screen.availHeight - height - 48);
+  return window.open(
+    url,
+    name,
+    [
+      "popup=yes",
+      `width=${width}`,
+      `height=${height}`,
+      `left=${left}`,
+      `top=${top}`,
+      "menubar=no",
+      "toolbar=no",
+      "location=no",
+      "status=no",
+      "resizable=yes",
+      "scrollbars=no"
+    ].join(",")
+  );
+}
+
+/** Opens a small corner popup, runs IOCL download there, and closes when finished. */
+export async function runFuelPortalInPopup(args: {
+  sourceType: FuelPortalSource;
+  reportDate: string;
+}): Promise<{ file: File; fileName: string }> {
+  if (args.sourceType !== "iocl_fuel") {
+    throw new Error("BPCL browser auto-upload is not available yet — use Manual upload.");
+  }
+
+  const url = `/portal-client/fuel-runner?portal=${encodeURIComponent(args.sourceType)}&reportDate=${encodeURIComponent(args.reportDate)}`;
+  const popup = openFuelPortalPopup(url, `dropx-fuel-${args.sourceType}-${Date.now()}`);
+  if (!popup) {
+    throw new Error("Popup blocked. Allow popups for this site and try again.");
+  }
+
+  return new Promise((resolve, reject) => {
+    const origin = window.location.origin;
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("Portal runner timed out after 3 minutes."));
+    }, POPUP_TIMEOUT_MS);
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== origin) return;
+      const data = event.data as {
+        type?: string;
+        ok?: boolean;
+        error?: string;
+        fileName?: string;
+        mime?: string;
+        buffer?: ArrayBuffer;
+      } | null;
+      if (!data || data.type !== "fuel-portal-done") return;
+      cleanup();
+      if (!data.ok || !data.buffer) {
+        reject(new Error(String(data.error || "Portal download failed.")));
+        return;
+      }
+      const fileName = String(data.fileName || `${args.sourceType}_${args.reportDate}.csv`);
+      const mime = String(data.mime || "text/csv");
+      resolve({ file: new File([data.buffer], fileName, { type: mime }), fileName });
+    };
+
+    const onClosePoll = window.setInterval(() => {
+      if (popup.closed) {
+        cleanup();
+        reject(new Error("Portal runner window was closed before the download finished."));
+      }
+    }, 500);
+
+    function cleanup() {
+      window.clearTimeout(timeout);
+      window.clearInterval(onClosePoll);
+      window.removeEventListener("message", onMessage);
+      try {
+        if (!popup.closed) popup.close();
+      } catch {
+        /* ignore */
+      }
+    }
+
+    window.addEventListener("message", onMessage);
+  });
+}
+
+/** Runs inline on the current page (blocks the tab until done). */
 export async function runFuelPortalInBrowser(args: {
   sourceType: FuelPortalSource;
   reportDate: string;

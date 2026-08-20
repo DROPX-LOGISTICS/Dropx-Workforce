@@ -109,8 +109,8 @@ export async function runFuelPortalInPopup(args: {
   }
 
   const url = `/portal-client/fuel-runner?portal=${encodeURIComponent(args.sourceType)}&reportDate=${encodeURIComponent(args.reportDate)}`;
-  const popup = openFuelPortalPopup(url, `dropx-fuel-${args.sourceType}-${Date.now()}`);
-  if (!popup) {
+  const runnerWindow = openFuelPortalPopup(url, `dropx-fuel-${args.sourceType}-${Date.now()}`);
+  if (!runnerWindow) {
     throw new Error("Popup blocked. Allow popups for this site and try again.");
   }
 
@@ -143,7 +143,7 @@ export async function runFuelPortalInPopup(args: {
     };
 
     const onClosePoll = window.setInterval(() => {
-      if (popup.closed) {
+      if (runnerWindow.closed) {
         cleanup();
         reject(new Error("Portal runner window was closed before the download finished."));
       }
@@ -154,7 +154,7 @@ export async function runFuelPortalInPopup(args: {
       window.clearInterval(onClosePoll);
       window.removeEventListener("message", onMessage);
       try {
-        if (!popup.closed) popup.close();
+        if (!runnerWindow.closed) runnerWindow.close();
       } catch {
         /* ignore */
       }

@@ -14,7 +14,7 @@ export default async function PortalRunnerPage() {
       <PageHead
         eyebrow="Report Imports"
         title="Portal auto runner"
-        subtitle="Download IOCL fuel reports from your browser in a minimized popup, then import automatically."
+        subtitle="Staff click Run; the office gateway PC downloads the report into Import Master."
         action={<Link className="button secondary compact" href="/imports">Report imports</Link>}
       />
 

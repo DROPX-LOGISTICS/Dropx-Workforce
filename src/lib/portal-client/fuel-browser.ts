@@ -12,123 +12,152 @@ export type FuelPortalSession = {
   error?: string;
 };
 
-const POPUP_TIMEOUT_MS = 180_000;
-export const FUEL_PORTAL_RUNNER_PATH = "/portal-fuel-proxy/runner";
+const HELPER_TIMEOUT_MS = 10 * 60_000;
+const HELPER_READY_MS = 2_500;
 
-function openFuelPortalPopup(url: string, name: string) {
-  const width = 420;
-  const height = 320;
-  const left = Math.max(0, window.screen.availWidth - width - 16);
-  const top = Math.max(0, window.screen.availHeight - height - 48);
-  return window.open(
-    url,
-    name,
-    [
-      "popup=yes",
-      `width=${width}`,
-      `height=${height}`,
-      `left=${left}`,
-      `top=${top}`,
-      "menubar=no",
-      "toolbar=no",
-      "location=no",
-      "status=no",
-      "resizable=yes",
-      "scrollbars=yes"
-    ].join(",")
-  );
+function portalCode(sourceType: FuelPortalSource) {
+  return sourceType === "iocl_fuel" ? "iocl" : "bpcl";
 }
 
-/** Opens a small corner popup under the SW scope, runs IOCL download, closes when finished. */
+async function loadPortalSession(sourceType: FuelPortalSource): Promise<FuelPortalSession> {
+  const portal = portalCode(sourceType);
+  const response = await fetch(`/api/report-imports/portal-session?portal=${portal}`, { cache: "no-store" });
+  const payload = (await response.json().catch(() => ({}))) as FuelPortalSession;
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || `Unable to load ${sourceType} portal session (${response.status}).`);
+  }
+  return payload;
+}
+
+function waitForHelperReady(timeoutMs = HELPER_READY_MS): Promise<boolean> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (value: boolean) => {
+      if (done) return;
+      done = true;
+      window.clearTimeout(timer);
+      window.removeEventListener("message", onMessage);
+      resolve(value);
+    };
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === "DROPX_PORTAL_HELPER_READY") finish(true);
+    };
+    const timer = window.setTimeout(() => finish(false), timeoutMs);
+    window.addEventListener("message", onMessage);
+    // Ask an already-loaded helper to re-announce itself.
+    window.postMessage({ type: "DROPX_PORTAL_HELPER_PING" }, window.location.origin);
+  });
+}
+
+/**
+ * Opens a minimized Chrome window on this PC (extension) and drives IOCL/BPCL
+ * using the machine’s internet/IP. No PowerShell — install Dropx Portal Helper once.
+ */
 export async function runFuelPortalInPopup(args: {
   sourceType: FuelPortalSource;
   reportDate: string;
-}): Promise<{ file: File; fileName: string }> {
+}): Promise<{ fileName: string; uploaded: true }> {
   if (args.sourceType !== "iocl_fuel") {
     throw new Error("BPCL browser auto-upload is not available yet — use Manual upload.");
   }
 
-  const url = `${FUEL_PORTAL_RUNNER_PATH}?portal=${encodeURIComponent(args.sourceType)}&reportDate=${encodeURIComponent(args.reportDate)}`;
-  const popup = openFuelPortalPopup(url, `dropx-fuel-${args.sourceType}-${Date.now()}`);
-  if (!popup) {
-    throw new Error("Popup blocked. Allow popups for this site and try again.");
+  const helperReady = await waitForHelperReady();
+  if (!helperReady) {
+    throw new Error(
+      "Install the Dropx Portal Helper Chrome extension once (Imports → Portal Helper), then refresh and try again. No PowerShell needed."
+    );
   }
-  const runnerWindow: Window = popup;
+
+  const session = await loadPortalSession(args.sourceType);
+  const portal = portalCode(args.sourceType);
+  const config = {
+    ioclUsername: session.username,
+    ioclPassword: session.password,
+    bpclUserId: session.userId,
+    bpclPassword: session.password,
+    uploadTarget: "dashboard" as const,
+    dashboardUploadUrl: `${window.location.origin}/api/report-imports/portal-browser-upload`
+  };
+  window.postMessage({ type: "DROPX_PORTAL_CONFIG", ...config }, window.location.origin);
+  window.postMessage(
+    {
+      type: "DROPX_PORTAL_TRIGGER",
+      portal,
+      reportDate: args.reportDate,
+      ...config
+    },
+    window.location.origin
+  );
 
   return new Promise((resolve, reject) => {
-    const origin = window.location.origin;
     let settled = false;
     const timeout = window.setTimeout(() => {
-      finish(() => reject(new Error("Portal runner timed out after 3 minutes. Check the popup for the error log.")), false);
-    }, POPUP_TIMEOUT_MS);
-
-    const onClosePoll = window.setInterval(() => {
-      if (runnerWindow.closed && !settled) {
-        finish(() => reject(new Error("Portal runner window was closed before the download finished.")), false);
-      }
-    }, 500);
-
-    function finish(action: () => void, closePopup = true) {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      window.clearInterval(onClosePoll);
-      window.removeEventListener("message", onMessage);
-      // On failure, leave the popup open so the operator can read the error log.
-      if (closePopup) {
-        try {
-          if (!runnerWindow.closed) runnerWindow.close();
-        } catch {
-          /* ignore */
-        }
-      }
-      action();
-    }
+      finish(() =>
+        reject(
+          new Error(
+            "Timed out waiting for the portal window. If a captcha appeared, solve it and click Login, then wait for upload — or use Manual upload."
+          )
+        )
+      );
+    }, HELPER_TIMEOUT_MS);
 
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== origin) return;
       const data = event.data as {
         type?: string;
         ok?: boolean;
         error?: string;
         fileName?: string;
-        mime?: string;
-        buffer?: ArrayBuffer;
+        portal?: string;
       } | null;
-      if (!data || data.type !== "fuel-portal-done") return;
-      if (!data.ok || !data.buffer) {
-        finish(() => reject(new Error(String(data.error || "Portal download failed."))), false);
+      if (!data || data.type !== "DROPX_PORTAL_DONE") return;
+      if (!data.ok) {
+        finish(() => reject(new Error(String(data.error || "Portal Helper upload failed."))));
         return;
       }
-      const buffer = data.buffer;
-      const fileName = String(data.fileName || `${args.sourceType}_${args.reportDate}.csv`);
-      const mime = String(data.mime || "text/csv");
-      finish(() => resolve({ file: new File([buffer], fileName, { type: mime }), fileName }), true);
+      finish(() =>
+        resolve({
+          uploaded: true,
+          fileName: String(data.fileName || `${args.sourceType}_${args.reportDate}`)
+        })
+      );
     };
+
+    function finish(action: () => void) {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      window.removeEventListener("message", onMessage);
+      action();
+    }
 
     window.addEventListener("message", onMessage);
   });
 }
 
-/**
- * Prefer popup runner (SW-scoped). Kept name for callers; do not run IOCL APIs from
- * /imports directly — that page is outside the service-worker proxy scope.
- */
+/** @deprecated Same as runFuelPortalInPopup — SW API proxy cannot bypass IOCL CORS. */
 export async function runFuelPortalInline(args: {
   sourceType: FuelPortalSource;
   reportDate: string;
 }): Promise<{ file: File; fileName: string }> {
-  return runFuelPortalInPopup(args);
+  const result = await runFuelPortalInPopup(args);
+  // Callers that still expect a File should not re-upload — helper already imported.
+  throw new Error(
+    `Portal Helper already imported ${result.fileName}. Refresh Import Master — no second upload needed.`
+  );
 }
 
-/** @deprecated Prefer runFuelPortalInPopup */
 export async function runFuelPortalInBrowser(args: {
   sourceType: FuelPortalSource;
   reportDate: string;
-}): Promise<{ file: File; fileName: string }> {
+}): Promise<{ fileName: string; uploaded: true }> {
   return runFuelPortalInPopup(args);
 }
 
 export function isFuelPortalSource(value: string): value is FuelPortalSource {
   return value === "iocl_fuel" || value === "bpcl_fuel";
+}
+
+export function portalHelperInstallUrl() {
+  return "/imports/portal-extension";
 }

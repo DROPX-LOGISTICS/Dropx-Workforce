@@ -195,12 +195,37 @@ export async function POST(request: Request) {
       return Response.json(result);
     }
 
-    const path =
-      sourceType === "iocl_fuel"
-        ? "/api/admin/reports/iocl-fuel/run"
-        : sourceType === "bpcl_fuel"
-          ? "/api/admin/reports/bpcl-fuel/run"
-          : "/api/admin/reports/cashbook/run";
+    // IOCL/BPCL: queue a job for the office-PC agent (headed Chrome on that machine's IP).
+    // No Cloudflare Browser Rendering / tunnel — poll_jobs.py / start-agent.ps1 does the work.
+    if (sourceType === "iocl_fuel" || sourceType === "bpcl_fuel") {
+      const portal = sourceType === "iocl_fuel" ? "iocl" : "bpcl";
+      const enq = await reportAutoPost<{
+        ok?: boolean;
+        id?: string;
+        already?: boolean;
+        error?: string;
+        note?: string;
+      }>("/api/admin/reports/portal-jobs", { portal, reportDate });
+      if (!enq.id) {
+        return Response.json(
+          { ok: false, sourceType, reportDate, error: enq.error || "Failed to queue portal job" },
+          { status: 502 }
+        );
+      }
+      const result: AutoRunResult = {
+        ok: true,
+        sourceType,
+        reportDate,
+        queued: true,
+        jobId: enq.id,
+        message: enq.already
+          ? `Job already queued (${enq.id}). Waiting for the PC agent to open Chrome…`
+          : `Job queued (${enq.id}). On the office PC keep start-agent.ps1 running — Chrome opens there on your ISP IP.`
+      };
+      return Response.json(result);
+    }
+
+    const path = "/api/admin/reports/cashbook/run";
     const run = await reportAutoPost<{
       ok?: boolean;
       error?: string;
@@ -211,20 +236,6 @@ export async function POST(request: Request) {
       run?: { id?: string; error?: string | null };
     }>(path, { reportDate, forceNew: true });
     if (run.error || run.run?.error) {
-      const errText = String(run.error || run.run?.error || "");
-      const fuelNeedsBrowser =
-        (sourceType === "iocl_fuel" || sourceType === "bpcl_fuel") &&
-        (run.clientPortal ||
-          /recaptcha|captcha|request rejected|waf|login_failed|browser login|client.?portal/i.test(errText));
-      if (fuelNeedsBrowser) {
-        return Response.json({
-          ok: false,
-          sourceType,
-          reportDate,
-          clientPortal: true,
-          error: errText || "Worker portal browser blocked."
-        }, { status: 409 });
-      }
       return Response.json(
         { ok: false, sourceType, reportDate, error: run.error || run.run?.error },
         { status: 502 }

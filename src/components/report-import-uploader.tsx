@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ReportImportMaster, reportSchedule } from "@/lib/report-import-master";
 import { isReportAutoSource, isWorkforceAutoSource } from "@/lib/report-auto-worker";
-import { isFuelPortalSource, runFuelPortalInPopup } from "@/lib/portal-client/fuel-browser";
+import { isFuelPortalSource } from "@/lib/portal-client/fuel-browser";
 import { supabase } from "@/lib/supabase";
 
 type ShipmentStation = { code: string; name: string; model: string; provider: string; parentStationId?: string | null; id?: string; childCodes?: string[] };
@@ -168,68 +168,66 @@ export function ReportImportUploader({
     }
     const isDelivered = sourceType === "delivered_shipment_detail";
 
-    // IOCL: skip cloud worker (always blocked) — open portal runner directly.
-    if (isFuelPortalSource(sourceType)) {
-      if (sourceType !== "iocl_fuel") {
-        setError("BPCL browser auto-upload is not available yet — use Manual upload, or open Portal runner.");
-        return;
-      }
-      startAuto(async () => {
-        const effectiveDate = reportDate || indiaDate(-1);
-        try {
-          setAutoProgress({
-            title: "IOCL portal runner",
-            current: 1,
-            total: 2,
-            station: null,
-            steps: [
-              { label: "Download from the portal", status: "active", detail: "Opening portal runner popup" },
-              { label: "Import into Master", status: "pending" }
-            ]
-          });
-          let browser: { file: File; fileName: string };
-          browser = await runFuelPortalInPopup({ sourceType, reportDate: effectiveDate });
-          setAutoProgress({
-            title: "IOCL portal runner",
-            current: 2,
-            total: 2,
-            station: null,
-            steps: [
-              { label: "Download from the portal", status: "done", detail: browser.fileName },
-              { label: "Import into Master", status: "active" }
-            ]
-          });
-          const form = new FormData();
-          form.set("source_type", sourceType);
-          form.set("report_date", effectiveDate);
-          form.set("file", browser.file);
-          const importResponse = await fetch("/api/report-imports", { method: "POST", body: form });
-          const imported = await importResponse.json().catch(() => ({}));
-          if (!importResponse.ok) {
-            setError(imported.error ?? `Import failed after browser download (${importResponse.status}).`);
-            return;
-          }
-          setMessage(imported.message ?? "IOCL auto upload completed via portal runner.");
-          setSummary({
-            duplicateRows: Number(imported.duplicateRows ?? 0),
-            imported: Number(imported.imported ?? 0),
-            refreshedExisting: Number(imported.refreshedExisting ?? 0),
-            skipped: Number(imported.skipped ?? 0),
-            totalRows: Number(imported.totalRows ?? 0)
-          });
-          setAutoNotice(true);
-          router.refresh();
-        } catch (err) {
-          setError(err instanceof Error ? err.message : String(err));
-        } finally {
-          setAutoProgress(null);
-        }
-      });
-      return;
-    }
-
+    // IOCL/BPCL: company website queues a job; office gateway PC downloads (IT-managed).
     startAuto(async () => {
       try {
+      if (isFuelPortalSource(sourceType)) {
+        const { runFuelViaMachineAgent } = await import("@/lib/portal-client/machine-agent");
+        setAutoProgress({
+          title: sourceType === "iocl_fuel" ? "IOCL auto upload" : "BPCL auto upload",
+          current: 1,
+          total: 3,
+          station: null,
+          steps: [
+            { label: "Queue on company systems", status: "active" },
+            { label: "Office gateway download", status: "pending" },
+            { label: "Import into Master", status: "pending" }
+          ]
+        });
+        const result = await runFuelViaMachineAgent({
+          sourceType,
+          reportDate: reportDate || "",
+          onProgress: (p) => {
+            const waitActive = p.phase === "wait" || p.phase === "queue";
+            const importActive = p.phase === "import";
+            setAutoProgress({
+              title: sourceType === "iocl_fuel" ? "IOCL auto upload" : "BPCL auto upload",
+              current: p.phase === "done" ? 3 : importActive ? 3 : waitActive ? 2 : 1,
+              total: 3,
+              station: null,
+              steps: [
+                {
+                  label: "Queue on company systems",
+                  status: p.phase === "queue" ? "active" : "done",
+                  detail: p.phase === "queue" ? p.detail : undefined
+                },
+                {
+                  label: "Office gateway download",
+                  status: waitActive ? "active" : p.phase === "error" ? "error" : "done",
+                  detail: waitActive || p.phase === "error" ? p.detail : undefined
+                },
+                {
+                  label: "Import into Master",
+                  status: importActive ? "active" : p.phase === "done" ? "done" : "pending",
+                  detail: importActive || p.phase === "done" ? p.detail : undefined
+                }
+              ]
+            });
+          }
+        });
+        if (!result.ok) {
+          setError(
+            result.error ||
+              "Auto upload failed. Ask IT to confirm the office gateway agent is running (see /imports/portal-extension)."
+          );
+          return;
+        }
+        setMessage(result.message);
+        setAutoNotice(true);
+        router.refresh();
+        return;
+      }
+
       setAutoProgress({
         title: isDelivered ? "Fetching delivered data for every station" : "Auto upload",
         current: 0,
@@ -354,7 +352,7 @@ export function ReportImportUploader({
       : !isReportAutoSource(sourceType)
         ? "Auto upload is not available for this report — use Upload file"
         : isFuelPortalSource(sourceType)
-          ? "Opens portal runner in a small popup (uses your browser network)"
+          ? "Queues download on the office gateway PC — staff only use the website"
         : isShipmentImport
           ? "Fetches every station one by one — you do not pick a station"
         : "Fetch this report from the portal and import it (no file needed)";
@@ -449,7 +447,7 @@ export function ReportImportUploader({
         {compact ? <div className="compact-upload-actions">{manualButton}{autoButton}</div> : null}
       </div>
       {compact && isShipmentImport ? <p className="shipment-upload-note">Manual upload: station is read from the file. Auto upload: every Amazon station is fetched one by one for the date above — no station picker.</p> : null}
-      {compact && canAuto && isFuelPortalSource(sourceType) ? <p className="shipment-upload-note">Auto upload opens a small portal runner popup on your network, then imports the file. Allow popups if nothing opens. Use Upload file for a manual CSV/XLSX.</p> : null}
+      {compact && canAuto && isFuelPortalSource(sourceType) ? <p className="shipment-upload-note">Auto upload runs through the company office gateway (managed by IT). You only click Auto — <a href="/imports/portal-extension">how this is set up</a>.</p> : null}
       {compact && canAuto && !isShipmentImport && !isFuelPortalSource(sourceType) ? <p className="shipment-upload-note">Auto upload pulls the file from the portal — no file picker needed. Use Upload file when the portal is blocked or Auto fails.</p> : null}
       {autoProgress ? (
         <div className="auto-run-progress" role="status" aria-live="polite">

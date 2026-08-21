@@ -170,6 +170,9 @@ export type AutoRunResult = {
   totalRows?: number;
   /** Worker WAF blocked — retry via operator browser (IOCL/BPCL). */
   clientPortal?: boolean;
+  /** Queued for office-PC agent (poll_jobs / start-agent.ps1). */
+  queued?: boolean;
+  jobId?: string;
   lastStationCode?: string | null;
   stationsOk?: number;
   stationsFailed?: number;

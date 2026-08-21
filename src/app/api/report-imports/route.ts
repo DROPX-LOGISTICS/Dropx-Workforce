@@ -686,10 +686,14 @@ function parseDeliveredShipmentFacts(rows: SheetRow[], companyId: string, batchI
   const records = rowsToRecords(rows, headerIndex);
   const rejected: Array<{ rowNumber: number; issue: string }> = [];
   const byTrackingId = new Map<string, DeliveredShipmentFact>();
-  const embeddedDates = new Set(records.map(({ raw }) =>
-    timestamp(findValue(raw, ["Last Updated Time", "Delivery Time", "Delivered At"]))?.slice(0, 10)
-  ).filter(Boolean));
-  const preserveEmbeddedDates = embeddedDates.size > 1;
+  // The file represents a single report business date (chosen at upload time,
+  // normally D-1). Amazon's own "Last Updated Time" column routinely spills a
+  // handful of rows past midnight into the next calendar day — bucketing by
+  // that raw per-row timestamp instead of the selected report date scattered
+  // one file's shipments across two dates, so the checklist total for the
+  // intended day never matched the upload log's imported row count. Always
+  // trust the selected report date; only fall back to the row's own
+  // timestamp when no report date was supplied.
   records.forEach(({ raw, rowNumber }) => {
     const trackingId = clean(findValue(raw, ["Tracking ID", "Tracking Number", "Shipment ID"]));
     const stationCode = normalizeStation(findValue(raw, ["Station", "Station Code", "Delivery Station"])) || selectedStation;
@@ -740,7 +744,7 @@ function parseDeliveredShipmentFacts(rows: SheetRow[], companyId: string, batchI
       tracking_id: trackingId,
       updated_at: new Date().toISOString(),
       width_cm: widthCm,
-      work_date: preserveEmbeddedDates ? lastUpdatedAt.slice(0, 10) : selectedDate || lastUpdatedAt.slice(0, 10)
+      work_date: selectedDate || lastUpdatedAt.slice(0, 10)
     };
     const existing = byTrackingId.get(trackingId);
     if (!existing || existing.last_updated_at <= fact.last_updated_at) byTrackingId.set(trackingId, fact);

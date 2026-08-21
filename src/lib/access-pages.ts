@@ -26,7 +26,6 @@ export const accessPages = [
   { code: "fleet_live_gps", name: "Live GPS", sort_order: 53 },
   { code: "fleet_maintenance", name: "Maintenance", sort_order: 54 },
   { code: "fleet_reports", name: "Fleet Report", sort_order: 55 },
-  { code: "mapping", name: "Mapping", sort_order: 50 },
   { code: "rate_cards", name: "Rate Cards", sort_order: 60 },
   { code: "imports", name: "Report Imports", sort_order: 70 },
   { code: "ops_pulse", name: "Ops Pulse", sort_order: 84 },

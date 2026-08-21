@@ -55,7 +55,6 @@ export const navItems: NavItem[] = [
   { code: "executive_id_onboarding", label: "Executive ID Onboarding", href: "/executive-id-onboarding", icon: "ID" },
   { code: "provider_mapping", label: "ID Mapping", href: "/provider-mapping", icon: "<>" },
   fleetNavItem,
-  { code: "mapping", label: "Mapping", href: "/mapping", icon: "<>" },
   { code: "rate_cards", label: "Rate Cards", href: "/rate-cards", icon: "Rs" },
   { code: "imports", label: "Report Imports", href: "/imports", icon: "^" },
   { code: "earnings", label: "Earnings Review", href: "/earnings", icon: "$" },

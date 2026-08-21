@@ -28,20 +28,6 @@ export const fleetNavItem: NavItem = {
 export const navItems: NavItem[] = [
   { code: "dashboard", label: "Command Center", href: "/dashboard", icon: "#" },
   {
-    code: "leads",
-    label: "Leads",
-    icon: "L",
-    children: [
-      { code: "leads_dashboard", label: "Dashboard", href: "/leads" },
-      { code: "leads_all", label: "All Leads", href: "/leads/all" },
-      { code: "leads_followups", label: "Follow-ups", href: "/leads/follow-ups" },
-      { code: "leads_interviews", label: "Interviews", href: "/leads/interviews" },
-      { code: "leads_reports", label: "Reports", href: "/leads/reports" },
-      { code: "leads_ads", label: "All Ads", href: "/leads/ads" },
-      { code: "leads_sop", label: "Ad SOP", href: "/leads/ad-sop" }
-    ]
-  },
-  {
     code: "onboard",
     label: "People",
     icon: "+",
@@ -55,10 +41,7 @@ export const navItems: NavItem[] = [
   { code: "executive_id_onboarding", label: "Executive ID Onboarding", href: "/executive-id-onboarding", icon: "ID" },
   { code: "provider_mapping", label: "ID Mapping", href: "/provider-mapping", icon: "<>" },
   fleetNavItem,
-  { code: "rate_cards", label: "Rate Cards", href: "/rate-cards", icon: "Rs" },
   { code: "imports", label: "Report Imports", href: "/imports", icon: "^" },
-  { code: "earnings", label: "Earnings Review", href: "/earnings", icon: "$" },
-  { code: "exceptions", label: "Exceptions", href: "/exceptions", icon: "!" },
   { code: "inbox", label: "Inbox", href: "/inbox", icon: "I" },
   { code: "business_documents", label: "Business Docs", href: "/business-documents", icon: "D" },
   {

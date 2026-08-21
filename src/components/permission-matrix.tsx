@@ -29,7 +29,6 @@ const workforceCategoryCodes = new Set(["employees", "delivery_associates", "con
 
 const dashboardGroups: PermissionGroup[] = [
   { key: "dashboard", label: "Command Center", codes: ["dashboard"] },
-  { key: "leads", label: "Leads", codes: ["leads_dashboard", "leads_all", "leads_followups", "leads_interviews", "leads_reports", "leads_ads", "leads_sop"], hiddenCodes: ["leads"] },
   {
     key: "people",
     label: "People",
@@ -39,10 +38,7 @@ const dashboardGroups: PermissionGroup[] = [
   { key: "executive_id_onboarding", label: "Executive ID Onboarding", codes: ["executive_id_onboarding"] },
   { key: "provider_mapping", label: "ID Mapping", codes: ["provider_mapping"] },
   { key: "fleet", label: "Fleet", codes: ["fleet_action_center", "fleet_vehicle_view", "fleet_date_view", "fleet_station_view", "fleet_tracking", "fleet_fuel_log", "fleet_live_gps", "fleet_maintenance", "fleet_reports"], hiddenCodes: ["fleet"] },
-  { key: "rate_cards", label: "Rate Cards", codes: ["rate_cards"] },
   { key: "imports", label: "Report Imports", codes: ["imports"] },
-  { key: "earnings", label: "Earnings", codes: ["earnings"] },
-  { key: "exceptions", label: "Exceptions", codes: ["exceptions"] },
   { key: "inbox", label: "Inbox", codes: ["inbox"] },
   { key: "business_documents", label: "Business Documents", codes: ["business_documents"] },
   { key: "payments", label: "Payments", codes: ["expense_requests", "payment_requests", "payment_approvals", "payment_process", "payment_reports"], hiddenCodes: ["payments"] },

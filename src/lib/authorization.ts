@@ -32,7 +32,6 @@ export type AuthorizationContext = {
 const noPermission: PagePermission = { canView: false, canAdd: false, canEdit: false };
 
 const groupedParentPermissions: Record<string, string[]> = {
-  leads: ["leads_dashboard", "leads_all", "leads_followups", "leads_interviews", "leads_reports", "leads_ads", "leads_sop"],
   fleet: ["fleet_action_center", "fleet_vehicle_view", "fleet_date_view", "fleet_station_view", "fleet_tracking", "fleet_fuel_log", "fleet_live_gps", "fleet_maintenance", "fleet_reports"],
   capacity: ["capacity_overview", "capacity_associates", "capacity_delivery", "capacity_hiring"],
   cod: ["daily_submission", "cod_executive_reconciliation", "cod_submission", "cod_validation", "cod_reports", "cod_portal_checks", "cod_cash_in_associate"],

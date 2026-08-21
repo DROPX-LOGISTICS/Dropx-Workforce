@@ -299,7 +299,6 @@ export async function ReportUploadPageContent({
         <div className="panel-head compact-import-head">
           <div><h2>Upload report</h2></div>
           <div className="toolbar-actions">
-            <Link className="button secondary compact" href="/imports/portal-runner">Portal runner</Link>
             <Link className="button secondary compact" href="/master/imports">Manage reports</Link>
           </div>
         </div>

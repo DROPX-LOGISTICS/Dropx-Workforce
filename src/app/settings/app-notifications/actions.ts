@@ -19,35 +19,20 @@ export async function saveAppNotificationSettings(formData: FormData) {
     redirect("/settings/app-notifications?error=Supabase%20is%20not%20configured");
   }
 
-  const existing = await supabaseAdmin
-    .from("mob_app_notification_rules")
-    .select("event_code, title_template, body_template")
-    .eq("company_id", authorization.companyId)
-    .in("event_code", appNotificationEvents);
-  if (existing.error) {
-    const message = existing.error.message.toLowerCase().includes("mob_app_notification")
-      ? "Run scripts/mob_app_notifications_v1.sql in Supabase first"
-      : existing.error.message;
-    redirect(`/settings/app-notifications?error=${encodeURIComponent(message)}`);
-  }
-
-  const existingByEvent = new Map(
-    (existing.data ?? []).map((row) => [String(row.event_code), row])
-  );
   const rows = appNotificationEvents.map((eventCode) => {
-    const current = existingByEvent.get(eventCode);
     const defaults = appNotificationDefaults[eventCode];
+    const titleTemplate = String(formData.get(`${eventCode}_title`) ?? defaults.titleTemplate).trim();
+    const bodyTemplate = String(formData.get(`${eventCode}_body`) ?? defaults.bodyTemplate).trim();
+    if (!titleTemplate || titleTemplate.length > 120 || !bodyTemplate || bodyTemplate.length > 1000) {
+      redirect(`/settings/app-notifications?error=${encodeURIComponent(`Invalid title or message for ${defaults.label}.`)}`);
+    }
     return {
-      body_template: String(current?.body_template ?? defaults.bodyTemplate),
+      body_template: bodyTemplate,
       company_id: authorization.companyId,
-      enabled: formData.get(
-        eventCode === "attendance_punch_in" || eventCode === "attendance_punch_out"
-          ? "attendance_punch"
-          : eventCode
-      ) === "on",
+      enabled: formData.get(`${eventCode}_enabled`) === "on",
       event_code: eventCode,
       route: defaults.route,
-      title_template: String(current?.title_template ?? defaults.titleTemplate),
+      title_template: titleTemplate,
       updated_at: new Date().toISOString()
     };
   });

@@ -575,12 +575,15 @@ export async function POST(request: NextRequest) {
       await createAttendancePunchNotification({
         accountId: recipientAccountId,
         companyId: device.company_id,
+        enrolmentId: canonicalEnrolmentId,
         firstPunchTime,
         profileType,
         punchDate,
         punchId: String(punchResult.data.id),
         punchOrder: nextOrder,
-        punchTime
+        punchTime,
+        workerId: enrolment.worker_type === "employee" ? enrolment.employee_id : enrolment.field_executive_id,
+        workerType: enrolment.worker_type
       });
     }
 

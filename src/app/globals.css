@@ -15715,6 +15715,19 @@ td strong,
   accent-color: #e94b35;
 }
 
+.app-notification-rule-list { display: grid; gap: 12px; }
+.app-notification-rule { display: grid; gap: 11px; padding: 15px; border: 1px solid #e1e5eb; border-radius: 8px; background: #fff; }
+.app-notification-rule > label:not(.app-notification-rule-toggle) { display: grid; gap: 6px; color: #526174; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.app-notification-rule input[type="text"],
+.app-notification-rule > label:not(.app-notification-rule-toggle) input,
+.app-notification-rule textarea { width: 100%; border: 1px solid #d7dce2; border-radius: 7px; padding: 10px 11px; color: #182230; background: #fff; font: inherit; text-transform: none; }
+.app-notification-rule textarea { resize: vertical; min-height: 68px; }
+.app-notification-rule-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.app-notification-rule-toggle > span { display: grid; gap: 2px; }
+.app-notification-rule-toggle small { color: #7b8797; font-size: 10px; font-weight: 500; }
+.app-notification-rule-toggle input { width: 17px; height: 17px; accent-color: #e94b35; }
+.app-notification-variable-help { color: #667085; font-size: 10px; }
+
 .app-notification-history table {
   width: 100%;
   border-collapse: collapse;

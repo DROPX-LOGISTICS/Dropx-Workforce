@@ -13,28 +13,45 @@ import { saveAppNotificationSettings } from "./actions";
 export const dynamic = "force-dynamic";
 
 async function loadSettings(companyId: string) {
-  const enabled = Object.fromEntries(
-    appNotificationEvents.map((eventCode) => [eventCode, true])
-  ) as Record<AppNotificationEvent, boolean>;
+  const rules = Object.fromEntries(appNotificationEvents.map((eventCode) => [eventCode, {
+    bodyTemplate: appNotificationDefaults[eventCode].bodyTemplate,
+    enabled: true,
+    titleTemplate: appNotificationDefaults[eventCode].titleTemplate
+  }])) as Record<AppNotificationEvent, { bodyTemplate: string; enabled: boolean; titleTemplate: string }>;
   if (!supabaseAdmin) {
-    return { enabled, error: "Supabase service role key is not configured." };
+    return { rules, error: "Supabase service role key is not configured." };
   }
 
   const result = await supabaseAdmin
     .from("mob_app_notification_rules")
-    .select("event_code, enabled")
+    .select("event_code, enabled, title_template, body_template")
     .eq("company_id", companyId)
     .in("event_code", appNotificationEvents);
-  if (result.error) return { enabled, error: result.error.message };
+  if (result.error) return { rules, error: result.error.message };
 
   for (const row of result.data ?? []) {
     const eventCode = row.event_code as AppNotificationEvent;
     if (appNotificationEvents.includes(eventCode)) {
-      enabled[eventCode] = row.enabled !== false;
+      rules[eventCode] = {
+        bodyTemplate: String(row.body_template ?? rules[eventCode].bodyTemplate),
+        enabled: row.enabled !== false,
+        titleTemplate: String(row.title_template ?? rules[eventCode].titleTemplate)
+      };
     }
   }
-  return { enabled, error: null as string | null };
+  return { rules, error: null as string | null };
 }
+
+const variableHelp: Partial<Record<AppNotificationEvent, string>> = {
+  attendance_punch_in: "Variables: {time}, {date}, {punch_count}, {work_duration}",
+  attendance_punch_out: "Variables: {time}, {date}, {punch_count}, {work_duration}",
+  attendance_late_in: "Variables: {time}, {date}, {late_minutes}",
+  attendance_early_out: "Variables: {time}, {date}, {early_minutes}, {work_duration}",
+  attendance_half_day: "Variables: {time}, {date}, {work_duration}, {outcome}",
+  attendance_short_day: "Variables: {time}, {date}, {work_duration}, {outcome}, {payable_percent}",
+  attendance_overtime: "Variables: {time}, {date}, {work_duration}, {overtime_minutes}, {outcome}",
+  attendance_exception_review: "Variables: {time}, {date}, {work_duration}, {outcome}"
+};
 
 export default async function AppNotificationSettingsPage({
   searchParams
@@ -67,32 +84,17 @@ export default async function AppNotificationSettingsPage({
       ) : (
         <section className="panel app-notification-settings">
           <form action={saveAppNotificationSettings}>
-            <div className="app-notification-checklist">
-              <label>
-                <span>Punch</span>
-                <input
-                  defaultChecked={
-                    settings.enabled.attendance_punch_in &&
-                    settings.enabled.attendance_punch_out
-                  }
-                  disabled={!permission.canEdit && !permission.canAdd}
-                  name="attendance_punch"
-                  type="checkbox"
-                />
-              </label>
-              {appNotificationEvents.filter(
-                (eventCode) => eventCode !== "attendance_punch_in" &&
-                  eventCode !== "attendance_punch_out"
-              ).map((eventCode) => (
-                <label key={eventCode}>
-                  <span>{appNotificationDefaults[eventCode].label}</span>
-                  <input
-                    defaultChecked={settings.enabled[eventCode]}
-                    disabled={!permission.canEdit && !permission.canAdd}
-                    name={eventCode}
-                    type="checkbox"
-                  />
-                </label>
+            <div className="app-notification-rule-list">
+              {appNotificationEvents.map((eventCode) => (
+                <article className="app-notification-rule" key={eventCode}>
+                  <label className="app-notification-rule-toggle">
+                    <span><strong>{appNotificationDefaults[eventCode].label}</strong><small>{eventCode}</small></span>
+                    <input defaultChecked={settings.rules[eventCode].enabled} disabled={!permission.canEdit && !permission.canAdd} name={`${eventCode}_enabled`} type="checkbox" />
+                  </label>
+                  <label><span>Notification title</span><input defaultValue={settings.rules[eventCode].titleTemplate} disabled={!permission.canEdit && !permission.canAdd} maxLength={120} minLength={1} name={`${eventCode}_title`} required /></label>
+                  <label><span>Notification message</span><textarea defaultValue={settings.rules[eventCode].bodyTemplate} disabled={!permission.canEdit && !permission.canAdd} maxLength={1000} minLength={1} name={`${eventCode}_body`} required rows={2} /></label>
+                  {variableHelp[eventCode] ? <small className="app-notification-variable-help">{variableHelp[eventCode]}</small> : null}
+                </article>
               ))}
             </div>
             {permission.canEdit || permission.canAdd ? (

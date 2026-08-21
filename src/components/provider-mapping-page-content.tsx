@@ -36,10 +36,26 @@ type EmployeeRow = {
   is_active: boolean;
 };
 
+type ContractorRow = {
+  id: string;
+  full_name: string;
+  date_of_join: string;
+  location_id: string | null;
+  dropx_id: string | null;
+  designation: string | null;
+  is_active: boolean;
+};
+
+type FieldOperationsDesignationRow = {
+  code: string;
+  name: string;
+};
+
 type MappingRow = {
   id: string;
   field_executive_id: string | null;
   employee_id: string | null;
+  contractor_id: string | null;
   provider_member_id: string;
   provider_id: string;
   station_id: string | null;
@@ -105,7 +121,7 @@ async function loadMappingData(authorization: AuthorizationContext) {
   }
 
   const companyId = requireCompanyId(authorization);
-  const [locationsResult, executivesResult, employeesResult, mappingsResult, paymentMethodsResult] = await Promise.all([
+  const [locationsResult, executivesResult, employeesResult, contractorsResult, designationsResult, mappingsResult, paymentMethodsResult] = await Promise.all([
     supabaseAdmin
       .from("stations")
       .select("id, station_code, station_name, provider_id")
@@ -134,11 +150,25 @@ async function loadMappingData(authorization: AuthorizationContext) {
       .eq("designations.is_field_operations", true)
       .order("full_name"),
     supabaseAdmin
+      .from("contractors")
+      .select("id, full_name, date_of_join, location_id, dropx_id, designation, is_active")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .order("full_name"),
+    supabaseAdmin
+      .from("designations")
+      .select("code, name")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .eq("is_field_operations", true),
+    supabaseAdmin
       .from("field_executive_provider_mappings")
       .select(`
         id,
         field_executive_id,
         employee_id,
+        contractor_id,
         provider_id,
         station_id,
         provider_member_id,
@@ -203,12 +233,21 @@ async function loadMappingData(authorization: AuthorizationContext) {
   }));
   const latestMappingByWorkerKey = new Map<string, MappingRow>();
   ((mappingsResult.data ?? []) as MappingRow[]).forEach((mapping) => {
-    const key = mapping.employee_id ? `employee:${mapping.employee_id}` : `field_executive:${mapping.field_executive_id}`;
+    const key = mapping.employee_id
+      ? `employee:${mapping.employee_id}`
+      : mapping.contractor_id
+        ? `contractor:${mapping.contractor_id}`
+        : `field_executive:${mapping.field_executive_id}`;
     if (!latestMappingByWorkerKey.has(key)) {
       latestMappingByWorkerKey.set(key, mapping);
     }
   });
 
+  const fieldOperationsDesignationKeys = new Set(
+    ((designationsResult.data ?? []) as FieldOperationsDesignationRow[])
+      .flatMap((designation) => [designation.code, designation.name])
+      .map((value) => value.trim().toLowerCase())
+  );
   const workers = [
     ...((employeesResult.data ?? []) as unknown as EmployeeRow[]).map((employee) => ({
       id: employee.id,
@@ -218,6 +257,16 @@ async function loadMappingData(authorization: AuthorizationContext) {
       locationId: employee.location_id ?? "",
       dropxId: employee.employee_code ?? ""
     })),
+    ...((contractorsResult.data ?? []) as ContractorRow[])
+      .filter((contractor) => fieldOperationsDesignationKeys.has((contractor.designation ?? "").trim().toLowerCase()))
+      .map((contractor) => ({
+        id: contractor.id,
+        sourceType: "contractor" as const,
+        fullName: contractor.full_name,
+        dateOfJoin: contractor.date_of_join,
+        locationId: contractor.location_id ?? "",
+        dropxId: contractor.dropx_id ?? ""
+      })),
     ...((executivesResult.data ?? []) as ExecutiveRow[]).map((executive) => ({
       id: executive.id,
       sourceType: "field_executive" as const,
@@ -259,7 +308,7 @@ async function loadMappingData(authorization: AuthorizationContext) {
     locations,
     mappings,
     paymentMethods,
-    error: mappingsResult.error?.message || employeesResult.error?.message || executivesResult.error?.message || locationsResult.error?.message || paymentMethodsResult.error?.message || null
+    error: mappingsResult.error?.message || employeesResult.error?.message || contractorsResult.error?.message || designationsResult.error?.message || executivesResult.error?.message || locationsResult.error?.message || paymentMethodsResult.error?.message || null
   };
 }
 

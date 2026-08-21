@@ -50,6 +50,9 @@ function friendlyError(error: unknown, fallback: string) {
   if (message.toLowerCase().includes("portal_permissions")) {
     return "Designation portal access setup is pending. Run scripts/designations_portal_permissions_v1.sql in Supabase SQL Editor, then try again.";
   }
+  if (message.toLowerCase().includes("is_field_operations")) {
+    return "Field Operations setup is pending. Apply the field operations mapping migration, then try again.";
+  }
   return message;
 }
 
@@ -157,6 +160,7 @@ export async function createDesignation(formData: FormData) {
       app_page_access: appPageAccess(formData),
       onboarding_role_ids: roleIds,
       portal_permissions: portalPermissions(formData),
+      is_field_operations: formData.has("is_field_operations"),
       is_active: true
     }, companyId));
     if (error) throw new Error(error.message);
@@ -197,6 +201,7 @@ export async function updateDesignation(formData: FormData) {
         app_page_access: appPageAccess(formData),
         onboarding_role_ids: roleIds,
         portal_permissions: portalPermissions(formData),
+        is_field_operations: formData.has("is_field_operations"),
         is_active: status,
         updated_at: new Date().toISOString()
       })

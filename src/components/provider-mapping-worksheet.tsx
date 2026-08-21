@@ -13,6 +13,7 @@ export type LocationOption = {
 
 export type MappingWorksheetRow = {
   id: string;
+  sourceType: "employee" | "field_executive";
   mappingId: string;
   dropxId: string;
   dropxName: string;
@@ -49,6 +50,7 @@ export type PaymentMethodOption = {
 function rowSignature(row: MappingWorksheetRow) {
   return [
     row.id,
+    row.sourceType,
     row.mappingId,
     row.dropxId,
     row.dropxName,
@@ -232,6 +234,7 @@ export function ProviderMappingWorksheet({
           {rows.map((row, index) => (
             <div className={`mapping-row-card ${dirtyRows[index] ? "unsaved-row" : ""}`} key={`${row.id || row.dropxId}-${index}`}>
               <input type="hidden" name={`rows[${index}][id]`} value={row.id} />
+              <input type="hidden" name={`rows[${index}][source_type]`} value={row.sourceType} />
               <input type="hidden" name={`rows[${index}][mapping_id]`} value={row.mappingId} />
               <input type="hidden" name={`rows[${index}][dropx_id]`} value={row.dropxId} />
               <input type="hidden" name={`rows[${index}][dropx_name]`} value={row.dropxName} />

@@ -46,6 +46,7 @@ type DesignationRow = {
   onboarding_role_ids?: string[] | null;
   portal_permissions?: unknown;
   profile_field_rules?: unknown;
+  is_field_operations?: boolean | null;
   is_active: boolean;
 };
 
@@ -90,7 +91,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
   }
 
   const [designationsResult, providersResult, locationsResult, modelsResult, categoriesResult, rolesResult] = await Promise.all([
-    supabaseAdmin.from("designations").select("id, code, name, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_active").eq("company_id", companyId).order("code"),
+    supabaseAdmin.from("designations").select("id, code, name, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_field_operations, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("providers").select("id, code, name, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("stations").select("id, station_code, station_name, hide_from_location_list").eq("company_id", companyId).eq("is_active", true).order("station_code"),
     supabaseAdmin.from("location_models").select("id, provider_id, code, name, is_active, providers (code, name)").eq("company_id", companyId).eq("is_active", true).order("code"),
@@ -120,6 +121,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
       profile_field_rules: {},
       onboarding_role_ids: [],
       portal_permissions: null,
+      is_field_operations: false,
     }));
     designationError = fallbackError;
   }
@@ -280,6 +282,7 @@ export default async function DesignationsPage({
                   <th>Categories</th>
                   <th>Models</th>
                   <th>App pages</th>
+                  <th>Field operations</th>
                   <th>Status</th>
                   {pagePermission.canEdit ? <th>Action</th> : null}
                 </tr>
@@ -317,12 +320,13 @@ export default async function DesignationsPage({
                           </div>
                         ) : <span className="subtle">No pages</span>}
                       </td>
+                      <td>{designation.is_field_operations ? <span className="mini-tag">Included</span> : <span className="subtle">-</span>}</td>
                       <td><StatusPill status={designation.is_active ? "Active" : "Inactive"} /></td>
                       {pagePermission.canEdit ? <td><PendingLink className="button secondary compact" href={`/master/designations?edit=${designation.id}`} scroll={false}>Edit</PendingLink></td> : null}
                     </tr>
                   );
                 }) : (
-                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 7 : 6}>No designations found.</td></tr>
+                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 8 : 7}>No designations found.</td></tr>
                 )}
               </tbody>
             </table>

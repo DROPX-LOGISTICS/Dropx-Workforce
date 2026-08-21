@@ -46,6 +46,7 @@ type DesignationInitial = {
   onboarding_role_ids?: string[] | null;
   portal_permissions?: unknown;
   profile_field_rules?: unknown;
+  is_field_operations?: boolean | null;
   is_active: boolean;
 };
 
@@ -496,6 +497,18 @@ export function DesignationForm({
         <label>
           Models
           <ModelMultiSelect models={models} selected={selectedModels} setSelected={setSelectedModels} />
+        </label>
+        <label className="check-row designation-field-operations">
+          <input
+            className="matrix-checkbox"
+            defaultChecked={Boolean(initial?.is_field_operations)}
+            name="is_field_operations"
+            type="checkbox"
+          />
+          <span>
+            <strong>Field Operations</strong>
+            <small>Include people with this designation in ID &amp; Pay Mapping.</small>
+          </span>
         </label>
         {initial ? (
           <label>

@@ -35,6 +35,34 @@ async function nextApprover(companyId: string, finalRoleIds: string[]) {
   return { userId: finalUser.id, roleId: finalUser.role_id ?? finalRoleIds[0] ?? null };
 }
 
+async function isFinalRoleOrAbove(companyId: string, actorRoleId: string | null, finalRoleIds: string[]) {
+  if (!supabaseAdmin || !actorRoleId || !finalRoleIds.length) return false;
+  if (finalRoleIds.includes(actorRoleId)) return true;
+
+  let pendingRoleIds = [...new Set(finalRoleIds)];
+  const visitedRoleIds = new Set<string>();
+  while (pendingRoleIds.length) {
+    const roleIds = pendingRoleIds.filter((roleId) => !visitedRoleIds.has(roleId));
+    if (!roleIds.length) break;
+    roleIds.forEach((roleId) => visitedRoleIds.add(roleId));
+
+    const { data, error } = await supabaseAdmin
+      .from("user_roles")
+      .select("id, parent_role_id")
+      .eq("company_id", companyId)
+      .in("id", roleIds);
+    if (error) throw new Error(error.message);
+
+    const parentRoleIds = (data ?? [])
+      .map((role) => role.parent_role_id as string | null)
+      .filter((roleId): roleId is string => Boolean(roleId));
+    if (parentRoleIds.includes(actorRoleId)) return true;
+    pendingRoleIds = [...new Set(parentRoleIds)];
+  }
+
+  return false;
+}
+
 async function ensureUserHasNotAlreadyActed(
   companyId: string,
   requestId: string,
@@ -340,15 +368,14 @@ export async function approvePaymentRequest(formData: FormData) {
   const finalRoleIds = (request.final_approval_role_ids?.length ? request.final_approval_role_ids : request.final_approval_role_id ? [request.final_approval_role_id] : []) as string[];
   if (!finalRoleIds.length) throw new Error("Final approval role is not configured for this payment request.");
 
-  // Routing is determined by the request stage, not by the actor's role. This
-  // prevents an initial approver who also has a configured final role from
-  // accidentally completing both approval stages in one action.
+  const actorRoleId = authorization.roleId ?? request.current_approver_role_id ?? null;
+  const actorCanFinalize = await isFinalRoleOrAbove(companyId, actorRoleId, finalRoleIds);
   const storedStepOrder = Number(request.current_step_order);
   const legacyStatus = String(request.approval_status || request.status || "").trim().toUpperCase();
   const currentStepOrder = storedStepOrder > 0
     ? storedStepOrder
     : legacyStatus.endsWith("_APPROVED") ? 2 : 1;
-  const isFinalApproval = currentStepOrder >= 2;
+  const isFinalApproval = currentStepOrder >= 2 || actorCanFinalize;
 
   if (isFinalApproval) {
     await updatePaymentRequest(request.id, companyId, {

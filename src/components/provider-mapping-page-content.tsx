@@ -27,9 +27,19 @@ type ExecutiveRow = {
   is_active: boolean;
 };
 
+type EmployeeRow = {
+  id: string;
+  full_name: string;
+  date_of_join: string;
+  location_id: string | null;
+  employee_code: string | null;
+  is_active: boolean;
+};
+
 type MappingRow = {
   id: string;
-  field_executive_id: string;
+  field_executive_id: string | null;
+  employee_id: string | null;
   provider_member_id: string;
   provider_id: string;
   station_id: string | null;
@@ -95,7 +105,7 @@ async function loadMappingData(authorization: AuthorizationContext) {
   }
 
   const companyId = requireCompanyId(authorization);
-  const [locationsResult, executivesResult, mappingsResult, paymentMethodsResult] = await Promise.all([
+  const [locationsResult, executivesResult, employeesResult, mappingsResult, paymentMethodsResult] = await Promise.all([
     supabaseAdmin
       .from("stations")
       .select("id, station_code, station_name, provider_id")
@@ -116,10 +126,19 @@ async function loadMappingData(authorization: AuthorizationContext) {
       .eq("is_active", true)
       .order("full_name"),
     supabaseAdmin
+      .from("employees")
+      .select("id, full_name, date_of_join, location_id, employee_code, is_active, designations!inner(is_field_operations)")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .eq("designations.is_field_operations", true)
+      .order("full_name"),
+    supabaseAdmin
       .from("field_executive_provider_mappings")
       .select(`
         id,
         field_executive_id,
+        employee_id,
         provider_id,
         station_id,
         provider_member_id,
@@ -182,26 +201,46 @@ async function loadMappingData(authorization: AuthorizationContext) {
       : location.station_code,
     providerId: location.provider_id ?? undefined
   }));
-  const latestMappingByExecutiveId = new Map<string, MappingRow>();
+  const latestMappingByWorkerKey = new Map<string, MappingRow>();
   ((mappingsResult.data ?? []) as MappingRow[]).forEach((mapping) => {
-    if (!latestMappingByExecutiveId.has(mapping.field_executive_id)) {
-      latestMappingByExecutiveId.set(mapping.field_executive_id, mapping);
+    const key = mapping.employee_id ? `employee:${mapping.employee_id}` : `field_executive:${mapping.field_executive_id}`;
+    if (!latestMappingByWorkerKey.has(key)) {
+      latestMappingByWorkerKey.set(key, mapping);
     }
   });
 
-  const mappings = ((executivesResult.data ?? []) as ExecutiveRow[])
-    .map((executive) => {
-      const mapping = latestMappingByExecutiveId.get(executive.id);
-      const stationId = mapping?.station_id ?? executive.location_id;
-      return {
+  const workers = [
+    ...((employeesResult.data ?? []) as unknown as EmployeeRow[]).map((employee) => ({
+      id: employee.id,
+      sourceType: "employee" as const,
+      fullName: employee.full_name,
+      dateOfJoin: employee.date_of_join,
+      locationId: employee.location_id ?? "",
+      dropxId: employee.employee_code ?? ""
+    })),
+    ...((executivesResult.data ?? []) as ExecutiveRow[]).map((executive) => ({
       id: executive.id,
+      sourceType: "field_executive" as const,
+      fullName: executive.full_name,
+      dateOfJoin: executive.date_of_join,
+      locationId: executive.location_id,
+      dropxId: executive.dropx_id || executiveDropxId(executive.id)
+    }))
+  ];
+
+  const mappings = workers.map((worker) => {
+      const mapping = latestMappingByWorkerKey.get(`${worker.sourceType}:${worker.id}`);
+      const stationId = mapping?.station_id ?? worker.locationId;
+      return {
+      id: worker.id,
+      sourceType: worker.sourceType,
       mappingId: mapping?.id ?? "",
-      dropxId: executive.dropx_id || executiveDropxId(executive.id),
-      dropxName: executive.full_name,
+      dropxId: worker.dropxId,
+      dropxName: worker.fullName,
       providerMemberId: mapping?.provider_member_id ?? "",
       providerId: mapping?.provider_id ?? locationProviderById.get(stationId) ?? "",
       stationId,
-      effectiveFrom: mapping?.effective_from ?? executive.date_of_join,
+      effectiveFrom: mapping?.effective_from ?? worker.dateOfJoin,
       effectiveTo: mapping?.effective_to ?? "",
       paymentMethodId: mapping?.payment_method_id ?? "",
       paymentValues: Object.fromEntries(Object.entries(mapping?.payment_values ?? {}).map(([key, value]) => [key, amountValue(value)])),
@@ -220,7 +259,7 @@ async function loadMappingData(authorization: AuthorizationContext) {
     locations,
     mappings,
     paymentMethods,
-    error: mappingsResult.error?.message || executivesResult.error?.message || locationsResult.error?.message || paymentMethodsResult.error?.message || null
+    error: mappingsResult.error?.message || employeesResult.error?.message || executivesResult.error?.message || locationsResult.error?.message || paymentMethodsResult.error?.message || null
   };
 }
 

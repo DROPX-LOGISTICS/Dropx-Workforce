@@ -45,6 +45,7 @@ function rowNumber(formData: FormData, index: number, field: string, label: stri
 function nonEmptyRow(formData: FormData, index: number) {
   return [
     "id",
+    "source_type",
     "mapping_id",
     "dropx_id",
     "provider_id",
@@ -74,6 +75,10 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
 
   const id = rowRequired(formData, index, "id", "Field executive");
+  const sourceType = rowRequired(formData, index, "source_type", "Worker source");
+  if (sourceType !== "employee" && sourceType !== "field_executive") {
+    throw new Error(`Row ${index + 1}: Worker source is invalid.`);
+  }
   const mappingId = rowValue(formData, index, "mapping_id");
   const dropxId = rowRequired(formData, index, "dropx_id", "DropX ID").toUpperCase();
   const providerId = rowRequired(formData, index, "provider_id", "Provider");
@@ -93,13 +98,24 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
 
   if (methodError) throw new Error(methodError.message);
 
-  const [{ data: executive }, { data: station }] = await Promise.all([
-    supabaseAdmin
-      .from("field_executives")
-      .select("id")
-      .eq("id", id)
-      .eq("company_id", companyId)
-      .maybeSingle(),
+  const [{ data: worker }, { data: station }] = await Promise.all([
+    sourceType === "employee"
+      ? supabaseAdmin
+        .from("employees")
+        .select("id, designations!inner(is_field_operations)")
+        .eq("id", id)
+        .eq("company_id", companyId)
+        .eq("is_active", true)
+        .is("deleted_at", null)
+        .eq("designations.is_field_operations", true)
+        .maybeSingle()
+      : supabaseAdmin
+        .from("field_executives")
+        .select("id")
+        .eq("id", id)
+        .eq("company_id", companyId)
+        .eq("is_active", true)
+        .maybeSingle(),
     supabaseAdmin
       .from("stations")
       .select("id")
@@ -108,7 +124,7 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
       .maybeSingle()
   ]);
 
-  if (!executive) throw new Error(`Row ${index + 1}: Field executive was not found for this company.`);
+  if (!worker) throw new Error(`Row ${index + 1}: Field Operations worker was not found for this company.`);
   if (!station) throw new Error(`Row ${index + 1}: Location was not found for this company.`);
 
   let paymentValues: Record<string, number> = {};
@@ -156,7 +172,8 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
   }
 
   const mappingPayload = withCompany({
-    field_executive_id: id,
+    field_executive_id: sourceType === "field_executive" ? id : null,
+    employee_id: sourceType === "employee" ? id : null,
     provider_id: providerId,
     provider_member_id: providerMemberId,
     station_id: stationId,
@@ -177,15 +194,10 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
     updated_at: new Date().toISOString()
   }, companyId);
 
-  const { error: executiveError } = await supabaseAdmin
-    .from("field_executives")
-    .update({
-      dropx_id: dropxId,
-      location_id: stationId,
-      updated_at: new Date().toISOString()
-    })
-    .eq("id", id)
-    .eq("company_id", companyId);
+  const workerUpdate = sourceType === "employee"
+    ? supabaseAdmin.from("employees").update({ employee_code: dropxId, location_id: stationId, updated_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId)
+    : supabaseAdmin.from("field_executives").update({ dropx_id: dropxId, location_id: stationId, updated_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId);
+  const { error: executiveError } = await workerUpdate;
 
   if (executiveError) throw new Error(executiveError.message);
 

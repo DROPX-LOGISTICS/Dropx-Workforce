@@ -41,6 +41,7 @@ export const navItems: NavItem[] = [
   { code: "executive_id_onboarding", label: "Executive ID Onboarding", href: "/executive-id-onboarding", icon: "ID" },
   { code: "provider_mapping", label: "ID Mapping", href: "/provider-mapping", icon: "<>" },
   fleetNavItem,
+  { code: "assets", label: "Assets", href: "/assets", icon: "A" },
   { code: "imports", label: "Report Imports", href: "/imports", icon: "^" },
   { code: "inbox", label: "Inbox", href: "/inbox", icon: "I" },
   { code: "business_documents", label: "Business Docs", href: "/business-documents", icon: "D" },
@@ -104,7 +105,8 @@ export const navItems: NavItem[] = [
       { code: "designations", label: "Designations", href: "/master/designations" },
       { code: "biometric_devices", label: "Device Master", href: "/master/biometric-devices" },
       { code: "master_documents", label: "Documents", href: "/master/documents" },
-      { code: "master_imports", label: "Import Master", href: "/master/imports" }
+      { code: "master_imports", label: "Import Master", href: "/master/imports" },
+      { code: "master_asset_types", label: "Asset Categories", href: "/master/assets" }
     ]
   },
   {

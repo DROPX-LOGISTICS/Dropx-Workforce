@@ -114,7 +114,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const reportDate = ymdOrNull(body.report_date) || yesterdayIst();
+  // IOCL/BPCL fuel data only ever exists through yesterday (the portals report
+  // D-1). If the uploader's date field resolves to today (its default offset,
+  // or a manual pick), fetching "today" returns nothing — force D-1 for these
+  // two sources regardless of what was requested.
+  const isFuelPortalSource = sourceType === "iocl_fuel" || sourceType === "bpcl_fuel";
+  const requestedDate = ymdOrNull(body.report_date) || yesterdayIst();
+  const reportDate = isFuelPortalSource && requestedDate >= todayIst() ? yesterdayIst() : requestedDate;
 
   try {
     if (isWorkforceAutoSource(sourceType)) {

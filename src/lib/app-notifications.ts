@@ -23,14 +23,15 @@ export const appNotificationEvents = [
   "profile_submitted",
   "profile_approved",
   "profile_returned",
-  "attendance_regularization_submitted"
+  "attendance_regularization_submitted",
+  "leave_request_submitted"
 ] as const;
 export type AppNotificationEvent = typeof appNotificationEvents[number];
 
 export const appNotificationDefaults: Record<AppNotificationEvent, {
   bodyTemplate: string;
   label: string;
-  route: "attendance" | "profile";
+  route: "attendance" | "leave" | "profile";
   titleTemplate: string;
 }> = {
   attendance_punch_in: {
@@ -104,6 +105,12 @@ export const appNotificationDefaults: Record<AppNotificationEvent, {
     route: "attendance",
     titleTemplate: "Regularization submitted",
     bodyTemplate: "Your attendance regularization request for {date} has been submitted."
+  },
+  leave_request_submitted: {
+    label: "Leave submitted",
+    route: "leave",
+    titleTemplate: "Leave request submitted",
+    bodyTemplate: "Your leave request from {from_date} to {to_date} is awaiting reporting-manager approval."
   }
 };
 

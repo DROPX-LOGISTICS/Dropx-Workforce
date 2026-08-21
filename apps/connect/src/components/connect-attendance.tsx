@@ -15,6 +15,19 @@ type Regularization = {
   reviewRemarks: string;
   createdAt: string;
 };
+
+const regularizationStatusLabel: Record<string, string> = {
+  pending: "Awaiting HR",
+  pending_manager: "Awaiting manager",
+  pending_hr: "Awaiting HR",
+  approved: "Correction applied",
+  returned: "Returned for changes",
+  rejected: "Rejected"
+};
+
+function mayRegularize(status?: string | null) {
+  return !status || status === "returned" || status === "rejected";
+}
 type Row = {
   date: string;
   status: string;
@@ -165,8 +178,8 @@ export function ConnectAttendance({ account }: { account: Account }) {
           <header><div><CalendarDays /><strong>{selected.date.split("-").reverse().join("/")}</strong></div><em className={dayStatus(selected, false)}>{selected.status === "P" ? "Present" : selected.status === "A" ? "Absent" : "No punch"}</em></header>
           <div><span><LogIn /><small>IN</small><strong>{selected.inTime || "--:--"}</strong></span><span><LogOut /><small>OUT</small><strong>{selected.outTime || "--:--"}</strong></span><span><Clock3 /><small>WORK</small><strong>{selected.workHours || "00:00"}</strong></span><span><Fingerprint /><small>PUNCHES</small><strong>{selected.punchCount}</strong></span></div>
           <footer>
-            {selected.regularization ? <span className={`dx-request-status ${selected.regularization.status}`}>Regularization {selected.regularization.status}</span> : null}
-            {selected.regularization?.status !== "pending" ? <button onClick={() => { setRequestError(""); setRegularizing(true); }}>Regularize</button> : null}
+            {selected.regularization ? <span className={`dx-request-status ${selected.regularization.status}`}>{regularizationStatusLabel[selected.regularization.status] ?? selected.regularization.status}</span> : null}
+            {mayRegularize(selected.regularization?.status) ? <button onClick={() => { setRequestError(""); setRegularizing(true); }}>Regularize</button> : null}
           </footer>
         </div> : null}
       </> : null}

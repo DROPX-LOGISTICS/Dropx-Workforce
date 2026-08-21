@@ -5,6 +5,7 @@ import { connectSessionCookieName, normalizeConnectMobile } from "@/lib/connect-
 import { loadAttendanceReportRows } from "@/lib/biometric/attendance";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createAppNotification } from "@/lib/app-notifications";
+import { resolveReportingApprovalSteps } from "@/lib/reporting-approval-chain";
 import { isWorkforceProfileType, type WorkforceProfileType, workforceTable } from "@/lib/workforce-profiles";
 
 function monthRange(month: string | null) {
@@ -38,6 +39,19 @@ function isMissingRegularizationTable(message: unknown) {
 
 function validTime(value: string) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function indiaToday() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+}
+
+function dateDistanceInDays(fromDate: string, toDate: string) {
+  return Math.floor((Date.parse(`${toDate}T00:00:00Z`) - Date.parse(`${fromDate}T00:00:00Z`)) / 86_400_000);
 }
 
 function fileExtension(name: string) {
@@ -79,12 +93,12 @@ async function resolveWorker({
     const idColumn = resolvedProfileType === "employee" ? "employee_code" : "dropx_id";
     const result = await supabaseAdmin
       .from(table)
-      .select(`id, company_id, mobile, mobile_country_code, biometric_id, full_name, ${idColumn}`)
+      .select(`id, company_id, mobile, mobile_country_code, biometric_id, full_name, ${idColumn}, is_active`)
       .eq("id", accountId)
       .maybeSingle();
     if (result.error) throw new Error(result.error.message);
     const row = result.data;
-    if (!row) throw new Error("Workforce account not found.");
+    if (!row || row.is_active === false) throw new Error("Workforce account is inactive or unavailable.");
     const rowMobile = String(row.mobile ?? "").replace(/\D/g, "");
     const rowCountryCode = String(row.mobile_country_code ?? countryCode).replace(/\D/g, "") || countryCode;
     if (rowCountryCode !== countryCode || (rowMobile !== mobile && rowMobile !== localMobile)) {
@@ -212,39 +226,43 @@ export async function POST(request: NextRequest) {
     const currentOutTime = String(formData.get("currentOutTime") ?? "").trim();
     if (!accountId) throw new Error("Account is required.");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(attendanceDate)) throw new Error("Attendance date is required.");
-    if (attendanceDate > new Date().toISOString().slice(0, 10)) throw new Error("Future attendance cannot be regularized.");
+    const today = indiaToday();
+    if (attendanceDate > today) throw new Error("Future attendance cannot be regularized.");
     if (!validTime(requestedInTime) || !validTime(requestedOutTime)) {
       throw new Error("Requested IN and OUT times are required.");
     }
-    if (requestedOutTime <= requestedInTime) throw new Error("Requested OUT time must be after IN time.");
+    if (requestedOutTime === requestedInTime) throw new Error("Requested IN and OUT times cannot be the same.");
     if (!["missed_in", "missed_out", "missed_both", "incorrect_in", "incorrect_out", "other"].includes(reasonCode)) {
       throw new Error("Select a regularization reason.");
     }
     if (remarks.length < 5) throw new Error("Enter a short explanation.");
     const worker = await resolveWorker({ accountId, profileType });
-    const existingResult = await supabaseAdmin
-      .from("attendance_regularization_requests")
-      .select("id, status")
+    if (worker.profileType !== "employee" && worker.profileType !== "contractor") {
+      throw new Error("Attendance regularization is available for employees and independent contractors only.");
+    }
+    const settingsResult = await supabaseAdmin.from("hr_company_settings")
+      .select("regularization_manager_levels,regularization_max_backdate_days")
       .eq("company_id", worker.companyId)
-      .eq("profile_type", worker.profileType)
-      .eq("profile_id", worker.profileId)
-      .eq("attendance_date", attendanceDate)
-      .in("status", ["pending", "returned"])
       .maybeSingle();
-    if (existingResult.error) {
-      if (isMissingRegularizationTable(existingResult.error.message)) {
-        throw new Error("Attendance regularization setup is pending. Run attendance_regularization_requests_v1.sql.");
-      }
-      throw new Error(existingResult.error.message);
+    if (settingsResult.error) throw new Error(settingsResult.error.message);
+    const managerLevels = Number(settingsResult.data?.regularization_manager_levels ?? 2);
+    const maxBackdateDays = Number(settingsResult.data?.regularization_max_backdate_days ?? 30);
+    if (dateDistanceInDays(attendanceDate, today) > maxBackdateDays) {
+      throw new Error(`Regularization can be requested only within ${maxBackdateDays} days of attendance.`);
     }
-    if (existingResult.data?.status === "pending") {
-      throw new Error("A regularization request is already pending for this date.");
-    }
+    const approvalSteps = await resolveReportingApprovalSteps({
+      companyId: worker.companyId,
+      profileId: worker.profileId,
+      profileType: worker.profileType,
+      managerLevels
+    });
 
     let attachmentPath: string | null = null;
     const attachment = formData.get("attachment");
     if (attachment instanceof File && attachment.size > 0) {
       if (attachment.size > 8 * 1024 * 1024) throw new Error("Attachment must be 8 MB or smaller.");
+      const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+      if (!allowedTypes.has(attachment.type)) throw new Error("Attach a PDF, JPG, PNG or WebP file only.");
       const safeName = attachment.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       attachmentPath = `${worker.companyId}/${worker.profileId}/attendance-regularization-${attendanceDate}-${Date.now()}${fileExtension(safeName)}`;
       const uploadResult = await supabaseAdmin.storage
@@ -256,51 +274,44 @@ export async function POST(request: NextRequest) {
       if (uploadResult.error) throw new Error(uploadResult.error.message);
     }
 
-    const payload = {
-      company_id: worker.companyId,
-      profile_type: worker.profileType,
-      profile_id: worker.profileId,
-      dropx_id: worker.dropxId || null,
-      biometric_id: worker.biometricId || null,
-      full_name: worker.fullName || null,
-      attendance_date: attendanceDate,
-      current_in_time: currentInTime || null,
-      current_out_time: currentOutTime || null,
-      requested_in_time: requestedInTime,
-      requested_out_time: requestedOutTime,
-      reason_code: reasonCode,
-      remarks,
-      attachment_path: attachmentPath,
-      status: "pending",
-      updated_at: new Date().toISOString()
-    };
-    const saveResult = existingResult.data?.id
-      ? await supabaseAdmin
-          .from("attendance_regularization_requests")
-          .update(payload)
-          .eq("id", existingResult.data.id)
-          .select("id, status")
-          .single()
-      : await supabaseAdmin
-          .from("attendance_regularization_requests")
-          .insert(payload)
-          .select("id, status")
-          .single();
-    if (saveResult.error) throw new Error(saveResult.error.message);
+    const saveResult = await supabaseAdmin.rpc("hr_create_attendance_regularization_with_steps", {
+      p_company_id: worker.companyId,
+      p_profile_type: worker.profileType,
+      p_profile_id: worker.profileId,
+      p_dropx_id: worker.dropxId || null,
+      p_biometric_id: worker.biometricId || null,
+      p_full_name: worker.fullName || null,
+      p_attendance_date: attendanceDate,
+      p_current_in_time: currentInTime || null,
+      p_current_out_time: currentOutTime || null,
+      p_requested_in_time: requestedInTime,
+      p_requested_out_time: requestedOutTime,
+      p_reason_code: reasonCode,
+      p_remarks: remarks,
+      p_attachment_path: attachmentPath,
+      p_steps: approvalSteps
+    });
+    if (saveResult.error || !saveResult.data) {
+      if (attachmentPath) await supabaseAdmin.storage.from("employee-profile-documents").remove([attachmentPath]);
+      throw new Error(saveResult.error?.message ?? "Unable to create regularization request.");
+    }
+    const requestId = String(saveResult.data);
+    const requestStatus = "pending_manager";
     await createAppNotification({
       accountId: worker.profileId,
       companyId: worker.companyId,
       data: {
         attendanceDate,
-        regularizationRequestId: saveResult.data.id,
-        status: saveResult.data.status
+        regularizationRequestId: requestId,
+        status: requestStatus,
+        approvalSteps: approvalSteps.length
       },
       eventCode: "attendance_regularization_submitted",
       profileType: worker.profileType,
-      sourceKey: `${saveResult.data.id}:${payload.updated_at}`,
+      sourceKey: `${requestId}:${Date.now()}`,
       variables: { date: attendanceDate.split("-").reverse().join("/") }
     });
-    return NextResponse.json({ ok: true, request: saveResult.data });
+    return NextResponse.json({ ok: true, request: { id: requestId, status: requestStatus, approvalSteps: approvalSteps.length } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to submit regularization request.";
     const status = message.includes("Login") ? 401 : 400;

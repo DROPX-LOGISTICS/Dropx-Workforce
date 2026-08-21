@@ -7,7 +7,6 @@ export const platformModules = [
   { code: "inbox", name: "Inbox" },
   { code: "notifications", name: "Notifications" },
   { code: "id_mapping", name: "ID Mapping" },
-  { code: "mapping", name: "Mapping" },
   { code: "rate_cards", name: "Rate Cards" },
   { code: "report_imports", name: "Report Imports" },
   { code: "earnings_review", name: "Earnings Review" },

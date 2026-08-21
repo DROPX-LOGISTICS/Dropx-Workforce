@@ -1,5 +1,5 @@
-import { ProviderMappingPageContent } from "@/components/provider-mapping-page-content";
+import { redirect } from "next/navigation";
 
 export default function MappingPage() {
-  return <ProviderMappingPageContent active="Mapping" pageCode="mapping" />;
+  redirect("/provider-mapping");
 }

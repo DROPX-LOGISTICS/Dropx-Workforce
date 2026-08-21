@@ -39,7 +39,6 @@ const dashboardGroups: PermissionGroup[] = [
   { key: "executive_id_onboarding", label: "Executive ID Onboarding", codes: ["executive_id_onboarding"] },
   { key: "provider_mapping", label: "ID Mapping", codes: ["provider_mapping"] },
   { key: "fleet", label: "Fleet", codes: ["fleet_action_center", "fleet_vehicle_view", "fleet_date_view", "fleet_station_view", "fleet_tracking", "fleet_fuel_log", "fleet_live_gps", "fleet_maintenance", "fleet_reports"], hiddenCodes: ["fleet"] },
-  { key: "mapping", label: "Mapping", codes: ["mapping"] },
   { key: "rate_cards", label: "Rate Cards", codes: ["rate_cards"] },
   { key: "imports", label: "Report Imports", codes: ["imports"] },
   { key: "earnings", label: "Earnings", codes: ["earnings"] },

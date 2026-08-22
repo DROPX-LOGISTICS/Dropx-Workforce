@@ -42,6 +42,7 @@ function shiftDuration(shift: AttendanceShift | null) {
 }
 
 export function evaluateAttendanceNotification(input: {
+  finalized?: boolean;
   inMinutes: number | null;
   outMinutes: number | null;
   punchOrder: number;
@@ -57,7 +58,7 @@ export function evaluateAttendanceNotification(input: {
     ? Math.max(0, (relative(input.shift.endMinutes, input.shift.startMinutes) - Math.max(0, input.shift.graceOutMinutes)) - relative(input.outMinutes, input.shift.startMinutes))
     : 0;
 
-  if (input.punchOrder === 1) {
+  if (input.punchOrder === 1 && !input.finalized) {
     return lateMinutes ? { eventCode: "attendance_late_in", lateMinutes, earlyMinutes: 0, overtimeMinutes: 0, payablePercent: 100, outcome: "Late arrival" } : null;
   }
 
@@ -68,6 +69,11 @@ export function evaluateAttendanceNotification(input: {
   }
   if (input.crossLocation && input.policy.crossLocationTreatment === "review") {
     return { eventCode: "attendance_exception_review", lateMinutes, earlyMinutes, overtimeMinutes: 0, payablePercent: 100, outcome: "Punch received from another location" };
+  }
+  if (input.punchOrder === 1) {
+    if (input.policy.singlePunchTreatment === "half_day") return { eventCode: "attendance_half_day", lateMinutes, earlyMinutes, overtimeMinutes: 0, payablePercent: 50, outcome: "Half day — single punch" };
+    if (input.policy.singlePunchTreatment === "absent") return { eventCode: "attendance_short_day", lateMinutes, earlyMinutes, overtimeMinutes: 0, payablePercent: 0, outcome: "Absent — single punch" };
+    return { eventCode: "attendance_exception_review", lateMinutes, earlyMinutes, overtimeMinutes: 0, payablePercent: 100, outcome: "Single punch needs review" };
   }
   if (input.punchOrder % 2 === 1) {
     if (input.policy.oddPunchTreatment === "half_day") return { eventCode: "attendance_half_day", lateMinutes, earlyMinutes, overtimeMinutes: 0, payablePercent: 50, outcome: "Half day — odd punch count" };

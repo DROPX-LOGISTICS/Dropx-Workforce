@@ -70,14 +70,6 @@ type ProfileDraft = {
   updatedAt: string;
 };
 
-type ResignationCase = {
-  id: string;
-  status: string;
-  requested_effective_date: string;
-  reason_details?: string | null;
-  review_remarks?: string | null;
-};
-
 const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const states = ["AN","AP","AR","AS","BR","CG","CH","DD","DL","DN","GA","GJ","HP","HR","JH","JK","KA","KL","LA","LD","MH","ML","MN","MP","MZ","NL","OD","PB","PY","RJ","SK","TN","TR","TS","UK","UP","WB"];
 const relations = ["Parent", "Spouse", "Child", "Other Relative", "Friend", "Other"];
@@ -344,10 +336,6 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [agreementAccepted, setAgreementAccepted] = useState(false);
   const [agreementGatePassed, setAgreementGatePassed] = useState(false);
-  const [resignationCases, setResignationCases] = useState<ResignationCase[]>([]);
-  const [resignationDate, setResignationDate] = useState("");
-  const [resignationReason, setResignationReason] = useState("");
-  const [resignationSaving, setResignationSaving] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -387,38 +375,6 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
       if (next.profilePhotoUrl) onPhoto?.(next.profilePhotoUrl);
     }).catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load profile."));
   }, [account.id, account.profileType, endpoint, query]);
-
-  useEffect(() => {
-    if (account.profileType !== "field_executive" || !statusReadOnly(profile?.status)) return;
-    fetch(`/api/connect/workforce-resignation?executiveId=${encodeURIComponent(account.id)}`)
-      .then(async (response) => {
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || "Unable to load resignation status.");
-        setResignationCases(payload.cases ?? []);
-      })
-      .catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load resignation status."));
-  }, [account.id, account.profileType, profile?.status]);
-
-  async function submitResignation() {
-    setResignationSaving(true);
-    setError("");
-    try {
-      const response = await fetch("/api/connect/workforce-resignation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ executiveId: account.id, effectiveDate: resignationDate, reasonDetails: resignationReason })
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Unable to submit resignation.");
-      setNotice(payload.notice || "Resignation submitted.");
-      const refreshed = await fetch(`/api/connect/workforce-resignation?executiveId=${encodeURIComponent(account.id)}`).then((next) => next.json());
-      setResignationCases(refreshed.cases ?? []);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to submit resignation.");
-    } finally {
-      setResignationSaving(false);
-    }
-  }
 
   const enabled = useMemo(() => {
     const configured = profile?.fieldRules?.enabled;
@@ -723,7 +679,6 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
       }}] : [])
     ].filter((section) => Object.keys(section.values).length);
     const verifyLabels: Record<string, string> = { "Aadhaar number": "pan_aadhaar", PAN: "pan", "Bank account no": "bank", "PF UAN": "pf_uan", "Driving license no": "dl", "Vehicle reg no": "vehicle" };
-    const openResignation = resignationCases.find((item) => !["rejected", "settled", "cancelled"].includes(item.status));
     return <div className="dx-profile-view">
       {notice ? <div className="dx-alert success">{notice}</div> : null}
       <div className="dx-profile-hero"><small>DROPX LOGISTICS</small><h1>Profile details</h1><i><UserRound /></i></div>
@@ -738,10 +693,6 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
           url={section.name === "Uploads" ? profile.uploadUrls[label.replace(/\s(.)/g, (_, character) => character.toUpperCase()).replace(/^./, (character) => character.toLowerCase())] : undefined}
         />)}</div>
       </section>)}
-      {account.profileType === "field_executive" && profile.status.toLowerCase() === "active" ? <section className="dx-resignation-section">
-        <h2>Resignation & exit status</h2>
-        {openResignation ? <div className="dx-resignation-status"><strong>{title(openResignation.status)}</strong><span>Requested last working date: {displayDate(openResignation.requested_effective_date)}</span>{openResignation.review_remarks ? <small>{openResignation.review_remarks}</small> : null}</div> : <div className="dx-resignation-form"><p>Use this only for a formal voluntary resignation. HO will review the date, clearance and final settlement.</p><label>Requested last working date<input min={new Date().toISOString().slice(0, 10)} onChange={(event) => setResignationDate(event.target.value)} type="date" value={resignationDate} /></label><label>Reason<textarea onChange={(event) => setResignationReason(event.target.value)} value={resignationReason} /></label><button className="dx-save" disabled={resignationSaving || !resignationDate || resignationReason.trim().length < 5} onClick={submitResignation} type="button">{resignationSaving ? "Submitting..." : "Submit resignation"}</button></div>}
-      </section> : null}
     </div>;
   }
 

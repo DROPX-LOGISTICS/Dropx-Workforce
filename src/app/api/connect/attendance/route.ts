@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectSessionCookieName, normalizeConnectMobile } from "@/lib/connect-auth";
 import { loadAttendanceReportRows } from "@/lib/biometric/attendance";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { createAppNotification } from "@/lib/app-notifications";
+import { createAppNotification, evaluateAttendanceDayForApp } from "@/lib/app-notifications";
 import { resolveReportingApprovalSteps } from "@/lib/reporting-approval-chain";
 import { isWorkforceProfileType, type WorkforceProfileType, workforceTable } from "@/lib/workforce-profiles";
 
@@ -165,7 +165,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const responseRows = rows.map((row) => ({
+    const today = indiaToday();
+    const responseRows = await Promise.all(rows.map(async (row) => ({
       date: row.punchDate,
       status: row.status,
       inTime: row.inTime,
@@ -174,8 +175,16 @@ export async function GET(request: NextRequest) {
       workHours: row.workHours,
       punchCount: row.punchCount,
       remark: row.remark,
+      outcome: await evaluateAttendanceDayForApp({
+        companyId: worker.companyId,
+        enrolmentId: worker.biometricId,
+        finalized: row.punchDate < today || row.punchCount > 1,
+        punchDate: row.punchDate,
+        workerId: worker.profileId,
+        workerType: worker.profileType
+      }),
       regularization: requestByDate.get(row.punchDate) ?? null
-    }));
+    })));
     const attendanceDates = new Set(responseRows.map((row) => row.date));
     for (const [date, regularization] of requestByDate) {
       if (!attendanceDates.has(date)) {
@@ -188,6 +197,7 @@ export async function GET(request: NextRequest) {
           workHours: "",
           punchCount: 0,
           remark: "",
+          outcome: null,
           regularization
         });
       }
@@ -200,7 +210,13 @@ export async function GET(request: NextRequest) {
         totalRows: rows.length,
         present,
         absent,
-        misPunch
+        misPunch,
+        fullDay: responseRows.filter((row) => row.outcome?.code === "full_day").length,
+        halfDay: responseRows.filter((row) => row.outcome?.code === "half_day").length,
+        needsReview: responseRows.filter((row) => row.outcome?.code === "needs_review").length,
+        shortDay: responseRows.filter((row) => row.outcome?.code === "short_day").length,
+        late: responseRows.filter((row) => row.outcome?.code === "late" || Boolean(row.outcome?.lateMinutes)).length,
+        early: responseRows.filter((row) => row.outcome?.code === "early" || Boolean(row.outcome?.earlyMinutes)).length
       },
       rows: responseRows
     });

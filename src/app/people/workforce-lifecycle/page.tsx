@@ -6,6 +6,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { isNonEmployeeProfileType, workforceTable, type NonEmployeeProfileType } from "@/lib/workforce-profiles";
 import { completeWorkforceSettlement, reviewWorkforceExit, reviewWorkforceOnboarding, startWorkforceExit } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,8 @@ type Applicant = {
 
 type ChecklistItem = { id: string; code: string; label: string; description: string | null; is_required: boolean; applicable_designation_codes: string[]; sort_order: number };
 type ChecklistResult = { field_executive_id: string; checklist_item_id: string; status: string; remarks: string | null };
-type ExitCase = { id: string; field_executive_id: string; case_type: string; status: string; requested_effective_date: string; approved_effective_date: string | null; reason_code: string; reason_details: string | null; review_remarks: string | null; created_at: string };
+type ExitCase = { id: string; field_executive_id: string | null; profile_type: string; profile_id: string; profile_location_id: string | null; case_type: string; status: string; requested_effective_date: string; approved_effective_date: string | null; reason_code: string; reason_details: string | null; review_remarks: string | null; created_at: string };
+type ExitProfile = { id: string; full_name: string; dropx_id: string | null; designation: string | null; location_id: string | null };
 
 function first<T>(value: T | T[] | null | undefined) { return Array.isArray(value) ? value[0] ?? null : value ?? null; }
 function title(value: string | null | undefined) { return String(value ?? "-").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
@@ -40,6 +42,7 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
   let exits: ExitCase[] = [];
   let exitChecklist: Array<{ id: string; label: string; description: string | null; is_required: boolean }> = [];
   let designationCodes = new Map<string, string>();
+  const exitProfileMap = new Map<string, ExitProfile>();
   if (!supabaseAdmin) {
     error = "Supabase service role key is not configured.";
   } else {
@@ -52,7 +55,7 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
       supabaseAdmin.from("workforce_onboarding_checklist_master").select("id, code, label, description, is_required, applicable_designation_codes, sort_order").eq("company_id", companyId).eq("is_active", true).order("sort_order"),
       supabaseAdmin.from("workforce_onboarding_checklist_results").select("field_executive_id, checklist_item_id, status, remarks").eq("company_id", companyId),
       supabaseAdmin.from("workforce_agreement_acceptances").select("field_executive_id").eq("company_id", companyId),
-      supabaseAdmin.from("workforce_lifecycle_cases").select("id, field_executive_id, case_type, status, requested_effective_date, approved_effective_date, reason_code, reason_details, review_remarks, created_at").eq("company_id", companyId).order("created_at", { ascending: false }),
+      supabaseAdmin.from("workforce_lifecycle_cases").select("id, field_executive_id, profile_type, profile_id, profile_location_id, case_type, status, requested_effective_date, approved_effective_date, reason_code, reason_details, review_remarks, created_at").eq("company_id", companyId).order("created_at", { ascending: false }),
       supabaseAdmin.from("workforce_exit_checklist_master").select("id, label, description, is_required").eq("company_id", companyId).eq("is_active", true).order("sort_order"),
       supabaseAdmin.from("designations").select("name, code").eq("company_id", companyId).eq("is_active", true)
     ]);
@@ -64,8 +67,19 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
       checklistResults = (resultResult.data ?? []) as ChecklistResult[];
       acceptedIds = new Set((acceptanceResult.data ?? []).map((row) => String(row.field_executive_id)));
       exits = (exitResult.data ?? []) as ExitCase[];
+      if (!authorization.hasAllLocationAccess) {
+        exits = exits.filter((item) => item.profile_location_id && authorization.locationScopeIds.includes(item.profile_location_id));
+      }
       exitChecklist = (exitMasterResult.data ?? []) as typeof exitChecklist;
       designationCodes = new Map((designationResult.data ?? []).map((row) => [String(row.name).toLowerCase(), String(row.code).toUpperCase()]));
+      const profileTypes: NonEmployeeProfileType[] = ["field_executive", "contractor", "vendor", "worker"];
+      for (const profileType of profileTypes) {
+        const ids = [...new Set(exits.filter((item) => item.profile_type === profileType).map((item) => item.profile_id))];
+        if (!ids.length) continue;
+        const profiles = await supabaseAdmin.from(workforceTable(profileType)).select("id, full_name, dropx_id, designation, location_id").eq("company_id", companyId).in("id", ids);
+        if (profiles.error) { error = profiles.error.message; break; }
+        for (const profile of profiles.data ?? []) exitProfileMap.set(`${profileType}:${profile.id}`, profile as ExitProfile);
+      }
     }
   }
   const pending = applicants.filter((item) => !["active", "cancelled"].includes(item.onboarding_status));
@@ -122,8 +136,8 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
     </section> : null}
 
     {tab === "exits" ? <section className="workforce-lifecycle-grid">
-      {exits.length ? exits.map((item) => { const person = applicantMap.get(item.field_executive_id); return <article className="card workforce-lifecycle-card" key={item.id}>
-        <header><div><small>{title(item.case_type)}</small><h2>{person?.full_name || "Workforce profile"}</h2><p>Requested last day {item.requested_effective_date} · {title(item.reason_code)}</p></div><span className={`status ${item.status}`}>{title(item.status)}</span></header>
+      {exits.length ? exits.map((item) => { const person = item.profile_type === "field_executive" ? applicantMap.get(item.profile_id) : isNonEmployeeProfileType(item.profile_type) ? exitProfileMap.get(`${item.profile_type}:${item.profile_id}`) : null; return <article className="card workforce-lifecycle-card" key={item.id}>
+        <header><div><small>{title(item.profile_type)} · {title(item.case_type)}</small><h2>{person?.full_name || "Workforce profile"}</h2><p>{person?.dropx_id ? `${person.dropx_id} · ` : ""}Requested last day {item.requested_effective_date} · {title(item.reason_code)}</p></div><span className={`status ${item.status}`}>{title(item.status)}</span></header>
         {item.reason_details ? <p>{item.reason_details}</p> : null}
         {canEdit && ["submitted", "under_review"].includes(item.status) ? <form action={reviewWorkforceExit} className="workforce-decision-form"><input name="case_id" type="hidden" value={item.id} /><label>Decision remarks<textarea name="remarks" required /></label><div className="form-actions"><button className="button danger" name="review_action" type="submit" value="reject">Reject exit</button><button className="button" name="review_action" type="submit" value="approve">Approve for settlement</button></div></form> : null}
         {canEdit && item.status === "settlement_pending" ? <form action={completeWorkforceSettlement} className="workforce-review-form"><input name="case_id" type="hidden" value={item.id} /><h3>Exit checklist and final settlement</h3>{exitChecklist.map((check) => <label key={check.id}><input name={`exit_checklist_${check.id}`} type="checkbox" value="true" /><span><strong>{check.label}{check.is_required ? " *" : ""}</strong><small>{check.description}</small></span></label>)}<div className="workforce-settlement-values"><label>Gross amount<input min="0" name="gross_amount" step="0.01" type="number" /></label><label>Deductions<input min="0" name="deduction_amount" step="0.01" type="number" /></label><label>Settlement<select name="settlement_status" required><option value="">Select</option><option value="paid">Paid</option><option value="waived">Waived</option></select></label><label>Payment date<input name="payment_date" type="date" /></label><label>UTR / reference<input name="payment_reference" /></label></div><SubmitButton confirmMessage="This records final settlement and permanently deactivates the workforce and biometric access." confirmTitle="Complete settlement?">Complete & deactivate</SubmitButton></form> : null}

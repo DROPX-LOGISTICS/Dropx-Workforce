@@ -48,3 +48,31 @@ test("missing shift handling follows the selected policy", () => {
   const result = evaluateAttendanceNotification({ inMinutes: 540, outMinutes: 900, punchOrder: 2, shift: null, workMinutes: 360, policy });
   assert.equal(result?.eventCode, "attendance_exception_review");
 });
+
+test("a completed one-hour day is not reported as present", () => {
+  const result = evaluateAttendanceNotification({
+    finalized: true,
+    inMinutes: 1_328,
+    outMinutes: 1_402,
+    punchOrder: 2,
+    shift,
+    workMinutes: 74,
+    policy: { ...policy, durationBasis: "fixed", unassignedShiftTreatment: "fixed_minutes" }
+  });
+  assert.equal(result?.eventCode, "attendance_short_day");
+  assert.equal(result?.payablePercent, 0);
+});
+
+test("a finalized single punch follows the configured single-punch rule", () => {
+  const result = evaluateAttendanceNotification({
+    finalized: true,
+    inMinutes: 540,
+    outMinutes: null,
+    punchOrder: 1,
+    shift,
+    workMinutes: 0,
+    policy
+  });
+  assert.equal(result?.eventCode, "attendance_exception_review");
+  assert.match(result?.outcome ?? "", /Single punch/);
+});

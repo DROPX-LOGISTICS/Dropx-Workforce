@@ -5,11 +5,12 @@ import { Bell, CalendarDays, CheckCheck, ChevronRight, Fingerprint, Gauge, LogOu
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ConnectAttendance } from "./connect-attendance";
 import { ConnectDashboard } from "./connect-dashboard";
+import { ConnectExitManagement } from "./connect-exit-management";
 import { ConnectLeave } from "./connect-leave";
 import { AppAccount, ConnectProfileApp } from "./connect-profile-app";
 import { countryCodeOptions } from "@/lib/country-codes";
 
-type Step = "mobile" | "pin" | "otp" | "createPin" | "unlock" | "accounts" | "dashboard" | "profile" | "attendance" | "leave" | "settings";
+type Step = "mobile" | "pin" | "otp" | "createPin" | "unlock" | "accounts" | "dashboard" | "profile" | "attendance" | "leave" | "exit" | "settings";
 type ConnectNotification = {
   id: string;
   title: string;
@@ -242,7 +243,7 @@ export function ConnectLoginFlow() {
       }
     }
     const destination = notification.route as Step | null | undefined;
-    if (destination && ["dashboard", "profile", "attendance", "leave", "settings"].includes(destination)) {
+    if (destination && ["dashboard", "profile", "attendance", "leave", "exit", "settings"].includes(destination)) {
       setNotificationMenu(false);
       open(destination);
     } else if (destination) {
@@ -368,7 +369,7 @@ export function ConnectLoginFlow() {
       setStep("accounts");
       return;
     }
-    if (!active(account) && next !== "profile" && next !== "settings") {
+    if (!active(account) && next !== "profile" && next !== "exit" && next !== "settings") {
       setStep("profile");
       return;
     }
@@ -390,7 +391,7 @@ export function ConnectLoginFlow() {
     setStep(refreshed ? landingPage(refreshed) : "accounts");
   }
 
-  const loggedIn = ["accounts","dashboard","profile","attendance","leave","settings"].includes(step);
+  const loggedIn = ["accounts","dashboard","profile","attendance","leave","exit","settings"].includes(step);
   if (checking) return <div className="dx-auth"><Loader text="" /></div>;
 
   return <div className={`dx-app ${loggedIn ? "logged-in" : ""}`}>
@@ -418,6 +419,7 @@ export function ConnectLoginFlow() {
         <button onClick={() => open("profile")}><UserRound />My Profile<ChevronRight /></button>
         {allowed(account, "attendance") ? <button onClick={() => open("attendance")}><Fingerprint />Attendance<ChevronRight /></button> : null}
         {allowed(account, "leave") ? <button onClick={() => open("leave")}><CalendarDays />Leave<ChevronRight /></button> : null}
+        <button onClick={() => open("exit")}><LogOut />Resignation & exit<ChevronRight /></button>
         <button onClick={() => open("settings")}><Settings />Settings<ChevronRight /></button>
       </nav>
       <button className="signout" onClick={logout}><LogOut />Sign out</button>
@@ -439,6 +441,7 @@ export function ConnectLoginFlow() {
       {step === "profile" && account ? <ConnectProfileApp account={account} onPhoto={(url) => setAvatar(url)} onSubmitted={profileSubmitted} /> : null}
       {step === "attendance" && account ? <ConnectAttendance account={account} /> : null}
       {step === "leave" && account ? <ConnectLeave account={account} /> : null}
+      {step === "exit" && account ? <ConnectExitManagement account={account} onBack={() => open(landingPage(account))} /> : null}
       {step === "settings" ? <section className="dx-settings"><h1>Settings</h1><label>Default account<select disabled={pending} value={defaultKey} onChange={(e) => saveDefaultAccount(e.target.value)}><option value="">Select default account</option>{accounts.map((row) => <option key={accountKey(row)} value={accountKey(row)}>{row.companyName} - {row.reference || row.name}</option>)}</select></label><label className="toggle"><span><strong>Enable biometric login</strong><small>Use Face ID or device authentication when available.</small></span><input defaultChecked={localStorage.getItem(biometricKey) === "true"} onChange={(e) => enrollBiometric(e.target.checked)} type="checkbox" /></label><button onClick={resetPin}>Change PIN</button></section> : null}
     </main>}
   </div>;

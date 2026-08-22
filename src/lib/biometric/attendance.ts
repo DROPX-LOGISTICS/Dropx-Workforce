@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { previousIsoDate, shouldContinueOpenAttendanceDay, shouldUsePreviousShiftDate } from "@/lib/biometric/work-date";
 
 export type AttendanceReportType =
   | "performance"
@@ -30,6 +31,7 @@ export type AttendanceReportRow = {
 
 type PunchRow = {
   enrolment_id: string;
+  punch_date: string;
   punch_time: string;
   punch_label: string;
   device_serial: string | null;
@@ -148,6 +150,123 @@ export function istDate(value: Date) {
   }).formatToParts(value);
   const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
   return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function istMinutes(value: Date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "Asia/Kolkata"
+  }).formatToParts(value);
+  return Number(parts.find((part) => part.type === "hour")?.value ?? 0) * 60 +
+    Number(parts.find((part) => part.type === "minute")?.value ?? 0);
+}
+
+function clockMinutes(value: string | null | undefined) {
+  if (!value) return null;
+  const [hours, minutes] = value.split(":").map(Number);
+  return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : null;
+}
+
+function shiftStartInstant(workDate: string, startMinutes: number) {
+  const hours = Math.floor(startMinutes / 60);
+  const minutes = startMinutes % 60;
+  return new Date(`${workDate}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00+05:30`);
+}
+
+async function assignmentShiftForDate({
+  accountId,
+  companyId,
+  employeeId,
+  profileType,
+  workDate
+}: {
+  accountId: string | null;
+  companyId: string;
+  employeeId: string | null;
+  profileType: string | null;
+  workDate: string;
+}) {
+  if (!supabaseAdmin) return null;
+  const isEmployee = profileType === "employee" || Boolean(employeeId);
+  if (!isEmployee && profileType !== "contractor") return null;
+  const workerId = isEmployee ? employeeId : accountId;
+  if (!workerId) return null;
+  const table = isEmployee ? "hr_employee_shift_assignments" : "hr_contractor_shift_assignments";
+  const idColumn = isEmployee ? "employee_id" : "contractor_id";
+  const result = await supabaseAdmin
+    .from(table)
+    .select("effective_from,effective_to,hr_shifts(start_time,end_time)")
+    .eq("company_id", companyId)
+    .eq(idColumn, workerId)
+    .lte("effective_from", workDate)
+    .or(`effective_to.is.null,effective_to.gte.${workDate}`)
+    .order("effective_from", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (result.error) throw new Error(result.error.message);
+  const relation = Array.isArray(result.data?.hr_shifts) ? result.data.hr_shifts[0] : result.data?.hr_shifts;
+  const startMinutes = clockMinutes(relation?.start_time);
+  const endMinutes = clockMinutes(relation?.end_time);
+  return startMinutes === null || endMinutes === null ? null : { startMinutes, endMinutes };
+}
+
+export async function resolveAttendanceWorkDate({
+  accountId,
+  companyId,
+  employeeId,
+  enrolmentId,
+  profileType,
+  punchTime
+}: {
+  accountId: string | null;
+  companyId: string;
+  employeeId: string | null;
+  enrolmentId: string;
+  profileType: string | null;
+  punchTime: Date;
+}) {
+  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+  const currentDate = istDate(punchTime);
+  const previousDate = previousIsoDate(currentDate);
+  const settings = await supabaseAdmin
+    .from("hr_company_settings")
+    .select("overnight_shift_pairing_enabled,overnight_pairing_window_minutes")
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (settings.error && !isMissingColumnError(settings.error)) throw new Error(settings.error.message);
+  const enabled = settings.error ? true : settings.data?.overnight_shift_pairing_enabled !== false;
+  const pairingWindowMinutes = Math.min(1440, Math.max(60, Number(settings.data?.overnight_pairing_window_minutes ?? 1080)));
+  if (!enabled) return currentDate;
+
+  const previousShift = await assignmentShiftForDate({ accountId, companyId, employeeId, profileType, workDate: previousDate });
+  if (previousShift) {
+    const elapsedFromShiftStartMinutes = Math.round((punchTime.getTime() - shiftStartInstant(previousDate, previousShift.startMinutes).getTime()) / 60000);
+    if (shouldUsePreviousShiftDate({
+      elapsedFromShiftStartMinutes,
+      localPunchMinutes: istMinutes(punchTime),
+      pairingWindowMinutes,
+      shift: previousShift
+    })) return previousDate;
+  }
+
+  const openDay = await supabaseAdmin
+    .from("attendance_daily")
+    .select("punch_count,in_time")
+    .eq("company_id", companyId)
+    .eq("enrolment_id", enrolmentId)
+    .eq("punch_date", previousDate)
+    .maybeSingle();
+  if (openDay.error) throw new Error(openDay.error.message);
+  const firstPunch = openDay.data?.in_time ? new Date(openDay.data.in_time) : null;
+  if (firstPunch && shouldContinueOpenAttendanceDay({
+    elapsedMinutes: Math.round((punchTime.getTime() - firstPunch.getTime()) / 60000),
+    pairingWindowMinutes,
+    previousPunchCount: Number(openDay.data?.punch_count ?? 0)
+  })) return previousDate;
+
+  return currentDate;
 }
 
 export function formatTime(value: string | Date | null | undefined) {
@@ -454,8 +573,15 @@ export async function backfillHistoricalPunches({
   const affectedDates = new Set<string>();
   for (let offset = 0; offset < rawPunches.length; offset += pageSize) {
     const page = rawPunches.slice(offset, offset + pageSize);
-    const rows = page.map((rawPunch) => {
-      const punchDate = istDate(new Date(rawPunch.punch_time));
+    const rows = await Promise.all(page.map(async (rawPunch) => {
+      const punchDate = await resolveAttendanceWorkDate({
+        accountId,
+        companyId,
+        employeeId,
+        enrolmentId,
+        profileType,
+        punchTime: new Date(rawPunch.punch_time)
+      });
       affectedDates.add(punchDate);
       return {
         company_id: companyId,
@@ -476,7 +602,7 @@ export async function backfillHistoricalPunches({
         worker_status: workerStatus,
         calculated: isActive
       };
-    });
+    }));
 
     const insert = await supabaseAdmin
       .from("attendance_punches")
@@ -695,7 +821,7 @@ export async function loadAttendanceReportRows({
   if (enrolmentIds.length && punchFilterDates.length) {
     let punchQuery = supabaseAdmin
       .from("attendance_punches")
-      .select("enrolment_id, punch_time, punch_label, device_serial, calculated")
+      .select("enrolment_id, punch_date, punch_time, punch_label, device_serial, calculated")
       .eq("company_id", companyId)
       .eq("calculated", true)
       .in("enrolment_id", enrolmentIds)
@@ -705,7 +831,7 @@ export async function loadAttendanceReportRows({
     const punchResult = await punchQuery;
     if (punchResult.error && !isMissingColumnError(punchResult.error)) throw new Error(punchResult.error.message);
     punchesByKey = ((punchResult.data ?? []) as PunchRow[]).reduce((map, punch) => {
-      const key = `${punch.enrolment_id}:${istDate(new Date(punch.punch_time))}`;
+      const key = `${punch.enrolment_id}:${punch.punch_date}`;
       const rows = map.get(key) ?? [];
       rows.push(punch);
       map.set(key, rows);

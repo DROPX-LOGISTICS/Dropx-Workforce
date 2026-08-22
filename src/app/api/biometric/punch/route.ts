@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createAttendancePunchNotification } from "@/lib/app-notifications";
-import { istDate, punchLabel, rebuildAttendanceDay } from "@/lib/biometric/attendance";
+import { punchLabel, rebuildAttendanceDay, resolveAttendanceWorkDate } from "@/lib/biometric/attendance";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -507,7 +507,14 @@ export async function POST(request: NextRequest) {
 
     const canonicalEnrolmentId = enrolment.enrolment_id;
     const active = enrolment.status === "Active";
-    const punchDate = istDate(punchTime);
+    const punchDate = await resolveAttendanceWorkDate({
+      accountId: enrolment.account_id,
+      companyId: device.company_id,
+      employeeId: enrolment.employee_id,
+      enrolmentId: canonicalEnrolmentId,
+      profileType: enrolment.profile_type,
+      punchTime
+    });
     const existingPunches = await supabaseAdmin
       .from("attendance_punches")
       .select("id, punch_time")

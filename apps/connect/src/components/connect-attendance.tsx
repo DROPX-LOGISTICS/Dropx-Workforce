@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, Fingerprint, LogIn, LogOut, Paperclip, UserCheck, UserX, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Clock3, Fingerprint, LogIn, LogOut, Paperclip, UserCheck, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 type Account = { id: string; profileType: string };
@@ -37,11 +37,20 @@ type Row = {
   workHours: string;
   punchCount: number;
   remark: string;
+  outcome: {
+    code: "full_day" | "half_day" | "short_day" | "needs_review" | "late" | "early" | "overtime" | "in_progress";
+    detail: string;
+    label: string;
+    needsAttention: boolean;
+    payablePercent: number;
+    shiftAssigned: boolean;
+    tone: "green" | "amber" | "red" | "blue";
+  } | null;
   regularization: Regularization | null;
 };
 type Attendance = {
   month: string;
-  summary: { present: number; absent: number; misPunch: number };
+  summary: { present: number; absent: number; misPunch: number; fullDay: number; halfDay: number; needsReview: number; shortDay: number };
   rows: Row[];
 };
 
@@ -65,6 +74,9 @@ function minutes(value: string) {
 
 function dayStatus(row: Row | undefined, future: boolean) {
   if (future || !row) return "off";
+  if (row.outcome?.code === "short_day") return "absent";
+  if (row.outcome?.needsAttention) return "miss";
+  if (row.outcome?.code === "full_day" || row.outcome?.code === "in_progress") return "present";
   if (row.status === "A") return "absent";
   if (row.remark.toLowerCase().match(/single|missing/)) return "miss";
   return row.status === "P" ? "present" : "off";
@@ -80,6 +92,7 @@ function emptyAttendanceRow(date: string): Row {
     workHours: "",
     punchCount: 0,
     remark: "",
+    outcome: null,
     regularization: null
   };
 }
@@ -135,9 +148,9 @@ export function ConnectAttendance({ account }: { account: Account }) {
       {!data && !error ? <div className="dx-loader"><span /><small>Loading attendance...</small></div> : null}
       {data ? <>
         <div className="dx-attendance-summary">
-          <div><i><UserCheck /></i><span>Present<strong>{data.summary.present}</strong></span></div>
-          <div><i><UserX /></i><span>Absent<strong>{data.summary.absent}</strong></span></div>
-          <div><i><Clock3 /></i><span>Mis Punch<strong>{data.summary.misPunch}</strong></span></div>
+          <div><i><UserCheck /></i><span>Full day<strong>{data.summary.fullDay}</strong></span></div>
+          <div><i><Clock3 /></i><span>Half day<strong>{data.summary.halfDay}</strong></span></div>
+          <div><i><AlertTriangle /></i><span>Review<strong>{data.summary.needsReview + data.summary.shortDay}</strong></span></div>
           <p><Clock3 /> Total Hours <strong>{Math.floor(total / 60)}:{String(total % 60).padStart(2, "0")}</strong></p>
         </div>
         <div className="dx-tabs-card">
@@ -159,11 +172,11 @@ export function ConnectAttendance({ account }: { account: Account }) {
                 return <button className={`${dayStatus(row, future)} ${selected?.date === date ? "selected" : ""}`} disabled={future} key={day} onClick={() => !future && setSelected(row ?? emptyAttendanceRow(date))}>{day}</button>;
               })}
             </div>
-            <div className="dx-legend"><span className="present">Present</span><span className="absent">Absent</span><span className="miss">Mis Punch</span><span className="off">Off / Future</span></div>
+            <div className="dx-legend"><span className="present">Full day</span><span className="absent">Absent</span><span className="miss">Needs attention</span><span className="off">Off / Future</span></div>
           </div> : null}
           {tab === "list" ? <div className="dx-attendance-list">
             {[...data.rows].sort((left, right) => right.date.localeCompare(left.date)).map((row) => <button key={row.date} onClick={() => { setSelected(row); setTab("calendar"); }}>
-              <header><strong>{row.date.split("-").reverse().join("/")}</strong><em className={dayStatus(row, false)}>{row.status === "P" ? "Present" : row.status === "A" ? "Absent" : row.status}</em></header>
+              <header><strong>{row.date.split("-").reverse().join("/")}</strong><em className={dayStatus(row, false)}>{row.outcome?.label ?? (row.status === "P" ? "Present" : row.status === "A" ? "Absent" : row.status)}</em></header>
               <span><small>IN</small>{row.inTime || "--:--"}</span><span><small>OUT</small>{row.outTime || "--:--"}</span><span><small>HRS</small>{row.workHours || "00:00"}</span>
             </button>)}
           </div> : null}
@@ -175,8 +188,12 @@ export function ConnectAttendance({ account }: { account: Account }) {
           </div> : null}
         </div>
         {tab === "calendar" && selected ? <div className="dx-selected-day">
-          <header><div><CalendarDays /><strong>{selected.date.split("-").reverse().join("/")}</strong></div><em className={dayStatus(selected, false)}>{selected.status === "P" ? "Present" : selected.status === "A" ? "Absent" : "No punch"}</em></header>
+          <header><div><CalendarDays /><strong>{selected.date.split("-").reverse().join("/")}</strong></div><em className={dayStatus(selected, false)}>{selected.outcome?.label ?? (selected.status === "P" ? "Present" : selected.status === "A" ? "Absent" : "No punch")}</em></header>
           <div><span><LogIn /><small>IN</small><strong>{selected.inTime || "--:--"}</strong></span><span><LogOut /><small>OUT</small><strong>{selected.outTime || "--:--"}</strong></span><span><Clock3 /><small>WORK</small><strong>{selected.workHours || "00:00"}</strong></span><span><Fingerprint /><small>PUNCHES</small><strong>{selected.punchCount}</strong></span></div>
+          {selected.outcome ? <section className={`dx-attendance-outcome ${selected.outcome.tone}`}>
+            {selected.outcome.needsAttention ? <AlertTriangle /> : <UserCheck />}
+            <span><strong>{selected.outcome.label}</strong><small>{selected.outcome.detail}</small></span>
+          </section> : null}
           <footer>
             {selected.regularization ? <span className={`dx-request-status ${selected.regularization.status}`}>{regularizationStatusLabel[selected.regularization.status] ?? selected.regularization.status}</span> : null}
             {mayRegularize(selected.regularization?.status) ? <button onClick={() => { setRequestError(""); setRegularizing(true); }}>Regularize</button> : null}

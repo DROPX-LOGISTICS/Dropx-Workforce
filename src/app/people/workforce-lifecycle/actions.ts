@@ -6,6 +6,7 @@ import { requirePagePermission } from "@/lib/authorization";
 import { syncBiometricEnrolment } from "@/lib/biometric/enrolments";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { isNonEmployeeProfileType, workforceTable } from "@/lib/workforce-profiles";
 
 function lifecycleRedirect(params: { error?: string; notice?: string; tab?: string }): never {
   const query = new URLSearchParams();
@@ -203,6 +204,9 @@ export async function startWorkforceExit(formData: FormData) {
     const created = await supabaseAdmin!.from("workforce_lifecycle_cases").insert({
       company_id: companyId,
       field_executive_id: id,
+      profile_type: "field_executive",
+      profile_id: id,
+      profile_location_id: applicant.location_id,
       case_type: caseType,
       requested_effective_date: effectiveDate,
       reason_code: reasonCode,
@@ -219,6 +223,8 @@ export async function startWorkforceExit(formData: FormData) {
       company_id: companyId,
       lifecycle_case_id: created.data.id,
       field_executive_id: id,
+      profile_type: "field_executive",
+      profile_id: id,
       event_code: `${caseType}_submitted`,
       from_status: "active",
       to_status: "submitted",
@@ -246,12 +252,12 @@ export async function reviewWorkforceExit(formData: FormData) {
     if (!caseId || !["approve", "reject"].includes(action)) throw new Error("Choose a valid exit decision.");
     if (!remarks) throw new Error("Decision remarks are required.");
     const current = await supabaseAdmin.from("workforce_lifecycle_cases")
-      .select("id, field_executive_id, status, requested_effective_date, field_executives(location_id)")
+      .select("id, field_executive_id, profile_type, profile_id, profile_location_id, status, requested_effective_date")
       .eq("company_id", companyId).eq("id", caseId).maybeSingle();
     if (current.error) throw new Error(current.error.message);
     if (!current.data) throw new Error("Exit case was not found.");
-    const relation = Array.isArray(current.data.field_executives) ? current.data.field_executives[0] : current.data.field_executives;
-    const locationId = String((relation as { location_id?: string } | null)?.location_id ?? "");
+    if (!isNonEmployeeProfileType(current.data.profile_type)) throw new Error("This workforce category is not supported by this queue.");
+    const locationId = String(current.data.profile_location_id ?? "");
     if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) throw new Error("You do not have access to this location.");
     if (!["submitted", "under_review"].includes(String(current.data.status))) throw new Error("This exit case has already been decided.");
     const now = new Date().toISOString();
@@ -267,11 +273,25 @@ export async function reviewWorkforceExit(formData: FormData) {
       updated_at: now
     }).eq("company_id", companyId).eq("id", caseId);
     if (update.error) throw new Error(update.error.message);
-    const profileUpdate = await supabaseAdmin.from("field_executives").update({
+    const profileUpdate = await supabaseAdmin.from(workforceTable(current.data.profile_type)).update({
       lifecycle_status: action === "approve" ? "settlement_pending" : "active",
       updated_at: now
-    }).eq("company_id", companyId).eq("id", current.data.field_executive_id);
+    }).eq("company_id", companyId).eq("id", current.data.profile_id);
     if (profileUpdate.error) throw new Error(profileUpdate.error.message);
+    const lifecycleEvent = await supabaseAdmin.from("workforce_lifecycle_events").insert({
+      company_id: companyId,
+      lifecycle_case_id: current.data.id,
+      field_executive_id: current.data.profile_type === "field_executive" ? current.data.profile_id : null,
+      profile_type: current.data.profile_type,
+      profile_id: current.data.profile_id,
+      event_code: action === "approve" ? "exit_approved" : "exit_rejected",
+      from_status: current.data.status,
+      to_status: toStatus,
+      actor_user_id: authorization.userId,
+      source_portal: "dashboard",
+      remarks
+    });
+    if (lifecycleEvent.error) throw new Error(lifecycleEvent.error.message);
     revalidatePath("/people/workforce-lifecycle");
     lifecycleRedirect({ notice: action === "approve" ? "Exit approved for settlement." : "Exit request rejected.", tab: "exits" });
   } catch (error) {
@@ -287,12 +307,12 @@ export async function completeWorkforceSettlement(formData: FormData) {
     const companyId = requireCompanyId(authorization);
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
     const current = await supabaseAdmin.from("workforce_lifecycle_cases")
-      .select("id, field_executive_id, status, approved_effective_date, requested_effective_date, field_executives(location_id)")
+      .select("id, field_executive_id, profile_type, profile_id, profile_location_id, status, approved_effective_date, requested_effective_date")
       .eq("company_id", companyId).eq("id", caseId).maybeSingle();
     if (current.error) throw new Error(current.error.message);
     if (!current.data || current.data.status !== "settlement_pending") throw new Error("Choose an exit awaiting settlement.");
-    const relation = Array.isArray(current.data.field_executives) ? current.data.field_executives[0] : current.data.field_executives;
-    const locationId = String((relation as { location_id?: string } | null)?.location_id ?? "");
+    if (!isNonEmployeeProfileType(current.data.profile_type)) throw new Error("This workforce category is not supported by this queue.");
+    const locationId = String(current.data.profile_location_id ?? "");
     if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) throw new Error("You do not have access to this location.");
     const masters = await supabaseAdmin.from("workforce_exit_checklist_master").select("id, label, is_required")
       .eq("company_id", companyId).eq("is_active", true).order("sort_order");
@@ -335,7 +355,7 @@ export async function completeWorkforceSettlement(formData: FormData) {
     const closeCase = await supabaseAdmin.from("workforce_lifecycle_cases").update({ status: "settled", updated_at: now })
       .eq("company_id", companyId).eq("id", caseId);
     if (closeCase.error) throw new Error(closeCase.error.message);
-    const closeProfile = await supabaseAdmin.from("field_executives").update({
+    const closeProfile = await supabaseAdmin.from(workforceTable(current.data.profile_type)).update({
       onboarding_status: "cancelled",
       lifecycle_status: "exited",
       last_working_date: effectiveDate,
@@ -343,11 +363,25 @@ export async function completeWorkforceSettlement(formData: FormData) {
       deactivated_by: authorization.userId,
       is_active: false,
       updated_at: now
-    }).eq("company_id", companyId).eq("id", current.data.field_executive_id);
+    }).eq("company_id", companyId).eq("id", current.data.profile_id);
     if (closeProfile.error) throw new Error(closeProfile.error.message);
     await supabaseAdmin.from("biometric_enrolments").update({ status: "Inactive", effective_to: effectiveDate, updated_at: now })
-      .eq("company_id", companyId).eq("profile_type", "field_executive")
-      .eq("account_id", current.data.field_executive_id).is("effective_to", null);
+      .eq("company_id", companyId).eq("profile_type", current.data.profile_type)
+      .eq("account_id", current.data.profile_id).is("effective_to", null);
+    const lifecycleEvent = await supabaseAdmin.from("workforce_lifecycle_events").insert({
+      company_id: companyId,
+      lifecycle_case_id: current.data.id,
+      field_executive_id: current.data.profile_type === "field_executive" ? current.data.profile_id : null,
+      profile_type: current.data.profile_type,
+      profile_id: current.data.profile_id,
+      event_code: "exit_settled_and_deactivated",
+      from_status: current.data.status,
+      to_status: "settled",
+      actor_user_id: authorization.userId,
+      source_portal: "dashboard",
+      remarks: `Settlement ${settlementStatus}`
+    });
+    if (lifecycleEvent.error) throw new Error(lifecycleEvent.error.message);
     revalidatePath("/people/workforce-lifecycle");
     lifecycleRedirect({ notice: "Final settlement recorded and workforce access deactivated.", tab: "exits" });
   } catch (error) {

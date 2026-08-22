@@ -208,7 +208,7 @@ async function loadAttendanceNotificationContext({
   };
 
   let shift: AttendanceShift | null = null;
-  if (workerId) {
+  if (workerId && (workerType === "employee" || workerType === "contractor")) {
     const table = workerType === "employee" ? "hr_employee_shift_assignments" : "hr_contractor_shift_assignments";
     const workerColumn = workerType === "employee" ? "employee_id" : "contractor_id";
     const assignmentResult = await supabaseAdmin
@@ -235,6 +235,114 @@ async function loadAttendanceNotificationContext({
     }
   }
   return { day: dayResult.data, policy, shift };
+}
+
+export type AttendanceAppOutcome = {
+  code: "full_day" | "half_day" | "short_day" | "needs_review" | "late" | "early" | "overtime" | "in_progress";
+  detail: string;
+  earlyMinutes: number;
+  label: string;
+  lateMinutes: number;
+  needsAttention: boolean;
+  payablePercent: number;
+  shiftAssigned: boolean;
+  tone: "green" | "amber" | "red" | "blue";
+};
+
+export async function evaluateAttendanceDayForApp({
+  companyId,
+  enrolmentId,
+  finalized,
+  punchDate,
+  workerId,
+  workerType
+}: {
+  companyId: string;
+  enrolmentId: string;
+  finalized: boolean;
+  punchDate: string;
+  workerId: string | null;
+  workerType: string;
+}): Promise<AttendanceAppOutcome | null> {
+  const context = await loadAttendanceNotificationContext({ companyId, enrolmentId, punchDate, workerId, workerType });
+  if (!context?.day) return null;
+  const punchCount = number(context.day.punch_count);
+  const workMinutes = number(context.day.work_minutes);
+  const outcome = evaluateAttendanceNotification({
+    finalized,
+    inMinutes: localMinutes(context.day.in_time),
+    outMinutes: localMinutes(context.day.out_time),
+    punchOrder: punchCount,
+    shift: context.shift,
+    workMinutes,
+    crossLocation: Boolean(context.day.location_id && (
+      (context.day.punch_in_location_id && context.day.punch_in_location_id !== context.day.location_id) ||
+      (context.day.punch_out_location_id && context.day.punch_out_location_id !== context.day.location_id)
+    )),
+    policy: context.policy
+  });
+  const duration = formatDuration(workMinutes);
+
+  if (!outcome) {
+    if (!finalized && punchCount === 1) {
+      return {
+        code: "in_progress",
+        detail: "Punch-in captured",
+        earlyMinutes: 0,
+        label: "In progress",
+        lateMinutes: 0,
+        needsAttention: false,
+        payablePercent: 100,
+        shiftAssigned: Boolean(context.shift),
+        tone: "blue"
+      };
+    }
+    return {
+      code: "full_day",
+      detail: `Worked ${duration}`,
+      earlyMinutes: 0,
+      label: "Full day",
+      lateMinutes: 0,
+      needsAttention: false,
+      payablePercent: 100,
+      shiftAssigned: Boolean(context.shift),
+      tone: "green"
+    };
+  }
+
+  const code = outcome.eventCode === "attendance_half_day"
+    ? "half_day"
+    : outcome.eventCode === "attendance_short_day"
+      ? "short_day"
+      : outcome.eventCode === "attendance_exception_review"
+        ? "needs_review"
+        : outcome.eventCode === "attendance_late_in"
+          ? "late"
+          : outcome.eventCode === "attendance_early_out"
+            ? "early"
+            : "overtime";
+  const label = code === "half_day"
+    ? "Half day"
+    : code === "short_day"
+      ? outcome.payablePercent === 0 ? "Absent" : "Short day"
+      : code === "needs_review"
+        ? "Needs review"
+        : code === "late"
+          ? "Late"
+          : code === "early"
+            ? "Left early"
+            : "Overtime review";
+  return {
+    code,
+    detail: `${outcome.outcome} · Worked ${duration}`,
+    earlyMinutes: outcome.earlyMinutes,
+    label,
+    lateMinutes: outcome.lateMinutes,
+    needsAttention: true,
+    payablePercent: outcome.payablePercent,
+    shiftAssigned: Boolean(context.shift),
+    tone: code === "short_day" && outcome.payablePercent === 0 ? "red" : "amber"
+  };
 }
 
 export async function createAppNotification({

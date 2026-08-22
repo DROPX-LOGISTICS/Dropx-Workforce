@@ -40,15 +40,25 @@ type AttendanceRow = {
   workHours: string;
   punchCount: number;
   remark: string;
+  outcome: {
+    code: "full_day" | "half_day" | "short_day" | "needs_review" | "late" | "early" | "overtime" | "in_progress";
+    detail: string;
+    label: string;
+    needsAttention: boolean;
+    payablePercent: number;
+    shiftAssigned: boolean;
+    tone: "green" | "amber" | "red" | "blue";
+  } | null;
   regularization: Regularization | null;
 };
 
 type Attendance = {
-  summary: { present: number; absent: number; misPunch: number };
+  summary: { present: number; absent: number; misPunch: number; fullDay: number; halfDay: number; needsReview: number; shortDay: number };
   rows: AttendanceRow[];
 };
 
 type DashboardAlert = {
+  action: "attendance" | "profile";
   label: string;
   danger: boolean;
 };
@@ -79,7 +89,7 @@ function titleCase(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-function Pill({ text, tone }: { text: string; tone: "green" | "amber" | "red" }) {
+function Pill({ text, tone }: { text: string; tone: "green" | "amber" | "red" | "blue" }) {
   return <em className={`dx-dashboard-pill ${tone}`}>{titleCase(text)}</em>;
 }
 
@@ -166,8 +176,8 @@ export function ConnectDashboard({
       const expiry = parseDate(value);
       if (!expiry) return;
       const days = Math.ceil((expiry.getTime() - start.getTime()) / 86400000);
-      if (days < 0) rows.push({ label: `${label} expired`, danger: true });
-      else if (days <= 30) rows.push({ label: `${label} expires in ${days} days`, danger: false });
+      if (days < 0) rows.push({ action: "profile", label: `${label} expired`, danger: true });
+      else if (days <= 30) rows.push({ action: "profile", label: `${label} expires in ${days} days`, danger: false });
     });
     const labels: Record<string, string> = {
       pan: "PAN verification",
@@ -177,11 +187,20 @@ export function ConnectDashboard({
     };
     verifications.forEach((verification) => {
       if (!labels[verification.kind]) return;
-      if (verification.blockSubmit) rows.push({ label: `${labels[verification.kind]} failed`, danger: true });
-      else if (!verification.verified || verification.manualReview) rows.push({ label: `${labels[verification.kind]} requires review`, danger: false });
+      if (verification.blockSubmit) rows.push({ action: "profile", label: `${labels[verification.kind]} failed`, danger: true });
+      else if (!verification.verified || verification.manualReview) rows.push({ action: "profile", label: `${labels[verification.kind]} requires review`, danger: false });
     });
+    [...(attendance?.rows ?? [])]
+      .filter((row) => row.outcome?.needsAttention)
+      .sort((left, right) => right.date.localeCompare(left.date))
+      .slice(0, 2)
+      .forEach((row) => rows.unshift({
+        action: "attendance",
+        danger: row.outcome?.tone === "red",
+        label: `${row.outcome?.label} · ${displayDate(row.date)} · ${row.workHours || "00:00"}`
+      }));
     return rows.slice(0, 4);
-  }, [profile, verifications]);
+  }, [attendance, profile, verifications]);
 
   if (!profile && !error) return <div className="dx-loader fullscreen"><span /><small>Loading dashboard...</small></div>;
   if (!profile || !attendance) return <div className="dx-alert error">{error}<button onClick={() => setRefreshKey((value) => value + 1)}>Retry</button></div>;
@@ -189,8 +208,8 @@ export function ConnectDashboard({
   const now = new Date();
   const today = attendance.rows.find((row) => row.date === localIsoDate());
   const present = today?.status.toUpperCase() === "P";
-  const todayStatus = !today ? "No punch" : present ? "Present" : today.status.toUpperCase() === "A" ? "Absent" : "Mis Punch";
-  const statusTone = present ? "green" : todayStatus === "Absent" ? "red" : "amber";
+  const todayStatus = !today ? "No punch" : today.outcome?.label ?? (present ? "Present" : today.status.toUpperCase() === "A" ? "Absent" : "Mis Punch");
+  const statusTone = !today ? "amber" : today.outcome?.tone ?? (present ? "green" : todayStatus === "Absent" ? "red" : "amber");
   const totalMinutes = attendance.rows.reduce((total, row) => total + workMinutes(row.workHours), 0);
   const totalHours = `${Math.floor(totalMinutes / 60)}:${String(totalMinutes % 60).padStart(2, "0")}`;
   const latestRequest = [...attendance.rows]
@@ -215,15 +234,20 @@ export function ConnectDashboard({
         <Metric icon={<Clock3 />} label="WORK" value={today?.workHours || "00:00"} tone="orange" />
         <Metric icon={<Fingerprint />} label="PUNCHES" value={today?.punchCount || 0} tone="purple" />
       </div>
+      {today?.outcome ? <button className={`dx-dashboard-outcome ${today.outcome.tone}`} onClick={onAttendance}>
+        {today.outcome.needsAttention ? <AlertTriangle /> : <UserRound />}
+        <span><strong>{today.outcome.label}</strong><small>{today.outcome.detail}</small></span>
+        <ChevronRight />
+      </button> : null}
       {attendanceAllowed ? <button className="dx-dashboard-link" onClick={onAttendance}>View attendance <ChevronRight /></button> : null}
     </section>
 
     <section className="dx-dashboard-card">
       <h2>Monthly summary</h2>
       <div className="dx-dashboard-metrics">
-        <Metric icon={<PersonStanding />} label="PRESENT" value={attendance.summary.present} tone="green" />
-        <Metric icon={<UserRoundX />} label="ABSENT" value={attendance.summary.absent} tone="red" />
-        <Metric icon={<Clock3 />} label="MIS PUNCH" value={attendance.summary.misPunch} tone="orange" />
+        <Metric icon={<PersonStanding />} label="FULL DAY" value={attendance.summary.fullDay} tone="green" />
+        <Metric icon={<UserRoundX />} label="HALF DAY" value={attendance.summary.halfDay} tone="red" />
+        <Metric icon={<Clock3 />} label="REVIEW" value={attendance.summary.needsReview + attendance.summary.shortDay} tone="orange" />
         <Metric icon={<Clock3 />} label="TOTAL" value={totalHours} tone="purple" />
       </div>
     </section>
@@ -231,7 +255,7 @@ export function ConnectDashboard({
     {alerts.length ? <section className="dx-dashboard-card">
       <h2>Requires attention</h2>
       <div className="dx-dashboard-alerts">
-        {alerts.map((alert) => <button key={alert.label} onClick={onProfile}>
+        {alerts.map((alert) => <button key={alert.label} onClick={alert.action === "attendance" ? onAttendance : onProfile}>
           <AlertTriangle className={alert.danger ? "danger" : ""} />
           <span>{alert.label}</span>
           <ChevronRight />

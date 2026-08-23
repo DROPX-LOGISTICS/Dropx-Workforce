@@ -429,7 +429,12 @@ export async function requireConnectAccount(profileType: ConnectAccount["profile
     throw new Error("Connect session expired. Please log in again.");
   }
   const accounts = await findConnectAccounts(session.country_code, session.mobile_number);
-  const account = accounts.find((item) => item.profileType === profileType && item.id === accountId);
+  let account = accounts.find((item) => item.profileType === profileType && item.id === accountId);
+  if (!account) {
+    const { activeConnectPreview } = await import("./connect-owner-preview");
+    const preview = await activeConnectPreview();
+    if (preview.account?.profileType === profileType && preview.account.id === accountId) account = preview.account;
+  }
   if (!account) throw new Error("This account is not available for the current login.");
   return account;
 }

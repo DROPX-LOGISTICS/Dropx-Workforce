@@ -47,10 +47,27 @@ export async function resolveConnectWorkforceAccount(input: {
   const profile = profileResult.data;
   if (!profile || profile.is_active === false) throw new Error("Workforce account is inactive or unavailable.");
 
+  const previewValue = cookies().get("dropx_connect_preview_account")?.value ?? "";
+  const previewMatches = previewValue === `${profileType}:${input.accountId}:${profile.company_id}`;
+  let ownerPreview = false;
+  if (previewMatches) {
+    const { countryCode: viewerCountry, mobile: viewerMobile, localMobile: viewerLocal } = normalizeConnectMobile(session.mobile_number, session.country_code);
+    const viewerProfiles = await supabaseAdmin.from("profiles").select("id,company_id,role_id,is_master_owner,is_active,mobile,mobile_country_code").eq("company_id", profile.company_id).eq("is_active", true).or(`mobile.eq.${viewerMobile},mobile.eq.${viewerLocal}`);
+    if (viewerProfiles.error) throw new Error(viewerProfiles.error.message);
+    const roleIds = [...new Set((viewerProfiles.data ?? []).map((row) => row.role_id).filter(Boolean))];
+    const roles = roleIds.length ? await supabaseAdmin.from("user_roles").select("id,code").in("id", roleIds) : { data: [], error: null };
+    if (roles.error) throw new Error(roles.error.message);
+    const ownerRoleIds = new Set((roles.data ?? []).filter((role) => String(role.code ?? "").toUpperCase() === "OWNER").map((role) => role.id));
+    ownerPreview = (viewerProfiles.data ?? []).some((row) => {
+      const rowCountry = String(row.mobile_country_code ?? viewerCountry).replace(/\D/g, "") || viewerCountry;
+      return rowCountry === viewerCountry && (row.is_master_owner || ownerRoleIds.has(row.role_id));
+    });
+  }
+
   const { countryCode, mobile, localMobile } = normalizeConnectMobile(session.mobile_number, session.country_code);
   const profileMobile = String(profile.mobile ?? "").replace(/\D/g, "");
   const profileCountry = String(profile.mobile_country_code ?? countryCode).replace(/\D/g, "") || countryCode;
-  if (profileCountry !== countryCode || (profileMobile !== mobile && profileMobile !== localMobile)) {
+  if (!ownerPreview && (profileCountry !== countryCode || (profileMobile !== mobile && profileMobile !== localMobile))) {
     throw new Error("This account does not belong to the signed-in mobile number.");
   }
 

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { connectSessionCookieName, findConnectAccounts } from "@/lib/connect-auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { activeConnectPreview, connectPreviewCookieName } from "../../../../../src/lib/connect-owner-preview";
 
 export async function GET() {
   try {
@@ -23,9 +24,12 @@ export async function GET() {
     }
     await supabaseAdmin.from("connect_login_sessions").update({ last_seen_at: new Date().toISOString() }).eq("id", session.id);
     const accounts = await findConnectAccounts(session.country_code, session.mobile_number);
+    const preview = await activeConnectPreview();
     return NextResponse.json({
       authenticated: true,
-      accounts,
+      accounts: preview.account ? [...accounts.filter((row) => !(row.profileType === preview.account?.profileType && row.id === preview.account?.id)), preview.account] : accounts,
+      canPreviewUsers: preview.canPreviewUsers,
+      previewActive: Boolean(preview.account),
       countryCode: session.country_code,
       mobile: session.mobile_number.startsWith(session.country_code)
         ? session.mobile_number.slice(session.country_code.length)
@@ -48,6 +52,7 @@ export async function DELETE() {
         .eq("session_hash", sessionHash);
     }
     cookies().delete(connectSessionCookieName);
+    cookies().delete(connectPreviewCookieName);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to clear session." }, { status: 500 });

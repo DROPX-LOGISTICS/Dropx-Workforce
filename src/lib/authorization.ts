@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { cache } from "react";
 import { accessPages, ensureAccessPages } from "@/lib/access-pages";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -27,7 +28,15 @@ export type AuthorizationContext = {
   roleId: string | null;
   roleName: string | null;
   userId: string;
+  viewerUserId?: string;
+  viewerFullName?: string | null;
+  canPreviewUsers?: boolean;
+  isPreview?: boolean;
+  readOnly?: boolean;
+  previewUserId?: string | null;
 };
+
+export const dashboardPreviewCookieName = "dropx_dashboard_preview_user";
 
 const noPermission: PagePermission = { canView: false, canAdd: false, canEdit: false };
 
@@ -204,6 +213,30 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
 
   if (!profile?.is_active) return null;
 
+  const viewerProfile = profile;
+  const viewerRoleResult = viewerProfile.role_id
+    ? await supabaseAdmin.from("user_roles").select("code,is_active").eq("id", viewerProfile.role_id).maybeSingle()
+    : { data: null, error: null };
+  const canPreviewUsers = Boolean(viewerProfile.is_master_owner)
+    || String(viewerRoleResult.data?.code ?? "").toUpperCase() === "OWNER"
+    || signedInEmail === "nisar@dropxlogistics.com";
+  const requestedPreviewUserId = canPreviewUsers ? cookies().get(dashboardPreviewCookieName)?.value?.trim() : "";
+  let isPreview = false;
+  if (requestedPreviewUserId && requestedPreviewUserId !== viewerProfile.id && viewerProfile.company_id) {
+    const previewResult = await supabaseAdmin
+      .from("profiles")
+      .select(profileColumns)
+      .eq("id", requestedPreviewUserId)
+      .eq("company_id", viewerProfile.company_id)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (!previewResult.error && previewResult.data) {
+      profile = previewResult.data;
+      isPreview = true;
+    }
+  }
+  const effectiveEmail = normalizeEmail(profile.email) || signedInEmail;
+
   const permissions: Record<string, PagePermission> = Object.fromEntries(
     initializedPermissionCodes.map((code) => [code, { ...noPermission }])
   );
@@ -214,7 +247,7 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
   let companyCode: string | null = null;
   let companyName: string | null = null;
   let isMasterCompany = signedInEmail === "nisar@dropxlogistics.com";
-  let isMasterOwner = Boolean(profile.is_master_owner) || signedInEmail === "nisar@dropxlogistics.com";
+  let isMasterOwner = Boolean(profile.is_master_owner) || (!isPreview && signedInEmail === "nisar@dropxlogistics.com");
   let roleCode: string | null = null;
 
   if (!companyId) return null;
@@ -255,7 +288,7 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
         .eq("is_active", true)
         .not("station_email", "is", null);
       const emailLocationIds = (allEmailLocations ?? [])
-        .filter((location) => normalizeEmail(location.station_email) === signedInEmail)
+        .filter((location) => normalizeEmail(location.station_email) === effectiveEmail)
         .map((location) => location.id);
       locationScopeIds = Array.from(new Set([
         ...locationScopeIds,
@@ -330,7 +363,7 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
     companyCode,
     companyId,
     companyName,
-    email: data.user.email ?? null,
+    email: isPreview ? profile.email ?? null : data.user.email ?? null,
     fullName: profile.full_name,
     hasAllLocationAccess,
     isMasterCompany,
@@ -340,7 +373,13 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
     roleCode,
     roleId: profile.role_id,
     roleName,
-    userId: profile.id
+    userId: profile.id,
+    viewerUserId: viewerProfile.id,
+    viewerFullName: viewerProfile.full_name,
+    canPreviewUsers,
+    isPreview,
+    readOnly: isPreview,
+    previewUserId: isPreview ? profile.id : null
   };
 });
 
@@ -366,6 +405,9 @@ export async function requirePagePermission(pageCode: string, action: Permission
   if (!authorization) redirect("/login");
   if (!hasPermission(authorization, pageCode, action)) {
     redirect(`/unauthorized?page=${encodeURIComponent(pageCode)}&action=${action}`);
+  }
+  if (authorization.readOnly && action !== "view" && action !== "access") {
+    redirect("/unauthorized?reason=preview_read_only");
   }
   return authorization;
 }

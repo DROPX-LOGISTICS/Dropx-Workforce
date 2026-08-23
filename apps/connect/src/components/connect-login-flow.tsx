@@ -9,6 +9,7 @@ import { ConnectExitManagement } from "./connect-exit-management";
 import { ConnectLeave } from "./connect-leave";
 import { AppAccount, ConnectProfileApp } from "./connect-profile-app";
 import { countryCodeOptions } from "@/lib/country-codes";
+import { ConnectOwnerPreviewSwitcher } from "./connect-owner-preview-switcher";
 
 type Step = "mobile" | "pin" | "otp" | "createPin" | "unlock" | "accounts" | "dashboard" | "profile" | "attendance" | "leave" | "exit" | "settings";
 type ConnectNotification = {
@@ -65,6 +66,8 @@ export function ConnectLoginFlow() {
   const [notice, setNotice] = useState("");
   const [avatar, setAvatar] = useState("");
   const [lockedAccounts, setLockedAccounts] = useState<AppAccount[]>([]);
+  const [canPreviewUsers, setCanPreviewUsers] = useState(false);
+  const [previewActive, setPreviewActive] = useState(false);
   const lastLoggedScreen = useRef("");
 
   function route(rows: AppAccount[]) {
@@ -81,6 +84,8 @@ export function ConnectLoginFlow() {
     fetch("/api/connect/auth/session").then((r) => r.json()).then((payload) => {
       if (payload.authenticated) {
         const rows = payload.accounts ?? [];
+        setCanPreviewUsers(Boolean(payload.canPreviewUsers));
+        setPreviewActive(Boolean(payload.previewActive));
         setCountryCode(String(payload.countryCode || "91"));
         setMobile(String(payload.mobile || ""));
         if (localStorage.getItem(biometricKey) === "true" && localStorage.getItem(credentialKey)) {
@@ -398,6 +403,7 @@ export function ConnectLoginFlow() {
     {loggedIn ? <header className="dx-header">
       <button aria-label="Menu" className={!account ? "dx-menu-unavailable" : ""} disabled={!account} onClick={() => { setDrawer(true); setProfileMenu(false); }}><Menu /></button>
       <Image alt="DropX" height={42} priority src="/dropx-logo.png" width={120} />
+      {canPreviewUsers ? <ConnectOwnerPreviewSwitcher active={previewActive} name={account?.name || account?.reference || "User"} /> : null}
       <span />
       <button aria-label="Notifications" className="dx-notification-trigger" disabled={!account} onClick={() => void loadNotifications()}><Bell />{unreadNotifications ? <b>{unreadNotifications > 99 ? "99+" : unreadNotifications}</b> : null}</button>
       <button className="avatar" onClick={() => { setProfileMenu((v) => !v); setNotificationMenu(false); setDrawer(false); }}>{avatar ? <img alt="" src={avatar} /> : <b>{(account?.name || "U")[0]}</b>}</button>
@@ -434,6 +440,7 @@ export function ConnectLoginFlow() {
       {step === "createPin" ? <form onSubmit={savePin}><label>Create app PIN<input inputMode="numeric" maxLength={6} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" value={pin} /></label><label>Re-enter app PIN<input inputMode="numeric" maxLength={6} onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))} type="password" value={confirmPin} /></label><button disabled={pending || pin.length !== 6}>Save PIN</button></form> : null}
       {step === "unlock" ? <form onSubmit={(e) => { e.preventDefault(); unlock(); }}><div className="dx-unlock"><Fingerprint /><strong>Unlock DropX One</strong><small>Use Face ID or your device security to continue.</small></div><button disabled={pending}>{pending ? "Unlocking..." : "Unlock"}</button><button className="text" onClick={() => { setPin(""); setStep("pin"); }} type="button">Use PIN</button></form> : null}
     </div> : <main className="dx-content">
+      {previewActive ? <div className="dx-preview-banner"><strong>Read-only preview</strong><span>You are viewing DropX One as {account?.name || "this user"}. Changes are blocked.</span></div> : null}
       {notice ? <div className="dx-alert success">{notice}<button onClick={() => setNotice("")}><X /></button></div> : null}
       {error ? <div className="dx-alert error">{error}<button onClick={() => setError("")}><X /></button></div> : null}
       {step === "accounts" ? <section className="dx-accounts"><h1>Choose account</h1>{accounts.map((row) => <button key={accountKey(row)} onClick={() => choose(row)}><i>{row.profilePhotoUrl ? <img alt="" src={row.profilePhotoUrl} /> : <UsersRound />}</i><span><strong>{row.companyName}</strong><em>{row.name || row.reference}</em><small>{row.reference} {row.biometricId ? ` | ${row.biometricId}` : ""}</small></span><ChevronRight /></button>)}</section> : null}

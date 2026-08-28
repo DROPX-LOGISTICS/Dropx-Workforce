@@ -4,6 +4,7 @@ The Workforce product has an independent GitHub repository, Vercel project, and 
 
 - GitHub source: `DROPX-LOGISTICS/Dropx-Workforce`
 - Vercel project: `dropx-workforce`
+- Vercel framework preset: `Next.js`
 - Production branch: `main`
 - Production domain: `workforce.dropxlogistics.com`
 

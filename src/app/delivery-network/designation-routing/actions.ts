@@ -10,7 +10,7 @@ import { writeEventLog } from "@/lib/event-log";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const routingPath = "/delivery-network/designation-routing";
-const workforceRegisterTables = new Set(["workforce", "vendors", "workers"]);
+const workforceRegisterTables = new Set(["workforce", "vendors", "workers", "workforce_helpers"]);
 
 function clean(value: FormDataEntryValue | null) {
   const text = String(value ?? "").trim();

@@ -1,7 +1,8 @@
 begin;
 
--- Legacy housekeeping profiles live in workforce_helpers. Keep that table as
--- a compatibility source while routing the canonical profile to workers.
+-- Housekeeping profiles already live in workforce_helpers. Make that physical
+-- register a supported source and target so the master can preserve the
+-- existing record instead of forcing it into a stricter generic worker table.
 create or replace function public.designation_register_counts(p_company_id uuid)
 returns table(
   designation_id uuid,
@@ -46,6 +47,64 @@ begin
       ) using p_company_id;
     end if;
   end loop;
+end;
+$$;
+
+create or replace function public.upsert_record_from_json(
+  p_target_table regclass,
+  p_record jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  column_list text;
+  assignment_list text;
+  target_id uuid;
+begin
+  if p_target_table not in (
+    'public.employees'::regclass,
+    'public.contractors'::regclass,
+    'public.workforce'::regclass,
+    'public.vendors'::regclass,
+    'public.workers'::regclass,
+    'public.workforce_helpers'::regclass,
+    'public.field_executives'::regclass
+  ) then
+    raise exception 'Unsupported profile table: %', p_target_table;
+  end if;
+
+  select
+    string_agg(format('%I', attribute.attname), ', ' order by attribute.attnum),
+    string_agg(
+      format('%1$I = excluded.%1$I', attribute.attname),
+      ', ' order by attribute.attnum
+    ) filter (where attribute.attname <> 'id')
+  into column_list, assignment_list
+  from pg_catalog.pg_attribute attribute
+  where attribute.attrelid = p_target_table
+    and attribute.attnum > 0
+    and not attribute.attisdropped
+    and attribute.attgenerated = ''
+    and p_record ? attribute.attname;
+
+  if column_list is null or not (p_record ? 'id') then
+    raise exception 'Profile payload must contain an id for %', p_target_table;
+  end if;
+
+  execute format(
+    'insert into %1$s (%2$s) select %2$s from jsonb_populate_record(null::%1$s, $1) '
+      'on conflict (id) do update set %3$s returning id',
+    p_target_table,
+    column_list,
+    assignment_list
+  )
+  into target_id
+  using p_record;
+
+  return target_id;
 end;
 $$;
 
@@ -138,7 +197,7 @@ begin
   ) then
     raise exception 'Unsupported source register: %', p_source_register;
   end if;
-  if p_target_register not in ('employees', 'contractors', 'workforce', 'vendors', 'workers') then
+  if p_target_register not in ('employees', 'contractors', 'workforce', 'vendors', 'workers', 'workforce_helpers') then
     raise exception 'Unsupported target register: %', p_target_register;
   end if;
   if company_id_value is null or source_id_value is null or p_designation_id is null then
@@ -202,12 +261,18 @@ begin
         'onboarding_status', coalesce(nullif(p_record ->> 'onboarding_status', ''), nullif(p_record ->> 'profile_completion_status', ''), 'pending')
       );
       target_table_value := 'public.vendors'::regclass;
-    else
+    elsif p_target_register = 'workers' then
       payload_value := payload_value || jsonb_build_object(
         'dropx_id', coalesce(nullif(p_record ->> 'dropx_id', ''), nullif(p_record ->> 'employee_code', '')),
         'onboarding_status', coalesce(nullif(p_record ->> 'onboarding_status', ''), nullif(p_record ->> 'profile_completion_status', ''), 'pending')
       );
       target_table_value := 'public.workers'::regclass;
+    else
+      payload_value := payload_value || jsonb_build_object(
+        'dropx_id', coalesce(nullif(p_record ->> 'dropx_id', ''), nullif(p_record ->> 'employee_code', '')),
+        'onboarding_status', coalesce(nullif(p_record ->> 'onboarding_status', ''), nullif(p_record ->> 'profile_completion_status', ''), 'pending')
+      );
+      target_table_value := 'public.workforce_helpers'::regclass;
     end if;
 
     target_id_value := public.upsert_record_from_json(target_table_value, payload_value);
@@ -335,12 +400,20 @@ begin
 end;
 $$;
 
+drop trigger if exists workforce_helpers_enforce_designation_register on public.workforce_helpers;
+create trigger workforce_helpers_enforce_designation_register
+before insert or update of designation
+on public.workforce_helpers
+for each row execute function public.enforce_designation_register_route();
+
 revoke all on function public.designation_register_counts(uuid) from public, anon, authenticated;
 revoke all on function public.enforce_designation_register_route() from public, anon, authenticated;
+revoke all on function public.upsert_record_from_json(regclass, jsonb) from public, anon, authenticated;
 revoke all on function public.route_profile_record(text, jsonb, uuid, text) from public, anon, authenticated;
 revoke all on function public.reconcile_designation_register_route(uuid, uuid) from public, anon, authenticated;
 
 grant execute on function public.designation_register_counts(uuid) to service_role;
+grant execute on function public.upsert_record_from_json(regclass, jsonb) to service_role;
 grant execute on function public.route_profile_record(text, jsonb, uuid, text) to service_role;
 grant execute on function public.reconcile_designation_register_route(uuid, uuid) to service_role;
 

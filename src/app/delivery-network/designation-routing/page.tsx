@@ -87,8 +87,8 @@ function registerLabel(tableName: string) {
     field_executives: "Field executives",
     vendors: "Vendors",
     workforce: "Workforce",
-    workforce_helpers: "Legacy helpers",
-    workers: "Helpers"
+    workforce_helpers: "Helpers",
+    workers: "Workers"
   };
   return labels[tableName] ?? tableName.replaceAll("_", " ");
 }
@@ -136,7 +136,7 @@ export default async function WorkforceDesignationRoutingPage({
     ];
 
   const error = registerResult.error?.message || designationResult.error?.message || categoryResult.error?.message || routeResult.error?.message || countResult.error?.message || null;
-  const workforceRegisterTables = new Set(["workforce", "vendors", "workers"]);
+  const workforceRegisterTables = new Set(["workforce", "vendors", "workers", "workforce_helpers"]);
   const registers = ((registerResult.data ?? []) as RegisterRow[]).filter((register) =>
     workforceRegisterTables.has(register.table_name)
   );

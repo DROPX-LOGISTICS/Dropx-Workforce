@@ -7757,9 +7757,12 @@ tr:last-child td {
 }
 
 .dx-dashboard-greeting p {
-  margin: 4px 0 0;
-  color: #73706b;
+  max-width: 620px;
+  margin: 5px 0 0;
+  color: #68645f;
   font-size: 13px;
+  font-weight: 450;
+  line-height: 1.45;
 }
 
 .dx-dashboard-card,

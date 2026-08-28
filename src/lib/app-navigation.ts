@@ -184,7 +184,8 @@ export const workforceNavItems: NavItem[] = [
     label: "Workforce Master",
     icon: "WM",
     children: [
-      { code: "designations", label: "Workforce Designations", href: "/delivery-network/designations" }
+      { code: "designations", label: "Workforce Designations", href: "/delivery-network/designations" },
+      { code: "designations", label: "Designation Routing", href: "/delivery-network/designation-routing" }
     ]
   }
 ];

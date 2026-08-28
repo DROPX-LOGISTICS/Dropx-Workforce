@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const profileDocumentBucket = "employee-profile-documents";
 
-type ProfileDocumentOwnerType = "employee" | "field_executive" | "contractor" | "vendor" | "worker";
+type ProfileDocumentOwnerType = "employee" | "workforce" | "field_executive" | "contractor" | "vendor" | "worker";
 
 type ProfileDocumentTrashPayload = {
   companyId: string;
@@ -97,4 +97,3 @@ export async function moveProfileDocumentToTrash({
   }
   throw new Error(error.message);
 }
-

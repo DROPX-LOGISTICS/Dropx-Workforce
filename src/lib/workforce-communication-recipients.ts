@@ -45,7 +45,7 @@ type LegacyProfileRow = {
 };
 
 type CanonicalWorkforceRow = LegacyProfileRow & {
-  source_profile_type: "field_executive" | "contractor";
+  source_profile_type: string;
   source_profile_id: string;
   compatibility_mode: boolean;
 };
@@ -193,7 +193,7 @@ export async function loadWorkforceCommunicationRecipients(authorization: Author
   if (error) throw new Error(error.message);
 
   const movedLegacyKeys = new Set((identityLinks.data ?? [])
-    .filter((link) => link.target_profile_type === "vendor" || link.target_profile_type === "worker")
+    .filter((link) => ["workforce", "vendor", "worker"].includes(link.target_profile_type))
     .map((link) => `${link.legacy_profile_type}:${link.legacy_profile_id}`));
   const recipients = new Map<string, WorkforceCommunicationRecipient>();
   const add = (recipient: WorkforceCommunicationRecipient) => {
@@ -202,7 +202,7 @@ export async function loadWorkforceCommunicationRecipients(authorization: Author
   };
 
   for (const row of (canonical.data ?? []) as unknown as CanonicalWorkforceRow[]) {
-    add(recipientFromRow(row, row.source_profile_type, row.source_profile_id, row.compatibility_mode));
+    add(recipientFromRow(row, "workforce", row.id, false));
   }
 
   for (const employee of (employees.data ?? []) as unknown as EmployeeRow[]) {

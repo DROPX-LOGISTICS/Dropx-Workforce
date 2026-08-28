@@ -79,9 +79,9 @@ export default async function WorkforceOnboardingHubPage() {
     const categories = normalizeDesignationCategories(designation.onboarding_categories);
     return categories.includes("vendors") || categories.includes("workers");
   });
-  const associateRecords = records.filter((record) => record.profileType === "contractor");
+  const associateRecords = records.filter((record) => record.profileType === "workforce");
   const operationsRecords = records.filter((record) => record.profileType === "vendor" || record.profileType === "worker");
-  const protectedInvitations = records.filter((record) => record.profileType === "field_executive");
+  const protectedInvitations = records.filter((record) => record.profileType === "workforce" && record.compatibilityMode);
 
   const lifecycle = [
     { label: "Role master", helper: `${designations.length} Workforce roles`, href: "/delivery-network/designations", icon: ClipboardCheck },
@@ -121,9 +121,9 @@ export default async function WorkforceOnboardingHubPage() {
 
         <article className="protected">
           <header><span><ShieldCheck size={18} /></span><div><small>Transition protection</small><h2>Existing mobile invitations</h2></div></header>
-          <p>Invitations already sent through the earlier flow remain on their original identity and registration token until completion.</p>
+          <p>Invitations already sent through the earlier flow continue on the same profile ID, now resolved through the canonical Workforce register.</p>
           <div className="wf-journey-metrics"><span><strong>{protectedInvitations.length}</strong> protected</span><span><strong>{protectedInvitations.filter(isOpen).length}</strong> still open</span></div>
-          <div className="wf-protection-note"><ShieldCheck size={14} /> No registration record or saved draft is moved by this interface change.</div>
+          <div className="wf-protection-note"><ShieldCheck size={14} /> Registration tokens, saved drafts and verification results remain attached during cutover.</div>
           <PendingLink className="wf-journey-action secondary" href="/delivery-network/lifecycle">Track protected invitations <ArrowRight size={15} /></PendingLink>
         </article>
       </section>
@@ -147,7 +147,7 @@ export default async function WorkforceOnboardingHubPage() {
 
       <section className="wf-product-principles">
         <article><Building2 size={17} /><div><strong>People / HR isolation</strong><small>HR-classified designations never appear in these journeys or Workforce registers.</small></div></article>
-        <article><ShieldCheck size={17} /><div><strong>Registration continuity</strong><small>Existing tokens, drafts and mobile submissions continue against their original source identity.</small></div></article>
+        <article><ShieldCheck size={17} /><div><strong>Registration continuity</strong><small>Existing tokens, drafts and mobile submissions resolve to the same canonical Workforce identity.</small></div></article>
         <article><Route size={17} /><div><strong>One lifecycle</strong><small>Registration, review, provider ID, rates, communication and exit stay connected.</small></div></article>
       </section>
     </AppShell>

@@ -27,29 +27,6 @@ export const fleetNavItem: NavItem = {
 
 export const navItems: NavItem[] = [
   { code: "dashboard", label: "Command Center", href: "/dashboard", icon: "#" },
-  {
-    code: "onboard",
-    label: "People",
-    icon: "+",
-    children: [
-      { code: "people_all", label: "All People", href: "/people/all" },
-      { code: "people_review", label: "Under Review", href: "/people/review" },
-      { code: "people_exceptions", label: "Exception", href: "/people/exceptions" },
-      { code: "designations", label: "People Designations", href: "/people/designations" }
-    ]
-  },
-  {
-    code: "delivery_network",
-    label: "Delivery Network",
-    icon: "DN",
-    children: [
-      { code: "delivery_associates", label: "Overview", href: "/delivery-network" },
-      { code: "delivery_associates", label: "Onboarding", href: "/delivery-network/onboarding" },
-      { code: "executive_id_onboarding", label: "Provider ID Onboarding", href: "/delivery-network/id-onboarding" },
-      { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping" },
-      { code: "people_review", label: "Lifecycle", href: "/delivery-network/lifecycle" }
-    ]
-  },
   fleetNavItem,
   { code: "assets", label: "Assets", href: "/assets", icon: "A" },
   { code: "imports", label: "Report Imports", href: "/imports", icon: "^" },

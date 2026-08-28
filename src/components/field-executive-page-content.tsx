@@ -490,7 +490,7 @@ function FieldExecutiveForm({
 }) {
   const workforceConfig = nonEmployeeConfigForRoute(returnPath);
   const optionalEditFields = mode === "edit" &&
-    (workforceConfig.profileType === "field_executive" || workforceConfig.profileType === "contractor");
+    (["workforce", "field_executive", "contractor"].includes(workforceConfig.profileType));
   const fieldEnabled = (key: string) => dashboardRules.enabled.includes(key);
   const fieldRequired = (key: string) => !optionalEditFields && dashboardRules.required.includes(key);
   return (
@@ -704,7 +704,7 @@ function FieldExecutiveBulkImportPanel({
           <a
             className="template-download-link"
             download
-            href={`/api/import-template?kind=${nonEmployeeConfigForRoute(returnPath).profileType === "contractor" ? "contractor" : "field_executive"}`}
+            href={`/api/import-template?kind=${["workforce", "contractor"].includes(nonEmployeeConfigForRoute(returnPath).profileType) ? "contractor" : "field_executive"}`}
           >
             Download sample Excel
           </a>
@@ -728,7 +728,7 @@ async function loadFieldExecutiveData(
   authorization: AuthorizationContext,
   designationCategoryFilter: DesignationCategoryFilter[],
   designationPeopleModule: DesignationPeopleModule | undefined,
-  table: "field_executives" | "contractors" | "vendors" | "workers",
+  table: "workforce" | "field_executives" | "contractors" | "vendors" | "workers",
   accessSurface: AccessSurface,
   editId?: string,
   viewId?: string

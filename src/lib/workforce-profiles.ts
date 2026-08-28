@@ -1,5 +1,6 @@
 export const workforceProfileTypes = [
   "employee",
+  "workforce",
   "field_executive",
   "contractor",
   "vendor",
@@ -15,21 +16,31 @@ export type NonEmployeeRoute =
   | "/delivery-network/onboarding/associates"
   | "/delivery-network/onboarding/operations"
   | "/delivery-network/contractor-profiles"
+  | "/delivery-network/workforce-profiles"
   | "/contractors"
   | "/vendors"
   | "/workers";
 
 type NonEmployeeConfig = {
-  category: "field_executive" | "contractor" | "vendor" | "worker";
+  category: "workforce" | "field_executive" | "contractor" | "vendor" | "worker";
   designationCategory: "field_executives" | "contractors" | "vendors" | "workers";
   label: string;
   pageCode: "delivery_associates" | "contractors" | "vendors" | "workers";
   profileType: NonEmployeeProfileType;
   route: NonEmployeeRoute;
-  table: "field_executives" | "contractors" | "vendors" | "workers";
+  table: "workforce" | "field_executives" | "contractors" | "vendors" | "workers";
 };
 
 export const nonEmployeeProfileConfigs: Record<NonEmployeeProfileType, NonEmployeeConfig> = {
+  workforce: {
+    category: "workforce",
+    designationCategory: "contractors",
+    label: "Workforce associate",
+    pageCode: "delivery_associates",
+    profileType: "workforce",
+    route: "/delivery-network/workforce-profiles",
+    table: "workforce"
+  },
   field_executive: {
     category: "field_executive",
     designationCategory: "field_executives",
@@ -87,17 +98,16 @@ export function nonEmployeeConfigForRoute(value: unknown) {
   }
   if (route === "/delivery-network/contractor-profiles") {
     return {
-      ...nonEmployeeProfileConfigs.contractor,
-      label: "Workforce associate",
-      pageCode: "delivery_associates" as const,
+      ...nonEmployeeProfileConfigs.workforce,
       route
     };
   }
+  if (route === "/delivery-network/workforce-profiles") {
+    return nonEmployeeProfileConfigs.workforce;
+  }
   if (route === "/delivery-network/onboarding/associates") {
     return {
-      ...nonEmployeeProfileConfigs.contractor,
-      label: "Workforce associate",
-      pageCode: "delivery_associates" as const,
+      ...nonEmployeeProfileConfigs.workforce,
       route
     };
   }

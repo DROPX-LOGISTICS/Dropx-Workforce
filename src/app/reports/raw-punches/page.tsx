@@ -192,6 +192,7 @@ export default async function RawPunchesPage({ searchParams = {} }: { searchPara
 
         const tableByProfile: Record<string, { table: string; code: string }> = {
           employee: { table: "employees", code: "employee_code" },
+          workforce: { table: "workforce", code: "dropx_id" },
           field_executive: { table: "field_executives", code: "dropx_id" },
           contractor: { table: "contractors", code: "dropx_id" },
           vendor: { table: "vendors", code: "dropx_id" },

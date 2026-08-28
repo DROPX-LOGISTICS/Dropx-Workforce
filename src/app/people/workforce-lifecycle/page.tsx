@@ -21,7 +21,7 @@ type Applicant = {
 };
 
 type ChecklistItem = { id: string; code: string; label: string; description: string | null; is_required: boolean; applicable_designation_codes: string[]; sort_order: number };
-type ChecklistResult = { field_executive_id: string; checklist_item_id: string; status: string; remarks: string | null };
+type ChecklistResult = { workforce_id: string; checklist_item_id: string; status: string; remarks: string | null };
 type ExitCase = { id: string; field_executive_id: string | null; profile_type: string; profile_id: string; profile_location_id: string | null; case_type: string; status: string; requested_effective_date: string; approved_effective_date: string | null; reason_code: string; reason_details: string | null; review_remarks: string | null; created_at: string };
 type ExitProfile = { id: string; full_name: string; dropx_id: string | null; designation: string | null; location_id: string | null };
 
@@ -46,15 +46,15 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
   if (!supabaseAdmin) {
     error = "Supabase service role key is not configured.";
   } else {
-    let applicantQuery = supabaseAdmin.from("field_executives")
+    let applicantQuery = supabaseAdmin.from("workforce")
       .select("id, full_name, dropx_id, biometric_id, mobile_country_code, mobile, email, designation, location_id, date_of_join, onboarding_status, lifecycle_status, onboarding_application_source, onboarding_submitted_at, provider_id_status, provider_employee_id, onboarding_review_remarks, updated_at, stations(station_code, station_name)")
-      .eq("company_id", companyId).order("updated_at", { ascending: false });
+      .eq("company_id", companyId).is("deleted_at", null).neq("migration_state", "reclassified").order("updated_at", { ascending: false });
     if (!authorization.hasAllLocationAccess) applicantQuery = applicantQuery.in("location_id", authorization.locationScopeIds.length ? authorization.locationScopeIds : ["00000000-0000-0000-0000-000000000000"]);
     const [applicantResult, checklistResult, resultResult, acceptanceResult, exitResult, exitMasterResult, designationResult] = await Promise.all([
       applicantQuery,
       supabaseAdmin.from("workforce_onboarding_checklist_master").select("id, code, label, description, is_required, applicable_designation_codes, sort_order").eq("company_id", companyId).eq("is_active", true).order("sort_order"),
-      supabaseAdmin.from("workforce_onboarding_checklist_results").select("field_executive_id, checklist_item_id, status, remarks").eq("company_id", companyId),
-      supabaseAdmin.from("workforce_agreement_acceptances").select("field_executive_id").eq("company_id", companyId),
+      supabaseAdmin.from("workforce_onboarding_checklist_results").select("workforce_id, checklist_item_id, status, remarks").eq("company_id", companyId).not("workforce_id", "is", null),
+      supabaseAdmin.from("workforce_agreement_acceptances").select("profile_id").eq("company_id", companyId).eq("profile_type", "workforce"),
       supabaseAdmin.from("workforce_lifecycle_cases").select("id, field_executive_id, profile_type, profile_id, profile_location_id, case_type, status, requested_effective_date, approved_effective_date, reason_code, reason_details, review_remarks, created_at").eq("company_id", companyId).order("created_at", { ascending: false }),
       supabaseAdmin.from("workforce_exit_checklist_master").select("id, label, description, is_required").eq("company_id", companyId).eq("is_active", true).order("sort_order"),
       supabaseAdmin.from("designations").select("name, code").eq("company_id", companyId).eq("is_active", true)
@@ -65,14 +65,14 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
       applicants = (applicantResult.data ?? []) as Applicant[];
       checklist = (checklistResult.data ?? []) as ChecklistItem[];
       checklistResults = (resultResult.data ?? []) as ChecklistResult[];
-      acceptedIds = new Set((acceptanceResult.data ?? []).map((row) => String(row.field_executive_id)));
+      acceptedIds = new Set((acceptanceResult.data ?? []).map((row) => String(row.profile_id)));
       exits = (exitResult.data ?? []) as ExitCase[];
       if (!authorization.hasAllLocationAccess) {
         exits = exits.filter((item) => item.profile_location_id && authorization.locationScopeIds.includes(item.profile_location_id));
       }
       exitChecklist = (exitMasterResult.data ?? []) as typeof exitChecklist;
       designationCodes = new Map((designationResult.data ?? []).map((row) => [String(row.name).toLowerCase(), String(row.code).toUpperCase()]));
-      const profileTypes: NonEmployeeProfileType[] = ["field_executive", "contractor", "vendor", "worker"];
+      const profileTypes: NonEmployeeProfileType[] = ["workforce", "field_executive", "contractor", "vendor", "worker"];
       for (const profileType of profileTypes) {
         const ids = [...new Set(exits.filter((item) => item.profile_type === profileType).map((item) => item.profile_id))];
         if (!ids.length) continue;
@@ -85,7 +85,7 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
   const pending = applicants.filter((item) => !["active", "cancelled"].includes(item.onboarding_status));
   const active = applicants.filter((item) => item.lifecycle_status === "active");
   const openExits = exits.filter((item) => !["rejected", "settled", "cancelled"].includes(item.status));
-  const resultMap = new Map(checklistResults.map((item) => [`${item.field_executive_id}:${item.checklist_item_id}`, item]));
+  const resultMap = new Map(checklistResults.map((item) => [`${item.workforce_id}:${item.checklist_item_id}`, item]));
   const applicantMap = new Map(applicants.map((item) => [item.id, item]));
 
   return <AppShell active="Activation & Lifecycle" pageCode="people_review">
@@ -136,7 +136,7 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
     </section> : null}
 
     {tab === "exits" ? <section className="workforce-lifecycle-grid">
-      {exits.length ? exits.map((item) => { const person = item.profile_type === "field_executive" ? applicantMap.get(item.profile_id) : isNonEmployeeProfileType(item.profile_type) ? exitProfileMap.get(`${item.profile_type}:${item.profile_id}`) : null; return <article className="card workforce-lifecycle-card" key={item.id}>
+      {exits.length ? exits.map((item) => { const person = item.profile_type === "workforce" ? applicantMap.get(item.profile_id) : isNonEmployeeProfileType(item.profile_type) ? exitProfileMap.get(`${item.profile_type}:${item.profile_id}`) : null; return <article className="card workforce-lifecycle-card" key={item.id}>
         <header><div><small>{title(item.profile_type)} · {title(item.case_type)}</small><h2>{person?.full_name || "Workforce profile"}</h2><p>{person?.dropx_id ? `${person.dropx_id} · ` : ""}Requested last day {item.requested_effective_date} · {title(item.reason_code)}</p></div><span className={`status ${item.status}`}>{title(item.status)}</span></header>
         {item.reason_details ? <p>{item.reason_details}</p> : null}
         {canEdit && ["submitted", "under_review"].includes(item.status) ? <form action={reviewWorkforceExit} className="workforce-decision-form"><input name="case_id" type="hidden" value={item.id} /><label>Decision remarks<textarea name="remarks" required /></label><div className="form-actions"><button className="button danger" name="review_action" type="submit" value="reject">Reject exit</button><button className="button" name="review_action" type="submit" value="approve">Approve for settlement</button></div></form> : null}

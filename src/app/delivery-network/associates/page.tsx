@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 
 function profileHref(record: WorkforceCommunicationRecipient, mode: "edit" | "view") {
   if (record.profileType === "field_executive") return `/delivery-network/onboarding?${mode}=${encodeURIComponent(record.accountId)}`;
+  if (record.profileType === "workforce") return `/delivery-network/onboarding/associates?${mode}=${encodeURIComponent(record.accountId)}`;
   if (record.profileType === "contractor") return `/delivery-network/contractor-profiles?${mode}=${encodeURIComponent(record.accountId)}`;
   return undefined;
 }
@@ -32,7 +33,7 @@ export default async function WorkforceAssociatesPage() {
     if (supabaseAdmin) {
       let mappingQuery = supabaseAdmin
         .from("field_executive_provider_mappings")
-        .select("field_executive_id, contractor_id")
+        .select("workforce_id, field_executive_id, contractor_id")
         .eq("company_id", companyId)
         .is("effective_to", null);
       if (!authorization.hasAllLocationAccess) {
@@ -43,6 +44,7 @@ export default async function WorkforceAssociatesPage() {
       const mappingResult = await mappingQuery;
       if (mappingResult.error) throw new Error(mappingResult.error.message);
       for (const mapping of mappingResult.data ?? []) {
+        if (mapping.workforce_id) mappedSourceIds.add(`workforce:${mapping.workforce_id}`);
         if (mapping.field_executive_id) mappedSourceIds.add(`field_executive:${mapping.field_executive_id}`);
         if (mapping.contractor_id) mappedSourceIds.add(`contractor:${mapping.contractor_id}`);
       }
@@ -69,8 +71,12 @@ export default async function WorkforceAssociatesPage() {
     editHref: profileHref(record, "edit")
   }));
   const pending = records.filter((record) => !["active", "rejected", "cancelled"].includes(record.status.toLowerCase())).length;
-  const protectedRegistrations = records.filter((record) => record.compatibilityMode).length;
-  const paymentLinked = records.filter((record) => mappedSourceIds.has(`${record.profileType}:${record.accountId}`)).length;
+  const protectedRegistrations = records.filter((record) => record.profileType === "workforce").length;
+  const paymentLinked = records.filter((record) => (
+    record.profileType === "workforce"
+      ? mappedSourceIds.has(`workforce:${record.accountId}`) || mappedSourceIds.has(`contractor:${record.accountId}`) || mappedSourceIds.has(`field_executive:${record.accountId}`)
+      : mappedSourceIds.has(`${record.profileType}:${record.accountId}`)
+  )).length;
 
   return (
     <AppShell active="Workforce Register" pageCode="delivery_associates">

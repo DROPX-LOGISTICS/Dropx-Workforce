@@ -39,6 +39,7 @@ type DeliveryNetworkDesignationRow = {
 
 type MappingRow = {
   id: string;
+  workforce_id: string | null;
   field_executive_id: string | null;
   employee_id: string | null;
   contractor_id: string | null;
@@ -77,8 +78,8 @@ function amountValue(value: number | string | null | undefined) {
   return value === null || value === undefined ? "" : String(value);
 }
 
-function isMappingSourceType(value: string): value is MappingWorksheetRow["sourceType"] {
-  return value === "employee" || value === "contractor" || value === "field_executive";
+function isWorkforceSourceType(value: string) {
+  return value === "canonical" || value === "employee" || value === "contractor" || value === "field_executive";
 }
 
 function loadFlashMessage() {
@@ -131,6 +132,7 @@ async function loadMappingData(authorization: AuthorizationContext) {
       .from("field_executive_provider_mappings")
       .select(`
         id,
+        workforce_id,
         field_executive_id,
         employee_id,
         contractor_id,
@@ -198,7 +200,9 @@ async function loadMappingData(authorization: AuthorizationContext) {
   }));
   const latestMappingByWorkerKey = new Map<string, MappingRow>();
   ((mappingsResult.data ?? []) as MappingRow[]).forEach((mapping) => {
-    const key = mapping.employee_id
+    const key = mapping.workforce_id
+      ? `workforce:${mapping.workforce_id}`
+      : mapping.employee_id
       ? `employee:${mapping.employee_id}`
       : mapping.contractor_id
         ? `contractor:${mapping.contractor_id}`
@@ -213,14 +217,16 @@ async function loadMappingData(authorization: AuthorizationContext) {
   const deliveryNetworkDesignationIds = new Set(deliveryNetworkDesignations.map((designation) => designation.id));
   const workers = ((workforceResult.data ?? []) as WorkforceRow[])
     .filter((worker) =>
-      isMappingSourceType(worker.source_profile_type) &&
+      isWorkforceSourceType(worker.source_profile_type) &&
       deliveryNetworkDesignationIds.has(worker.designation_id) &&
       Boolean(worker.dropx_id?.trim())
     )
     .map((worker) => ({
-      id: worker.source_profile_id,
+      id: worker.id,
       workforceId: worker.id,
-      sourceType: worker.source_profile_type as MappingWorksheetRow["sourceType"],
+      sourceType: "workforce" as const,
+      legacySourceType: worker.source_profile_type,
+      legacySourceId: worker.source_profile_id,
       fullName: worker.full_name,
       dateOfJoin: worker.date_of_join,
       locationId: worker.location_id,
@@ -228,7 +234,8 @@ async function loadMappingData(authorization: AuthorizationContext) {
     }));
 
   const mappings = workers.map((worker) => {
-      const mapping = latestMappingByWorkerKey.get(`${worker.sourceType}:${worker.id}`);
+      const mapping = latestMappingByWorkerKey.get(`workforce:${worker.workforceId}`)
+        ?? latestMappingByWorkerKey.get(`${worker.legacySourceType}:${worker.legacySourceId}`);
       const stationId = mapping?.station_id ?? worker.locationId;
       return {
       id: worker.id,

@@ -112,6 +112,13 @@ function requiredPan(value: FormDataEntryValue | null) {
   return text;
 }
 
+function isMissingWorkforceIdColumn(error: { code?: string; message?: string } | null | undefined) {
+  const message = error?.message?.toLowerCase() ?? "";
+  return error?.code === "42703" || (message.includes("workforce_id") && (
+    message.includes("does not exist") || message.includes("schema cache")
+  ));
+}
+
 function alphaNumValue(value: FormDataEntryValue | null, label: string, required = false) {
   const text = cleanText(value)?.toUpperCase() ?? null;
   if (!text) {
@@ -251,7 +258,7 @@ async function signedProfileUrl(path: string | null) {
   return result.data?.signedUrl ?? "";
 }
 
-async function loadApplicableAgreement(row: FieldExecutiveRow): Promise<WorkforceAgreementView | null> {
+async function loadApplicableAgreement(row: FieldExecutiveRow, profileType: NonEmployeeProfileType): Promise<WorkforceAgreementView | null> {
   if (!supabaseAdmin) return null;
   const designation = row.designation
     ? await supabaseAdmin
@@ -279,14 +286,16 @@ async function loadApplicableAgreement(row: FieldExecutiveRow): Promise<Workforc
     return (!item.effective_to || item.effective_to >= today) && (!codes.length || codes.includes(designationCode));
   });
   if (!agreement) return null;
-  const acceptance = await supabaseAdmin
+  let acceptanceQuery = supabaseAdmin
     .from("workforce_agreement_acceptances")
     .select("accepted_at")
     .eq("company_id", row.company_id)
-    .eq("field_executive_id", row.id)
     .eq("agreement_id", agreement.id)
-    .eq("agreement_version", agreement.version)
-    .maybeSingle();
+    .eq("agreement_version", agreement.version);
+  acceptanceQuery = profileType === "field_executive"
+    ? acceptanceQuery.eq("field_executive_id", row.id)
+    : acceptanceQuery.eq("profile_type", profileType).eq("profile_id", row.id);
+  const acceptance = await acceptanceQuery.maybeSingle();
   if (acceptance.error) throw new Error(acceptance.error.message);
   return {
     id: agreement.id,
@@ -315,7 +324,9 @@ async function serializeExecutive(row: FieldExecutiveRow, profileType: NonEmploy
     designationResult?.data?.profile_field_rules,
     categoryCode
   )).dropx_one;
-  const agreement = profileType === "field_executive" ? await loadApplicableAgreement(row) : null;
+  const agreement = ["workforce", "field_executive"].includes(profileType)
+    ? await loadApplicableAgreement(row, profileType)
+    : null;
   const designationCode = String(designationResult?.data?.code ?? "").trim().toUpperCase();
   return {
     id: row.id,
@@ -419,10 +430,20 @@ export async function POST(request: Request) {
     const profileType = String(formData.get("profile_type") ?? "field_executive");
     const account = await requireExecutiveAccess(executiveId, profileType);
     const table = workforceTable(account.profileType);
+    const legacyIdentity = account.profileType === "workforce"
+      ? await supabaseAdmin
+        .from("workforce_identity_links")
+        .select("legacy_profile_type, legacy_profile_id")
+        .eq("company_id", account.companyId)
+        .eq("target_profile_type", "workforce")
+        .eq("target_profile_id", account.id)
+        .eq("compatibility_active", true)
+        .maybeSingle()
+      : null;
     const manualReviewRequired = String(formData.get("manual_review_required") ?? "") === "true";
     const currentExecutive = await loadExecutive(account.id, account.companyId, account.profileType);
-    const requiredAgreement = account.profileType === "field_executive"
-      ? await loadApplicableAgreement(currentExecutive)
+    const requiredAgreement = ["workforce", "field_executive"].includes(account.profileType)
+      ? await loadApplicableAgreement(currentExecutive, account.profileType)
       : null;
     if (requiredAgreement) {
       const accepted = String(formData.get("agreement_accepted") ?? "") === "true";
@@ -543,16 +564,21 @@ export async function POST(request: Request) {
     const profilePhotoPath = uploadedProfilePhotoPath ?? draft?.filePaths.profile_photo ?? null;
     if (requiredAgreement && !requiredAgreement.acceptedAt) {
       const acceptedAt = new Date().toISOString();
+      const agreementIdentity = account.profileType === "field_executive"
+        ? { field_executive_id: account.id }
+        : { field_executive_id: null, profile_type: account.profileType, profile_id: account.id };
       const agreementAcceptance = await supabaseAdmin.from("workforce_agreement_acceptances").upsert({
         company_id: account.companyId,
-        field_executive_id: account.id,
+        ...agreementIdentity,
         agreement_id: requiredAgreement.id,
         agreement_version: requiredAgreement.version,
         content_hash: createHash("sha256").update(requiredAgreement.body).digest("hex"),
         accepted_at: acceptedAt,
         accepted_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
         accepted_user_agent: request.headers.get("user-agent") ?? null
-      }, { onConflict: "field_executive_id,agreement_id,agreement_version" });
+      }, { onConflict: account.profileType === "field_executive"
+        ? "field_executive_id,agreement_id,agreement_version"
+        : "profile_type,profile_id,agreement_id,agreement_version" });
       if (agreementAcceptance.error) throw new Error(agreementAcceptance.error.message);
       const checklistItem = await supabaseAdmin
         .from("workforce_onboarding_checklist_master")
@@ -562,27 +588,45 @@ export async function POST(request: Request) {
         .eq("is_active", true)
         .maybeSingle();
       if (checklistItem.error) throw new Error(checklistItem.error.message);
-      if (checklistItem.data) {
+      if (checklistItem.data && ["workforce", "field_executive"].includes(account.profileType)) {
+        const canonicalChecklist = account.profileType === "workforce";
         const checklistResult = await supabaseAdmin.from("workforce_onboarding_checklist_results").upsert({
           company_id: account.companyId,
-          field_executive_id: account.id,
+          field_executive_id: canonicalChecklist ? null : account.id,
+          workforce_id: canonicalChecklist ? account.id : null,
           checklist_item_id: checklistItem.data.id,
           status: "completed",
           remarks: `${requiredAgreement.code} v${requiredAgreement.version} accepted by applicant`,
           completed_at: acceptedAt,
           updated_at: acceptedAt
-        }, { onConflict: "field_executive_id,checklist_item_id" });
-        if (checklistResult.error) throw new Error(checklistResult.error.message);
+        }, { onConflict: canonicalChecklist ? "workforce_id,checklist_item_id" : "field_executive_id,checklist_item_id" });
+        if (checklistResult.error && canonicalChecklist && isMissingWorkforceIdColumn(checklistResult.error)) {
+          if (legacyIdentity?.data?.legacy_profile_type === "field_executive") {
+            const legacyChecklist = await supabaseAdmin.from("workforce_onboarding_checklist_results").upsert({
+              company_id: account.companyId,
+              field_executive_id: legacyIdentity.data.legacy_profile_id,
+              checklist_item_id: checklistItem.data.id,
+              status: "completed",
+              remarks: `${requiredAgreement.code} v${requiredAgreement.version} accepted by applicant`,
+              completed_at: acceptedAt,
+              updated_at: acceptedAt
+            }, { onConflict: "field_executive_id,checklist_item_id" });
+            if (legacyChecklist.error) throw new Error(legacyChecklist.error.message);
+          }
+        } else if (checklistResult.error) {
+          throw new Error(checklistResult.error.message);
+        }
       }
     }
     const submittedAt = new Date().toISOString();
     const isFieldExecutive = account.profileType === "field_executive";
+    const requiresWorkforceReview = isFieldExecutive || account.profileType === "workforce";
     const uploadPayload: Record<string, unknown> = {
-      onboarding_status: isFieldExecutive ? "under_review" : manualReviewRequired ? "under_review" : "active",
+      onboarding_status: requiresWorkforceReview ? "under_review" : manualReviewRequired ? "under_review" : "active",
       profile_return_remarks: null,
       profile_returned_at: null,
-      is_active: !isFieldExecutive,
-      ...(isFieldExecutive ? { onboarding_submitted_at: submittedAt, lifecycle_status: "onboarding" } : {}),
+      is_active: account.profileType === "workforce" || !isFieldExecutive,
+      ...(requiresWorkforceReview ? { onboarding_submitted_at: submittedAt, lifecycle_status: "onboarding" } : {}),
       updated_at: submittedAt
     };
     if (aadhaarFrontPath) uploadPayload.aadhaar_front_path = aadhaarFrontPath;
@@ -599,17 +643,38 @@ export async function POST(request: Request) {
     if (uploadUpdateResult.error) {
       throw new Error(`Profile details were saved, but the profile could not be submitted. ${uploadUpdateResult.error.message}`);
     }
-    if (isFieldExecutive) {
+    if (requiresWorkforceReview) {
       const eventResult = await supabaseAdmin.from("workforce_onboarding_events").insert({
         company_id: account.companyId,
-        field_executive_id: account.id,
+        field_executive_id: isFieldExecutive ? account.id : null,
+        workforce_id: account.profileType === "workforce" ? account.id : null,
         event_code: "candidate_submitted",
         from_status: currentStatus,
         to_status: "under_review",
         source_portal: "connect",
         remarks: "Applicant submitted profile and agreement for HO review."
       });
-      if (eventResult.error) throw new Error(eventResult.error.message);
+      if (eventResult.error && account.profileType === "workforce" && isMissingWorkforceIdColumn(eventResult.error)) {
+        const legacyEventIdentity = legacyIdentity?.data?.legacy_profile_type === "field_executive"
+          ? { field_executive_id: legacyIdentity.data.legacy_profile_id, contractor_id: null }
+          : legacyIdentity?.data?.legacy_profile_type === "contractor"
+            ? { field_executive_id: null, contractor_id: legacyIdentity.data.legacy_profile_id }
+            : null;
+        if (legacyEventIdentity) {
+          const legacyEvent = await supabaseAdmin.from("workforce_onboarding_events").insert({
+            company_id: account.companyId,
+            ...legacyEventIdentity,
+            event_code: "candidate_submitted",
+            from_status: currentStatus,
+            to_status: "under_review",
+            source_portal: "connect",
+            remarks: "Applicant submitted profile and agreement for HO review."
+          });
+          if (legacyEvent.error) throw new Error(legacyEvent.error.message);
+        }
+      } else if (eventResult.error) {
+        throw new Error(eventResult.error.message);
+      }
     }
     const executive = await loadExecutive(account.id, account.companyId, account.profileType);
     await deleteProfileDraft({
@@ -637,7 +702,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       profile: await serializeExecutive(executive, account.profileType),
-      notice: isFieldExecutive ? "Registration submitted to the HO Workforce team for review." : "Profile saved successfully."
+      notice: requiresWorkforceReview ? "Registration submitted to the HO Workforce team for review." : "Profile saved successfully."
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to save profile." }, { status: 400 });

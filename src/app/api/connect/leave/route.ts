@@ -67,6 +67,16 @@ async function applicablePolicy(companyId: string, profileType: "employee" | "co
   return policy;
 }
 
+function peopleLeaveIdentity(worker: Awaited<ReturnType<typeof resolveConnectWorkforceAccount>>) {
+  if (worker.profileType === "employee" || worker.profileType === "contractor") {
+    return { profileId: worker.profileId, profileType: worker.profileType } as const;
+  }
+  if (worker.profileType === "workforce" && worker.legacyPeopleProfileId && worker.legacyPeopleProfileType) {
+    return { profileId: worker.legacyPeopleProfileId, profileType: worker.legacyPeopleProfileType } as const;
+  }
+  throw new Error("Time off requires an active People approval identity for this Workforce profile.");
+}
+
 export async function GET(request: NextRequest) {
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
@@ -74,10 +84,8 @@ export async function GET(request: NextRequest) {
       accountId: request.nextUrl.searchParams.get("accountId") ?? "",
       profileType: request.nextUrl.searchParams.get("profileType") ?? ""
     });
-    if (worker.profileType !== "employee" && worker.profileType !== "contractor") {
-      throw new Error("Time off is available for employees and independent contractors only.");
-    }
-    const profileColumn = worker.profileType === "employee" ? "employee_id" : "contractor_id";
+    const leaveIdentity = peopleLeaveIdentity(worker);
+    const profileColumn = leaveIdentity.profileType === "employee" ? "employee_id" : "contractor_id";
     const range = currentYearRange();
     const [typesResult, requestsResult, approvedResult] = await Promise.all([
       supabaseAdmin.from("hr_leave_types")
@@ -85,11 +93,11 @@ export async function GET(request: NextRequest) {
         .eq("company_id", worker.companyId).eq("is_active", true).order("name"),
       supabaseAdmin.from("hr_leave_requests")
         .select("id,leave_type_id,start_date,end_date,days,reason,status,requested_at,reviewed_at,reviewer_note,hr_leave_types(name,code,color)")
-        .eq("company_id", worker.companyId).eq(profileColumn, worker.profileId)
+        .eq("company_id", worker.companyId).eq(profileColumn, leaveIdentity.profileId)
         .order("requested_at", { ascending: false }).limit(100),
       supabaseAdmin.from("hr_leave_requests")
         .select("leave_type_id,days")
-        .eq("company_id", worker.companyId).eq(profileColumn, worker.profileId)
+        .eq("company_id", worker.companyId).eq(profileColumn, leaveIdentity.profileId)
         .eq("status", "approved").gte("start_date", range.from).lte("start_date", range.to)
     ]);
     if (typesResult.error || requestsResult.error || approvedResult.error) {
@@ -128,9 +136,7 @@ export async function POST(request: NextRequest) {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
     const body = await request.json();
     const worker = await resolveConnectWorkforceAccount({ accountId: String(body.accountId ?? ""), profileType: String(body.profileType ?? "") });
-    if (worker.profileType !== "employee" && worker.profileType !== "contractor") {
-      throw new Error("Time off is available for employees and independent contractors only.");
-    }
+    const leaveIdentity = peopleLeaveIdentity(worker);
     const leaveTypeId = String(body.leaveTypeId ?? "").trim();
     const fromDate = String(body.fromDate ?? "").trim();
     const toDate = String(body.toDate ?? "").trim();
@@ -141,7 +147,7 @@ export async function POST(request: NextRequest) {
     if (days < 1 || days > 365) throw new Error("Select a valid leave period.");
     if (fromDate.slice(0, 4) !== toDate.slice(0, 4)) throw new Error("A leave request must stay within one calendar year.");
     if (reason.length < 3) throw new Error("Enter a leave reason.");
-    const profileColumn = worker.profileType === "employee" ? "employee_id" : "contractor_id";
+    const profileColumn = leaveIdentity.profileType === "employee" ? "employee_id" : "contractor_id";
     const leaveTypeResult = await supabaseAdmin.from("hr_leave_types")
       .select("id,name,code,annual_allowance")
       .eq("company_id", worker.companyId)
@@ -155,7 +161,7 @@ export async function POST(request: NextRequest) {
     const existingResult = await supabaseAdmin.from("hr_leave_requests")
       .select("id,start_date,end_date,days,status,leave_type_id")
       .eq("company_id", worker.companyId)
-      .eq(profileColumn, worker.profileId)
+      .eq(profileColumn, leaveIdentity.profileId)
       .in("status", ["pending", "approved"])
       .lte("start_date", `${year}-12-31`)
       .gte("end_date", `${year}-01-01`);
@@ -170,18 +176,18 @@ export async function POST(request: NextRequest) {
     if (annualAllowance > 0 && usedDays + days > annualAllowance) {
       throw new Error(`${leaveTypeResult.data.name} has only ${Math.max(0, annualAllowance - usedDays)} day(s) available.`);
     }
-    const engagement = await workerContext(worker.companyId, worker.profileType, worker.profileId);
-    const policy = await applicablePolicy(worker.companyId, worker.profileType, engagement.business_line, days);
+    const engagement = await workerContext(worker.companyId, leaveIdentity.profileType, leaveIdentity.profileId);
+    const policy = await applicablePolicy(worker.companyId, leaveIdentity.profileType, engagement.business_line, days);
     const steps = await resolveReportingApprovalSteps({
       companyId: worker.companyId,
-      profileId: worker.profileId,
-      profileType: worker.profileType,
+      profileId: leaveIdentity.profileId,
+      profileType: leaveIdentity.profileType,
       managerLevels: Number(policy.manager_levels)
     });
     const saveResult = await supabaseAdmin.rpc("hr_create_workforce_leave_request_with_steps", {
       p_company_id: worker.companyId,
-      p_worker_type: worker.profileType,
-      p_profile_id: worker.profileId,
+      p_worker_type: leaveIdentity.profileType,
+      p_profile_id: leaveIdentity.profileId,
       p_leave_type_id: leaveTypeId,
       p_start_date: fromDate,
       p_end_date: toDate,

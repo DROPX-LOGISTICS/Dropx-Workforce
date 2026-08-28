@@ -1,4 +1,13 @@
 import { cookies } from "next/headers";
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  Database,
+  Route,
+  Search,
+  ShieldCheck
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import { StatusPill } from "@/components/status-pill";
@@ -158,7 +167,8 @@ export default async function WorkforceDesignationRoutingPage({
   const routes = new Map(((routeResult.data ?? []) as RouteRow[]).map((route) => [route.designation_id, route]));
   const registerById = new Map(registers.map((register) => [register.id, register]));
   const query = String(searchParams?.q ?? "").trim().toLowerCase();
-  const statusFilter = String(searchParams?.status ?? "all");
+  const requestedStatus = String(searchParams?.status ?? "all");
+  const statusFilter = ["all", "mapped", "unmapped", "review"].includes(requestedStatus) ? requestedStatus : "all";
   const workforceDesignations = ((designationResult.data ?? []) as DesignationRow[]).filter((designation) =>
     Boolean(designation.designation_category_id && workforceCategoryIds.has(designation.designation_category_id))
   );
@@ -194,13 +204,20 @@ export default async function WorkforceDesignationRoutingPage({
     return `${designation.code} ${designation.name} ${categories.get(designation.designation_category_id ?? "") ?? ""}`.toLowerCase().includes(query);
   });
   const unmappedCount = workforceDesignations.filter((designation) => !routes.get(designation.id)?.register_id).length;
+  const mappedCount = workforceDesignations.length - unmappedCount;
+  const reviewCount = workforceDesignations.filter((designation) => (
+    ["needs_review", "failed"].includes(routes.get(designation.id)?.reconciliation_status ?? "")
+  )).length;
+  const totalProfileCount = Array.from(countsByDesignation.values()).reduce((total, rows) => (
+    total + rows.reduce((rowTotal, row) => rowTotal + Number(row.total_count), 0)
+  ), 0);
 
   return (
     <AppShell active="Designation Routing" pageCode="designations">
       <PageHead
         eyebrow="Workforce Master"
         title="Designation Routing"
-        subtitle="Route Workforce roles only. Employee and independent-contractor onboarding remains controlled by People engagement type."
+        subtitle="Choose where every Workforce designation is stored. The same rule controls new onboarding and safely reconciles existing records."
       />
 
       {error ? (
@@ -223,54 +240,59 @@ export default async function WorkforceDesignationRoutingPage({
 
       {!error ? (
         <>
-          <section className="panel designation-routing-register-panel">
-            <div className="panel-head">
+          <section className="wf-routing-health" aria-label="Routing health">
+            <article><span><Route size={16} /></span><div><small>Mapped roles</small><strong>{mappedCount}<i>/ {workforceDesignations.length}</i></strong></div></article>
+            <article><span><Database size={16} /></span><div><small>Profiles tracked</small><strong>{totalProfileCount}</strong></div></article>
+            <article className={unmappedCount ? "warning" : "success"}><span>{unmappedCount ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}</span><div><small>Unmapped</small><strong>{unmappedCount}</strong></div></article>
+            <article className={reviewCount ? "warning" : "success"}><span>{reviewCount ? <AlertTriangle size={16} /> : <ShieldCheck size={16} />}</span><div><small>Needs review</small><strong>{reviewCount}</strong></div></article>
+          </section>
+
+          <section className="wf-routing-destinations">
+            <header>
               <div>
-                <h2>Register Master</h2>
-                <p className="subtle">Only Workforce-owned profile destinations are available here. Physical table codes are protected system identifiers.</p>
+                <small>Destination master</small>
+                <h2>Available Workforce registers</h2>
+                <p>Display names can be changed here; physical table keys remain protected.</p>
               </div>
-            </div>
-            <div className="table-wrap">
-              <table className="designation-register-table">
-                <thead><tr><th>Register</th><th>Physical table</th><th>Purpose</th><th>Status</th><th>Action</th></tr></thead>
-                <tbody>
-                  {registers.map((register) => (
-                    <tr key={register.id}>
-                      <td>
-                        <form action={updateRegisterMaster} className="inline-actions" id={`register-${register.id}`}>
-                          <input name="register_id" type="hidden" value={register.id} />
-                          <input className="field" defaultValue={register.name} name="name" required style={{ minWidth: 210 }} />
-                        </form>
-                      </td>
-                      <td>
-                        <div className="routing-identity">
-                          <strong>{register.code}</strong>
-                          <small>{register.table_name}</small>
-                        </div>
-                      </td>
-                      <td>{register.description ?? "-"}</td>
-                      <td>
-                        <label className="check-row">
-                          <input defaultChecked={register.is_active} form={`register-${register.id}`} name="is_active" type="checkbox" /> Active
-                        </label>
-                      </td>
-                      <td>{permission.canEdit ? <SubmitButton className="button secondary compact" form={`register-${register.id}`} pendingText="Saving">Save</SubmitButton> : "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <span><ShieldCheck size={14} /> Workforce-only</span>
+            </header>
+            <div>
+              {registers.map((register) => (
+                <form action={updateRegisterMaster} className="wf-register-card" key={register.id}>
+                  <input name="register_id" type="hidden" value={register.id} />
+                  <span className="wf-register-icon"><Database size={16} /></span>
+                  <label>
+                    <small>{register.code}</small>
+                    <input
+                      aria-label={`${register.code} register display name`}
+                      className="field"
+                      defaultValue={register.name}
+                      name="name"
+                      readOnly={!permission.canEdit}
+                      required
+                    />
+                  </label>
+                  <p>{register.description ?? `Profiles stored in ${register.table_name}.`}</p>
+                  <footer>
+                    <span>{register.table_name}</span>
+                    <label className="wf-switch"><input defaultChecked={register.is_active} disabled={!permission.canEdit} name="is_active" type="checkbox" /><i /> Active</label>
+                    {permission.canEdit ? <SubmitButton className="button secondary compact" pendingText="Saving">Save</SubmitButton> : null}
+                  </footer>
+                </form>
+              ))}
             </div>
           </section>
 
-          <section className="panel designation-routing-panel">
-            <div className="panel-head toolbar">
+          <section className="wf-routing-workspace">
+            <header className="wf-routing-toolbar">
               <div>
-                <h2>Designation to register mapping</h2>
-                <p className="subtle">{designations.length} of {workforceDesignations.length} Workforce roles shown · {unmappedCount} unmapped</p>
+                <small>Designation rules</small>
+                <h2>Route roles to their register</h2>
+                <p>{designations.length} of {workforceDesignations.length} roles shown</p>
               </div>
               <form action={routingPath} className="master-toolbar">
-                <input className="field" defaultValue={searchParams?.q ?? ""} name="q" placeholder="Search designation" />
-                <select className="select" defaultValue={statusFilter} name="status">
+                <label className="wf-routing-search"><Search size={15} /><input aria-label="Search designations" className="field" defaultValue={searchParams?.q ?? ""} name="q" placeholder="Search designation" /></label>
+                <select aria-label="Filter by routing status" className="select" defaultValue={statusFilter} name="status">
                   <option value="all">All statuses</option>
                   <option value="mapped">Mapped</option>
                   <option value="unmapped">Unmapped</option>
@@ -278,67 +300,60 @@ export default async function WorkforceDesignationRoutingPage({
                 </select>
                 <button className="button secondary compact" type="submit">Filter</button>
               </form>
-            </div>
-            <div className="table-wrap designation-routing-wrap">
-              <table className="designation-routing-table">
-                <colgroup>
-                  <col className="routing-col-designation" />
-                  <col className="routing-col-records" />
-                  <col className="routing-col-target" />
-                  <col className="routing-col-registration" />
-                  <col className="routing-col-reconciliation" />
-                  <col className="routing-col-action" />
-                </colgroup>
-                <thead><tr><th>Designation</th><th>Current records</th><th>Target register</th><th>New registration</th><th>Reconciliation</th><th>Action</th></tr></thead>
-                <tbody>
-                  {designations.map((designation) => {
+            </header>
+            <div className="wf-route-list">
+              {designations.length ? designations.map((designation) => {
                     const route = routes.get(designation.id);
                     const register = route?.register_id ? registerById.get(route.register_id) : null;
                     const currentCounts = (countsByDesignation.get(designation.id) ?? []).filter((row) => Number(row.total_count) > 0);
                     const reconciliation = route?.last_reconciliation ?? {};
                     const failureSamples = reconciliation.failure_samples ?? [];
                     return (
-                      <tr key={designation.id}>
-                        <td>
-                          <div className="routing-designation">
-                            <strong>{designation.name}</strong>
-                            <span>
-                              <small>{designation.code}</small>
-                              <small>{categories.get(designation.designation_category_id ?? "") ?? "Uncategorised"}</small>
-                              <small className={designation.is_active ? "is-active" : "is-inactive"}>{designation.is_active ? "Active" : "Inactive"}</small>
-                            </span>
+                      <article className="wf-route-card" key={designation.id}>
+                        <header>
+                          <div className="wf-route-title">
+                            <span>{designation.code}</span>
+                            <div><strong>{designation.name}</strong><small>{categories.get(designation.designation_category_id ?? "") ?? "Uncategorised"}</small></div>
                           </div>
-                        </td>
-                        <td>
+                          <span className={designation.is_active ? "wf-role-state active" : "wf-role-state"}>{designation.is_active ? "Active" : "Inactive"}</span>
+                        </header>
+
+                        <div className="wf-route-flow">
+                          <section className="wf-route-source">
+                            <small>1 · Current footprint</small>
                           {currentCounts.length ? (
                             <div className="routing-record-stack">
                               {currentCounts.map((row) => (
                                 <span className="routing-record-count" key={row.table_name}>
                                   <strong>{registerLabel(row.table_name)}</strong>
-                                  <small>{Number(row.active_count)} active · {Number(row.total_count)} total</small>
+                                  <small>{Number(row.total_count)} profiles · {Number(row.active_count)} active</small>
                                 </span>
                               ))}
                             </div>
-                          ) : <span className="routing-empty">No records</span>}
-                        </td>
-                        <td>
+                          ) : <span className="routing-empty">No existing profiles</span>}
+                          </section>
+
+                          <ArrowRight className="wf-route-arrow" size={17} />
+
+                          <section className="wf-route-target">
+                            <small>2 · Canonical destination</small>
                           <form action={saveDesignationRoute} className="routing-target-form" id={`route-${designation.id}`}>
                             <input name="designation_id" type="hidden" value={designation.id} />
-                            <select className="select" defaultValue={route?.register_id ?? ""} name="register_id">
-                              <option value="">Unmapped — block registration</option>
+                            <select aria-label={`Canonical destination for ${designation.name}`} className="select" defaultValue={route?.register_id ?? ""} disabled={!permission.canEdit} name="register_id">
+                              <option value="">Unmapped — registration blocked</option>
                               {registers.filter((item) => item.is_active || item.id === route?.register_id).map((item) => (
                                 <option key={item.id} value={item.id}>{item.name}</option>
                               ))}
                             </select>
+                            <label className="wf-switch"><input defaultChecked={Boolean(route?.registration_enabled)} disabled={!permission.canEdit} name="registration_enabled" type="checkbox" /><i /> Accept new registrations</label>
                           </form>
-                          <small className="routing-target-note">{register ? `New profiles go to ${register.name}` : "New registration is blocked"}</small>
-                        </td>
-                        <td>
-                          <label className="check-row routing-registration-toggle">
-                            <input defaultChecked={Boolean(route?.registration_enabled)} form={`route-${designation.id}`} name="registration_enabled" type="checkbox" /> Enabled
-                          </label>
-                        </td>
-                        <td>
+                          <p>{register ? `New profiles are written to ${register.name}.` : "Choose a destination before onboarding this role."}</p>
+                          </section>
+
+                          <ArrowRight className="wf-route-arrow" size={17} />
+
+                          <section className="wf-route-health">
+                            <small>3 · Cutover health</small>
                           <div className="routing-reconciliation">
                             <StatusPill status={(route?.reconciliation_status ?? "unmapped").replaceAll("_", " ")} />
                             <small>{formatDate(route?.last_reconciled_at ?? null)}</small>
@@ -361,27 +376,30 @@ export default async function WorkforceDesignationRoutingPage({
                               </details>
                             ) : null}
                           </div>
-                        </td>
-                        <td className="routing-action-cell">
+                          </section>
+                        </div>
+
+                        <footer>
+                          <p><ShieldCheck size={14} /> Existing IDs, invitations and saved drafts are retained during reconciliation.</p>
                           {permission.canEdit ? (
                             <SubmitButton
                               className="button compact"
-                              confirmDescription="Existing profiles are copied into the selected register and legacy source rows are retained inactive for compatibility."
+                              confirmDescription="Existing profiles are reconciled into the selected register. IDs, invitations, drafts and verification history remain attached."
                               confirmMessage={`Save the route for ${designation.name} and reconcile its existing records?`}
                               confirmSubmitText="Save and reconcile"
                               confirmTitle="Confirm register routing"
                               form={`route-${designation.id}`}
                               pendingText="Reconciling"
                             >
-                              Save & reconcile
+                              Save route & reconcile
                             </SubmitButton>
-                          ) : "-"}
-                        </td>
-                      </tr>
+                          ) : null}
+                        </footer>
+                      </article>
                     );
-                  })}
-                </tbody>
-              </table>
+                  }) : (
+                    <div className="wf-route-empty"><Search size={18} /><strong>No matching designations</strong><p>Try another search or status filter.</p></div>
+                  )}
             </div>
           </section>
         </>

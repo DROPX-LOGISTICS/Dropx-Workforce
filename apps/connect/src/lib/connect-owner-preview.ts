@@ -39,17 +39,19 @@ function first<T>(value: T | T[] | null | undefined): T | null { return Array.is
 
 export async function listConnectPreviewAccounts(companyId: string): Promise<ConnectAccount[]> {
   if (!supabaseAdmin) throw new Error("Database configuration is missing.");
-  const [company, employees, contractors] = await Promise.all([
+  const [company, employees, workforce] = await Promise.all([
     supabaseAdmin.from("companies").select("name").eq("id", companyId).maybeSingle(),
     supabaseAdmin.from("employees").select("id,company_id,full_name,email,employee_code,biometric_id,profile_photo_path,profile_completion_status,designations(name)").eq("company_id", companyId).eq("is_active", true).is("deleted_at", null).order("full_name"),
-    supabaseAdmin.from("contractors").select("id,company_id,full_name,email,dropx_id,biometric_id,profile_photo_path,onboarding_status,designation").eq("company_id", companyId).eq("is_active", true).is("deleted_at", null).order("full_name")
+    supabaseAdmin.from("workforce").select("id,company_id,full_name,email,dropx_id,biometric_id,profile_photo_path,onboarding_status,designation").eq("company_id", companyId).is("deleted_at", null).neq("migration_state", "reclassified").order("full_name")
   ]);
-  const error = company.error ?? employees.error ?? contractors.error;
+  const error = company.error ?? employees.error ?? workforce.error;
   if (error) throw new Error(error.message);
   const companyName = company.data?.name ?? "DropX";
   return [
     ...(employees.data ?? []).map((row): ConnectAccount => ({ id: row.id, companyId, profileType: "employee", name: row.full_name, email: row.email, reference: row.employee_code, role: first(row.designations)?.name ?? "Employee", status: row.profile_completion_status === "active" ? "Active" : "Active", biometricId: row.biometric_id, profilePhotoUrl: "", pageAccess: ["dashboard", "attendance", "leave", "settings"], isDefault: false, companyName, label: `${row.full_name} - ${row.employee_code ?? "Employee"}` })),
-    ...(contractors.data ?? []).map((row): ConnectAccount => ({ id: row.id, companyId, profileType: "contractor", name: row.full_name, email: row.email, reference: row.dropx_id, role: row.designation ?? "Independent contractor", status: row.onboarding_status === "active" ? "Active" : "Active", biometricId: row.biometric_id, profilePhotoUrl: "", pageAccess: ["dashboard", "attendance", "leave", "settings"], isDefault: false, companyName, label: `${row.full_name} - ${row.dropx_id ?? "Contractor"}` }))
+    ...(workforce.data ?? [])
+      .filter((row) => !["rejected", "cancelled"].includes(String(row.onboarding_status ?? "pending").toLowerCase()))
+      .map((row): ConnectAccount => ({ id: row.id, companyId, profileType: "workforce", name: row.full_name, email: row.email, reference: row.dropx_id, role: row.designation ?? "Workforce associate", status: row.onboarding_status === "active" ? "Active" : "Registration in progress", biometricId: row.biometric_id, profilePhotoUrl: "", pageAccess: ["dashboard", "attendance", "leave", "settings"], isDefault: false, companyName, label: `${row.full_name} - ${row.dropx_id ?? "Workforce"}` }))
   ];
 }
 

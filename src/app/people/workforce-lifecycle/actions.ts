@@ -14,10 +14,10 @@ function lifecycleRedirect(params: { error?: string; notice?: string; tab?: stri
   if (params.error) query.set("error", params.error);
   if (params.notice) query.set("notice", params.notice);
   if (params.tab) query.set("tab", params.tab);
-  let path = "/people/workforce-lifecycle";
+  let path = "/delivery-network/lifecycle";
   try {
-    if (new URL(headers().get("referer") ?? "http://localhost").pathname.startsWith("/delivery-network/")) {
-      path = "/delivery-network/lifecycle";
+    if (new URL(headers().get("referer") ?? "http://localhost").pathname.startsWith("/people/")) {
+      path = "/people/workforce-lifecycle";
     }
   } catch {
     // Keep the compatibility route when the request has no usable referrer.
@@ -34,12 +34,17 @@ function text(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
 }
 
+function revalidateLifecyclePages() {
+  revalidatePath("/delivery-network/lifecycle");
+  revalidatePath("/people/workforce-lifecycle");
+}
+
 async function requireScopedApplicant(id: string) {
   const authorization = await requirePagePermission("people_review", "edit");
   const companyId = requireCompanyId(authorization);
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const result = await supabaseAdmin
-    .from("field_executives")
+    .from("workforce")
     .select("id, full_name, location_id, designation, date_of_join, biometric_id, onboarding_status, lifecycle_status")
     .eq("company_id", companyId)
     .eq("id", id)
@@ -80,29 +85,29 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
     const reviewedAt = new Date().toISOString();
     if (action !== "approve") {
       const toStatus = action === "return" ? "returned" : "rejected";
-      const update = await supabaseAdmin!.from("field_executives").update({
+      const update = await supabaseAdmin!.from("workforce").update({
         onboarding_status: toStatus,
         onboarding_reviewed_at: reviewedAt,
         onboarding_reviewed_by: authorization.userId,
         onboarding_review_remarks: remarks,
         profile_return_remarks: action === "return" ? remarks : null,
         profile_returned_at: action === "return" ? reviewedAt : null,
-        is_active: false,
+        is_active: action === "return",
         updated_at: reviewedAt
       }).eq("company_id", companyId).eq("id", id);
       if (update.error) throw new Error(update.error.message);
       const event = await supabaseAdmin!.from("workforce_onboarding_events").insert({
         company_id: companyId,
-        field_executive_id: id,
+        workforce_id: id,
         event_code: action === "return" ? "returned_for_correction" : "onboarding_rejected",
         from_status: applicant.onboarding_status,
         to_status: toStatus,
         actor_user_id: authorization.userId,
-        source_portal: "dashboard",
+        source_portal: "workforce",
         remarks
       });
       if (event.error) throw new Error(event.error.message);
-      revalidatePath("/people/workforce-lifecycle");
+      revalidateLifecyclePages();
       lifecycleRedirect({ notice: action === "return" ? "Application returned for correction." : "Application rejected." });
     }
 
@@ -124,7 +129,8 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
         : checked ? "completed" : "pending";
       return {
         company_id: companyId,
-        field_executive_id: id,
+        workforce_id: id,
+        field_executive_id: null,
         checklist_item_id: item.id,
         status,
         remarks: item.code === "provider_id_created"
@@ -139,10 +145,10 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
     if (incomplete.length) throw new Error(`Complete the required checklist: ${incomplete.map((item) => item.label).join(", ")}.`);
     if (results.length) {
       const checklist = await supabaseAdmin!.from("workforce_onboarding_checklist_results")
-        .upsert(results, { onConflict: "field_executive_id,checklist_item_id" });
+        .upsert(results, { onConflict: "workforce_id,checklist_item_id" });
       if (checklist.error) throw new Error(checklist.error.message);
     }
-    const approval = await supabaseAdmin!.from("field_executives").update({
+    const approval = await supabaseAdmin!.from("workforce").update({
       onboarding_status: "active",
       onboarding_reviewed_at: reviewedAt,
       onboarding_reviewed_by: authorization.userId,
@@ -163,14 +169,13 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
         createdBy: authorization.userId,
         effectiveFrom: applicant.date_of_join || reviewedAt.slice(0, 10),
         enrolmentId: applicant.biometric_id,
-        fieldExecutiveId: id,
         isActive: true,
         locationId: String(applicant.location_id),
-        profileType: "field_executive",
+        profileType: "workforce",
         workerType: "individual_contract"
       });
     } catch (syncError) {
-      await supabaseAdmin!.from("field_executives").update({
+      await supabaseAdmin!.from("workforce").update({
         onboarding_status: "approved",
         onboarding_activated_at: null,
         is_active: false,
@@ -181,16 +186,16 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
     }
     const event = await supabaseAdmin!.from("workforce_onboarding_events").insert({
       company_id: companyId,
-      field_executive_id: id,
+      workforce_id: id,
       event_code: "ho_approved_and_activated",
       from_status: applicant.onboarding_status,
       to_status: "active",
       actor_user_id: authorization.userId,
-      source_portal: "dashboard",
+      source_portal: "workforce",
       remarks: remarks || "HO checklist completed and workforce ID activated."
     });
     if (event.error) throw new Error(event.error.message);
-    revalidatePath("/people/workforce-lifecycle");
+    revalidateLifecyclePages();
     lifecycleRedirect({ notice: `${applicant.full_name} approved and activated.` });
   } catch (error) {
     if (isRedirect(error)) throw error;
@@ -212,8 +217,8 @@ export async function startWorkforceExit(formData: FormData) {
     if (String(applicant.lifecycle_status) !== "active") throw new Error("Only active workforce can enter an exit process.");
     const created = await supabaseAdmin!.from("workforce_lifecycle_cases").insert({
       company_id: companyId,
-      field_executive_id: id,
-      profile_type: "field_executive",
+      field_executive_id: null,
+      profile_type: "workforce",
       profile_id: id,
       profile_location_id: applicant.location_id,
       case_type: caseType,
@@ -221,28 +226,28 @@ export async function startWorkforceExit(formData: FormData) {
       reason_code: reasonCode,
       reason_details: reasonDetails || null,
       initiated_by: authorization.userId,
-      initiated_source: "dashboard"
+      initiated_source: "workforce"
     }).select("id").single();
     if (created.error) throw new Error(created.error.message);
     const nextStatus = caseType === "resignation" ? "resignation_pending" : "termination_pending";
-    const update = await supabaseAdmin!.from("field_executives").update({ lifecycle_status: nextStatus, updated_at: new Date().toISOString() })
+    const update = await supabaseAdmin!.from("workforce").update({ lifecycle_status: nextStatus, updated_at: new Date().toISOString() })
       .eq("company_id", companyId).eq("id", id);
     if (update.error) throw new Error(update.error.message);
     const event = await supabaseAdmin!.from("workforce_lifecycle_events").insert({
       company_id: companyId,
       lifecycle_case_id: created.data.id,
-      field_executive_id: id,
-      profile_type: "field_executive",
+      field_executive_id: null,
+      profile_type: "workforce",
       profile_id: id,
       event_code: `${caseType}_submitted`,
       from_status: "active",
       to_status: "submitted",
       actor_user_id: authorization.userId,
-      source_portal: "dashboard",
+      source_portal: "workforce",
       remarks: reasonDetails || reasonCode
     });
     if (event.error) throw new Error(event.error.message);
-    revalidatePath("/people/workforce-lifecycle");
+    revalidateLifecyclePages();
     lifecycleRedirect({ notice: `${caseType === "resignation" ? "Resignation" : "Termination"} case created.`, tab: "exits" });
   } catch (error) {
     if (isRedirect(error)) throw error;
@@ -297,11 +302,11 @@ export async function reviewWorkforceExit(formData: FormData) {
       from_status: current.data.status,
       to_status: toStatus,
       actor_user_id: authorization.userId,
-      source_portal: "dashboard",
+      source_portal: "workforce",
       remarks
     });
     if (lifecycleEvent.error) throw new Error(lifecycleEvent.error.message);
-    revalidatePath("/people/workforce-lifecycle");
+    revalidateLifecyclePages();
     lifecycleRedirect({ notice: action === "approve" ? "Exit approved for settlement." : "Exit request rejected.", tab: "exits" });
   } catch (error) {
     if (isRedirect(error)) throw error;
@@ -387,11 +392,11 @@ export async function completeWorkforceSettlement(formData: FormData) {
       from_status: current.data.status,
       to_status: "settled",
       actor_user_id: authorization.userId,
-      source_portal: "dashboard",
+      source_portal: "workforce",
       remarks: `Settlement ${settlementStatus}`
     });
     if (lifecycleEvent.error) throw new Error(lifecycleEvent.error.message);
-    revalidatePath("/people/workforce-lifecycle");
+    revalidateLifecyclePages();
     lifecycleRedirect({ notice: "Final settlement recorded and workforce access deactivated.", tab: "exits" });
   } catch (error) {
     if (isRedirect(error)) throw error;

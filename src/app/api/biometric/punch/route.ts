@@ -33,7 +33,7 @@ type EnrolmentRow = {
   worker_type: string;
   employee_id: string | null;
   field_executive_id: string | null;
-  profile_type: "employee" | "field_executive" | "contractor" | "vendor" | "worker" | null;
+  profile_type: "employee" | "workforce" | "field_executive" | "contractor" | "vendor" | "worker" | null;
   account_id: string | null;
   location_id: string | null;
   status: string;
@@ -41,7 +41,7 @@ type EnrolmentRow = {
 
 type WorkerMatch = {
   workerType: "employee" | "individual_contract";
-  profileType: "employee" | "field_executive" | "contractor" | "vendor" | "worker";
+  profileType: "employee" | "workforce" | "field_executive" | "contractor" | "vendor" | "worker";
   accountId: string;
   employeeId: string | null;
   fieldExecutiveId: string | null;
@@ -79,7 +79,7 @@ function enrolmentPriority(
   const workerType = "worker_type" in row ? row.worker_type : row.workerType;
   const profileType = "profile_type" in row ? row.profile_type : row.profileType;
   const active = "status" in row ? row.status === "Active" : row.isActive;
-  const profileOrder = ["employee", "contractor", "vendor", "worker", "field_executive"];
+  const profileOrder = ["employee", "workforce", "contractor", "vendor", "worker", "field_executive"];
   return [
     Math.max(profileOrder.indexOf(profileType ?? (workerType === "employee" ? "employee" : "contractor")), 0),
     active ? 0 : 1
@@ -199,19 +199,25 @@ async function createAlert({
   severity?: string;
 }) {
   if (!supabaseAdmin) return;
-  await supabaseAdmin.from("biometric_alerts").insert({
+  const alertPayload = {
     company_id: companyId,
     alert_type: alertType,
     severity: severity ?? "medium",
     enrolment_id: cleanEnrolmentId(payload.enrolment_id) || null,
     employee_id: enrolment?.employee_id ?? null,
     field_executive_id: enrolment?.field_executive_id ?? null,
+    workforce_id: enrolment?.profile_type === "workforce" ? enrolment.account_id : null,
     device_id: device.id,
     device_serial: clean(payload.device_serial) || null,
     punch_time: parseDeviceDateTime(payload.punch_time)?.toISOString() ?? null,
     message,
     raw_event_id: rawEventId ?? null
-  });
+  };
+  const result = await supabaseAdmin.from("biometric_alerts").insert(alertPayload);
+  if (result.error?.code === "42703" || result.error?.message?.toLowerCase().includes("workforce_id")) {
+    const { workforce_id: _workforceId, ...fallbackPayload } = alertPayload;
+    await supabaseAdmin.from("biometric_alerts").insert(fallbackPayload);
+  }
 }
 
 async function storeReviewPunch({
@@ -284,6 +290,7 @@ async function findWorkerMatches(companyId: string, enrolmentId: string) {
   if (!normalizedEnrolmentId) return [];
 
   const nonEmployeeTables = [
+    ["workforce", "workforce"],
     ["field_executive", "field_executives"],
     ["contractor", "contractors"],
     ["vendor", "vendors"],
@@ -390,10 +397,36 @@ async function reconcileLegacyEnrolment(
   enrolment: EnrolmentRow
 ) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
-  if (enrolment.profile_type && enrolment.profile_type !== "field_executive") return enrolment;
+  if (enrolment.profile_type && !["field_executive", "contractor"].includes(enrolment.profile_type)) return enrolment;
 
   const matches = await findWorkerMatches(companyId, enrolment.enrolment_id);
   const linkedId = enrolment.account_id ?? enrolment.field_executive_id;
+  const linkedWorkforce = matches.find((match) =>
+    match.profileType === "workforce" && Boolean(linkedId) && match.accountId === linkedId
+  );
+  const workforceMatches = matches.filter((match) => match.profileType === "workforce");
+  const workforce = linkedWorkforce ?? (workforceMatches.length === 1 ? workforceMatches[0] : null);
+  if (workforce) {
+    const repaired = {
+      worker_type: workforce.workerType,
+      profile_type: workforce.profileType,
+      account_id: workforce.accountId,
+      employee_id: null,
+      field_executive_id: null,
+      location_id: workforce.locationId ?? enrolment.location_id,
+      status: workforce.isActive ? "Active" : "Inactive",
+      updated_at: new Date().toISOString()
+    };
+    const result = await supabaseAdmin
+      .from("biometric_enrolments")
+      .update(repaired)
+      .eq("id", enrolment.id)
+      .eq("company_id", companyId)
+      .select("id, enrolment_id, worker_type, employee_id, field_executive_id, profile_type, account_id, location_id, status")
+      .single();
+    if (result.error) throw new Error(result.error.message);
+    return result.data as EnrolmentRow;
+  }
   const linkedContractor = matches.find((match) =>
     match.profileType === "contractor" && Boolean(linkedId) && match.accountId === linkedId
   );

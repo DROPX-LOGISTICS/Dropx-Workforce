@@ -28,6 +28,7 @@ type Recipient = {
 
 const profileLabels: Record<WorkforceProfileType, string> = {
   employee: "Employee",
+  workforce: "Workforce associate",
   field_executive: "Field executive",
   contractor: "Independent contractor",
   vendor: "Vendor",

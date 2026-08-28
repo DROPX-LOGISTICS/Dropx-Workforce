@@ -25,6 +25,16 @@ export async function saveProfileVerifications({
   values: FormDataEntryValue[] | string[];
 }) {
   if (!supabaseAdmin) return;
+  const legacyIdentity = profileType === "workforce"
+    ? await supabaseAdmin
+      .from("workforce_identity_links")
+      .select("legacy_profile_type, legacy_profile_id")
+      .eq("company_id", companyId)
+      .eq("target_profile_type", "workforce")
+      .eq("target_profile_id", accountId)
+      .eq("compatibility_active", true)
+      .maybeSingle()
+    : null;
   const seen = new Set<string>();
   for (const value of values) {
     const raw = text(value);
@@ -46,7 +56,7 @@ export async function saveProfileVerifications({
       const key = `${kind}:${inputKey}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      const saveResult = await supabaseAdmin.from("connect_profile_verifications").upsert({
+      const verificationPayload = {
         company_id: companyId,
         profile_type: profileType,
         account_id: accountId,
@@ -60,9 +70,23 @@ export async function saveProfileVerifications({
         details: { ...record, kind },
         verified_at: record.verified === true ? new Date().toISOString() : null,
         updated_at: new Date().toISOString()
-      }, { onConflict: "company_id,profile_type,account_id,kind" });
+      };
+      const saveResult = await supabaseAdmin.from("connect_profile_verifications").upsert(
+        verificationPayload,
+        { onConflict: "company_id,profile_type,account_id,kind" }
+      );
       if (saveResult.error && !isMissingVerificationTable(saveResult.error)) {
         throw new Error(saveResult.error.message);
+      }
+      if (!saveResult.error && legacyIdentity?.data) {
+        const legacySave = await supabaseAdmin.from("connect_profile_verifications").upsert({
+          ...verificationPayload,
+          profile_type: legacyIdentity.data.legacy_profile_type,
+          account_id: legacyIdentity.data.legacy_profile_id
+        }, { onConflict: "company_id,profile_type,account_id,kind" });
+        if (legacySave.error && !isMissingVerificationTable(legacySave.error)) {
+          throw new Error(legacySave.error.message);
+        }
       }
     }
   }

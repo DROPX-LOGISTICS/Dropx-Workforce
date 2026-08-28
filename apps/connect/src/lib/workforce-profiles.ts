@@ -1,5 +1,6 @@
 export const workforceProfileTypes = [
   "employee",
+  "workforce",
   "field_executive",
   "contractor",
   "vendor",
@@ -9,7 +10,8 @@ export const workforceProfileTypes = [
 export type WorkforceProfileType = typeof workforceProfileTypes[number];
 export type NonEmployeeProfileType = Exclude<WorkforceProfileType, "employee">;
 
-const tables: Record<NonEmployeeProfileType, "field_executives" | "contractors" | "vendors" | "workers"> = {
+const tables: Record<NonEmployeeProfileType, "workforce" | "field_executives" | "contractors" | "vendors" | "workers"> = {
+  workforce: "workforce",
   field_executive: "field_executives",
   contractor: "contractors",
   vendor: "vendors",
@@ -29,6 +31,7 @@ export function workforceTable(profileType: WorkforceProfileType) {
 }
 
 export function workforceLabel(profileType: NonEmployeeProfileType) {
+  if (profileType === "workforce") return "Workforce associate";
   if (profileType === "contractor") return "Independent contractor";
   if (profileType === "vendor") return "Vendor";
   if (profileType === "worker") return "Worker";
@@ -36,6 +39,9 @@ export function workforceLabel(profileType: NonEmployeeProfileType) {
 }
 
 export function profileFieldRuleCategory(profileType: NonEmployeeProfileType) {
+  // Workforce classification comes from the designation master. Contractors
+  // remain only the legacy fallback field set for the registration form.
+  if (profileType === "workforce") return "contractors" as const;
   if (profileType === "contractor") return "contractors" as const;
   if (profileType === "vendor") return "vendors" as const;
   if (profileType === "worker") return "workers" as const;

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-export default function LegacyWorkforceContractorProfilesPage({
+export default function WorkforceProfilesPage({
   searchParams
 }: {
   searchParams?: Record<string, string | string[] | undefined>;

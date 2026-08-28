@@ -87,7 +87,7 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
   const id = rowRequired(formData, index, "id", "Workforce source profile");
   const workforceId = rowRequired(formData, index, "workforce_id", "Workforce profile");
   const sourceType = rowRequired(formData, index, "source_type", "Worker source");
-  if (sourceType !== "employee" && sourceType !== "contractor" && sourceType !== "field_executive") {
+  if (sourceType !== "workforce" && sourceType !== "employee" && sourceType !== "contractor" && sourceType !== "field_executive") {
     throw new Error(`Row ${index + 1}: Worker source is invalid.`);
   }
   const mappingId = rowValue(formData, index, "mapping_id");
@@ -128,7 +128,10 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
 
   if (workerError) throw new Error(workerError.message);
   if (!worker) throw new Error(`Row ${index + 1}: Delivery Network partner was not found for this company.`);
-  if (worker.source_profile_id !== id || worker.source_profile_type !== sourceType) {
+  const sourceMatches = sourceType === "workforce"
+    ? worker.id === id && worker.id === workforceId
+    : worker.source_profile_id === id && worker.source_profile_type === sourceType;
+  if (!sourceMatches) {
     throw new Error(`Row ${index + 1}: Workforce source identity does not match this mapping row.`);
   }
   const designationResult = await supabaseAdmin
@@ -189,6 +192,7 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
   }
 
   const mappingPayload = withCompany({
+    workforce_id: sourceType === "workforce" ? workforceId : null,
     field_executive_id: sourceType === "field_executive" ? id : null,
     employee_id: sourceType === "employee" ? id : null,
     contractor_id: sourceType === "contractor" ? id : null,
@@ -220,7 +224,9 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
     .eq("company_id", companyId);
   if (canonicalUpdate.error) throw new Error(canonicalUpdate.error.message);
 
-  const workerUpdate = sourceType === "employee"
+  const workerUpdate = sourceType === "workforce"
+    ? Promise.resolve({ error: null })
+    : sourceType === "employee"
     ? supabaseAdmin.from("employees").update({ employee_code: dropxId, location_id: stationId, updated_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId)
     : sourceType === "contractor"
       ? supabaseAdmin.from("contractors").update({ dropx_id: dropxId, location_id: stationId, updated_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId)

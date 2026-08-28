@@ -5,7 +5,7 @@ import { workforceOnboardingEventCode } from "@/lib/whatsapp-onboarding";
 type OnboardingMessageData = {
   companyId: string;
   workerId: string;
-  workerType: "employee" | "field_executive" | "contractor" | "vendor" | "worker";
+  workerType: "employee" | "workforce" | "field_executive" | "contractor" | "vendor" | "worker";
   workforceCategoryCode: string;
   fullName: string;
   mobile: string;
@@ -21,6 +21,7 @@ type OnboardingMessageData = {
 
 type FieldExecutiveOnboardingMessageData = Omit<OnboardingMessageData, "workerId" | "workerType"> & {
   fieldExecutiveId: string;
+  profileType?: OnboardingMessageData["workerType"];
 };
 
 type EmployeeOnboardingMessageData = Omit<OnboardingMessageData, "workerId" | "workerType" | "workforceCategoryCode" | "registrationToken"> & {
@@ -39,6 +40,15 @@ function clean(value: unknown) {
 async function writeLog(payload: Record<string, unknown>) {
   if (!supabaseAdmin) return;
   await supabaseAdmin.from("whatsapp_message_logs").insert(payload);
+}
+
+function onboardingLogIdentity(data: OnboardingMessageData) {
+  return {
+    company_id: data.companyId,
+    workforce_id: data.workerType === "workforce" ? data.workerId : null,
+    field_executive_id: data.workerType === "field_executive" ? data.workerId : null,
+    contractor_id: data.workerType === "contractor" ? data.workerId : null
+  };
 }
 
 function renderTemplateText(components: WhatsAppTemplateComponent[], mappings: Record<string, string>, values: Record<string, string>, fallback: string) {
@@ -180,7 +190,7 @@ async function sendOnboardingWhatsApp(data: OnboardingMessageData) {
     if (settings.error) throw new Error(settings.error.message);
     if (config.error) throw new Error(config.error.message);
     if (!settings.data?.is_enabled || !config.data?.is_enabled) {
-      await writeLog({ event_code: eventCode, field_executive_id: data.workerType === "field_executive" ? data.workerId : null, recipient, template_name: config.data?.template_name, status: "skipped", error_message: "WhatsApp or onboarding notification is disabled." });
+      await writeLog({ ...onboardingLogIdentity(data), event_code: eventCode, recipient, template_name: config.data?.template_name, status: "skipped", error_message: "WhatsApp or onboarding notification is disabled." });
       return;
     }
     if (!config.data.whatsapp_profile_id || !config.data.template_id || !config.data.template_name || !config.data.template_language) throw new Error("WhatsApp onboarding configuration is incomplete.");
@@ -334,8 +344,8 @@ async function sendOnboardingWhatsApp(data: OnboardingMessageData) {
     });
 
     await writeLog({
+      ...onboardingLogIdentity(data),
       event_code: eventCode,
-      field_executive_id: data.workerType === "field_executive" ? data.workerId : null,
       whatsapp_profile_id: profile.id,
       whatsapp_profile_name: profile.profile_name,
       recipient,
@@ -384,8 +394,8 @@ async function sendOnboardingWhatsApp(data: OnboardingMessageData) {
       }).eq("id", campaignId);
     }
     await writeLog({
+      ...onboardingLogIdentity(data),
       event_code: eventCode,
-      field_executive_id: data.workerType === "field_executive" ? data.workerId : null,
       whatsapp_profile_id: campaignProfile?.id,
       whatsapp_profile_name: campaignProfile?.profile_name,
       recipient,
@@ -402,10 +412,10 @@ export async function sendFieldExecutiveOnboardingWhatsApp(data: FieldExecutiveO
   await sendOnboardingWhatsApp({
     ...data,
     workerId: data.fieldExecutiveId,
-    workerType: data.workforceCategoryCode === "contractors" ? "contractor"
+    workerType: data.profileType ?? (data.workforceCategoryCode === "contractors" ? "contractor"
       : data.workforceCategoryCode === "vendors" ? "vendor"
         : data.workforceCategoryCode === "workers" ? "worker"
-          : "field_executive"
+          : "field_executive")
   });
 }
 

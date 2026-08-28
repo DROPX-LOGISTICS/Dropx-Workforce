@@ -5,6 +5,7 @@ import { connectSessionCookieName, findConnectAccounts } from "../../../../src/l
 import {
   isMissingProfileDraftTable,
   loadProfileDraft,
+  mirrorLegacyWorkforceDraft,
   profileDraftFileSlots,
   type ProfileDraftFileSlot
 } from "../../../../src/lib/profile-drafts";
@@ -160,14 +161,17 @@ export async function POST(request: Request) {
       nextPaths[slot] = path;
     }
 
+    const updatedAt = new Date().toISOString();
+    const draftData = parseObject(formData.get("draft_data"));
+    const verificationResults = parseVerificationRows(formData.getAll("profile_verification_results"));
     const saveResult = await supabaseAdmin.from("mob_app_registration_drafts").upsert({
       company_id: account.companyId,
       profile_type: account.profileType,
       account_id: account.id,
-      draft_data: parseObject(formData.get("draft_data")),
-      verification_results: parseVerificationRows(formData.getAll("profile_verification_results")),
+      draft_data: draftData,
+      verification_results: verificationResults,
       file_paths: nextPaths,
-      updated_at: new Date().toISOString()
+      updated_at: updatedAt
     }, { onConflict: "company_id,profile_type,account_id" });
     if (saveResult.error) {
       if (isMissingProfileDraftTable(saveResult.error)) {
@@ -175,6 +179,15 @@ export async function POST(request: Request) {
       }
       throw new Error(saveResult.error.message);
     }
+    await mirrorLegacyWorkforceDraft({
+      accountId: account.id,
+      companyId: account.companyId,
+      draftData,
+      filePaths: nextPaths,
+      profileType: account.profileType,
+      updatedAt,
+      verificationResults
+    });
     if (replacedPaths.length) {
       await supabaseAdmin.storage.from("employee-profile-documents").remove(replacedPaths);
     }

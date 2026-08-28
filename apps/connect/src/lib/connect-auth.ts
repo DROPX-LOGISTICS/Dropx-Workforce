@@ -109,6 +109,7 @@ const defaultPageAccess = ["dashboard", "attendance", "leave", "settings"];
 
 function categoryCodeForProfile(profileType: ConnectAccount["profileType"]) {
   if (profileType === "employee") return "employees";
+  if (profileType === "workforce") return "workforce";
   if (profileType === "field_executive") return "field_executives";
   if (profileType === "contractor") return "contractors";
   if (profileType === "vendor") return "vendors";
@@ -130,7 +131,7 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const localMobile = mobile.startsWith(countryCode) ? mobile.slice(countryCode.length) : mobile;
   type ProfileMatch = { id: string; company_id: string; full_name: string | null; email?: string | null; employee_id?: string | null; role?: string | null };
-  type NonEmployeeMatch = { id: string; company_id: string; full_name: string | null; email?: string | null; dropx_id?: string | null; biometric_id?: string | null; designation?: string | null; onboarding_status?: string | null; profile_photo_path?: string | null };
+  type NonEmployeeMatch = { id: string; company_id: string; full_name: string | null; email?: string | null; dropx_id?: string | null; biometric_id?: string | null; designation?: string | null; designation_id?: string | null; onboarding_status?: string | null; profile_photo_path?: string | null };
 
   let profilesResult: MatchResult<ProfileMatch> = await supabaseAdmin
     .from("profiles")
@@ -145,34 +146,40 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
     .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
     .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`);
 
-  const nonEmployeeTypes: NonEmployeeProfileType[] = ["field_executive", "contractor", "vendor", "worker"];
+  const nonEmployeeTypes: NonEmployeeProfileType[] = ["workforce", "field_executive", "contractor", "vendor", "worker"];
   async function loadNonEmployee(profileType: NonEmployeeProfileType): Promise<MatchResult<NonEmployeeMatch>> {
     const table = workforceTable(profileType);
-    let query = supabaseAdmin!
+    const columns = profileType === "workforce"
+      ? "id, company_id, full_name, email, dropx_id, biometric_id, designation, designation_id, onboarding_status, profile_photo_path, is_active, mobile_country_code"
+      : "id, company_id, full_name, email, dropx_id, biometric_id, designation, onboarding_status, profile_photo_path, is_active, mobile_country_code";
+    let query: any = supabaseAdmin!
       .from(table)
-      .select("id, company_id, full_name, email, dropx_id, biometric_id, designation, onboarding_status, profile_photo_path, is_active, mobile_country_code")
+      .select(columns)
       .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
       .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`);
-    if (profileType !== "field_executive") query = query.eq("is_active", true);
+    if (profileType !== "field_executive" && profileType !== "workforce") query = query.eq("is_active", true);
     let result: MatchResult<NonEmployeeMatch> = await query;
-    if (profileType !== "field_executive" && isMissingColumnError(result.error)) {
+    if (profileType !== "field_executive" && profileType !== "workforce" && isMissingColumnError(result.error)) {
       return { data: [], error: null };
     }
     if (isMissingColumnError(result.error)) {
-      let fallbackQuery = supabaseAdmin!
+      const fallbackColumns = profileType === "workforce"
+        ? "id, company_id, full_name, email, dropx_id, biometric_id, designation, designation_id, onboarding_status, is_active"
+        : "id, company_id, full_name, email, dropx_id, biometric_id, designation, onboarding_status, is_active";
+      let fallbackQuery: any = supabaseAdmin!
         .from(table)
-        .select("id, company_id, full_name, email, dropx_id, biometric_id, designation, onboarding_status, is_active")
+        .select(fallbackColumns)
         .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`);
-      if (profileType !== "field_executive") fallbackQuery = fallbackQuery.eq("is_active", true);
+      if (profileType !== "field_executive" && profileType !== "workforce") fallbackQuery = fallbackQuery.eq("is_active", true);
       result = await fallbackQuery;
     }
-    if (profileType !== "field_executive" && isMissingColumnError(result.error)) {
+    if (profileType !== "field_executive" && profileType !== "workforce" && isMissingColumnError(result.error)) {
       return { data: [], error: null };
     }
     return result;
   }
   const nonEmployeeResults = (await Promise.all(nonEmployeeTypes.map(loadNonEmployee))).map((result, index) => {
-    if (nonEmployeeTypes[index] !== "field_executive") return result;
+    if (nonEmployeeTypes[index] !== "field_executive" && nonEmployeeTypes[index] !== "workforce") return result;
     return {
       ...result,
       data: (result.data ?? []).filter((row) => !["rejected", "cancelled"].includes(String(row.onboarding_status ?? "pending").toLowerCase()))
@@ -198,6 +205,29 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
   for (const result of nonEmployeeResults) {
     if (result.error) throw new Error(result.error.message);
   }
+
+  const legacyMatches = nonEmployeeResults.flatMap((result, index) => {
+    const profileType = nonEmployeeTypes[index];
+    if (profileType !== "field_executive" && profileType !== "contractor") return [];
+    return (result.data ?? []).map((row) => ({ profileType, id: row.id }));
+  });
+  const canonicalWorkforceIds = new Set(
+    (nonEmployeeResults[nonEmployeeTypes.indexOf("workforce")]?.data ?? []).map((row) => row.id)
+  );
+  const linkedLegacyResult = legacyMatches.length
+    ? await supabaseAdmin
+      .from("workforce_identity_links")
+      .select("legacy_profile_type, legacy_profile_id, target_profile_id")
+      .eq("compatibility_active", true)
+      .eq("target_profile_type", "workforce")
+      .in("legacy_profile_id", legacyMatches.map((row) => row.id))
+    : { data: [], error: null };
+  if (linkedLegacyResult.error && !isMissingColumnError(linkedLegacyResult.error)) {
+    throw new Error(linkedLegacyResult.error.message);
+  }
+  const canonicalLegacyKeys = new Set((linkedLegacyResult.data ?? [])
+    .filter((row) => canonicalWorkforceIds.has(row.target_profile_id))
+    .map((row) => `${row.legacy_profile_type}:${row.legacy_profile_id}`));
 
   const employeeAccounts = (employeesResult.data ?? []).map((employee) => ({
     id: employee.id,
@@ -232,13 +262,16 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
     }))),
     ...nonEmployeeResults.flatMap((result, index) => {
       const profileType = nonEmployeeTypes[index];
-      return (result.data ?? []).map((profile) => ({
+      return (result.data ?? [])
+        .filter((profile) => !canonicalLegacyKeys.has(`${profileType}:${profile.id}`))
+        .map((profile) => ({
         id: profile.id,
         company_id: profile.company_id,
         full_name: profile.full_name,
         email: profile.email,
         dropx_id: profile.dropx_id,
         biometric_id: profile.biometric_id,
+        designation_id: profile.designation_id ?? null,
         role: profile.designation || workforceLabel(profileType),
         status: profile.onboarding_status === "active"
           ? "Active"

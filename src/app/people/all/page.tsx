@@ -153,10 +153,15 @@ async function loadPeople(
   const categories = (categoryResult.data ?? []) as Array<{ code: string; name: string }>;
   const designationResult = await supabaseAdmin
     .from("designations")
-    .select("id, name, portal_permissions")
+    .select("id, name, portal_permissions, designation_category:designation_categories!designations_designation_category_id_fkey(people_module)")
     .eq("company_id", companyId)
     .eq("is_active", true);
-  const designations = (designationResult.data ?? []) as Array<{ id: string; name: string; portal_permissions: unknown }>;
+  const designations = ((designationResult.data ?? []) as Array<{
+    id: string;
+    name: string;
+    portal_permissions: unknown;
+    designation_category?: { people_module?: string | null } | Array<{ people_module?: string | null }> | null;
+  }>).filter((designation) => first(designation.designation_category)?.people_module === "people_hr");
   const designationById = new Map(designations.map((designation) => [designation.id, designation]));
   const designationByName = new Map(designations.map((designation) => [designation.name.trim().toLowerCase(), designation]));
   const ownerAccess = isCompanyOwner(authorization);
@@ -192,7 +197,7 @@ async function loadPeople(
           const designation = source.employeeDesignation
             ? designationById.get(String(row.designation_id ?? joinedDesignation?.id ?? ""))
             : designationByName.get(String(row.designation ?? "").trim().toLowerCase());
-          return canAccessDesignationPortal(designation, "dashboard", "view", { isOwner: ownerAccess });
+          return Boolean(designation) && canAccessDesignationPortal(designation, "dashboard", "view", { isOwner: ownerAccess });
         })
         .map((row: Record<string, unknown>) => {
           const location = String((first(row.stations as { station_code?: string } | Array<{ station_code?: string }> | null) ?? {}).station_code ?? "-");
@@ -237,7 +242,7 @@ async function loadPeople(
         .filter((row: Record<string, unknown>) => {
           if (!hasAllLocationAccess && !locationScopeIds.includes(String(row.location_id ?? ""))) return false;
           const designation = designationByName.get(String(row.designation ?? "").trim().toLowerCase());
-          return canAccessDesignationPortal(designation, "dashboard", "view", { isOwner: ownerAccess });
+          return Boolean(designation) && canAccessDesignationPortal(designation, "dashboard", "view", { isOwner: ownerAccess });
         })
         .map((row: Record<string, unknown>) => {
           const location = String((first(row.stations as { station_code?: string } | Array<{ station_code?: string }> | null) ?? {}).station_code ?? "-");
@@ -293,7 +298,7 @@ export default async function AllPeoplePage({ searchParams }: { searchParams?: {
   );
   return (
     <AppShell active="All People" pageCode="people_all">
-      <PageHead eyebrow="People" title="All People" subtitle="View every engagement type in one consolidated register." />
+      <PageHead eyebrow="People" title="All People" subtitle="People / HR profiles only. Delivery-network roles are maintained in the Workforce product." />
       {searchParams?.error || searchParams?.notice ? (
         <section className={`panel message-panel ${searchParams.error ? "error" : "success"}`}>
           <div className="panel-body">

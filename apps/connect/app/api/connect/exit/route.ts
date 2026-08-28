@@ -7,12 +7,12 @@ import { workforceTable, type WorkforceProfileType } from "../../../../src/lib/w
 
 type AppProfileType = ConnectAccount["profileType"];
 type PeopleProfileType = "employee" | "contractor";
-type FieldProfileType = "field_executive" | "vendor" | "worker";
+type FieldProfileType = "workforce" | "field_executive" | "vendor" | "worker";
 
 function db() { if (!supabaseAdmin) throw new Error("Database is unavailable."); return supabaseAdmin; }
 function clean(value: unknown) { return String(value ?? "").trim(); }
 function peopleProfile(value: AppProfileType): value is PeopleProfileType { return value === "employee" || value === "contractor"; }
-function fieldProfile(value: AppProfileType): value is FieldProfileType { return value === "field_executive" || value === "vendor" || value === "worker"; }
+function fieldProfile(value: AppProfileType): value is FieldProfileType { return value === "workforce" || value === "field_executive" || value === "vendor" || value === "worker"; }
 function identityColumn(profileType: PeopleProfileType) { return profileType === "employee" ? "employee_id" : "contractor_id"; }
 function validDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;

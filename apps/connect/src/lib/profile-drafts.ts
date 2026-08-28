@@ -50,6 +50,24 @@ export function isMissingProfileDraftTable(error: unknown) {
     && (message.includes("schema cache") || message.includes("does not exist"));
 }
 
+async function legacyWorkforceIdentity(params: {
+  accountId: string;
+  companyId: string;
+  profileType: WorkforceProfileType;
+}) {
+  if (!supabaseAdmin || params.profileType !== "workforce") return null;
+  const result = await supabaseAdmin
+    .from("workforce_identity_links")
+    .select("legacy_profile_type, legacy_profile_id")
+    .eq("company_id", params.companyId)
+    .eq("target_profile_type", "workforce")
+    .eq("target_profile_id", params.accountId)
+    .eq("compatibility_active", true)
+    .maybeSingle();
+  if (result.error) return null;
+  return result.data;
+}
+
 export async function loadProfileDraft(params: {
   accountId: string;
   companyId: string;
@@ -67,13 +85,75 @@ export async function loadProfileDraft(params: {
     if (isMissingProfileDraftTable(result.error)) return null;
     throw new Error(result.error.message);
   }
-  if (!result.data) return null;
+  let draftRow = result.data;
+  if (!draftRow) {
+    const legacy = await legacyWorkforceIdentity(params);
+    if (legacy) {
+      const legacyResult = await supabaseAdmin
+        .from("mob_app_registration_drafts")
+        .select("draft_data, verification_results, file_paths, updated_at")
+        .eq("company_id", params.companyId)
+        .eq("profile_type", legacy.legacy_profile_type)
+        .eq("account_id", legacy.legacy_profile_id)
+        .maybeSingle();
+      if (legacyResult.error && !isMissingProfileDraftTable(legacyResult.error)) {
+        throw new Error(legacyResult.error.message);
+      }
+      draftRow = legacyResult.data;
+    }
+  }
+  if (!draftRow) return null;
   return {
-    data: stringRecord(result.data.draft_data),
-    verificationResults: verificationRows(result.data.verification_results),
-    filePaths: fileRecord(result.data.file_paths),
-    updatedAt: String(result.data.updated_at ?? "")
+    data: stringRecord(draftRow.draft_data),
+    verificationResults: verificationRows(draftRow.verification_results),
+    filePaths: fileRecord(draftRow.file_paths),
+    updatedAt: String(draftRow.updated_at ?? "")
   };
+}
+
+export async function deleteLegacyWorkforceDraft(params: {
+  accountId: string;
+  companyId: string;
+  profileType: WorkforceProfileType;
+}) {
+  if (!supabaseAdmin) return;
+  const legacy = await legacyWorkforceIdentity(params);
+  if (!legacy) return;
+  const result = await supabaseAdmin
+    .from("mob_app_registration_drafts")
+    .delete()
+    .eq("company_id", params.companyId)
+    .eq("profile_type", legacy.legacy_profile_type)
+    .eq("account_id", legacy.legacy_profile_id);
+  if (result.error && !isMissingProfileDraftTable(result.error)) {
+    throw new Error(result.error.message);
+  }
+}
+
+export async function mirrorLegacyWorkforceDraft(params: {
+  accountId: string;
+  companyId: string;
+  draftData: Record<string, unknown>;
+  filePaths: Partial<Record<ProfileDraftFileSlot, string>>;
+  profileType: WorkforceProfileType;
+  updatedAt: string;
+  verificationResults: Record<string, unknown>[];
+}) {
+  if (!supabaseAdmin) return;
+  const legacy = await legacyWorkforceIdentity(params);
+  if (!legacy) return;
+  const result = await supabaseAdmin.from("mob_app_registration_drafts").upsert({
+    company_id: params.companyId,
+    profile_type: legacy.legacy_profile_type,
+    account_id: legacy.legacy_profile_id,
+    draft_data: params.draftData,
+    verification_results: params.verificationResults,
+    file_paths: params.filePaths,
+    updated_at: params.updatedAt
+  }, { onConflict: "company_id,profile_type,account_id" });
+  if (result.error && !isMissingProfileDraftTable(result.error)) {
+    throw new Error(result.error.message);
+  }
 }
 
 export async function deleteProfileDraft(params: {
@@ -91,6 +171,7 @@ export async function deleteProfileDraft(params: {
   if (result.error && !isMissingProfileDraftTable(result.error)) {
     throw new Error(result.error.message);
   }
+  await deleteLegacyWorkforceDraft(params);
 }
 
 export function draftVerificationValues(draft: ProfileDraft | null) {

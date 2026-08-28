@@ -14,7 +14,7 @@ export type LocationOption = {
 export type MappingWorksheetRow = {
   id: string;
   workforceId: string;
-  sourceType: "employee" | "contractor" | "field_executive";
+  sourceType: "workforce" | "employee" | "contractor" | "field_executive";
   mappingId: string;
   dropxId: string;
   dropxName: string;

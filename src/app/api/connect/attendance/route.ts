@@ -91,20 +91,45 @@ async function resolveWorker({
     const resolvedProfileType = profileType as WorkforceProfileType;
     const table = workforceTable(resolvedProfileType);
     const idColumn = resolvedProfileType === "employee" ? "employee_code" : "dropx_id";
+    const stateColumns: string = resolvedProfileType === "workforce"
+      ? ", onboarding_status, lifecycle_status, deleted_at, migration_state"
+      : "";
+    const profileColumns: string = `id, company_id, mobile, mobile_country_code, biometric_id, full_name, ${idColumn}, is_active${stateColumns}`;
     const result = await supabaseAdmin
       .from(table)
-      .select(`id, company_id, mobile, mobile_country_code, biometric_id, full_name, ${idColumn}, is_active`)
+      .select(profileColumns)
       .eq("id", accountId)
       .maybeSingle();
     if (result.error) throw new Error(result.error.message);
-    const row = result.data;
-    if (!row || row.is_active === false) throw new Error("Workforce account is inactive or unavailable.");
+    const row = result.data as Record<string, any> | null;
+    if (!row) throw new Error("Workforce account is inactive or unavailable.");
+    if (resolvedProfileType === "workforce") {
+      const terminal = new Set(["rejected", "cancelled", "terminated", "settled", "exited", "offboarded", "deactivated"]);
+      if (row.deleted_at || row.migration_state === "reclassified"
+        || terminal.has(String(row.onboarding_status ?? "").toLowerCase())
+        || terminal.has(String(row.lifecycle_status ?? "").toLowerCase())) {
+        throw new Error("Workforce account is inactive or unavailable.");
+      }
+    } else if (row.is_active === false) {
+      throw new Error("Workforce account is inactive or unavailable.");
+    }
     const rowMobile = String(row.mobile ?? "").replace(/\D/g, "");
     const rowCountryCode = String(row.mobile_country_code ?? countryCode).replace(/\D/g, "") || countryCode;
     if (rowCountryCode !== countryCode || (rowMobile !== mobile && rowMobile !== localMobile)) {
       throw new Error("This attendance is not available for the signed-in account.");
     }
     const enrolmentId = cleanEnrolmentId(row.biometric_id);
+    const legacyIdentity = resolvedProfileType === "workforce"
+      ? await supabaseAdmin.from("workforce_identity_links")
+        .select("legacy_profile_id")
+        .eq("company_id", row.company_id)
+        .eq("target_profile_type", "workforce")
+        .eq("target_profile_id", row.id)
+        .eq("legacy_profile_type", "contractor")
+        .eq("compatibility_active", true)
+        .maybeSingle()
+      : { data: null, error: null };
+    if (legacyIdentity.error) throw new Error(legacyIdentity.error.message);
     return {
       companyId: row.company_id as string,
       profileId: row.id as string,
@@ -112,6 +137,8 @@ async function resolveWorker({
       dropxId: String(row[idColumn as keyof typeof row] ?? ""),
       biometricId: String(row.biometric_id ?? ""),
       fullName: String(row.full_name ?? ""),
+      approvalProfileId: resolvedProfileType === "workforce" ? legacyIdentity.data?.legacy_profile_id ?? null : row.id as string,
+      approvalProfileType: resolvedProfileType === "workforce" ? "contractor" as const : resolvedProfileType,
       filter: (item: Awaited<ReturnType<typeof loadAttendanceReportRows>>[number]) => Boolean(enrolmentId) && cleanEnrolmentId(item.enrolmentId) === enrolmentId
     };
   }
@@ -253,8 +280,8 @@ export async function POST(request: NextRequest) {
     }
     if (remarks.length < 5) throw new Error("Enter a short explanation.");
     const worker = await resolveWorker({ accountId, profileType });
-    if (worker.profileType !== "employee" && worker.profileType !== "contractor") {
-      throw new Error("Attendance regularization is available for employees and independent contractors only.");
+    if (!worker.approvalProfileId || (worker.approvalProfileType !== "employee" && worker.approvalProfileType !== "contractor")) {
+      throw new Error("Attendance regularization requires an active People approval identity for this Workforce profile.");
     }
     const settingsResult = await supabaseAdmin.from("hr_company_settings")
       .select("regularization_manager_levels,regularization_max_backdate_days")
@@ -268,8 +295,8 @@ export async function POST(request: NextRequest) {
     }
     const approvalSteps = await resolveReportingApprovalSteps({
       companyId: worker.companyId,
-      profileId: worker.profileId,
-      profileType: worker.profileType,
+      profileId: worker.approvalProfileId,
+      profileType: worker.approvalProfileType,
       managerLevels
     });
 

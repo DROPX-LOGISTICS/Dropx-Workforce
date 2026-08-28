@@ -13,6 +13,8 @@ export type ConnectWorkforceAccount = {
   dropxId: string;
   biometricId: string;
   fullName: string;
+  legacyPeopleProfileId: string | null;
+  legacyPeopleProfileType: "contractor" | null;
 };
 
 export async function resolveConnectWorkforceAccount(input: {
@@ -45,7 +47,24 @@ export async function resolveConnectWorkforceAccount(input: {
     .maybeSingle();
   if (profileResult.error) throw new Error(profileResult.error.message);
   const profile = profileResult.data;
-  if (!profile || profile.is_active === false) throw new Error("Workforce account is inactive or unavailable.");
+  if (!profile) throw new Error("Workforce account is inactive or unavailable.");
+  if (profileType === "workforce") {
+    const stateResult = await supabaseAdmin.from("workforce")
+      .select("deleted_at,migration_state,onboarding_status,lifecycle_status")
+      .eq("company_id", profile.company_id)
+      .eq("id", profile.id)
+      .maybeSingle();
+    if (stateResult.error) throw new Error(stateResult.error.message);
+    const state = stateResult.data;
+    const terminal = new Set(["rejected", "cancelled", "terminated", "settled", "exited", "offboarded", "deactivated"]);
+    if (!state || state.deleted_at || state.migration_state === "reclassified"
+      || terminal.has(String(state.onboarding_status ?? "").toLowerCase())
+      || terminal.has(String(state.lifecycle_status ?? "").toLowerCase())) {
+      throw new Error("Workforce account is inactive or unavailable.");
+    }
+  } else if (profile.is_active === false) {
+    throw new Error("Workforce account is inactive or unavailable.");
+  }
 
   const previewValue = cookies().get("dropx_connect_preview_account")?.value ?? "";
   const previewMatches = previewValue === `${profileType}:${input.accountId}:${profile.company_id}`;
@@ -71,12 +90,26 @@ export async function resolveConnectWorkforceAccount(input: {
     throw new Error("This account does not belong to the signed-in mobile number.");
   }
 
+  const legacyIdentity = profileType === "workforce"
+    ? await supabaseAdmin.from("workforce_identity_links")
+      .select("legacy_profile_type,legacy_profile_id")
+      .eq("company_id", profile.company_id)
+      .eq("target_profile_type", "workforce")
+      .eq("target_profile_id", profile.id)
+      .eq("legacy_profile_type", "contractor")
+      .eq("compatibility_active", true)
+      .maybeSingle()
+    : { data: null, error: null };
+  if (legacyIdentity.error) throw new Error(legacyIdentity.error.message);
+
   return {
     companyId: String(profile.company_id),
     profileId: String(profile.id),
     profileType,
     dropxId: String(profile[idColumn as keyof typeof profile] ?? ""),
     biometricId: String(profile.biometric_id ?? ""),
-    fullName: String(profile.full_name ?? "")
+    fullName: String(profile.full_name ?? ""),
+    legacyPeopleProfileId: legacyIdentity.data?.legacy_profile_id ?? null,
+    legacyPeopleProfileType: legacyIdentity.data ? "contractor" : null
   };
 }

@@ -49,7 +49,7 @@ type BiometricWorkerLookupRow = {
 };
 
 type BiometricWorkerLookup = BiometricWorkerLookupRow & {
-  profileType: "employee" | "field_executive" | "contractor" | "vendor" | "worker";
+  profileType: "employee" | "workforce" | "field_executive" | "contractor" | "vendor" | "worker";
 };
 
 type DailyRow = {
@@ -63,6 +63,7 @@ type DailyRow = {
   status: string | null;
   remark: string | null;
   employee_id: string | null;
+  workforce_id: string | null;
   field_executive_id: string | null;
   location_id: string | null;
   employee_code: string | null;
@@ -120,6 +121,7 @@ function normalizeDailyRows(rows: Partial<DailyRow>[]): DailyRow[] {
     status: row.status ?? "P",
     remark: row.remark ?? null,
     employee_id: row.employee_id ?? null,
+    workforce_id: row.workforce_id ?? null,
     field_executive_id: row.field_executive_id ?? null,
     location_id: row.location_id ?? null,
     employee_code: row.employee_code ?? null,
@@ -342,8 +344,10 @@ async function loadDailyWorkerSnapshot({
       workerName = employee.data.full_name ?? null;
       locationId = employee.data.location_id ?? locationId;
     }
-  } else if (accountId && ["field_executive", "contractor", "vendor", "worker"].includes(profileType ?? "")) {
-    const table = profileType === "contractor"
+  } else if (accountId && ["workforce", "field_executive", "contractor", "vendor", "worker"].includes(profileType ?? "")) {
+    const table = profileType === "workforce"
+      ? "workforce"
+      : profileType === "contractor"
       ? "contractors"
       : profileType === "vendor"
         ? "vendors"
@@ -460,6 +464,7 @@ export async function rebuildAttendanceDay(companyId: string, enrolmentId: strin
     enrolment_id: enrolmentId,
     worker_type: latestPunch.data?.worker_type ?? null,
     employee_id: latestPunch.data?.employee_id ?? null,
+    workforce_id: latestPunch.data?.profile_type === "workforce" ? latestPunch.data.account_id : null,
     field_executive_id: latestPunch.data?.field_executive_id ?? null,
     location_id: latestPunch.data?.location_id ?? null,
     punch_date: punchDate,
@@ -484,9 +489,10 @@ export async function rebuildAttendanceDay(companyId: string, enrolmentId: strin
     .upsert(enrichedPayload, { onConflict: "company_id,enrolment_id,punch_date" });
 
   if (isMissingColumnError(firstUpsert.error)) {
+    const { workforce_id: _workforceId, ...fallbackPayload } = basePayload;
     const fallbackUpsert = await supabaseAdmin
       .from("attendance_daily")
-      .upsert(basePayload, { onConflict: "company_id,enrolment_id,punch_date" });
+      .upsert(fallbackPayload, { onConflict: "company_id,enrolment_id,punch_date" });
     if (fallbackUpsert.error) throw new Error(fallbackUpsert.error.message);
     return;
   }
@@ -556,6 +562,7 @@ export async function rebuildAttendanceReviewDay({
     enrolment_id: enrolmentId,
     worker_type: isInactive ? latestPunch.worker_type : "unmapped",
     employee_id: latestPunch.employee_id ?? null,
+    workforce_id: latestPunch.profile_type === "workforce" ? latestPunch.account_id : null,
     field_executive_id: latestPunch.field_executive_id ?? null,
     location_id: latestPunch.location_id ?? null,
     employee_code: workerSnapshot.workerCode ?? enrolmentId,
@@ -576,6 +583,14 @@ export async function rebuildAttendanceReviewDay({
   const upsert = await supabaseAdmin
     .from("attendance_daily")
     .upsert(payload, { onConflict: "company_id,enrolment_id,punch_date" });
+  if (isMissingColumnError(upsert.error)) {
+    const { workforce_id: _workforceId, ...fallbackPayload } = payload;
+    const fallbackUpsert = await supabaseAdmin
+      .from("attendance_daily")
+      .upsert(fallbackPayload, { onConflict: "company_id,enrolment_id,punch_date" });
+    if (fallbackUpsert.error) throw new Error(fallbackUpsert.error.message);
+    return;
+  }
   if (upsert.error) throw new Error(upsert.error.message);
 }
 
@@ -759,6 +774,7 @@ export async function loadAttendanceReportRows({
     status,
     remark,
     employee_id,
+    workforce_id,
     field_executive_id,
     location_id,
     employee_code,
@@ -808,7 +824,7 @@ export async function loadAttendanceReportRows({
   const dailyLocationIds = Array.from(new Set(dailyRows.map((row) => row.location_id).filter(Boolean))) as string[];
   const enrolmentIds = Array.from(new Set(dailyRows.map((row) => row.enrolment_id)));
   const biometricVariants = biometricIdVariants(enrolmentIds);
-  const [employeeResult, executiveResult, locationResult, biometricEmployeeResult, biometricExecutiveResult, biometricContractorResult, biometricVendorResult, biometricWorkerResult] = await Promise.all([
+  const [employeeResult, executiveResult, locationResult, biometricWorkforceResult, biometricEmployeeResult, biometricExecutiveResult, biometricContractorResult, biometricVendorResult, biometricWorkerResult] = await Promise.all([
     employeeIds.length
       ? supabaseAdmin
         .from("employees")
@@ -829,6 +845,13 @@ export async function loadAttendanceReportRows({
         .select("id, station_code, station_name")
         .eq("company_id", companyId)
         .in("id", dailyLocationIds)
+      : Promise.resolve({ data: [], error: null }),
+    biometricVariants.length
+      ? supabaseAdmin
+        .from("workforce")
+        .select("dropx_id, full_name, biometric_id, designation, designation_id, location_id")
+        .eq("company_id", companyId)
+        .in("biometric_id", biometricVariants)
       : Promise.resolve({ data: [], error: null }),
     biometricVariants.length
       ? supabaseAdmin
@@ -870,6 +893,7 @@ export async function loadAttendanceReportRows({
   if (executiveResult.error) throw new Error(executiveResult.error.message);
   if (locationResult.error) throw new Error(locationResult.error.message);
   if (biometricEmployeeResult.error) throw new Error(biometricEmployeeResult.error.message);
+  if (biometricWorkforceResult.error) throw new Error(biometricWorkforceResult.error.message);
   if (biometricExecutiveResult.error) throw new Error(biometricExecutiveResult.error.message);
   if (biometricContractorResult.error) throw new Error(biometricContractorResult.error.message);
   if (biometricVendorResult.error) throw new Error(biometricVendorResult.error.message);
@@ -880,6 +904,7 @@ export async function loadAttendanceReportRows({
   const locationsById = new Map(((locationResult.data ?? []) as LocationLookupRow[]).map((location) => [location.id, location]));
   const biometricWorkers: BiometricWorkerLookup[] = [
     ...((biometricEmployeeResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "employee" as const })),
+    ...((biometricWorkforceResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "workforce" as const })),
     ...((biometricContractorResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "contractor" as const })),
     ...((biometricVendorResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "vendor" as const })),
     ...((biometricWorkerResult.data ?? []) as BiometricWorkerLookupRow[]).map((row) => ({ ...row, profileType: "worker" as const })),
@@ -940,7 +965,11 @@ export async function loadAttendanceReportRows({
       enrolmentId: row.enrolment_id,
       workerCode: employee?.employee_code ?? executive?.dropx_id ?? biometricWorker?.employee_code ?? biometricWorker?.dropx_id ?? row.employee_code ?? row.enrolment_id,
       workerName: employee?.full_name ?? executive?.full_name ?? biometricWorker?.full_name ?? row.worker_name ?? "Unknown",
-      workerType: row.worker_type === "employee" || biometricWorker?.profileType === "employee" ? "Employee" : "Individual Contract",
+      workerType: row.worker_type === "employee" || biometricWorker?.profileType === "employee"
+        ? "Employee"
+        : biometricWorker?.profileType === "workforce" || row.workforce_id
+          ? "Workforce"
+          : "Individual Contract",
       location: station?.station_code ?? row.station_code ?? "-",
       designation: designation?.code ?? executive?.designation ?? biometricDesignation?.code ?? biometricWorker?.designation ?? "-",
       punchDate: row.punch_date,

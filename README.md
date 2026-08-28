@@ -1,12 +1,12 @@
-# DropX Partner Dashboard
+# DropX Workforce
 
-Deployment sync: dashboard Git connection enabled on 2026-07-19.
+Production: [workforce.dropxlogistics.com](https://workforce.dropxlogistics.com)
 
-Next.js dashboard for Provider ID mapping, rate cards, report imports, earnings, exceptions, and salary controls.
+Independent Workforce operations product for associate and operations-partner onboarding, registration, activation, provider IDs, rate cards, communications, and lifecycle management.
 
 ## Current Status
 
-This frontend is scaffolded with mock data and is ready to connect to the Supabase schema that has already been applied to the `DropX Partner` project.
+The product is live with a Workforce-only navigation and designation boundary. Existing in-progress registrations remain on the protected compatibility flow while Workforce records are mirrored into the dedicated data model.
 
 ## Local Setup
 
@@ -21,7 +21,7 @@ Create `.env.local`:
 NEXT_PUBLIC_SUPABASE_URL=https://uimajyffojydenqsegjv.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-NEXT_PUBLIC_APP_URL=https://dashboard.dropxlogistics.com
+NEXT_PUBLIC_APP_URL=https://workforce.dropxlogistics.com
 CASH_RECON_WORKER_URL=https://cash-recon-worker.withered-voice-1c40.workers.dev
 CASH_RECON_ADMIN_KEY=
 REPORT_AUTO_WORKER_URL=https://report-auto-worker.withered-voice-1c40.workers.dev
@@ -32,19 +32,12 @@ REPORT_AUTO_ADMIN_KEY=
 
 Never expose `SUPABASE_SERVICE_ROLE_KEY` to browser or mobile code.
 
-## Report Auto upload
+## Data Safety
 
-On **Report Imports**, each worker-backed source has **Upload file** (manual) and **Auto upload**.
-
-Auto calls `POST /api/report-imports/auto-run`, which proxies `REPORT_AUTO_WORKER_URL` with `x-admin-key`. Sources: `amazon_shipments`, `daily_edsp_metrics`, `delivered_shipment_detail`, `iocl_fuel`, `bpcl_fuel`, `cashbook`.
-
-Workforce Auto first checks `formattedCreationDate` on Amazon’s weekly-supp catalog. If Amazon has not published today’s files (often 8am–12pm IST), the API returns 409 — use Manual upload.
-
-Morning automation lives on the worker (06:00 IST kickoff + 08:00–15:00 IST poll). Set `REPORT_UPLOAD_ENABLED=true` and `DASHBOARD_IMPORT_COOKIE` on the worker so files land in Import Master. Hide the button with `REPORT_AUTO_UI_ENABLED=false` until that worker is deployed.
-
-OpsPulse Network Planning setup and operating notes are in `docs/ops-network-planning.md`.
-
-For independently assignable Ops menu permissions, run `scripts/ops_menu_permissions_v1.sql` before deploying the matching application release. The migration preserves current Performance, Capacity, Reports, Performance Master, and Capacity Master grants while separating their future access controls.
+- Workforce/People isolation is master-driven through each designation's business category.
+- Existing invited registrations continue through the compatibility path and mirror into the Workforce data model.
+- Workforce screens query only Workforce-classified designations and profiles.
+- Run `npm run build` before deployment; the prebuild boundary check protects contractor registration tables from direct writes.
 
 ## Invitation Email Sender
 
@@ -55,7 +48,7 @@ User invitations are sent by Supabase Auth when `Send email invitation` is check
 - SMTP host, port, username, and password from the DropX email provider
 - Verified DNS records for SPF, DKIM, and DMARC
 
-Keep the Supabase redirect allowlist including `https://dashboard.dropxlogistics.com/login` and `https://dashboard.dropxlogistics.com/auth/callback`.
+Keep the Supabase redirect allowlist including `https://workforce.dropxlogistics.com/login` and `https://workforce.dropxlogistics.com/auth/callback`.
 
 ## Vercel Setup
 
@@ -64,22 +57,12 @@ Keep the Supabase redirect allowlist including `https://dashboard.dropxlogistics
 3. Set the environment variables above in Vercel project settings.
 4. Deploy.
 
-## MVP Screens
+## Workforce Product Areas
 
-- Dashboard
-- Delivery Associate register
-- Provider ID mapping
-- Rate cards
-- Report upload
-- Earnings
-- Exception queue
-- Settings
-
-## Next Build Steps
-
-1. Replace mock data with Supabase reads.
-2. Add auth and role redirects.
-3. Add station-level access filters for managers.
-4. Build Provider ID mapping create/correct workflow.
-5. Build Amazon report import using the sample `111.xlsx`.
-6. Add daily earnings calculation API route.
+- Workforce command dashboard
+- Workforce register and onboarding journeys
+- Operations-partner onboarding for van renters, van vendors, sorters, and cleaning staff
+- Provider ID onboarding and rate-card mapping
+- Activation and lifecycle management
+- DropX One and WhatsApp communications
+- Workforce-only designations, users, roles, and access

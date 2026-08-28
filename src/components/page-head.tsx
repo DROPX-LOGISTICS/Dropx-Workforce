@@ -12,17 +12,13 @@ export function PageHead({
   action?: ReactNode;
 }) {
   return (
-    <div className="page-head">
-      <div>
+    <header className="page-head">
+      <div className="page-head-copy">
         {eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}
         <h1>{title}</h1>
-        {subtitle ? (
-          <p className="subtle" style={{ marginTop: 6 }}>
-            {subtitle}
-          </p>
-        ) : null}
+        {subtitle ? <p className="subtle">{subtitle}</p> : null}
       </div>
-      {action}
-    </div>
+      {action ? <div className="page-head-action">{action}</div> : null}
+    </header>
   );
 }

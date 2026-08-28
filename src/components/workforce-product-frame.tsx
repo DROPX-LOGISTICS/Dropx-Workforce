@@ -41,10 +41,10 @@ function WorkforceRiderMark() {
       className="wf-rider-mark"
       viewBox="0 0 32 32"
     >
-      <circle cx="7.5" cy="23.5" fill="none" r="4" stroke="#344054" strokeWidth="2" />
-      <circle cx="24.5" cy="23.5" fill="none" r="4" stroke="#344054" strokeWidth="2" />
+      <circle cx="7.5" cy="23.5" fill="none" r="4" stroke="currentColor" strokeWidth="2" />
+      <circle cx="24.5" cy="23.5" fill="none" r="4" stroke="currentColor" strokeWidth="2" />
       <path d="M7.5 23.5h7l4-7.7 3.5 7.7h2.5M13.3 15.8l-3 5.2h8" fill="none" stroke="#f15a24" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-      <path d="m18.5 15.8 5.2-1.2 2.2 3.2" fill="none" stroke="#344054" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      <path d="m18.5 15.8 5.2-1.2 2.2 3.2" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
       <circle cx="18.2" cy="7.2" fill="#f15a24" r="2.3" />
       <path d="m17.3 10.2-3.6 4 4.8 1.7 3.1-3.6" fill="none" stroke="#f15a24" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
       <rect fill="#f7b321" height="4.7" rx="1" width="5.2" x="9.5" y="9.4" />
@@ -111,7 +111,12 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
 
             if (item.href) {
               return (
-                <PendingLink className={`wf-left-direct ${directActive ? "active" : ""}`.trim()} href={item.href} key={item.label}>
+                <PendingLink
+                  aria-current={directActive ? "page" : undefined}
+                  className={`wf-left-direct ${directActive ? "active" : ""}`.trim()}
+                  href={item.href}
+                  key={item.label}
+                >
                   <NavigationIcon aria-hidden="true" size={16} />
                   <span>{item.label}</span>
                 </PendingLink>
@@ -122,6 +127,7 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
               <section className={childActive ? "active" : ""} key={item.label}>
                 <button
                   aria-expanded={expanded}
+                  aria-controls={`wf-nav-${item.code}`}
                   className="wf-left-group-label"
                   onClick={() => setExpandedGroup((current) => current === item.label ? null : item.label)}
                   type="button"
@@ -131,9 +137,10 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
                   <ChevronDown aria-hidden="true" className={`wf-left-group-chevron ${expanded ? "open" : ""}`.trim()} size={12} />
                 </button>
                 {expanded ? (
-                  <div className="wf-left-children">
+                  <div className="wf-left-children" id={`wf-nav-${item.code}`}>
                     {item.children?.map((child) => child.href ? (
                       <PendingLink
+                        aria-current={active === child.label ? "page" : undefined}
                         className={active === child.label ? "active" : ""}
                         disableWhenCurrent
                         href={child.href}
@@ -167,7 +174,7 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
             {mobileOpen ? <X size={19} /> : <Menu size={19} />}
           </button>
           <div className="wf-slim-page-title">
-            <span>Workforce</span>
+            <span>Field operations</span>
             <strong>{active}</strong>
           </div>
           <div className="wf-product-actions">{actions}</div>

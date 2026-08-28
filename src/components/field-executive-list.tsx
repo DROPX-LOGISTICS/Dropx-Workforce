@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EllipsisVertical, Eye, Pencil, UserRound } from "lucide-react";
+import { ChevronDown, EllipsisVertical, Eye, Pencil, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
 
@@ -72,7 +72,7 @@ function MultiCheckFilter({
     <div className="bulk-multi-filter field-executive-filter" ref={rootRef}>
       <button className={`bulk-multi-filter-trigger ${open ? "open" : ""}`} onClick={() => setOpen((current) => !current)} type="button">
         <strong>{selected.length ? `${label}: ${selected.length}` : allLabel}</strong>
-        <span>v</span>
+        <ChevronDown aria-hidden="true" size={14} />
       </button>
       {open ? (
         <div className="bulk-multi-filter-menu">
@@ -189,13 +189,24 @@ export function FieldExecutiveList({
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const visibleRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const hasFilters = Boolean(search || providerFilter.length || modelFilter.length || locationFilter.length || designationFilter.length || statusFilter.length);
+
+  function clearFilters() {
+    setSearch("");
+    setProviderFilter([]);
+    setModelFilter([]);
+    setLocationFilter([]);
+    setDesignationFilter([]);
+    setStatusFilter([]);
+    setPage(1);
+  }
 
   return (
     <section className="panel">
       <div className="panel-head toolbar">
         <div>
           <h2>{title}</h2>
-          <p className="subtle">{filteredRows.length} of {rows.length} records</p>
+          <p className="subtle"><SlidersHorizontal aria-hidden="true" size={13} /> {filteredRows.length} of {rows.length} records</p>
         </div>
         <div className="field-executive-filters">
           <MultiCheckFilter
@@ -257,6 +268,11 @@ export function FieldExecutiveList({
             placeholder="Search ID, biometric ID, name, mobile, email"
             value={search}
           />
+          {hasFilters ? (
+            <button className="field-executive-clear" onClick={clearFilters} type="button">
+              <X aria-hidden="true" size={14} /> Clear
+            </button>
+          ) : null}
         </div>
       </div>
       <div className={`table-wrap field-executive-table-wrap ${openMenuId ? "menu-open" : ""}`}>
@@ -326,6 +342,34 @@ export function FieldExecutiveList({
             )}
           </tbody>
         </table>
+      </div>
+      <div className="workforce-register-cards">
+        {visibleRows.length ? visibleRows.map((row) => (
+          <article className="workforce-register-card" key={`mobile-${row.id}`}>
+            <header>
+              <div className="executive-name-cell">
+                <span className="executive-avatar" aria-hidden="true">
+                  {row.profilePhotoUrl ? <img alt="" src={row.profilePhotoUrl} /> : <UserRound size={17} />}
+                </span>
+                <div><strong>{row.fullName}</strong><small>{row.designation}</small></div>
+              </div>
+              <StatusPill status={row.status} />
+            </header>
+            <dl>
+              <div><dt>DropX ID</dt><dd>{row.dropxId}</dd></div>
+              <div><dt>Biometric ID</dt><dd>{row.biometricId}</dd></div>
+              <div><dt>Location</dt><dd>{row.location}</dd></div>
+              <div><dt>Mobile</dt><dd>{row.mobile}</dd></div>
+              <div className="wide"><dt>Email</dt><dd>{row.email}</dd></div>
+            </dl>
+            {showActions && (row.viewHref || row.editHref) ? (
+              <footer>
+                {row.viewHref ? <PendingLink className="button secondary" href={row.viewHref} scroll={false}><Eye aria-hidden="true" size={15} /> View</PendingLink> : null}
+                {canEdit && row.canEdit !== false && row.editHref ? <PendingLink className="button" href={row.editHref} scroll={false}><Pencil aria-hidden="true" size={15} /> Edit</PendingLink> : null}
+              </footer>
+            ) : null}
+          </article>
+        )) : <div className="mobile-empty-card">{emptyLabel}</div>}
       </div>
       {totalPages > 1 ? (
         <div className="panel-foot pagination">

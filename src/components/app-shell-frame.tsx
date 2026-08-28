@@ -11,12 +11,13 @@ type AppShellFrameProps = {
   desktopActions: ReactNode;
   mobileActions: ReactNode;
   sidebar: ReactNode;
+  variant?: "default" | "workforce";
 };
 
 const flashQueryKeyPattern = /^(?:error|notice|success|sent|saved|deleted|added|initialized|updated|created|uploaded)$/i;
 const compoundFlashQueryKeyPattern = /_(?:sent|saved|deleted|added|initialized|updated|created|uploaded)$/i;
 
-export function AppShellFrame({ children, desktopActions, mobileActions, sidebar }: AppShellFrameProps) {
+export function AppShellFrame({ children, desktopActions, mobileActions, sidebar, variant = "default" }: AppShellFrameProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -52,7 +53,7 @@ export function AppShellFrame({ children, desktopActions, mobileActions, sidebar
   }, [pathname, searchParams]);
 
   return (
-    <div className={`shell ${sidebarOpen ? "sidebar-open" : ""}`}>
+    <div className={`shell ${variant === "workforce" ? "workforce-shell" : ""} ${sidebarOpen ? "sidebar-open" : ""}`.trim()}>
       <EventLogTracker />
       <header className="mobile-topbar">
         <button

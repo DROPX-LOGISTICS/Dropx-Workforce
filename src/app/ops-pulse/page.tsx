@@ -181,7 +181,7 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
         .limit(5000),
       supabaseAdmin.from("field_executives")
         .select("id,onboarding_status,is_active")
-        .in("location_id", locationIds).eq("is_active", true)
+        .in("location_id", locationIds)
     ]);
   const attendance = attendanceResult.data ?? [];
   const dayVolume = sum(facts, date, date);
@@ -230,8 +230,13 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
   const averageSlsScore = slsScores.length ? slsScores.reduce((total, value) => total + value, 0) / slsScores.length : 0;
   const week = amazonWeek(range.to);
   const executives = executivesResult.data ?? [];
-  const onboardingPending = executives.filter((row) => row.onboarding_status !== "active").length;
-  const onboardingActive = executives.filter((row) => row.onboarding_status === "active").length;
+  const onboardingStatus = (row: { onboarding_status: string | null; is_active: boolean }) =>
+    String(row.onboarding_status ?? "pending").trim().toLowerCase();
+  const onboardingActive = executives.filter((row) => row.is_active && onboardingStatus(row) === "active").length;
+  const onboardingReview = executives.filter((row) => onboardingStatus(row) === "under_review").length;
+  const onboardingReturned = executives.filter((row) => onboardingStatus(row) === "returned").length;
+  const onboardingPending = executives.filter((row) => !["active", "under_review", "returned", "rejected", "cancelled"].includes(onboardingStatus(row))).length;
+  const onboardingInactive = executives.filter((row) => !row.is_active && onboardingStatus(row) === "active").length;
   const stationComparison = selectedLocations.map((location) => {
     const stationCpsRows = mtdCpsRows.filter((row) => row.station_code === location.station_code);
     const stationShipmentRows = facts.filter((row) => row.station_code === location.station_code && row.work_date >= range.from && row.work_date <= range.to);
@@ -322,10 +327,13 @@ export default async function OpsPulsePage({ searchParams }: { searchParams?: Se
             <header><div><span>DA ONBOARDING</span><h2>In-app completion</h2></div><Link href="/field-executive">Open onboarding →</Link></header>
             <div className="ops-onboarding-figure">
               <div><strong>{onboardingPending}</strong><span>Pending</span></div>
-              <div><strong>{onboardingActive}</strong><span>Completed</span></div>
-              <div><strong>{executives.length}</strong><span>Active DAs</span></div>
+              <div><strong>{onboardingReview}</strong><span>Under review</span></div>
+              <div><strong>{onboardingReturned}</strong><span>Returned</span></div>
+              <div><strong>{onboardingActive}</strong><span>Active</span></div>
+              <div><strong>{onboardingInactive}</strong><span>Inactive</span></div>
+              <div><strong>{executives.length}</strong><span>Total records</span></div>
             </div>
-            <small className="ops-module-note">Live from field executive onboarding status for the selected locations.</small>
+            <small className="ops-module-note">Live lifecycle status for the selected locations. Open onboarding to view, correct or review a profile.</small>
           </article>
         </section>
 

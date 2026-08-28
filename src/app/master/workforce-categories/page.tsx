@@ -70,11 +70,11 @@ export default async function WorkforceCategoriesPage({
   const flash = loadFlash();
 
   return (
-    <AppShell active="Workforce Categories" pageCode="workforce_categories">
+    <AppShell active="Engagement Types" pageCode="workforce_categories">
       <PageHead
         eyebrow="Master Data"
-        title="Workforce Categories"
-        subtitle="Configure onboarding fields once per workforce category, then assign categories to designations."
+        title="Engagement Types"
+        subtitle="Configure employee, contractor, vendor, worker, and other legal engagement types independently from designation categories."
       />
 
       {result.error ? (
@@ -99,20 +99,20 @@ export default async function WorkforceCategoriesPage({
         <section className="panel">
           <div className="panel-head toolbar">
             <div>
-              <h2>Category list</h2>
+              <h2>Engagement type list</h2>
               <p className="subtle">{filtered.length} of {categories.length} records</p>
             </div>
             <div className="master-toolbar">
               <form action="/master/workforce-categories" className="inline-search">
-                <input className="field" defaultValue={searchParams?.q ?? ""} name="q" placeholder="Search category" />
+                <input className="field" defaultValue={searchParams?.q ?? ""} name="q" placeholder="Search engagement type" />
                 <button className="button secondary compact" type="submit">Search</button>
               </form>
-              {permission.canAdd ? <PendingLink className="button compact" href="/master/workforce-categories?add=1" scroll={false}>Add category</PendingLink> : null}
+              {permission.canAdd ? <PendingLink className="button compact" href="/master/workforce-categories?add=1" scroll={false}>Add engagement type</PendingLink> : null}
             </div>
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Code</th><th>Category</th><th>Statutory</th><th>Activation</th><th>App pages</th><th>Type</th><th>Status</th><th>Action</th></tr></thead>
+              <thead><tr><th>Code</th><th>Engagement type</th><th>Statutory</th><th>Activation</th><th>App pages</th><th>Type</th><th>Status</th><th>Action</th></tr></thead>
               <tbody>
                 {filtered.map((category) => (
                   <tr key={category.id}>
@@ -142,10 +142,10 @@ export default async function WorkforceCategoriesPage({
         <div className="modal-backdrop">
           <section className="modal-panel wide designation-modal">
             <div className="panel-head">
-              <div><h2>Add workforce category</h2><p className="subtle">Define the category and its onboarding fields.</p></div>
+              <div><h2>Add engagement type</h2><p className="subtle">Define the engagement type and its onboarding fields.</p></div>
               <PendingLink className="icon-button" href="/master/workforce-categories" scroll={false} aria-label="Close">x</PendingLink>
             </div>
-            <WorkforceCategoryForm action={createWorkforceCategory} submitLabel="Add category" />
+            <WorkforceCategoryForm action={createWorkforceCategory} submitLabel="Add engagement type" />
           </section>
         </div>
       ) : null}
@@ -154,7 +154,7 @@ export default async function WorkforceCategoriesPage({
         <div className="modal-backdrop">
           <section className="modal-panel wide designation-modal">
             <div className="panel-head">
-              <div><h2>Edit workforce category</h2><p className="subtle">These rules apply to every designation assigned to this category.</p></div>
+              <div><h2>Edit engagement type</h2><p className="subtle">These rules apply to every designation assigned to this engagement type.</p></div>
               <PendingLink className="icon-button" href="/master/workforce-categories" scroll={false} aria-label="Close">x</PendingLink>
             </div>
             <WorkforceCategoryForm action={updateWorkforceCategory} initial={editing} submitLabel="Save changes" />
@@ -163,12 +163,12 @@ export default async function WorkforceCategoriesPage({
                 <input name="id" type="hidden" value={editing.id} />
                 <SubmitButton
                   className="button danger"
-                  confirmDescription="This is available only when no designation or people record uses the category."
-                  confirmMessage={`Delete ${editing.name}? The category will be removed from onboarding, ID settings, and category lists.`}
-                  confirmSubmitText="Delete category"
+                  confirmDescription="This is available only when no designation or people record uses the engagement type."
+                  confirmMessage={`Delete ${editing.name}? The engagement type will be removed from onboarding, ID settings, and engagement type lists.`}
+                  confirmSubmitText="Delete engagement type"
                   pendingText="Deleting"
                 >
-                  Delete category
+                  Delete engagement type
                 </SubmitButton>
               </form>
             ) : null}
@@ -177,12 +177,12 @@ export default async function WorkforceCategoriesPage({
                 <input name="id" type="hidden" value={editing.id} />
                 <SubmitButton
                   className="button danger"
-                  confirmDescription="Workers will be removed from all designations and category lists. Historical worker profile records will be retained."
-                  confirmMessage="Force delete Workers category?"
+                  confirmDescription="Workers will be removed from all designations and engagement type lists. Historical worker profile records will be retained."
+                  confirmMessage="Force delete Workers engagement type?"
                   confirmSubmitText="Force delete"
                   pendingText="Deleting"
                 >
-                  Force delete category
+                  Force delete engagement type
                 </SubmitButton>
               </form>
             ) : null}

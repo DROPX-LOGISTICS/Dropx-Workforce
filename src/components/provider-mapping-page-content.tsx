@@ -9,6 +9,7 @@ import {
 } from "@/components/provider-mapping-worksheet";
 import { type AuthorizationContext, requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type LocationRow = {
@@ -33,6 +34,7 @@ type EmployeeRow = {
   date_of_join: string;
   location_id: string | null;
   employee_code: string | null;
+  designation_id: string | null;
   is_active: boolean;
 };
 
@@ -46,9 +48,11 @@ type ContractorRow = {
   is_active: boolean;
 };
 
-type FieldOperationsDesignationRow = {
+type DeliveryNetworkDesignationRow = {
+  id: string;
   code: string;
   name: string;
+  designation_category?: unknown;
 };
 
 type MappingRow = {
@@ -143,11 +147,10 @@ async function loadMappingData(authorization: AuthorizationContext) {
       .order("full_name"),
     supabaseAdmin
       .from("employees")
-      .select("id, full_name, date_of_join, location_id, employee_code, is_active, designations!inner(is_field_operations)")
+      .select("id, full_name, date_of_join, location_id, employee_code, designation_id, is_active")
       .eq("company_id", companyId)
       .eq("is_active", true)
       .is("deleted_at", null)
-      .eq("designations.is_field_operations", true)
       .order("full_name"),
     supabaseAdmin
       .from("contractors")
@@ -158,10 +161,9 @@ async function loadMappingData(authorization: AuthorizationContext) {
       .order("full_name"),
     supabaseAdmin
       .from("designations")
-      .select("code, name")
+      .select("id, code, name, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active)")
       .eq("company_id", companyId)
-      .eq("is_active", true)
-      .eq("is_field_operations", true),
+      .eq("is_active", true),
     supabaseAdmin
       .from("field_executive_provider_mappings")
       .select(`
@@ -243,13 +245,18 @@ async function loadMappingData(authorization: AuthorizationContext) {
     }
   });
 
-  const fieldOperationsDesignationKeys = new Set(
-    ((designationsResult.data ?? []) as FieldOperationsDesignationRow[])
+  const deliveryNetworkDesignations = ((designationsResult.data ?? []) as DeliveryNetworkDesignationRow[])
+    .filter((designation) => firstDesignationBusinessCategory(designation.designation_category)?.people_module === "delivery_network");
+  const deliveryNetworkDesignationIds = new Set(deliveryNetworkDesignations.map((designation) => designation.id));
+  const deliveryNetworkDesignationKeys = new Set(
+    deliveryNetworkDesignations
       .flatMap((designation) => [designation.code, designation.name])
       .map((value) => value.trim().toLowerCase())
   );
   const workers = [
-    ...((employeesResult.data ?? []) as unknown as EmployeeRow[]).map((employee) => ({
+    ...((employeesResult.data ?? []) as unknown as EmployeeRow[])
+      .filter((employee) => employee.designation_id && deliveryNetworkDesignationIds.has(employee.designation_id))
+      .map((employee) => ({
       id: employee.id,
       sourceType: "employee" as const,
       fullName: employee.full_name,
@@ -258,7 +265,7 @@ async function loadMappingData(authorization: AuthorizationContext) {
       dropxId: employee.employee_code ?? ""
     })),
     ...((contractorsResult.data ?? []) as ContractorRow[])
-      .filter((contractor) => fieldOperationsDesignationKeys.has((contractor.designation ?? "").trim().toLowerCase()))
+      .filter((contractor) => deliveryNetworkDesignationKeys.has((contractor.designation ?? "").trim().toLowerCase()))
       .map((contractor) => ({
         id: contractor.id,
         sourceType: "contractor" as const,
@@ -313,11 +320,17 @@ async function loadMappingData(authorization: AuthorizationContext) {
 }
 
 export async function ProviderMappingPageContent({
-  active = "ID Mapping",
-  pageCode = "provider_mapping"
+  active = "ID & Rate Mapping",
+  eyebrow = "Source-of-truth bridge",
+  pageCode = "provider_mapping",
+  subtitle = "Maintain Delivery Network IDs, provider member IDs, date-effective history, payout methods and partner rates.",
+  title = "ID & pay mapping"
 }: {
   active?: string;
+  eyebrow?: string;
   pageCode?: string;
+  subtitle?: string;
+  title?: string;
 }) {
   const authorization = await requirePagePermission(pageCode, "access");
   const permission = authorization.permissions[pageCode];
@@ -330,9 +343,9 @@ export async function ProviderMappingPageContent({
   return (
     <AppShell active={active} pageCode={pageCode}>
       <PageHead
-        eyebrow="Source-of-truth bridge"
-        title="ID & pay mapping"
-        subtitle="Maintain DropX ID to Provider Member ID mappings, date-effective history, and payout rates in editable rows."
+        eyebrow={eyebrow}
+        title={title}
+        subtitle={subtitle}
       />
 
       {error || flashError || flashNotice ? (

@@ -63,6 +63,10 @@ export const accessPages = [
   { code: "notifications_history", name: "Notification History", sort_order: 109 },
   { code: "notifications_email", name: "Email Notifications", sort_order: 110 },
   { code: "notifications_app", name: "App Notifications", sort_order: 111 },
+  { code: "workforce_communications", name: "Communication Center", sort_order: 112 },
+  { code: "workforce_communications_app", name: "DropX One Notifications", sort_order: 113 },
+  { code: "workforce_communications_whatsapp", name: "Workforce WhatsApp", sort_order: 114 },
+  { code: "workforce_communications_history", name: "Workforce Communication History", sort_order: 115 },
   { code: "users", name: "Users & Access", sort_order: 112 },
   { code: "master_locations", name: "Locations", sort_order: 120 },
   { code: "master_providers", name: "Providers", sort_order: 121 },
@@ -71,7 +75,7 @@ export const accessPages = [
   { code: "master_payment_banks", name: "Payment Banks", sort_order: 124 },
   { code: "master_payment_heads", name: "Payment Heads", sort_order: 125 },
   { code: "master_contacts", name: "Contacts", sort_order: 126 },
-  { code: "workforce_categories", name: "Workforce Categories", sort_order: 126 },
+  { code: "workforce_categories", name: "Engagement Types", sort_order: 126 },
   { code: "workforce_whatsapp", name: "Workforce WhatsApp", sort_order: 127 },
   { code: "designations", name: "Designations", sort_order: 128 },
   { code: "biometric_devices", name: "Device Master", sort_order: 129 },
@@ -498,6 +502,10 @@ export async function ensureAccessPages(supabase: SupabaseClient, companyId: str
     await seedTargetPermissionsFromSources(supabase, companyId, ["cod_master"], "capacity_master");
     await seedTargetPermissionsFromSources(supabase, companyId, ["designations"], "workforce_categories");
     await seedTargetPermissionsFromSources(supabase, companyId, ["designations"], "workforce_whatsapp");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["notifications_app", "notifications_whatsapp", "notifications_history"], "workforce_communications");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["notifications_app"], "workforce_communications_app");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["notifications_whatsapp"], "workforce_communications_whatsapp");
+    await seedTargetPermissionsFromSources(supabase, companyId, ["notifications_history"], "workforce_communications_history");
     await seedTargetPermissionsFromSources(supabase, companyId, ["imports"], "master_imports");
     await seedTargetPermissionsFromSources(supabase, companyId, ["attendance_reports"], "raw_punch_reports");
   }

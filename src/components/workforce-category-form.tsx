@@ -42,7 +42,7 @@ export function WorkforceCategoryForm({
       {initial ? <input name="id" type="hidden" value={initial.id} /> : null}
       <div className="form-grid three">
         <label>
-          Category code
+          Engagement type code
           <input
             className="field"
             defaultValue={initial?.code ?? ""}
@@ -54,8 +54,8 @@ export function WorkforceCategoryForm({
           />
         </label>
         <label>
-          Category name
-          <input className="field" defaultValue={initial?.name ?? ""} name="name" placeholder="Enter category name" required />
+          Engagement type name
+          <input className="field" defaultValue={initial?.name ?? ""} name="name" placeholder="Enter engagement type name" required />
         </label>
         {initial ? (
           <label>
@@ -71,7 +71,7 @@ export function WorkforceCategoryForm({
       <section className="workforce-category-page-access">
         <div>
           <strong>Statutory applicability</strong>
-          <p className="subtle">Show the Not Applicable, PF and ESI selection while onboarding this category.</p>
+          <p className="subtle">Show the Not Applicable, PF and ESI selection while onboarding this engagement type.</p>
         </div>
         <label className="checkbox-line">
           <input
@@ -87,7 +87,7 @@ export function WorkforceCategoryForm({
       <section className="workforce-category-page-access">
         <div>
           <strong>DropX One page access</strong>
-          <p className="subtle">Choose category-controlled pages. My Profile and Settings are always available.</p>
+          <p className="subtle">Choose engagement-type-controlled pages. My Profile and Settings are always available.</p>
         </div>
         <AppPageAccessSelect initialPages={selectedPages} />
       </section>
@@ -95,7 +95,7 @@ export function WorkforceCategoryForm({
       <section className="workforce-category-page-access">
         <div>
           <strong>Direct activation</strong>
-          <p className="subtle">Let dashboard users complete this category's enabled onboarding fields and activate the profile immediately.</p>
+          <p className="subtle">Let dashboard users complete this engagement type's enabled onboarding fields and activate the profile immediately.</p>
         </div>
         <label className="checkbox-line">
           <input

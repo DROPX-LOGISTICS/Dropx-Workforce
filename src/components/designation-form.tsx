@@ -8,6 +8,7 @@ import {
   defaultAppPageAccess
 } from "@/components/app-page-access-select";
 import { SubmitButton } from "@/components/submit-button";
+import type { DesignationBusinessCategory } from "@/lib/designation-business-categories";
 import { normalizeDesignationCategories, type DesignationCategory } from "@/lib/designation-categories";
 import {
   designationPortalOptions,
@@ -39,6 +40,7 @@ type DesignationInitial = {
   id: string;
   code: string;
   name: string;
+  designation_category_id?: string | null;
   provider_ids: string[];
   model_ids?: string[] | null;
   onboarding_categories?: string[] | null;
@@ -451,6 +453,7 @@ function ModelMultiSelect({
 
 export function DesignationForm({
   action,
+  businessCategories,
   categories,
   initial,
   models,
@@ -458,6 +461,7 @@ export function DesignationForm({
   submitLabel = "Add designation"
 }: {
   action: (formData: FormData) => void;
+  businessCategories: DesignationBusinessCategory[];
   categories: WorkforceCategoryOption[];
   initial?: DesignationInitial | null;
   providers?: ProviderOption[];
@@ -491,8 +495,9 @@ export function DesignationForm({
           <input className="field" defaultValue={initial?.name ?? ""} name="name" placeholder="Enter designation name" required />
         </label>
         <label>
-          Category
+          Engagement type
           <CategoryMultiSelect categories={categories} selected={selectedCategories} setSelected={setSelectedCategories} />
+          <small>Employee, contractor, vendor, worker, or another configured legal relationship.</small>
         </label>
         <label>
           Models
@@ -520,10 +525,25 @@ export function DesignationForm({
           </label>
         ) : null}
       </div>
+      <section className="workforce-category-page-access designation-classification">
+        <div>
+          <strong>Designation classification</strong>
+          <p className="subtle">Define whether this designation belongs to Workforce or HR. This controls which dashboard and onboarding flow handles the profile.</p>
+        </div>
+        <label>
+          Workforce / HR category
+          <select className="field" defaultValue={initial?.designation_category_id ?? (businessCategories.length === 1 ? businessCategories[0].id : "")} name="designation_category_id" required>
+            <option value="">Select Workforce or HR</option>
+            {businessCategories.map((category) => (
+              <option key={category.id} value={category.id}>{category.name}</option>
+            ))}
+          </select>
+        </label>
+      </section>
       <section className="workforce-category-page-access">
         <div>
           <strong>DropX One page access</strong>
-          <p className="subtle">A page is available only when enabled for both this designation and its workforce category. My Profile and Settings are always available.</p>
+          <p className="subtle">A page is available only when enabled for both this designation and its engagement type. My Profile and Settings are always available.</p>
         </div>
         <AppPageAccessSelect initialPages={selectedPages} />
       </section>
@@ -542,7 +562,7 @@ export function DesignationForm({
         <PortalAccessMatrix initialValue={initial?.portal_permissions} />
       </section>
       {!selectedCategories.length ? (
-        <div className="designation-field-rule-empty">Select one or more workforce categories.</div>
+        <div className="designation-field-rule-empty">Select one or more engagement types.</div>
       ) : (
         <div className={`designation-field-rule-grid ${selectedCategories.length === 1 ? "single" : ""}`}>
           {selectedCategories.map((category) => (

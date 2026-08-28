@@ -217,6 +217,7 @@ function MultiCheckFilter({
 }
 
 export function BulkWhatsAppPanel({
+  allowExcelUpload = true,
   canSend,
   campaignError,
   campaigns,
@@ -225,8 +226,10 @@ export function BulkWhatsAppPanel({
   flash,
   profiles,
   templates,
+  surface = "dashboard",
   whatsAppEnabled
 }: {
+  allowExcelUpload?: boolean;
   canSend: boolean;
   campaignError: string | null;
   campaigns: Campaign[];
@@ -235,6 +238,7 @@ export function BulkWhatsAppPanel({
   flash: { error: string | null; notice: string | null };
   profiles: WhatsAppProfile[];
   templates: Template[];
+  surface?: "dashboard" | "workforce";
   whatsAppEnabled: boolean;
 }) {
   const router = useRouter();
@@ -318,14 +322,7 @@ export function BulkWhatsAppPanel({
   }));
   const excelFieldOptions = excelHeaders.map((header) => ({ value: header, label: header }));
   const fieldOptions = sourceMode === "excel" ? excelFieldOptions : databaseFieldOptions;
-  const sourceOptions = [
-    { value: "Dashboard User", label: "Dashboard Users" },
-    { value: "Employee", label: "Employees" },
-    { value: "Field Executive", label: "Field Executives" },
-    { value: "Independent Contractor", label: "Independent Contractors" },
-    { value: "Vendor", label: "Vendors" },
-    { value: "Worker", label: "Workers" }
-  ];
+  const sourceOptions = uniqueOptions(contacts.map((contact) => contact.source)).map((source) => ({ value: source, label: source }));
   const statusOptions = uniqueOptions(contacts.map((contact) => contact.status)).map((status) => ({ value: status.toLowerCase(), label: status }));
   const locationOptions = uniqueOptions(contacts.flatMap((contact) => contact.location.split(",").map((item) => item.trim()))).map((location) => ({ value: location, label: location }));
   const providerOptions = uniqueOptions(contacts.flatMap((contact) => (contact.provider ?? "").split(",").map((item) => item.trim()))).map((provider) => ({ value: provider, label: provider }));
@@ -572,7 +569,7 @@ export function BulkWhatsAppPanel({
     setProgress((current) => ({ ...current, phase: "sending", total: recipients.length, current: 0, sent: 0, failed: 0, message: "Creating campaign..." }));
     try {
       const formData = new FormData();
-      formData.set("sourceMode", sourceMode);
+      formData.set("sourceMode", surface === "workforce" ? "workforce" : sourceMode);
       formData.set("templateId", selectedTemplateId);
       formData.set("whatsappProfileId", selectedProfileId);
       formData.set("mappings", JSON.stringify(effectiveMappings));
@@ -634,24 +631,26 @@ export function BulkWhatsAppPanel({
       <section className="panel">
         <div className="panel-head">
           <div>
-            <h2>Bulk WhatsApp notifications</h2>
-            <p className="subtle">Select recipients from existing data or upload an Excel file, then map template variables.</p>
+            <h2>{surface === "workforce" ? "Workforce WhatsApp" : "Bulk WhatsApp notifications"}</h2>
+            <p className="subtle">{surface === "workforce" ? "Select only master-classified Workforce recipients, then map template variables." : "Select recipients from existing data or upload an Excel file, then map template variables."}</p>
           </div>
           <div className="panel-head-actions">
             <button className="button secondary history-button" onClick={openHistory} type="button">History</button>
             {whatsAppEnabled ? <span className="status-pill good">Enabled</span> : null}
           </div>
         </div>
-        <div className="bulk-source-switch">
-          <label className={sourceMode === "database" ? "active" : ""}>
-            <input checked={sourceMode === "database"} name="source_mode_choice" onChange={() => setSourceMode("database")} type="radio" />
-            Existing data
-          </label>
-          <label className={sourceMode === "excel" ? "active" : ""}>
-            <input checked={sourceMode === "excel"} name="source_mode_choice" onChange={() => setSourceMode("excel")} type="radio" />
-            Excel upload
-          </label>
-        </div>
+        {allowExcelUpload ? (
+          <div className="bulk-source-switch">
+            <label className={sourceMode === "database" ? "active" : ""}>
+              <input checked={sourceMode === "database"} name="source_mode_choice" onChange={() => setSourceMode("database")} type="radio" />
+              Existing data
+            </label>
+            <label className={sourceMode === "excel" ? "active" : ""}>
+              <input checked={sourceMode === "excel"} name="source_mode_choice" onChange={() => setSourceMode("excel")} type="radio" />
+              Excel upload
+            </label>
+          </div>
+        ) : <p className="subtle">Recipient source: Workforce Designation Master</p>}
         <input name="source_mode" type="hidden" value={sourceMode} />
       </section>
 

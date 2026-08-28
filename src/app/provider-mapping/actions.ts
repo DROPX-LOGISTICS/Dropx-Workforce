@@ -1,10 +1,11 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getAuthorization, hasPermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
+import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 function clean(value: FormDataEntryValue | null) {
@@ -13,13 +14,21 @@ function clean(value: FormDataEntryValue | null) {
 }
 
 function mappingRedirect(params: { error?: string; notice?: string }) {
+  let path = "/provider-mapping";
+  try {
+    if (new URL(headers().get("referer") ?? "http://localhost").pathname.startsWith("/delivery-network/")) {
+      path = "/delivery-network/rate-mapping";
+    }
+  } catch {
+    // Keep the compatibility route when the request has no usable referrer.
+  }
   cookies().set("dropx_provider_mapping_flash", JSON.stringify(params), {
     httpOnly: true,
     maxAge: 15,
-    path: "/provider-mapping",
+    path,
     sameSite: "lax"
   });
-  redirect("/provider-mapping");
+  redirect(path);
 }
 
 function rowValue(formData: FormData, index: number, field: string) {
@@ -102,12 +111,11 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
     sourceType === "employee"
       ? supabaseAdmin
         .from("employees")
-        .select("id, designations!inner(is_field_operations)")
+        .select("id, designation_id")
         .eq("id", id)
         .eq("company_id", companyId)
         .eq("is_active", true)
         .is("deleted_at", null)
-        .eq("designations.is_field_operations", true)
         .maybeSingle()
       : sourceType === "contractor"
         ? supabaseAdmin
@@ -133,19 +141,21 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
       .maybeSingle()
   ]);
 
-  if (!worker) throw new Error(`Row ${index + 1}: Field Operations worker was not found for this company.`);
-  if (sourceType === "contractor") {
-    const contractorDesignation = String((worker as { designation?: string | null }).designation ?? "").trim().toLowerCase();
-    const { data: fieldOperationsDesignations } = await supabaseAdmin
+  if (!worker) throw new Error(`Row ${index + 1}: Delivery Network partner was not found for this company.`);
+  if (sourceType === "employee" || sourceType === "contractor") {
+    let designationQuery = supabaseAdmin
       .from("designations")
-      .select("code, name")
+      .select("id, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active)")
       .eq("company_id", companyId)
-      .eq("is_active", true)
-      .eq("is_field_operations", true);
-    const isFieldOperations = (fieldOperationsDesignations ?? []).some((designation) =>
-      [designation.code, designation.name].some((value) => String(value ?? "").trim().toLowerCase() === contractorDesignation)
-    );
-    if (!isFieldOperations) throw new Error(`Row ${index + 1}: Contractor designation is not enabled for Field Operations.`);
+      .eq("is_active", true);
+    designationQuery = sourceType === "employee"
+      ? designationQuery.eq("id", String((worker as { designation_id?: string | null }).designation_id ?? ""))
+      : designationQuery.ilike("name", String((worker as { designation?: string | null }).designation ?? ""));
+    const designationResult = await designationQuery.maybeSingle();
+    if (designationResult.error) throw new Error(designationResult.error.message);
+    if (firstDesignationBusinessCategory(designationResult.data?.designation_category)?.people_module !== "delivery_network") {
+      throw new Error(`Row ${index + 1}: Designation is not assigned to Delivery Network.`);
+    }
   }
   if (!station) throw new Error(`Row ${index + 1}: Location was not found for this company.`);
 
@@ -326,6 +336,7 @@ export async function saveProviderMappingWorksheet(formData: FormData) {
     }
 
     revalidatePath("/provider-mapping");
+    revalidatePath("/delivery-network/rate-mapping");
     revalidatePath("/field-executive");
   } catch (error) {
     mappingRedirect({ error: error instanceof Error ? error.message : "Unable to save mappings." });

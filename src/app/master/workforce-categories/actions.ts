@@ -21,8 +21,8 @@ function required(value: FormDataEntryValue | null, label: string) {
 }
 
 function categoryCode(value: FormDataEntryValue | null) {
-  const code = required(value, "Category code").toLowerCase().replace(/\s+/g, "_");
-  if (!/^[a-z0-9_]+$/.test(code)) throw new Error("Category code can contain lowercase letters, numbers, and underscores only.");
+  const code = required(value, "Engagement type code").toLowerCase().replace(/\s+/g, "_");
+  if (!/^[a-z0-9_]+$/.test(code)) throw new Error("Engagement type code can contain lowercase letters, numbers, and underscores only.");
   return code;
 }
 
@@ -85,7 +85,7 @@ export async function createWorkforceCategory(formData: FormData) {
     const code = categoryCode(formData.get("code"));
     const { error } = await supabaseAdmin.from("workforce_categories").insert(withCompany({
       code,
-      name: required(formData.get("name"), "Category name"),
+      name: required(formData.get("name"), "Engagement type name"),
       profile_field_rules: categoryRules(formData),
       app_page_access: appPageAccess(formData),
       statutory_enabled: formData.get("statutory_enabled") === "true",
@@ -105,10 +105,10 @@ export async function createWorkforceCategory(formData: FormData) {
       }
     }
     revalidateWorkforceCategoryPaths();
-    categoryRedirect({ notice: "Workforce category added." });
+    categoryRedirect({ notice: "Engagement type added." });
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
-    categoryRedirect({ error: error instanceof Error ? error.message : "Unable to add workforce category." });
+    categoryRedirect({ error: error instanceof Error ? error.message : "Unable to add engagement type." });
   }
 }
 
@@ -117,7 +117,7 @@ export async function updateWorkforceCategory(formData: FormData) {
   const companyId = requireCompanyId(authorization);
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
-    const id = required(formData.get("id"), "Workforce category");
+    const id = required(formData.get("id"), "Engagement type");
     const existing = await supabaseAdmin
       .from("workforce_categories")
       .select("code, is_system")
@@ -125,14 +125,14 @@ export async function updateWorkforceCategory(formData: FormData) {
       .eq("company_id", companyId)
       .maybeSingle();
     if (existing.error) throw new Error(existing.error.message);
-    if (!existing.data) throw new Error("Workforce category was not found.");
+    if (!existing.data) throw new Error("Engagement type was not found.");
 
     const code = existing.data.is_system ? existing.data.code : categoryCode(formData.get("code"));
     const { error } = await supabaseAdmin
       .from("workforce_categories")
       .update({
         code,
-        name: required(formData.get("name"), "Category name"),
+        name: required(formData.get("name"), "Engagement type name"),
         profile_field_rules: categoryRules(formData),
         app_page_access: appPageAccess(formData),
         statutory_enabled: formData.get("statutory_enabled") === "true",
@@ -144,10 +144,10 @@ export async function updateWorkforceCategory(formData: FormData) {
       .eq("company_id", companyId);
     if (error) throw new Error(error.message);
     revalidateWorkforceCategoryPaths();
-    categoryRedirect({ notice: "Workforce category updated." });
+    categoryRedirect({ notice: "Engagement type updated." });
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
-    categoryRedirect({ error: error instanceof Error ? error.message : "Unable to update workforce category." });
+    categoryRedirect({ error: error instanceof Error ? error.message : "Unable to update engagement type." });
   }
 }
 
@@ -156,7 +156,7 @@ export async function deleteWorkforceCategory(formData: FormData) {
   const companyId = requireCompanyId(authorization);
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
-    const id = required(formData.get("id"), "Workforce category");
+    const id = required(formData.get("id"), "Engagement type");
     const existing = await supabaseAdmin
       .from("workforce_categories")
       .select("code, name, is_system")
@@ -164,8 +164,8 @@ export async function deleteWorkforceCategory(formData: FormData) {
       .eq("company_id", companyId)
       .maybeSingle();
     if (existing.error) throw new Error(existing.error.message);
-    if (!existing.data) throw new Error("Workforce category was not found.");
-    if (existing.data.is_system) throw new Error("System workforce categories cannot be deleted.");
+    if (!existing.data) throw new Error("Engagement type was not found.");
+    if (existing.data.is_system) throw new Error("System engagement types cannot be deleted.");
 
     const designationUsage = await supabaseAdmin
       .from("designations")
@@ -195,10 +195,10 @@ export async function deleteWorkforceCategory(formData: FormData) {
     if (deletion.error) throw new Error(deletion.error.message);
 
     revalidateWorkforceCategoryPaths();
-    categoryRedirect({ notice: "Workforce category deleted." });
+    categoryRedirect({ notice: "Engagement type deleted." });
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
-    categoryRedirect({ error: error instanceof Error ? error.message : "Unable to delete workforce category." });
+    categoryRedirect({ error: error instanceof Error ? error.message : "Unable to delete engagement type." });
   }
 }
 
@@ -207,10 +207,10 @@ export async function forceDeleteWorkersCategory(formData: FormData) {
   const companyId = requireCompanyId(authorization);
   try {
     if (!authorization.isMasterOwner && authorization.roleCode !== "OWNER") {
-      throw new Error("Only the owner can force delete a system workforce category.");
+      throw new Error("Only the owner can force delete a system engagement type.");
     }
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
-    const id = required(formData.get("id"), "Workforce category");
+    const id = required(formData.get("id"), "Engagement type");
     const existing = await supabaseAdmin
       .from("workforce_categories")
       .select("code, name")
@@ -218,7 +218,7 @@ export async function forceDeleteWorkersCategory(formData: FormData) {
       .eq("company_id", companyId)
       .maybeSingle();
     if (existing.error) throw new Error(existing.error.message);
-    if (!existing.data) throw new Error("Workforce category was not found.");
+    if (!existing.data) throw new Error("Engagement type was not found.");
     if (existing.data.code !== "workers") throw new Error("This force-delete action is restricted to the Workers category.");
 
     const designationResult = await supabaseAdmin
@@ -249,7 +249,7 @@ export async function forceDeleteWorkersCategory(formData: FormData) {
     if (deletion.error) throw new Error(deletion.error.message);
 
     revalidateWorkforceCategoryPaths();
-    categoryRedirect({ notice: "Workers category force deleted. Historical worker profile records were retained." });
+    categoryRedirect({ notice: "Workers engagement type force deleted. Historical worker profile records were retained." });
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     categoryRedirect({ error: error instanceof Error ? error.message : "Unable to force delete the Workers category." });

@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 
-export type AccessSurface = "dashboard" | "ops";
+export type AccessSurface = "dashboard" | "ops" | "workforce";
 
 export const opsAccessPageCodes = [
   "ops_pulse",
@@ -83,20 +83,44 @@ const sharedPageCodes = new Set([
   "fleet_reports"
 ]);
 
+export const workforceAccessPageCodes = [
+  "delivery_associates",
+  "executive_id_onboarding",
+  "provider_mapping",
+  "people_review",
+  "workforce_communications",
+  "workforce_communications_app",
+  "workforce_communications_whatsapp",
+  "workforce_communications_history",
+  "users",
+  "designations"
+] as const;
+
+const workforcePageCodes = new Set<string>(workforceAccessPageCodes);
+
 export function currentAccessSurface(): AccessSurface {
   const host = (
     headers().get("x-forwarded-host") ??
     headers().get("host") ??
     ""
   ).split(":")[0].toLowerCase();
-  return host === "ops.dropxlogistics.com" || host.startsWith("ops-") ? "ops" : "dashboard";
+  if (host === "ops.dropxlogistics.com" || host.startsWith("ops-")) return "ops";
+  if (
+    host === "workforce.dropxlogistics.com" ||
+    host.startsWith("workforce-") ||
+    (host.endsWith(".vercel.app") && host.includes("workforce"))
+  ) return "workforce";
+  return "dashboard";
 }
 
 export function pageBelongsToSurface(code: string, surface: AccessSurface) {
+  if (surface === "workforce") return workforcePageCodes.has(code);
   if (sharedPageCodes.has(code)) return true;
   return surface === "ops" ? opsPageCodes.has(code) : !opsPageCodes.has(code);
 }
 
 export function accessSurfaceLabel(surface: AccessSurface) {
-  return surface === "ops" ? "Ops" : "Dashboard";
+  if (surface === "ops") return "Ops";
+  if (surface === "workforce") return "Workforce";
+  return "Dashboard";
 }

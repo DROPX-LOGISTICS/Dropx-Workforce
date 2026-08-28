@@ -76,8 +76,8 @@ export default async function ExecutiveIdOnboardingPage({ searchParams }: { sear
   const cleared = sourceRows.filter((row) => row.opsStatus === "cleared").length;
   const oldestPending = pending ? Math.max(...sourceRows.filter((row) => row.opsStatus !== "cleared").map((row) => daysSince(row.pendingSince))) : 0;
 
-  return <AppShell active="Executive ID Onboarding" pageCode="executive_id_onboarding"><div className="onboarding-workspace">
-    <PageHead eyebrow="Executive Setup" title="Executive ID Onboarding" subtitle="Amazon in-app onboarding, ID readiness and action closure." />
+  return <AppShell active="Provider ID Onboarding" pageCode="executive_id_onboarding"><div className="onboarding-workspace">
+    <PageHead eyebrow="Workforce" title="Provider ID Onboarding" subtitle="Provider-side ID readiness and action closure for Workforce associates." />
     <div className="onboarding-toolbar">
       <OnboardingScopeFilter stations={permitted.map((location) => ({ code: location.station_code, name: location.station_name || location.city || location.station_code, cluster: location.cluster || "Unassigned" }))} selectedStations={selectedCodes} selectedClusters={requestedClusters} status={status}/>
       <form className="onboarding-status-filter"><label>Status<select name="status" defaultValue={status}><option value="pending">Pending</option><option value="cleared">Cleared</option><option value="all">All</option></select></label>{selectedCodes.length !== permittedCodes.length ? <input type="hidden" name="stations" value={selectedCodes.join(",")}/> : null}<button>Apply</button></form>

@@ -11,6 +11,10 @@ export type NonEmployeeProfileType = Exclude<WorkforceProfileType, "employee">;
 
 export type NonEmployeeRoute =
   | "/field-executive"
+  | "/delivery-network/onboarding"
+  | "/delivery-network/onboarding/associates"
+  | "/delivery-network/onboarding/operations"
+  | "/delivery-network/contractor-profiles"
   | "/contractors"
   | "/vendors"
   | "/workers";
@@ -78,6 +82,33 @@ export function nonEmployeeConfigForProfileType(value: unknown) {
 
 export function nonEmployeeConfigForRoute(value: unknown) {
   const route = String(value ?? "") as NonEmployeeRoute;
+  if (route === "/delivery-network/onboarding") {
+    return { ...nonEmployeeProfileConfigs.field_executive, route };
+  }
+  if (route === "/delivery-network/contractor-profiles") {
+    return {
+      ...nonEmployeeProfileConfigs.contractor,
+      label: "Workforce associate",
+      pageCode: "delivery_associates" as const,
+      route
+    };
+  }
+  if (route === "/delivery-network/onboarding/associates") {
+    return {
+      ...nonEmployeeProfileConfigs.contractor,
+      label: "Workforce associate",
+      pageCode: "delivery_associates" as const,
+      route
+    };
+  }
+  if (route === "/delivery-network/onboarding/operations") {
+    return {
+      ...nonEmployeeProfileConfigs.vendor,
+      label: "Operations partner",
+      pageCode: "delivery_associates" as const,
+      route
+    };
+  }
   return Object.values(nonEmployeeProfileConfigs).find((config) => config.route === route) ??
     nonEmployeeProfileConfigs.field_executive;
 }

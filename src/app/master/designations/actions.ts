@@ -5,6 +5,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
+import {
+  firstDesignationBusinessCategory,
+  normalizeDesignationPeopleModule,
+  type DesignationPeopleModule
+} from "@/lib/designation-business-categories";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { designationPortalOptions } from "@/lib/designation-portal-access";
 import { normalizeCategoryProfileFieldRules } from "@/lib/profile-field-rules";
@@ -21,14 +26,40 @@ function required(value: FormDataEntryValue | null, field: string) {
   return text;
 }
 
-function designationRedirect(params: { error?: string; notice?: string }) {
+type DesignationActionScope = {
+  peopleModule: DesignationPeopleModule | null;
+  returnPath: "/master/designations" | "/people/designations" | "/delivery-network/designations";
+};
+
+const allDesignationScope: DesignationActionScope = {
+  peopleModule: null,
+  returnPath: "/master/designations"
+};
+
+const peopleDesignationScope: DesignationActionScope = {
+  peopleModule: "people_hr",
+  returnPath: "/people/designations"
+};
+
+const workforceDesignationScope: DesignationActionScope = {
+  peopleModule: "delivery_network",
+  returnPath: "/delivery-network/designations"
+};
+
+function designationScopeLabel(peopleModule: DesignationPeopleModule | null) {
+  if (peopleModule === "delivery_network") return "Workforce Designation Master";
+  if (peopleModule === "people_hr") return "People Designation Master";
+  return "Designation Master";
+}
+
+function designationRedirect(params: { error?: string; notice?: string }, returnPath: DesignationActionScope["returnPath"]) {
   cookies().set("dropx_designation_flash", JSON.stringify(params), {
     httpOnly: true,
     maxAge: 20,
-    path: "/master/designations",
+    path: returnPath,
     sameSite: "lax"
   });
-  redirect("/master/designations");
+  redirect(returnPath);
 }
 
 function isNextRedirectError(error: unknown) {
@@ -52,6 +83,9 @@ function friendlyError(error: unknown, fallback: string) {
   }
   if (message.toLowerCase().includes("is_field_operations")) {
     return "Field Operations setup is pending. Apply the field operations mapping migration, then try again.";
+  }
+  if (message.toLowerCase().includes("designation_category")) {
+    return "Designation Category setup is pending. Apply the designation category isolation migration, then try again.";
   }
   return message;
 }
@@ -96,8 +130,51 @@ async function validateOnboardingRoles(companyId: string, roleIds: string[]) {
 
 function onboardingCategories(formData: FormData) {
   const categories = normalizeDesignationCategories(formData.getAll("onboarding_categories"), []);
-  if (!categories.length) throw new Error("Select at least one workforce category.");
+  if (!categories.length) throw new Error("Select at least one engagement type.");
   return categories;
+}
+
+async function designationCategoryId(
+  companyId: string,
+  formData: FormData,
+  requiredPeopleModule: DesignationPeopleModule | null
+) {
+  const categoryId = required(formData.get("designation_category_id"), "Designation category");
+  const { data, error } = await supabaseAdmin!
+    .from("designation_categories")
+    .select("id, people_module")
+    .eq("id", categoryId)
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const peopleModule = normalizeDesignationPeopleModule(data?.people_module);
+  if (!data || !peopleModule) {
+    throw new Error("Select an active designation category for this company.");
+  }
+  if (requiredPeopleModule && peopleModule !== requiredPeopleModule) {
+    throw new Error(`${designationScopeLabel(requiredPeopleModule)} accepts ${requiredPeopleModule === "delivery_network" ? "Workforce" : "HR"} designations only.`);
+  }
+  return data.id;
+}
+
+async function requireExistingDesignationScope(
+  companyId: string,
+  designationId: string,
+  requiredPeopleModule: DesignationPeopleModule | null
+) {
+  if (!requiredPeopleModule) return;
+  const { data, error } = await supabaseAdmin!
+    .from("designations")
+    .select("id, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active)")
+    .eq("id", designationId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Designation was not found.");
+  if (firstDesignationBusinessCategory(data.designation_category)?.people_module !== requiredPeopleModule) {
+    throw new Error(`This designation is outside the ${designationScopeLabel(requiredPeopleModule)}.`);
+  }
 }
 
 async function validateOnboardingCategories(companyId: string, categories: string[]) {
@@ -109,7 +186,7 @@ async function validateOnboardingCategories(companyId: string, categories: strin
     .in("code", categories);
   if (error) throw new Error(error.message);
   if ((data ?? []).length !== categories.length) {
-    throw new Error("Remove deleted workforce categories before saving this designation.");
+    throw new Error("Remove deleted engagement types before saving this designation.");
   }
 }
 
@@ -137,7 +214,7 @@ function profileFieldRules(formData: FormData, categories: string[]) {
   ]));
 }
 
-export async function createDesignation(formData: FormData) {
+async function createDesignationForScope(formData: FormData, scope: DesignationActionScope) {
   const authorization = await requirePagePermission("designations", "add");
   const companyId = requireCompanyId(authorization);
   try {
@@ -145,6 +222,7 @@ export async function createDesignation(formData: FormData) {
 
     const code = required(formData.get("code"), "Designation code").toUpperCase();
     const name = required(formData.get("name"), "Designation name");
+    const categoryId = await designationCategoryId(companyId, formData, scope.peopleModule);
     const categories = onboardingCategories(formData);
     await validateOnboardingCategories(companyId, categories);
     const roleIds = onboardingRoleIds(formData);
@@ -152,6 +230,7 @@ export async function createDesignation(formData: FormData) {
     const { error } = await supabaseAdmin.from("designations").insert(withCompany({
       code,
       name,
+      designation_category_id: categoryId,
       provider_ids: providerIds(formData),
       model_ids: modelIds(formData),
       location_ids: [],
@@ -166,22 +245,28 @@ export async function createDesignation(formData: FormData) {
     if (error) throw new Error(error.message);
 
     revalidatePath("/master/designations");
-    designationRedirect({ notice: "Designation added." });
+    revalidatePath("/people/designations");
+    revalidatePath("/delivery-network/designations");
+    revalidatePath("/delivery-network");
+    revalidatePath("/delivery-network/onboarding");
+    designationRedirect({ notice: "Designation added." }, scope.returnPath);
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
-    designationRedirect({ error: friendlyError(error, "Unable to add designation.") });
+    designationRedirect({ error: friendlyError(error, "Unable to add designation.") }, scope.returnPath);
   }
 }
 
-export async function updateDesignation(formData: FormData) {
+async function updateDesignationForScope(formData: FormData, scope: DesignationActionScope) {
   const authorization = await requirePagePermission("designations", "edit");
   const companyId = requireCompanyId(authorization);
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
 
     const id = required(formData.get("id"), "Designation");
+    await requireExistingDesignationScope(companyId, id, scope.peopleModule);
     const code = required(formData.get("code"), "Designation code").toUpperCase();
     const name = required(formData.get("name"), "Designation name");
+    const categoryId = await designationCategoryId(companyId, formData, scope.peopleModule);
     const status = clean(formData.get("status")) === "inactive" ? false : true;
     const categories = onboardingCategories(formData);
     await validateOnboardingCategories(companyId, categories);
@@ -193,6 +278,7 @@ export async function updateDesignation(formData: FormData) {
       .update({
         code,
         name,
+        designation_category_id: categoryId,
         provider_ids: providerIds(formData),
         model_ids: modelIds(formData),
         location_ids: [],
@@ -210,26 +296,69 @@ export async function updateDesignation(formData: FormData) {
     if (error) throw new Error(error.message);
 
     revalidatePath("/master/designations");
-    designationRedirect({ notice: "Designation updated." });
+    revalidatePath("/people/designations");
+    revalidatePath("/delivery-network/designations");
+    revalidatePath("/delivery-network");
+    revalidatePath("/delivery-network/onboarding");
+    designationRedirect({ notice: "Designation updated." }, scope.returnPath);
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
-    designationRedirect({ error: friendlyError(error, "Unable to update designation.") });
+    designationRedirect({ error: friendlyError(error, "Unable to update designation.") }, scope.returnPath);
   }
 }
 
-export async function deleteDesignation(formData: FormData) {
+async function deleteDesignationForScope(formData: FormData, scope: DesignationActionScope) {
   const authorization = await requirePagePermission("designations", "edit");
   const companyId = requireCompanyId(authorization);
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
     const id = required(formData.get("id"), "Designation");
+    await requireExistingDesignationScope(companyId, id, scope.peopleModule);
     const { error } = await supabaseAdmin.from("designations").delete().eq("id", id).eq("company_id", companyId);
     if (error) throw new Error(error.message);
 
     revalidatePath("/master/designations");
-    designationRedirect({ notice: "Designation deleted." });
+    revalidatePath("/people/designations");
+    revalidatePath("/delivery-network/designations");
+    designationRedirect({ notice: "Designation deleted." }, scope.returnPath);
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
-    designationRedirect({ error: error instanceof Error ? error.message : "Unable to delete designation." });
+    designationRedirect({ error: error instanceof Error ? error.message : "Unable to delete designation." }, scope.returnPath);
   }
+}
+
+export async function createDesignation(formData: FormData) {
+  return createDesignationForScope(formData, allDesignationScope);
+}
+
+export async function createPeopleDesignation(formData: FormData) {
+  return createDesignationForScope(formData, peopleDesignationScope);
+}
+
+export async function createWorkforceDesignation(formData: FormData) {
+  return createDesignationForScope(formData, workforceDesignationScope);
+}
+
+export async function updateDesignation(formData: FormData) {
+  return updateDesignationForScope(formData, allDesignationScope);
+}
+
+export async function updatePeopleDesignation(formData: FormData) {
+  return updateDesignationForScope(formData, peopleDesignationScope);
+}
+
+export async function updateWorkforceDesignation(formData: FormData) {
+  return updateDesignationForScope(formData, workforceDesignationScope);
+}
+
+export async function deleteDesignation(formData: FormData) {
+  return deleteDesignationForScope(formData, allDesignationScope);
+}
+
+export async function deletePeopleDesignation(formData: FormData) {
+  return deleteDesignationForScope(formData, peopleDesignationScope);
+}
+
+export async function deleteWorkforceDesignation(formData: FormData) {
+  return deleteDesignationForScope(formData, workforceDesignationScope);
 }

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { accessPages, ensureAccessPages } from "@/lib/access-pages";
-import { currentAccessSurface, pageBelongsToSurface } from "@/lib/access-surface";
+import { currentAccessSurface, pageBelongsToSurface, type AccessSurface } from "@/lib/access-surface";
 import { isCompanyOwner, requirePagePermission, type AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
@@ -41,8 +41,13 @@ function locationAccessMode(value: FormDataEntryValue | null) {
   return clean(value) === "all_locations" ? "all_locations" : "role_based";
 }
 
-function appBaseUrl() {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? "https://dashboard.dropxlogistics.com").replace(/\/$/, "");
+function appBaseUrl(surface: AccessSurface = currentAccessSurface()) {
+  const configured = surface === "workforce"
+    ? process.env.WORKFORCE_APP_URL ?? "https://workforce.dropxlogistics.com"
+    : surface === "ops"
+      ? process.env.OPS_APP_URL ?? "https://ops.dropxlogistics.com"
+      : process.env.NEXT_PUBLIC_APP_URL ?? "https://dashboard.dropxlogistics.com";
+  return configured.replace(/\/$/, "");
 }
 
 function usersRedirect(params?: Record<string, string>): never {
@@ -232,6 +237,58 @@ function permissionsFromForm(formData: FormData): PermissionPayload {
     can_add: Boolean(permission.can_add),
     can_edit: Boolean(permission.can_edit)
   })).filter((permission) => permission.page_id);
+}
+
+async function assertRoleAvailableForSurface(roleId: string, companyId: string, surface: AccessSurface) {
+  if (surface !== "workforce") return;
+  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
+
+  await ensureAccessPages(supabaseAdmin, companyId);
+  let pagesResult = await supabaseAdmin
+    .from("app_pages")
+    .select("id, code")
+    .eq("company_id", companyId)
+    .eq("is_active", true);
+  if (!pagesResult.error && !(pagesResult.data ?? []).length) {
+    pagesResult = await supabaseAdmin
+      .from("app_pages")
+      .select("id, code")
+      .in("code", accessPages.map((page) => page.code))
+      .eq("is_active", true);
+  }
+  if (pagesResult.error) throw new Error(pagesResult.error.message);
+
+  const pageIds = (pagesResult.data ?? [])
+    .filter((page) => pageBelongsToSurface(page.code, surface))
+    .map((page) => page.id);
+  if (!pageIds.length) throw new Error("Workforce access pages are not configured.");
+
+  let permissionsResult = await supabaseAdmin
+    .from("role_page_permissions")
+    .select("can_view, can_add, can_edit")
+    .eq("company_id", companyId)
+    .eq("role_id", roleId)
+    .in("page_id", pageIds);
+  if (permissionsResult.error?.message?.toLowerCase().includes("company_id")) {
+    permissionsResult = await supabaseAdmin
+      .from("role_page_permissions")
+      .select("can_view, can_add, can_edit")
+      .eq("role_id", roleId)
+      .in("page_id", pageIds);
+  }
+  if (permissionsResult.error) throw new Error(permissionsResult.error.message);
+  if (!(permissionsResult.data ?? []).some((permission) => permission.can_view || permission.can_add || permission.can_edit)) {
+    throw new Error("Select a role that is enabled for Workforce.");
+  }
+}
+
+function assertWorkforceAddOnly(surface: AccessSurface) {
+  if (surface === "workforce") {
+    usersRedirect({
+      section: "users",
+      userError: "Workforce user access is add-only. Existing users must be managed from the main dashboard."
+    });
+  }
 }
 
 function permissionHasAccess(permission?: PermissionPayload[number] | null) {
@@ -559,6 +616,7 @@ export async function deleteUserRole(formData: FormData) {
 export async function createUser(formData: FormData) {
   const authorization = await requirePagePermission("users", "add");
   const companyId = requireCompanyId(authorization);
+  const surface = currentAccessSurface();
   const admin = supabaseAdmin;
   if (!admin) {
     usersRedirect({ section: "users", userError: "Supabase service role key is not configured." });
@@ -578,6 +636,20 @@ export async function createUser(formData: FormData) {
     const locationScopeIds = locationScopeFromForm(formData);
     if (mobile && !/^\d{6,15}$/.test(mobile)) throw new Error("Mobile number must contain 6 to 15 digits.");
 
+    await assertRoleAvailableForSurface(roleId, companyId, surface);
+    if (surface === "workforce") {
+      const { data: existingProfile, error: existingProfileError } = await admin
+        .from("profiles")
+        .select("id")
+        .eq("company_id", companyId)
+        .ilike("email", email)
+        .maybeSingle();
+      if (existingProfileError) throw new Error(existingProfileError.message);
+      if (existingProfile) {
+        throw new Error("This email already belongs to an existing company user. Existing users are not modified from Workforce.");
+      }
+    }
+
     await validateReportingManager(roleId, reportsToUserId, companyId);
     await validateLocationScope(roleId, reportsToUserId, locationScopeIds, companyId);
 
@@ -593,7 +665,7 @@ export async function createUser(formData: FormData) {
     const authResult = sendInvitation
       ? await admin.auth.admin.inviteUserByEmail(email, {
           data: { full_name: fullName, employee_id: employeeId },
-          redirectTo: `${appBaseUrl()}/login`
+          redirectTo: `${appBaseUrl(surface)}/login`
         })
       : await admin.auth.admin.createUser({
           email,
@@ -606,6 +678,9 @@ export async function createUser(formData: FormData) {
     if (authResult.error) {
       if (!isExistingUserError(authResult.error.message)) {
         throw new Error(authResult.error.message);
+      }
+      if (surface === "workforce") {
+        throw new Error("This email already has a DropX login. Existing users are not modified from Workforce.");
       }
       userId = await findAuthUserIdByEmail(email, companyId);
     }
@@ -648,6 +723,7 @@ export async function createUser(formData: FormData) {
 
 export async function updateUser(formData: FormData) {
   const authorization = await requirePagePermission("users", "edit");
+  assertWorkforceAddOnly(currentAccessSurface());
   const companyId = requireCompanyId(authorization);
   if (!supabaseAdmin) {
     throw new Error("Supabase service role key is not configured");
@@ -701,6 +777,7 @@ export async function updateUser(formData: FormData) {
 
 export async function resendUserInvitation(formData: FormData) {
   const authorization = await requirePagePermission("users", "edit");
+  assertWorkforceAddOnly(currentAccessSurface());
   const companyId = requireCompanyId(authorization);
   if (!supabaseAdmin) {
     usersRedirect({ section: "users", userError: "Supabase service role key is not configured." });
@@ -875,6 +952,7 @@ async function performDeleteUser(formData: FormData, companyId: string) {
 
 export async function deleteUser(formData: FormData) {
   const authorization = await requirePagePermission("users", "edit");
+  assertWorkforceAddOnly(currentAccessSurface());
   const companyId = requireCompanyId(authorization);
   try {
     await performDeleteUser(formData, companyId);

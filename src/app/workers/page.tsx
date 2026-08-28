@@ -24,6 +24,7 @@ export default function WorkersPage({
       bulkImportDescription="Upload existing worker rows and keep profile completion pending for DropX One."
       bulkImportTitle="Bulk upload workers"
       designationCategoryFilter={["workers"]}
+      designationPeopleModule="people_hr"
       detailSubtitle="Complete worker profile"
       editId={searchParams?.edit}
       editTitle="Edit worker"

@@ -30,6 +30,7 @@ export function SubmitButton({
   confirmDescription = "Please review this action before continuing.",
   confirmCancelText = "Cancel",
   confirmSubmitText,
+  confirmSubmitClassName,
   confirmationSelect,
   confirmationCheckboxes,
   confirmationBlocked = false,
@@ -45,6 +46,7 @@ export function SubmitButton({
   confirmDescription?: string;
   confirmCancelText?: string;
   confirmSubmitText?: string;
+  confirmSubmitClassName?: string;
   confirmationSelect?: ConfirmationSelect;
   confirmationCheckboxes?: ConfirmationCheckbox[];
   confirmationBlocked?: boolean;
@@ -150,7 +152,7 @@ export function SubmitButton({
                 {confirmCancelText}
               </button>
               <button
-                className={className}
+                className={confirmSubmitClassName ?? className}
                 disabled={pending || confirmationBlocked || Boolean(confirmationSelect && !confirmationSelection)}
                 form={form}
                 type="submit"

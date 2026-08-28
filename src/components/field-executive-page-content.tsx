@@ -1,4 +1,11 @@
-import { bulkImportFieldExecutives, createFieldExecutive, reviewFieldExecutiveProfile, updateFieldExecutive } from "@/app/field-executive/actions";
+import {
+  bulkImportFieldExecutives,
+  createFieldExecutive,
+  requestFieldExecutiveProfileChange,
+  reviewFieldExecutiveProfile,
+  reviewFieldExecutiveProfileChange,
+  updateFieldExecutive
+} from "@/app/field-executive/actions";
 import { AppShell } from "@/components/app-shell";
 import { CompensationBulkUpload } from "@/components/compensation-bulk-upload";
 import { FieldExecutiveList, type FieldExecutiveListRow } from "@/components/field-executive-list";
@@ -7,12 +14,18 @@ import { PendingLink } from "@/components/pending-link";
 import { ProfileVerificationPanel } from "@/components/profile-verification-panel";
 import { ScopedDesignationFields, type ScopedDesignationOption, type ScopedLocationOption } from "@/components/scoped-designation-fields";
 import { SearchableSelect } from "@/components/searchable-select";
+import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
 import { isCompanyOwner, type AuthorizationContext, requirePagePermission } from "@/lib/authorization";
 import { currentAccessSurface, type AccessSurface } from "@/lib/access-surface";
 import { requireCompanyId } from "@/lib/company-scope";
 import { countryCodeOptions } from "@/lib/country-codes";
 import { formatDashboardDate } from "@/lib/date-format";
+import {
+  firstDesignationBusinessCategory,
+  type DesignationBusinessCategory,
+  type DesignationPeopleModule
+} from "@/lib/designation-business-categories";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
 import { canOnboardDesignation } from "@/lib/designation-onboarding-access";
 import { canAccessDesignationPortal } from "@/lib/designation-portal-access";
@@ -38,6 +51,7 @@ type DesignationRow = {
   id: string;
   code: string;
   name: string;
+  designation_category?: DesignationBusinessCategory | DesignationBusinessCategory[] | null;
   model_ids?: string[] | null;
   onboarding_categories?: string[] | null;
   profile_field_rules?: unknown;
@@ -52,6 +66,7 @@ type DesignationCategoryFilter = "field_executives" | "contractors" | "vendors" 
 
 type ExecutiveRow = {
   id: string;
+  created_by?: string | null;
   dropx_id: string | null;
   full_name: string;
   mobile_country_code?: string | null;
@@ -111,6 +126,113 @@ type ExecutiveRow = {
   }[] | null;
 };
 
+type WorkforceProfileChangeRequest = {
+  id: string;
+  field_executive_id: string;
+  requested_by: string;
+  status: "pending" | "approved" | "rejected";
+  current_values: Record<string, unknown>;
+  proposed_values: Record<string, unknown>;
+  review_note?: string | null;
+  created_at: string;
+  executiveName?: string;
+  executiveCode?: string | null;
+  requestedByName?: string;
+};
+
+const invitationFieldLabels: Array<[string, string]> = [
+  ["full_name", "Full name"],
+  ["mobile_country_code", "Country code"],
+  ["mobile", "Mobile"],
+  ["email", "Email"],
+  ["date_of_join", "Joining date"],
+  ["location_code", "Station"],
+  ["designation", "Designation"]
+];
+
+function canApproveProfileCorrections(authorization: AuthorizationContext) {
+  const roleCode = String(authorization.roleCode ?? "").trim().toUpperCase();
+  return isCompanyOwner(authorization) || ["ZONAL_HEAD", "ZONE_HEAD", "ZH"].includes(roleCode);
+}
+
+function InvitationProfileDetails({ executive }: { executive: ExecutiveRow }) {
+  const station = firstRelation(executive.stations);
+  return (
+    <dl className="executive-details">
+      <ExecutiveDetail label="Full name" value={executive.full_name} />
+      <ExecutiveDetail label="Mobile" value={`+${executive.mobile_country_code ?? "91"} ${executive.mobile}`} />
+      <ExecutiveDetail label="Email" value={executive.email} />
+      <ExecutiveDetail label="Joining date" value={formatDashboardDate(executive.date_of_join)} />
+      <ExecutiveDetail label="Station" value={station?.station_code} />
+      <ExecutiveDetail label="Designation" value={executive.designation} />
+      <ExecutiveDetail label="Onboarding status" value={fieldExecutiveStatus(executive)} />
+    </dl>
+  );
+}
+
+function OpsWorkforceCorrectionForm({
+  designationOptions,
+  executive,
+  locationOptions,
+  returnPath
+}: {
+  designationOptions: Array<{ value: string; label: string; canView: boolean }>;
+  executive: ExecutiveRow;
+  locationOptions: ScopedLocationOption[];
+  returnPath: FieldExecutiveRoute;
+}) {
+  return (
+    <form action={requestFieldExecutiveProfileChange} className="form-grid">
+      <input name="id" type="hidden" value={executive.id} />
+      <input name="return_path" type="hidden" value={returnPath} />
+      <label>Full name<input className="field" defaultValue={executive.full_name} name="full_name" required /></label>
+      <label>Country code<input className="field" defaultValue={executive.mobile_country_code ?? "91"} inputMode="numeric" name="mobile_country_code" required /></label>
+      <label>Mobile number<input className="field" defaultValue={executive.mobile} inputMode="numeric" maxLength={10} minLength={10} name="mobile" pattern="[0-9]{10}" required /></label>
+      <label>Email<input className="field" defaultValue={executive.email} name="email" required type="email" /></label>
+      <label>Joining date<input className="field" defaultValue={executive.date_of_join} name="date_of_join" required type="date" /></label>
+      <label>Station<select className="field" defaultValue={executive.location_id} name="location_id" required>{locationOptions.map((location) => <option key={location.value} value={location.value}>{location.label}{location.helper ? ` — ${location.helper}` : ""}</option>)}</select></label>
+      <label>Designation<select className="field" defaultValue={executive.designation ?? ""} name="designation" required>{designationOptions.map((designation) => <option key={designation.value} value={designation.value}>{designation.label}</option>)}</select></label>
+      <div className="full-width message-panel"><p className="subtle">Only invitation details can be corrected here. Bank, KYC, statutory, vehicle and document information is excluded. The change is applied only after approval by a Zonal Head or Owner.</p></div>
+      <div className="full-width form-actions"><SubmitButton className="button" pendingText="Sending for approval...">Send for approval</SubmitButton></div>
+    </form>
+  );
+}
+
+function ProfileCorrectionApprovals({ requests, returnPath }: { requests: WorkforceProfileChangeRequest[]; returnPath: FieldExecutiveRoute }) {
+  if (!requests.length) return null;
+  return (
+    <section className="panel">
+      <div className="panel-head"><div><h2>Profile change approvals</h2><p className="subtle">Invitation-detail corrections awaiting a Zonal Head or Owner decision.</p></div><StatusPill status={`${requests.length} pending`} /></div>
+      <div className="profile-correction-queue">
+        {requests.map((request) => {
+          const changedFields = invitationFieldLabels.filter(([key]) => String(request.current_values?.[key] ?? "") !== String(request.proposed_values?.[key] ?? ""));
+          return (
+            <article className="profile-correction-card" key={request.id}>
+              <div className="panel-head"><div><h3>{request.executiveName ?? "Workforce applicant"}</h3><p className="subtle">{request.executiveCode ?? "ID pending"} · requested by {request.requestedByName ?? "Ops Pulse user"}</p></div><small>{new Date(request.created_at).toLocaleString("en-IN")}</small></div>
+              <div className="profile-correction-diff">{changedFields.map(([key, label]) => <div key={key}><span>{label}</span><del>{String(request.current_values?.[key] ?? "—")}</del><strong>{String(request.proposed_values?.[key] ?? "—")}</strong></div>)}</div>
+              <div className="profile-correction-actions">
+                <form action={reviewFieldExecutiveProfileChange}>
+                  <input name="request_id" type="hidden" value={request.id} />
+                  <input name="return_path" type="hidden" value={returnPath} />
+                  <input name="decision" type="hidden" value="approved" />
+                  <SubmitButton className="button" pendingText="Approving...">Approve</SubmitButton>
+                </form>
+                <form action={reviewFieldExecutiveProfileChange} className="profile-correction-reject">
+                  <input name="request_id" type="hidden" value={request.id} />
+                  <input name="return_path" type="hidden" value={returnPath} />
+                  <input name="decision" type="hidden" value="rejected" />
+                  <input className="field" name="review_note" placeholder="Rejection reason" required />
+                  <SubmitButton className="button danger" pendingText="Rejecting...">Reject</SubmitButton>
+                </form>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 type FieldExecutiveAddFormValues = {
   fullName?: string;
   mobileCountryCode?: string;
@@ -127,7 +249,8 @@ function firstRelation<T>(value: T | T[] | null | undefined) {
 
 function isMissingColumnError(error: unknown) {
   const message = String((error as { message?: unknown })?.message ?? "").toLowerCase();
-  return message.includes("column") && (message.includes("does not exist") || message.includes("schema cache"));
+  return (message.includes("column") && (message.includes("does not exist") || message.includes("schema cache"))) ||
+    message.includes("designation_categories") || message.includes("designation_category_id");
 }
 
 const stateOptions = [
@@ -192,10 +315,17 @@ const statusOptions = [
 ];
 
 function fieldExecutiveStatus(executive: Pick<ExecutiveRow, "is_active" | "onboarding_status">) {
-  if (!executive.is_active) return "Inactive";
-  if (executive.onboarding_status === "under_review") return "Under review";
-  if (executive.onboarding_status === "returned") return "Returned";
-  return executive.onboarding_status === "active" ? "Active" : "Pending";
+  const stage = String(executive.onboarding_status ?? "").trim().toLowerCase();
+  const labels: Record<string, string> = {
+    pending: "Invitation pending",
+    submitted: "Profile submitted",
+    under_review: "Under review",
+    returned: "Changes requested",
+    approved: "Activation pending",
+    rejected: "Not approved"
+  };
+  if (stage === "active") return executive.is_active ? "Active" : "Inactive / deactivated";
+  return labels[stage] ?? (executive.is_active ? "Active" : "Inactive / deactivated");
 }
 
 function textValue(value: string | null | undefined) {
@@ -574,7 +704,7 @@ function FieldExecutiveBulkImportPanel({
           <a
             className="template-download-link"
             download
-            href={`/api/import-template?kind=${returnPath === "/contractors" ? "contractor" : "field_executive"}`}
+            href={`/api/import-template?kind=${nonEmployeeConfigForRoute(returnPath).profileType === "contractor" ? "contractor" : "field_executive"}`}
           >
             Download sample Excel
           </a>
@@ -597,6 +727,7 @@ function FieldExecutiveBulkImportPanel({
 async function loadFieldExecutiveData(
   authorization: AuthorizationContext,
   designationCategoryFilter: DesignationCategoryFilter[],
+  designationPeopleModule: DesignationPeopleModule | undefined,
   table: "field_executives" | "contractors" | "vendors" | "workers",
   accessSurface: AccessSurface,
   editId?: string,
@@ -608,6 +739,7 @@ async function loadFieldExecutiveData(
       executives: [] as FieldExecutiveListRow[],
       locations: [] as LocationRow[],
       designations: [] as DesignationRow[],
+      profileDesignations: [] as DesignationRow[],
       editExecutive: null as ExecutiveRow | null,
       viewExecutive: null as ExecutiveRow | null,
       error: "Supabase service role key is not configured."
@@ -632,7 +764,7 @@ async function loadFieldExecutiveData(
 
   let designationsResult: { data: unknown[] | null; error: { message?: string } | null } = await supabaseAdmin
     .from("designations")
-    .select("id, code, name, model_ids, onboarding_categories, profile_field_rules, onboarding_role_ids, portal_permissions, is_active")
+    .select("id, code, name, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), model_ids, onboarding_categories, profile_field_rules, onboarding_role_ids, portal_permissions, is_active")
     .eq("company_id", companyId)
     .eq("is_active", true)
     .order("name");
@@ -645,12 +777,13 @@ async function loadFieldExecutiveData(
       .order("name");
     designationsResult = {
       ...fallbackDesignationsResult,
-      data: (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...(designation as Record<string, unknown>), model_ids: [], onboarding_categories: ["employees"], profile_field_rules: {}, onboarding_role_ids: [], portal_permissions: null }))
+      data: (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...(designation as Record<string, unknown>), designation_category: null, model_ids: [], onboarding_categories: ["employees"], profile_field_rules: {}, onboarding_role_ids: [], portal_permissions: null }))
     };
   }
 
   const executiveSelect = `
         id,
+        created_by,
         dropx_id,
         full_name,
         mobile_country_code,
@@ -718,11 +851,16 @@ async function loadFieldExecutiveData(
     providers: firstRelation(location.providers),
     location_models: firstRelation(location.location_models)
   })) as LocationRow[];
-  const designations = ((designationsResult.data ?? []) as unknown as DesignationRow[]).filter((designation) => {
+  const profileDesignations = ((designationsResult.data ?? []) as unknown as DesignationRow[]).filter((designation) => {
     const categories = normalizeDesignationCategories(designation.onboarding_categories);
     return designationCategoryFilter.some((category) => categories.includes(category));
   });
+  const designations = profileDesignations.filter((designation) => (
+    !designationPeopleModule || firstDesignationBusinessCategory(designation.designation_category)?.people_module === designationPeopleModule
+  ));
   const allowedLocationIds = new Set(locations.map((location) => location.id));
+  // The designation master is the final visibility boundary. Filtering only by
+  // engagement type lets legacy HR contractors leak into the Workforce portal.
   const allowedDesignationNames = new Set(designations
     .filter((designation) => canAccessDesignationPortal(designation, accessSurface, "view", { isOwner: ownerAccess }))
     .map((designation) => designation.name));
@@ -735,6 +873,7 @@ async function loadFieldExecutiveData(
     const model = firstRelation(location?.location_models);
     return {
       id: executive.id,
+      createdBy: executive.created_by ?? null,
       fullName: executive.full_name,
       dropxId: executive.dropx_id ?? "-",
       biometricId: executive.biometric_id ?? "-",
@@ -745,7 +884,7 @@ async function loadFieldExecutiveData(
       model: model?.code || model?.name || "-",
       designation: executive.designation || "-",
       canEdit: canAccessDesignationPortal(
-        designations.find((designation) => designation.name === executive.designation),
+        profileDesignations.find((designation) => designation.name === executive.designation),
         accessSurface,
           "edit",
           { isOwner: ownerAccess }
@@ -779,6 +918,7 @@ async function loadFieldExecutiveData(
     executives,
     locations,
     designations,
+    profileDesignations,
     editExecutive,
     viewExecutive,
     error: executivesResult.error?.message || locationsResult.error?.message || designationsResult.error?.message || null
@@ -791,6 +931,7 @@ export async function FieldExecutivePageContent({
   bulkImportDescription = "Upload existing field executive rows and keep the profile completion pending for the app.",
   bulkImportTitle = "Bulk upload field executives",
   designationCategoryFilter = ["field_executives"],
+  designationPeopleModule,
   detailSubtitle = "Complete Field Executive profile",
   errorMessage,
   editId,
@@ -811,6 +952,7 @@ export async function FieldExecutivePageContent({
   bulkImportDescription?: string;
   bulkImportTitle?: string;
   designationCategoryFilter?: DesignationCategoryFilter[];
+  designationPeopleModule?: DesignationPeopleModule;
   detailSubtitle?: string;
   errorMessage?: string;
   editId?: string;
@@ -835,20 +977,83 @@ export async function FieldExecutivePageContent({
     canEdit: false
   };
   const workforceConfig = nonEmployeeConfigForRoute(returnPath);
-  const { executives, locations, designations, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, designationCategoryFilter, workforceConfig.table, accessSurface, editId, viewId);
+  const { executives, locations, designations, profileDesignations, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, designationCategoryFilter, designationPeopleModule, workforceConfig.table, accessSurface, editId, viewId);
+  const companyId = requireCompanyId(authorization);
+  const isOpsWorkforce = accessSurface === "ops" && returnPath === "/field-executive";
+  const profileCorrectionApprover = isOpsWorkforce && canApproveProfileCorrections(authorization);
+  const latestCorrectionByExecutive = new Map<string, WorkforceProfileChangeRequest>();
+  let approvalQueue: WorkforceProfileChangeRequest[] = [];
+  if (isOpsWorkforce && supabaseAdmin) {
+    const visibleIds = executives.map((executive) => executive.id);
+    const requestColumns = "id,field_executive_id,requested_by,status,current_values,proposed_values,review_note,created_at";
+    const [visibleRequests, pendingRequests] = await Promise.all([
+      visibleIds.length
+        ? supabaseAdmin.from("workforce_profile_change_requests")
+            .select(requestColumns)
+            .eq("company_id", companyId)
+            .in("field_executive_id", visibleIds)
+            .order("created_at", { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
+      profileCorrectionApprover && visibleIds.length
+        ? supabaseAdmin.from("workforce_profile_change_requests")
+            .select(requestColumns)
+            .eq("company_id", companyId)
+            .eq("status", "pending")
+            .in("field_executive_id", visibleIds)
+            .order("created_at", { ascending: true })
+            .limit(100)
+        : Promise.resolve({ data: [], error: null })
+    ]);
+    if (visibleRequests.error || pendingRequests.error) {
+      throw new Error(visibleRequests.error?.message || pendingRequests.error?.message);
+    }
+    for (const request of (visibleRequests.data ?? []) as WorkforceProfileChangeRequest[]) {
+      if (!latestCorrectionByExecutive.has(request.field_executive_id)) latestCorrectionByExecutive.set(request.field_executive_id, request);
+    }
+    const pending = (pendingRequests.data ?? []) as WorkforceProfileChangeRequest[];
+    const requesterIds = [...new Set(pending.map((request) => request.requested_by))];
+    const requesters = requesterIds.length
+      ? await supabaseAdmin.from("profiles").select("id,full_name,email").eq("company_id", companyId).in("id", requesterIds)
+      : { data: [], error: null };
+    if (requesters.error) throw new Error(requesters.error.message);
+    const executiveMap = new Map(executives.map((executive) => [executive.id, executive]));
+    const requesterMap = new Map((requesters.data ?? []).map((profile) => [profile.id, profile]));
+    approvalQueue = pending.map((request) => {
+      const executive = executiveMap.get(request.field_executive_id);
+      const requester = requesterMap.get(request.requested_by);
+      return {
+        ...request,
+        executiveName: executive?.fullName ?? "Workforce applicant",
+        executiveCode: executive?.dropxId ?? null,
+        requestedByName: requester?.full_name || requester?.email || "Ops Pulse user"
+      };
+    });
+  }
+  const listExecutives = isOpsWorkforce
+    ? executives.map((executive) => ({
+        ...executive,
+        canEdit: executive.createdBy === authorization.userId && latestCorrectionByExecutive.get(executive.id)?.status !== "pending"
+      }))
+    : executives;
+  const canEditOpsCorrection = Boolean(
+    isOpsWorkforce &&
+    editExecutive &&
+    editExecutive.created_by === authorization.userId &&
+    latestCorrectionByExecutive.get(editExecutive.id)?.status !== "pending"
+  );
   const categoryRules = await loadWorkforceCategoryRules(
-    requireCompanyId(authorization),
+    companyId,
     workforceConfig.designationCategory,
-    designations[0]?.profile_field_rules,
+    designations[0]?.profile_field_rules ?? profileDesignations[0]?.profile_field_rules,
     workforceConfig.designationCategory
   );
   const statutoryEnabled = await loadWorkforceCategoryStatutoryEnabled(
-    requireCompanyId(authorization),
+    companyId,
     workforceConfig.designationCategory,
     false
   );
   const configuredDirectActivate = await loadWorkforceCategoryDirectActivate(
-    requireCompanyId(authorization),
+    companyId,
     workforceConfig.designationCategory
   );
   const directActivate = workforceConfig.profileType !== "field_executive" && configuredDirectActivate;
@@ -862,29 +1067,36 @@ export async function FieldExecutivePageContent({
       .join(" - ") || location.station_name || undefined,
     modelId: location.location_model_id ?? null
   }));
-  const designationOptions = await Promise.all(designations.map(async (designation) => ({
+  const toDesignationOption = async (designation: DesignationRow) => ({
     value: designation.name,
     label: designation.name,
     helper: designation.code,
     code: designation.code,
     modelIds: designation.model_ids ?? [],
+      canView: canAccessDesignationPortal(designation, accessSurface, "view", { isOwner: ownerAccess }),
       canAdd: canAccessDesignationPortal(designation, accessSurface, "add", { isOwner: ownerAccess }),
       canEdit: canAccessDesignationPortal(designation, accessSurface, "edit", { isOwner: ownerAccess }),
     dashboardRules: (await loadWorkforceCategoryRules(
-      requireCompanyId(authorization),
+      companyId,
       workforceConfig.designationCategory,
       designation.profile_field_rules,
       workforceConfig.designationCategory
     )).dashboard
-  })));
+  });
+  const designationOptions = await Promise.all(designations.map(toDesignationOption));
+  const currentDesignationNames = new Set([editExecutive?.designation, viewExecutive?.designation].filter(Boolean));
+  const currentProfileDesignationOptions = await Promise.all(profileDesignations
+    .filter((designation) => currentDesignationNames.has(designation.name) && !designations.some((item) => item.id === designation.id))
+    .map(toDesignationOption));
   const onboardingDesignationOptions = designationOptions.filter((option) => {
     const designation = designations.find((row) => row.name === option.value);
     return designation ? option.canAdd && canOnboardDesignation(designation, authorization) : false;
   });
-  const editDesignationOptions = designationOptions.filter((option) => option.canEdit);
-  const viewRules = designationOptions.find((option) => option.value === viewExecutive?.designation)?.dashboardRules
+  const editDesignationOptions = [...designationOptions, ...currentProfileDesignationOptions].filter((option) => option.canEdit);
+  const profileRuleOptions = [...designationOptions, ...currentProfileDesignationOptions];
+  const viewRules = profileRuleOptions.find((option) => option.value === viewExecutive?.designation)?.dashboardRules
     ?? categoryRules.dashboard;
-  const editRules = designationOptions.find((option) => option.value === editExecutive?.designation)?.dashboardRules
+  const editRules = profileRuleOptions.find((option) => option.value === editExecutive?.designation)?.dashboardRules
     ?? categoryRules.dashboard;
 
   return (
@@ -935,7 +1147,9 @@ export async function FieldExecutivePageContent({
       {permission.canAdd && accessSurface !== "ops" ? <FieldExecutiveBulkImportPanel description={bulkImportDescription} entityLabel={entityLabel} returnPath={returnPath} title={bulkImportTitle} /> : null}
       {ownerAccess && accessSurface !== "ops" && returnPath === "/contractors" ? <CompensationBulkUpload kind="contractor_remuneration" /> : null}
 
-      {permission.canView || permission.canEdit ? <FieldExecutiveList basePath={returnPath} canEdit={permission.canEdit} emptyLabel={emptyListLabel} rows={executives} title={listTitle} /> : null}
+      {profileCorrectionApprover ? <ProfileCorrectionApprovals requests={approvalQueue} returnPath={returnPath} /> : null}
+
+      {permission.canView || permission.canEdit ? <FieldExecutiveList basePath={returnPath} canEdit={isOpsWorkforce ? permission.canView || permission.canEdit : permission.canEdit} emptyLabel={emptyListLabel} rows={listExecutives} title={listTitle} /> : null}
 
       {(permission.canView || permission.canEdit) && viewExecutive ? (
         <div className="modal-backdrop">
@@ -947,32 +1161,41 @@ export async function FieldExecutivePageContent({
               </div>
               <PendingLink className="icon-button" href={returnPath} scroll={false} aria-label={`Close ${entityLabel.toLowerCase()} details`}>x</PendingLink>
             </div>
-            <FieldExecutiveDetails dashboardRules={viewRules} executive={viewExecutive} />
+            {isOpsWorkforce ? <InvitationProfileDetails executive={viewExecutive} /> : <FieldExecutiveDetails dashboardRules={viewRules} executive={viewExecutive} />}
           </section>
         </div>
       ) : null}
 
-      {permission.canEdit && editExecutive && editDesignationOptions.some((option) => option.value === editExecutive.designation) ? (
+      {editExecutive && (isOpsWorkforce ? canEditOpsCorrection : permission.canEdit && editDesignationOptions.some((option) => option.value === editExecutive.designation)) ? (
         <div className="modal-backdrop">
           <section className="modal-panel wide" aria-label="Edit field executive">
             <div className="panel-head">
               <div>
                 <h2>{editTitle}</h2>
-                <p className="subtle">Maintain the full registration profile from the Team DropX sample.</p>
+                <p className="subtle">{isOpsWorkforce ? "Correct invitation details and send them for Zonal Head or Owner approval." : "Maintain the full registration profile from the Team DropX sample."}</p>
               </div>
               <PendingLink className="icon-button" href={returnPath} scroll={false} aria-label={`Close edit ${entityLabel.toLowerCase()}`}>x</PendingLink>
             </div>
-            <FieldExecutiveForm
-              action={updateFieldExecutive}
-              dashboardRules={editRules}
-              designationOptions={editDesignationOptions}
-              executive={editExecutive}
-              locationOptions={locationOptions}
-              mode="edit"
-              returnPath={returnPath}
-              statutoryEnabled={statutoryEnabled}
-            />
-            {workforceConfig.profileType !== "field_executive" && editExecutive.onboarding_status === "under_review" ? (
+            {isOpsWorkforce ? (
+              <OpsWorkforceCorrectionForm
+                designationOptions={designationOptions.filter((option) => option.canView)}
+                executive={editExecutive}
+                locationOptions={locationOptions}
+                returnPath={returnPath}
+              />
+            ) : (
+              <FieldExecutiveForm
+                action={updateFieldExecutive}
+                dashboardRules={editRules}
+                designationOptions={editDesignationOptions}
+                executive={editExecutive}
+                locationOptions={locationOptions}
+                mode="edit"
+                returnPath={returnPath}
+                statutoryEnabled={statutoryEnabled}
+              />
+            )}
+            {!isOpsWorkforce && workforceConfig.profileType !== "field_executive" && editExecutive.onboarding_status === "under_review" ? (
               <section className="profile-review-panel">
                 <div className="profile-review-head">
                   <div>

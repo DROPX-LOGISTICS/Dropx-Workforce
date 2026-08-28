@@ -20,6 +20,9 @@ export type FieldExecutiveListRow = {
   isActive: boolean;
   status: string;
   canEdit?: boolean;
+  createdBy?: string | null;
+  editHref?: string;
+  viewHref?: string;
 };
 
 const pageSize = 20;
@@ -290,6 +293,7 @@ export function FieldExecutiveList({
                 <td>{row.designation}</td>
                 <td><StatusPill status={row.status} /></td>
                 {showActions ? <td className="action-cell">
+                  {row.viewHref || row.editHref ? (
                   <div className="row-action-menu" ref={openMenuId === row.id ? menuRef : undefined}>
                     <button
                       aria-expanded={openMenuId === row.id}
@@ -303,17 +307,18 @@ export function FieldExecutiveList({
                     </button>
                     {openMenuId === row.id ? (
                       <div className="row-action-popover">
-                        <PendingLink className="row-action-item" href={`${basePath}?view=${row.id}`} scroll={false}>
+                        <PendingLink className="row-action-item" href={row.viewHref ?? `${basePath}?view=${row.id}`} scroll={false}>
                           <Eye size={15} aria-hidden="true" /> View
                         </PendingLink>
                         {canEdit && row.canEdit !== false ? (
-                          <PendingLink className="row-action-item" href={`${basePath}?edit=${row.id}`} scroll={false}>
+                          <PendingLink className="row-action-item" href={row.editHref ?? `${basePath}?edit=${row.id}`} scroll={false}>
                             <Pencil size={15} aria-hidden="true" /> Edit
                           </PendingLink>
                         ) : null}
                       </div>
                     ) : null}
                   </div>
+                  ) : <span className="subtle">-</span>}
                 </td> : null}
               </tr>
             )) : (

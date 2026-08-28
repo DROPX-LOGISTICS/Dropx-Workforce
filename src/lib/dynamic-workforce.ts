@@ -34,7 +34,7 @@ export function workforceCategoryPageCode(value: unknown) {
 
 export function dynamicWorkforceTable(value: unknown) {
   const code = normalizeWorkforceCategoryCode(value);
-  if (!code) throw new Error("Invalid workforce category code.");
+  if (!code) throw new Error("Invalid engagement type code.");
   return `workforce_${code}`;
 }
 

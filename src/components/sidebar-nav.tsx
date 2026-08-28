@@ -9,9 +9,56 @@ import type { NavItem } from "@/lib/app-navigation";
 type SidebarNavProps = {
   active: string;
   items: NavItem[];
+  variant?: "default" | "workforce";
 };
 
-export function SidebarNav({ active, items }: SidebarNavProps) {
+export function SidebarNav({ active, items, variant = "default" }: SidebarNavProps) {
+  if (variant === "workforce") {
+    return <WorkforceSidebarNav active={active} items={items} />;
+  }
+
+  return <DefaultSidebarNav active={active} items={items} />;
+}
+
+function WorkforceSidebarNav({ active, items }: Pick<SidebarNavProps, "active" | "items">) {
+  return (
+    <nav className="workforce-nav" aria-label="Workforce navigation">
+      {items.map((item) => item.children ? (
+        <section className="workforce-nav-section" key={item.label}>
+          <div className="workforce-nav-heading">
+            <span className="workforce-nav-icon"><Icon>{item.icon}</Icon></span>
+            <span>{item.label}</span>
+          </div>
+          <div className="workforce-nav-links">
+            {item.children.map((child) => child.href ? (
+              <PendingLink
+                className={`workforce-nav-link ${active === child.label ? "active" : ""}`.trim()}
+                disableWhenCurrent
+                href={child.href}
+                key={child.label}
+              >
+                <span className="workforce-route-dot" aria-hidden="true" />
+                <span>{child.label}</span>
+              </PendingLink>
+            ) : null)}
+          </div>
+        </section>
+      ) : item.href ? (
+        <PendingLink
+          className={`workforce-nav-home ${active === item.label ? "active" : ""}`.trim()}
+          disableWhenCurrent
+          href={item.href}
+          key={item.label}
+        >
+          <span className="workforce-nav-icon"><Icon>{item.icon}</Icon></span>
+          <span>{item.label}</span>
+        </PendingLink>
+      ) : null)}
+    </nav>
+  );
+}
+
+function DefaultSidebarNav({ active, items }: Pick<SidebarNavProps, "active" | "items">) {
   const groupRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const submenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [submenuUp, setSubmenuUp] = useState<Record<string, boolean>>({});

@@ -3,6 +3,7 @@ import { AddUserForm } from "@/components/add-user-form";
 import { DismissibleModal, DismissModalButton } from "@/components/dismissible-modal";
 import { ManageUserForm } from "@/components/manage-user-form";
 import { PageHead } from "@/components/page-head";
+import { PendingLink } from "@/components/pending-link";
 import { PermissionMatrix } from "@/components/permission-matrix";
 import { SearchableSelect } from "@/components/searchable-select";
 import { SubmitButton } from "@/components/submit-button";
@@ -398,11 +399,12 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   const authorization = await requirePagePermission("users", "access");
   const companyId = requireCompanyId(authorization);
   const accessSurface = currentAccessSurface();
+  const isWorkforceSurface = accessSurface === "workforce";
   const pagePermission = authorization.permissions.users;
   const activeSection = searchParams?.section === "roles" || searchParams?.addRole || searchParams?.editRole ? "roles" : "users";
   const showUsersSection = activeSection === "users";
   const showRolesSection = activeSection === "roles";
-  const needsUserData = showUsersSection || Boolean(searchParams?.addUser || searchParams?.editUser);
+  const needsUserData = showUsersSection || Boolean(searchParams?.addUser || searchParams?.editUser || searchParams?.editRole);
   const needsRoleEditorData = Boolean(searchParams?.addRole || searchParams?.editRole);
   const { pages, roles, permissions, users, locations, error } = await loadAccessData(companyId, accessSurface, {
     includeUsers: needsUserData,
@@ -410,8 +412,16 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   });
   const showAddUser = pagePermission.canAdd && searchParams?.addUser === "1";
   const showAddRole = pagePermission.canAdd && searchParams?.addRole === "1";
-  const editUser = pagePermission.canEdit ? users.find((user) => user.id === searchParams?.editUser) ?? null : null;
-  const editRole = pagePermission.canEdit ? roles.find((role) => role.id === searchParams?.editRole) ?? null : null;
+  const surfacePageIds = new Set(pages.map((page) => page.id));
+  const surfacePermissions = permissions.filter((permission) => surfacePageIds.has(permission.page_id));
+  const surfaceRoleIds = new Set(surfacePermissions
+    .filter((permission) => permission.can_view || permission.can_add || permission.can_edit)
+    .map((permission) => permission.role_id));
+  const visibleRoles = isWorkforceSurface ? roles.filter((role) => surfaceRoleIds.has(role.id)) : roles;
+  const editUser = !isWorkforceSurface && pagePermission.canEdit
+    ? users.find((user) => user.id === searchParams?.editUser) ?? null
+    : null;
+  const editRole = pagePermission.canEdit ? visibleRoles.find((role) => role.id === searchParams?.editRole) ?? null : null;
   const roleModalError = showAddRole || editRole ? searchParams?.userError ?? null : null;
   const pageUserError = roleModalError ? null : searchParams?.userError ?? null;
   const userReturnHref = usersReturnHref(searchParams);
@@ -482,14 +492,20 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       helper: user.employee_id || user.email || undefined
     }));
 
+  const activeLabel = isWorkforceSurface
+    ? showRolesSection ? "User Roles" : "Add User"
+    : "Users & Access";
+
   return (
-    <AppShell active="Users & Access">
+    <AppShell active={activeLabel}>
       <PageHead
         eyebrow={`${accessSurfaceLabel(accessSurface)} admin setup`}
-        title={showRolesSection ? "User roles and permissions" : "Users and station access"}
+        title={showRolesSection ? "User roles and permissions" : isWorkforceSurface ? "Add Workforce user" : "Users and station access"}
         subtitle={showRolesSection
           ? `Define role hierarchy and permissions for the ${accessSurfaceLabel(accessSurface).toLowerCase()} frontend only. Other frontend permissions are preserved.`
-          : `Create users and manage access for the ${accessSurfaceLabel(accessSurface).toLowerCase()} frontend.`}
+          : isWorkforceSurface
+            ? "Create a Workforce login with a Workforce-enabled role and location scope. The company-wide user directory is not exposed here."
+            : `Create users and manage access for the ${accessSurfaceLabel(accessSurface).toLowerCase()} frontend.`}
       />
 
       {error ? (
@@ -514,7 +530,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
         </section>
       ) : null}
 
-      {showUsersSection && (pagePermission.canView || pagePermission.canEdit) ? (
+      {showUsersSection && !isWorkforceSurface && (pagePermission.canView || pagePermission.canEdit) ? (
       <UsersListPanel
         canAdd={pagePermission.canAdd}
         canEdit={pagePermission.canEdit}
@@ -544,18 +560,50 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       />
       ) : null}
 
+      {showUsersSection && isWorkforceSurface ? (
+        <section className="panel workforce-add-user-panel">
+          <div className="panel-head">
+            <div>
+              <h2>New Workforce user</h2>
+              <p className="subtle">Only Workforce-enabled roles can be assigned. Existing company users are not listed or editable from this product.</p>
+            </div>
+            <span className="status-pill good">Add only</span>
+          </div>
+          <div className="panel-body">
+            {pagePermission.canAdd ? (
+              visibleRoles.length ? (
+                <AddUserForm
+                  assignableRoleIds={[...surfaceRoleIds]}
+                  roles={addUserRoles}
+                  users={addUserProfiles}
+                  locations={locationScopeOptions}
+                />
+              ) : (
+                <div className="workforce-user-empty">
+                  <strong>Create a Workforce role first</strong>
+                  <p className="subtle">At least one active role needs Workforce permissions before a user can be added.</p>
+                  <PendingLink className="button" href="/users?section=roles&addRole=1">Add Workforce role</PendingLink>
+                </div>
+              )
+            ) : (
+              <p className="subtle">Your role does not have permission to add Workforce users.</p>
+            )}
+          </div>
+        </section>
+      ) : null}
+
       {showRolesSection && (pagePermission.canView || pagePermission.canEdit) ? (
       <UserRolesListPanel
         canAdd={pagePermission.canAdd}
         canEdit={pagePermission.canEdit}
-        roles={roles.map((role) => ({
+        roles={visibleRoles.map((role) => ({
           ...role,
-          permissionSummary: permissionText(role, permissions)
+          permissionSummary: permissionText(role, surfacePermissions)
         }))}
       />
       ) : null}
 
-      {showAddUser ? (
+      {showAddUser && !isWorkforceSurface ? (
         <DismissibleModal closeHref={sectionHref("users")}>
           <section className="modal-panel wide" aria-label="Add user">
             <div className="panel-head">

@@ -24,6 +24,7 @@ export default function ContractorsPage({
       bulkImportDescription="Upload existing independent contractor rows and keep the profile completion pending for the app."
       bulkImportTitle="Bulk upload independent contractors"
       designationCategoryFilter={["contractors"]}
+      designationPeopleModule="people_hr"
       detailSubtitle="Complete Independent Contractor profile"
       editId={searchParams?.edit}
       editTitle="Edit independent contractor"

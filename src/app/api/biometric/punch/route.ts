@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createAttendancePunchNotification } from "@/lib/app-notifications";
-import { punchLabel, rebuildAttendanceDay, resolveAttendanceWorkDate } from "@/lib/biometric/attendance";
+import { istDate, punchLabel, rebuildAttendanceDay, rebuildAttendanceReviewDay, resolveAttendanceWorkDate, type AttendanceReviewReason } from "@/lib/biometric/attendance";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -212,6 +212,53 @@ async function createAlert({
     message,
     raw_event_id: rawEventId ?? null
   });
+}
+
+async function storeReviewPunch({
+  companyId,
+  device,
+  enrolment,
+  enrolmentId,
+  deviceSerial,
+  punchTime,
+  rawEventId,
+  reason
+}: {
+  companyId: string;
+  device: DeviceRow;
+  enrolment?: EnrolmentRow | null;
+  enrolmentId: string;
+  deviceSerial: string;
+  punchTime: Date;
+  rawEventId: string;
+  reason: AttendanceReviewReason;
+}) {
+  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+  const punchDate = istDate(punchTime);
+  const result = await supabaseAdmin
+    .from("attendance_punches")
+    .upsert({
+      company_id: companyId,
+      raw_event_id: rawEventId,
+      device_id: device.id,
+      enrolment_id: enrolmentId,
+      worker_type: enrolment?.worker_type ?? "unmapped",
+      profile_type: enrolment?.profile_type ?? null,
+      account_id: enrolment?.account_id ?? null,
+      employee_id: enrolment?.employee_id ?? null,
+      field_executive_id: enrolment?.field_executive_id ?? null,
+      location_id: enrolment?.location_id ?? device.location_id,
+      device_serial: deviceSerial,
+      punch_time: punchTime.toISOString(),
+      punch_date: punchDate,
+      punch_order: 1,
+      punch_label: punchLabel(1),
+      worker_status: reason === "inactive" ? enrolment?.status ?? "Inactive" : "Review",
+      calculated: false
+    }, { ignoreDuplicates: true, onConflict: "company_id,device_serial,enrolment_id,punch_time" });
+  if (result.error) throw new Error(result.error.message);
+  await rebuildAttendanceReviewDay({ companyId, enrolmentId, punchDate, reason });
+  console.warn("[biometric:punch:review]", JSON.stringify({ companyId, enrolmentId, punchDate, reason }));
 }
 
 async function findCurrentEnrolments(companyId: string, enrolmentId: string) {
@@ -460,6 +507,7 @@ export async function POST(request: NextRequest) {
         rawEventId,
         severity: "high"
       });
+      await storeReviewPunch({ companyId: device.company_id, device, deviceSerial, enrolmentId, punchTime, rawEventId, reason: "duplicate" });
       return Response.json({ ok: true, stored: "raw_event", alert: "duplicate_enrolment_id" });
     }
 
@@ -490,6 +538,7 @@ export async function POST(request: NextRequest) {
           rawEventId,
           severity: "high"
         });
+        await storeReviewPunch({ companyId: device.company_id, device, deviceSerial, enrolmentId, punchTime, rawEventId, reason: "duplicate" });
         return Response.json({ ok: true, stored: "raw_event", alert: "duplicate_enrolment_id" });
       } else {
         await createAlert({
@@ -501,6 +550,7 @@ export async function POST(request: NextRequest) {
           rawEventId,
           severity: "high"
         });
+        await storeReviewPunch({ companyId: device.company_id, device, deviceSerial, enrolmentId, punchTime, rawEventId, reason: "unmapped" });
         return Response.json({ ok: true, stored: "raw_event", alert: "unknown_enrolment" });
       }
     }
@@ -566,6 +616,8 @@ export async function POST(request: NextRequest) {
         rawEventId,
         severity: "high"
       });
+      await rebuildAttendanceReviewDay({ companyId: device.company_id, enrolmentId: canonicalEnrolmentId, punchDate, reason: "inactive" });
+      console.warn("[biometric:punch:review]", JSON.stringify({ companyId: device.company_id, enrolmentId: canonicalEnrolmentId, punchDate, reason: "inactive" }));
       return Response.json({ ok: true, stored: "inactive_punch", alert: "inactive_worker_punched" });
     }
 
@@ -602,6 +654,7 @@ export async function POST(request: NextRequest) {
       punchLabel: punchLabel(nextOrder)
     });
   } catch (error) {
+    console.error("[biometric:punch:error]", error instanceof Error ? error.message : error);
     return jsonError(error instanceof Error ? error.message : "Unable to process biometric punch.", 500);
   }
 }

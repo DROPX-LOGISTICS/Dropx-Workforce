@@ -24,9 +24,11 @@ const PaymentNotificationContext = createContext<PaymentNotificationContextValue
 
 export function PaymentNotificationProvider({
   children,
+  enabled = true,
   initialData
 }: {
   children: ReactNode;
+  enabled?: boolean;
   initialData: PaymentNotificationSnapshot;
 }) {
   const pathname = usePathname();
@@ -34,6 +36,7 @@ export function PaymentNotificationProvider({
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const refresh = useCallback(async () => {
+    if (!enabled) return;
     setIsRefreshing(true);
     try {
       const response = await fetch("/api/payment-notifications", { cache: "no-store" });
@@ -43,13 +46,15 @@ export function PaymentNotificationProvider({
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     void refresh();
-  }, [pathname, refresh]);
+  }, [enabled, pathname, refresh]);
 
   useEffect(() => {
+    if (!enabled) return;
     const intervalId = window.setInterval(() => {
       void refresh();
     }, 15000);
@@ -63,7 +68,7 @@ export function PaymentNotificationProvider({
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [refresh]);
+  }, [enabled, refresh]);
 
   const value = useMemo(() => ({ isRefreshing, refresh, snapshot }), [isRefreshing, refresh, snapshot]);
 

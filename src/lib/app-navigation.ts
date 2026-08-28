@@ -35,11 +35,21 @@ export const navItems: NavItem[] = [
       { code: "people_all", label: "All People", href: "/people/all" },
       { code: "people_review", label: "Under Review", href: "/people/review" },
       { code: "people_exceptions", label: "Exception", href: "/people/exceptions" },
-      { code: "people_review", label: "Workforce Lifecycle", href: "/people/workforce-lifecycle" }
+      { code: "designations", label: "People Designations", href: "/people/designations" }
     ]
   },
-  { code: "executive_id_onboarding", label: "Executive ID Onboarding", href: "/executive-id-onboarding", icon: "ID" },
-  { code: "provider_mapping", label: "ID Mapping", href: "/provider-mapping", icon: "<>" },
+  {
+    code: "delivery_network",
+    label: "Delivery Network",
+    icon: "DN",
+    children: [
+      { code: "delivery_associates", label: "Overview", href: "/delivery-network" },
+      { code: "delivery_associates", label: "Onboarding", href: "/delivery-network/onboarding" },
+      { code: "executive_id_onboarding", label: "Provider ID Onboarding", href: "/delivery-network/id-onboarding" },
+      { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping" },
+      { code: "people_review", label: "Lifecycle", href: "/delivery-network/lifecycle" }
+    ]
+  },
   fleetNavItem,
   { code: "assets", label: "Assets", href: "/assets", icon: "A" },
   { code: "imports", label: "Report Imports", href: "/imports", icon: "^" },
@@ -100,7 +110,7 @@ export const navItems: NavItem[] = [
       { code: "master_payment_banks", label: "Payment Banks", href: "/master/payment-banks" },
       { code: "master_payment_heads", label: "Payment Heads", href: "/master/payment-heads" },
       { code: "master_contacts", label: "Contacts", href: "/master/contacts" },
-      { code: "workforce_categories", label: "Workforce Categories", href: "/master/workforce-categories" },
+      { code: "workforce_categories", label: "Engagement Types", href: "/master/workforce-categories" },
       { code: "workforce_whatsapp", label: "Workforce WhatsApp", href: "/master/workforce-whatsapp" },
       { code: "designations", label: "Designations", href: "/master/designations" },
       { code: "biometric_devices", label: "Device Master", href: "/master/biometric-devices" },
@@ -124,6 +134,57 @@ export const navItems: NavItem[] = [
       { code: "ai_connector", label: "AI Connector", href: "/settings/ai" },
       { code: "amazon_connector", label: "Amazon Connector", href: "/settings/amazon" },
       { code: "developer_mode", label: "Developer Mode", href: "/developer" }
+    ]
+  }
+];
+
+export const workforceNavItems: NavItem[] = [
+  { code: "delivery_associates", label: "Workforce Dashboard", href: "/delivery-network", icon: "WR" },
+  {
+    code: "delivery_associates",
+    label: "Workforce Operations",
+    icon: "DA",
+    children: [
+      { code: "delivery_associates", label: "Workforce Register", href: "/delivery-network/associates" },
+      { code: "delivery_associates", label: "Onboard Workforce", href: "/delivery-network/onboarding" },
+      { code: "people_review", label: "Activation & Lifecycle", href: "/delivery-network/lifecycle" }
+    ]
+  },
+  {
+    code: "provider_mapping",
+    label: "IDs & Rate Cards",
+    icon: "ID",
+    children: [
+      { code: "executive_id_onboarding", label: "Provider ID Onboarding", href: "/delivery-network/id-onboarding" },
+      { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping" }
+    ]
+  },
+  {
+    code: "workforce_communications",
+    label: "Communications",
+    icon: "CM",
+    children: [
+      { code: "workforce_communications", label: "Communication Center", href: "/delivery-network/communications" },
+      { code: "workforce_communications_app", label: "DropX One Notifications", href: "/delivery-network/communications/dropx-one" },
+      { code: "workforce_communications_whatsapp", label: "WhatsApp", href: "/delivery-network/communications/whatsapp" },
+      { code: "workforce_communications_history", label: "Communication History", href: "/delivery-network/communications/history" }
+    ]
+  },
+  {
+    code: "users",
+    label: "Workforce Access",
+    icon: "UA",
+    children: [
+      { code: "users", label: "Add User", href: "/users?section=users" },
+      { code: "users", label: "User Roles", href: "/users?section=roles" }
+    ]
+  },
+  {
+    code: "designations",
+    label: "Workforce Master",
+    icon: "WM",
+    children: [
+      { code: "designations", label: "Workforce Designations", href: "/delivery-network/designations" }
     ]
   }
 ];

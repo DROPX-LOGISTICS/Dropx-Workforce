@@ -11,21 +11,22 @@ import { OwnerPreviewSwitcher } from "@/components/owner-preview-switcher";
 import { OpsAiChat } from "@/components/ops-ai-chat";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { UserMenu } from "@/components/user-menu";
+import { WorkforceProductFrame } from "@/components/workforce-product-frame";
 import { redirect } from "next/navigation";
 import { getAuthorization, hasPermission } from "@/lib/authorization";
-import { navItems } from "@/lib/app-navigation";
+import { navItems, workforceNavItems } from "@/lib/app-navigation";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
 import { resolveOperatingContext } from "@/lib/ops-pulse/operating-context";
 import { operatingModeForLocation } from "@/lib/ops-pulse/operating-context";
-import { loadPaymentNotificationSnapshot } from "@/lib/payment-notification-counts";
+import { emptyPaymentNotificationSnapshot, loadPaymentNotificationSnapshot } from "@/lib/payment-notification-counts";
 import { opsNavItemsForMode } from "@/lib/ops-pulse/navigation";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { workforceCategoryPageCode } from "@/lib/dynamic-workforce";
 
 const workforceCategoryRoutes: Record<string, { code: string; href: string }> = {
   employees: { code: "employees", href: "/employees" },
-  field_executives: { code: "delivery_associates", href: "/field-executive" },
+  field_executives: { code: "delivery_associates", href: "/delivery-network/onboarding" },
   contractors: { code: "contractors", href: "/contractors" },
   vendors: { code: "vendors", href: "/vendors" },
   workers: { code: "workers", href: "/workers" }
@@ -36,6 +37,9 @@ export async function AppShell({ children, active, pageCode }: { children: React
   if (!authorization) redirect("/login");
   const host = headers().get("host")?.split(":")[0].toLowerCase() ?? "";
   const isOpsHost = host === "ops.dropxlogistics.com" || host.startsWith("ops-");
+  const isWorkforceHost = host === "workforce.dropxlogistics.com" ||
+    host.startsWith("workforce-") ||
+    (host.endsWith(".vercel.app") && host.includes("workforce"));
   const opsAppUrl = process.env.OPS_APP_URL?.trim();
   const opsLocationsResult = isOpsHost
     ? await loadCodLocations(
@@ -47,9 +51,11 @@ export async function AppShell({ children, active, pageCode }: { children: React
   const opsContext = resolveOperatingContext(opsLocationsResult.locations);
   const baseShellNavItems = isOpsHost
     ? opsNavItemsForMode(opsContext.mode)
-    : navItems.map((item) => item.code === "ops_pulse" && opsAppUrl ? { ...item, href: opsAppUrl } : item);
+    : isWorkforceHost
+      ? workforceNavItems
+      : navItems.map((item) => item.code === "ops_pulse" && opsAppUrl ? { ...item, href: opsAppUrl } : item);
   let workforceCategories: Array<{ code: string; name: string }> = [];
-  if (!isOpsHost && supabaseAdmin && authorization.companyId) {
+  if (!isOpsHost && !isWorkforceHost && supabaseAdmin && authorization.companyId) {
     const categoryResult = await supabaseAdmin
       .from("workforce_categories")
       .select("code, name")
@@ -71,10 +77,10 @@ export async function AppShell({ children, active, pageCode }: { children: React
       ...item,
       children: [
         { code: "people_all", label: "All People", href: "/people/all" },
+        { code: "designations", label: "People Designations", href: "/people/designations" },
         ...categoryChildren,
         { code: "people_review", label: "Under Review", href: "/people/review" },
-        { code: "people_exceptions", label: "Exception", href: "/people/exceptions" },
-        { code: "people_review", label: "Workforce Lifecycle", href: "/people/workforce-lifecycle" }
+        { code: "people_exceptions", label: "Exception", href: "/people/exceptions" }
       ]
     };
   });
@@ -88,8 +94,10 @@ export async function AppShell({ children, active, pageCode }: { children: React
       children: item.children.filter((child) => !child.code || hasPermission(authorization, child.code, "access"))
     } : item)
     .filter((item) => item.children?.length ? item.children.length > 0 : hasPermission(authorization, item.code, "access"));
-  const inboxNotificationsEnabled = hasPermission(authorization, "inbox", "access");
-  const paymentNotifications = await loadPaymentNotificationSnapshot(authorization);
+  const inboxNotificationsEnabled = !isWorkforceHost && hasPermission(authorization, "inbox", "access");
+  const paymentNotifications = isWorkforceHost
+    ? emptyPaymentNotificationSnapshot()
+    : await loadPaymentNotificationSnapshot(authorization);
   const userMenuProps = {
     action: signOut,
     email: authorization.email,
@@ -98,7 +106,7 @@ export async function AppShell({ children, active, pageCode }: { children: React
   };
   const topActions = (
     <>
-      {authorization.canPreviewUsers ? <OwnerPreviewSwitcher active={Boolean(authorization.isPreview)} name={authorization.fullName ?? "user"} /> : null}
+      {!isWorkforceHost && authorization.canPreviewUsers ? <OwnerPreviewSwitcher active={Boolean(authorization.isPreview)} name={authorization.fullName ?? "user"} /> : null}
       {isOpsHost && opsContext.location ? (
         <OpsContextSwitcher
           availableModes={opsContext.availableModes}
@@ -109,16 +117,27 @@ export async function AppShell({ children, active, pageCode }: { children: React
           selectedLocationIds={opsContext.selectedLocations.map((location) => location.id)}
         />
       ) : null}
-      <PaymentNotificationBell />
+      {!isWorkforceHost ? <PaymentNotificationBell /> : null}
       <UserMenu {...userMenuProps} />
     </>
   );
 
+  if (isWorkforceHost) {
+    return (
+      <WorkforceProductFrame active={active} actions={topActions} items={visibleNavItems}>
+        <DocumentTitle pageName={active} productName="Workforce · DropX" />
+        {authorization.isPreview ? <div className="owner-preview-banner"><strong>Read-only user preview</strong><span>You are seeing this portal as {authorization.fullName}. Changes are blocked until you exit preview.</span></div> : null}
+        {children}
+      </WorkforceProductFrame>
+    );
+  }
+
   return (
-    <PaymentNotificationProvider initialData={paymentNotifications}>
+    <PaymentNotificationProvider enabled initialData={paymentNotifications}>
     <AppShellFrame
       desktopActions={topActions}
       mobileActions={topActions}
+      variant="default"
       sidebar={(
         <aside className="sidebar">
           <div className="brand">
@@ -138,7 +157,7 @@ export async function AppShell({ children, active, pageCode }: { children: React
             ) : null}
           </div>
 
-          <SidebarNav active={active} items={visibleNavItems} />
+          <SidebarNav active={active} items={visibleNavItems} variant="default" />
 
           <div className="sidebar-footer">
             <strong>{authorization.fullName ?? authorization.email ?? "DropX user"}</strong>
@@ -148,7 +167,10 @@ export async function AppShell({ children, active, pageCode }: { children: React
         </aside>
       )}
     >
-      <DocumentTitle pageName={active} productName={isOpsHost ? "OpsPulse · DropX" : "DropX Dashboard"} />
+      <DocumentTitle
+        pageName={active}
+        productName={isOpsHost ? "OpsPulse · DropX" : "DropX Dashboard"}
+      />
       {authorization.isPreview ? <div className="owner-preview-banner"><strong>Read-only user preview</strong><span>You are seeing this portal as {authorization.fullName}. Changes are blocked until you exit preview.</span></div> : null}
       <InboxNotificationListener enabled={inboxNotificationsEnabled} />
       {children}

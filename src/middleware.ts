@@ -13,6 +13,12 @@ const MOVED_OPS_PAYMENT_PATHS = [
   "/payments/approvals",
   "/payments/report"
 ];
+const WORKFORCE_ROOTS = [
+  "/delivery-network",
+  "/users",
+  "/unauthorized"
+];
+const WORKFORCE_EXACT_PATHS = new Set(["/"]);
 
 function cleanOpsPath(path: string) {
   if (path === "/ops-pulse") return "/";
@@ -25,6 +31,10 @@ function isCleanOpsPath(path: string) {
 
 function isMovedOpsPaymentPath(path: string) {
   return MOVED_OPS_PAYMENT_PATHS.some((root) => path === root || path.startsWith(`${root}/`));
+}
+
+function isWorkforcePath(path: string) {
+  return WORKFORCE_EXACT_PATHS.has(path) || WORKFORCE_ROOTS.some((root) => path === root || path.startsWith(`${root}/`));
 }
 
 function isAssetPath(path: string) {
@@ -72,6 +82,9 @@ export async function middleware(request: NextRequest) {
   const host = request.headers.get("host")?.split(":")[0].toLowerCase() ?? "";
   const isPlatformAdminHost = host === "admin-panel.dropxlogistics.com";
   const isOpsHost = host === "ops.dropxlogistics.com";
+  const isWorkforceHost = host === "workforce.dropxlogistics.com" ||
+    host.startsWith("workforce-") ||
+    (host.endsWith(".vercel.app") && host.includes("workforce"));
   const isDashboardHost = host === "dashboard.dropxlogistics.com";
   const isSharedOpsPath = path === "/fleet" || path.startsWith("/fleet/") ||
     path === "/business-documents" || path.startsWith("/business-documents/");
@@ -100,6 +113,24 @@ export async function middleware(request: NextRequest) {
     !path.startsWith("/cps") &&
     !path.startsWith("/master/") &&
     !path.startsWith("/users") &&
+    !path.startsWith("/api/") &&
+    !path.startsWith("/auth/") &&
+    !path.startsWith("/_next/") &&
+    !isPublicOpsInstallAsset(path) &&
+    !isAssetPath(path)
+  ) {
+    const deniedUrl = request.nextUrl.clone();
+    deniedUrl.pathname = "/unauthorized";
+    deniedUrl.search = "";
+    deniedUrl.searchParams.set("reason", "surface");
+    deniedUrl.searchParams.set("requested", path);
+    return NextResponse.redirect(deniedUrl);
+  }
+
+  if (
+    isWorkforceHost &&
+    path !== "/login" &&
+    !isWorkforcePath(path) &&
     !path.startsWith("/api/") &&
     !path.startsWith("/auth/") &&
     !path.startsWith("/_next/") &&
@@ -198,6 +229,15 @@ export async function middleware(request: NextRequest) {
     const rewriteUrl = request.nextUrl.clone();
     rewriteUrl.pathname = "/platform-admin";
     return NextResponse.rewrite(rewriteUrl);
+  }
+
+
+  if (isWorkforceHost && path === "/") {
+    const rewriteUrl = request.nextUrl.clone();
+    rewriteUrl.pathname = "/delivery-network";
+    const rewriteResponse = NextResponse.rewrite(rewriteUrl);
+    response.cookies.getAll().forEach((cookie) => rewriteResponse.cookies.set(cookie));
+    return rewriteResponse;
   }
 
   if (isOpsHost && isCleanOpsPath(path)) {

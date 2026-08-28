@@ -90,10 +90,12 @@ function parseLocationScope(value: FormDataEntryValue | null) {
 }
 
 export function AddUserForm({
+  assignableRoleIds,
   roles,
   users,
   locations
 }: {
+  assignableRoleIds?: string[];
   roles: AddUserRoleOption[];
   users: AddUserProfileOption[];
   locations: LocationScopeOption[];
@@ -102,6 +104,14 @@ export function AddUserForm({
   const [draft, setDraft] = useState<AddUserDraft>(emptyDraft);
   const [roleId, setRoleId] = useState(emptyDraft.roleId);
   const [reportsToUserId, setReportsToUserId] = useState(emptyDraft.reportsToUserId);
+  const assignableRoles = useMemo(
+    () => {
+      if (!assignableRoleIds) return roles;
+      const roleIds = new Set(assignableRoleIds);
+      return roles.filter((role) => roleIds.has(role.id));
+    },
+    [assignableRoleIds, roles]
+  );
 
   const selectedRole = roles.find((role) => role.id === roleId) ?? null;
   const isLocationRole = selectedRole?.code === "LOCATION";
@@ -208,7 +218,7 @@ export function AddUserForm({
             value={roleId}
           >
             <option value="">Select role</option>
-            {roles.map((role) => (
+            {assignableRoles.map((role) => (
               <option key={role.id} value={role.id}>{role.name}</option>
             ))}
           </select>

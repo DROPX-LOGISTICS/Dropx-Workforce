@@ -11,7 +11,7 @@ import { redirect } from "next/navigation";
 
 const sources = [
   { categoryCode: "employees", category: "Employees", pageCode: "employees", basePath: "/employees", table: "employees", codeField: "employee_code", statusField: "profile_completion_status", employeeDesignation: true },
-  { categoryCode: "field_executives", category: "Field Executives", pageCode: "delivery_associates", basePath: "/field-executive", table: "field_executives", codeField: "dropx_id", statusField: "onboarding_status", employeeDesignation: false },
+  { categoryCode: "field_executives", category: "Delivery Network", pageCode: "delivery_associates", basePath: "/delivery-network/onboarding", table: "field_executives", codeField: "dropx_id", statusField: "onboarding_status", employeeDesignation: false },
   { categoryCode: "contractors", category: "Independent Contractor", pageCode: "contractors", basePath: "/contractors", table: "contractors", codeField: "dropx_id", statusField: "onboarding_status", employeeDesignation: false },
   { categoryCode: "vendors", category: "Vendors", pageCode: "vendors", basePath: "/vendors", table: "vendors", codeField: "dropx_id", statusField: "onboarding_status", employeeDesignation: false },
   { categoryCode: "workers", category: "Workers", pageCode: "workers", basePath: "/workers", table: "workers", codeField: "dropx_id", statusField: "onboarding_status", employeeDesignation: false }
@@ -217,6 +217,7 @@ async function loadPeople(
             viewHref: profileActionHref(source.basePath, "view", row.id),
             editHref: profileActionHref(source.basePath, "edit", row.id),
             canEdit: source.canEdit && canAccessDesignationPortal(designationRecord, "dashboard", "edit", { isOwner: ownerAccess }),
+            canDelete: ownerAccess,
             exportValues: buildExportValues(row, source.codeField, source.category, location, designation, status, source.employeeDesignation)
           };
         })
@@ -258,6 +259,7 @@ async function loadPeople(
             viewHref: profileActionHref(source.basePath, "view", row.id),
             editHref: profileActionHref(source.basePath, "edit", row.id),
             canEdit: source.canEdit && canAccessDesignationPortal(designationRecord, "dashboard", "edit", { isOwner: ownerAccess }),
+            canDelete: ownerAccess,
             exportValues: buildExportValues(row, source.codeField, source.category, location, designation, status, false)
           };
         })
@@ -273,7 +275,7 @@ async function loadPeople(
 
 export const dynamic = "force-dynamic";
 
-export default async function AllPeoplePage() {
+export default async function AllPeoplePage({ searchParams }: { searchParams?: { error?: string; notice?: string } }) {
   const authorization = await getAuthorization();
   if (!authorization) redirect("/login");
   if (!hasPermission(authorization, "people_all", "access")) redirect("/unauthorized?page=people_all&action=access");
@@ -291,7 +293,15 @@ export default async function AllPeoplePage() {
   );
   return (
     <AppShell active="All People" pageCode="people_all">
-      <PageHead eyebrow="People" title="All People" subtitle="View every workforce category in one consolidated register." />
+      <PageHead eyebrow="People" title="All People" subtitle="View every engagement type in one consolidated register." />
+      {searchParams?.error || searchParams?.notice ? (
+        <section className={`panel message-panel ${searchParams.error ? "error" : "success"}`}>
+          <div className="panel-body">
+            <strong>{searchParams.error ? "Profile was not deleted" : "Profile deleted"}</strong>
+            <p className="subtle">{searchParams.error ?? searchParams.notice}</p>
+          </div>
+        </section>
+      ) : null}
       {data.error ? (
         <section className="panel message-panel error"><div className="panel-body"><strong>Unable to load people</strong><p className="subtle">{data.error}</p></div></section>
       ) : null}

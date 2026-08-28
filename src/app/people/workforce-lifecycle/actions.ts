@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { syncBiometricEnrolment } from "@/lib/biometric/enrolments";
@@ -13,7 +14,15 @@ function lifecycleRedirect(params: { error?: string; notice?: string; tab?: stri
   if (params.error) query.set("error", params.error);
   if (params.notice) query.set("notice", params.notice);
   if (params.tab) query.set("tab", params.tab);
-  redirect(`/people/workforce-lifecycle${query.size ? `?${query.toString()}` : ""}`);
+  let path = "/people/workforce-lifecycle";
+  try {
+    if (new URL(headers().get("referer") ?? "http://localhost").pathname.startsWith("/delivery-network/")) {
+      path = "/delivery-network/lifecycle";
+    }
+  } catch {
+    // Keep the compatibility route when the request has no usable referrer.
+  }
+  redirect(`${path}${query.size ? `?${query.toString()}` : ""}`);
 }
 
 function isRedirect(error: unknown) {
@@ -256,7 +265,7 @@ export async function reviewWorkforceExit(formData: FormData) {
       .eq("company_id", companyId).eq("id", caseId).maybeSingle();
     if (current.error) throw new Error(current.error.message);
     if (!current.data) throw new Error("Exit case was not found.");
-    if (!isNonEmployeeProfileType(current.data.profile_type)) throw new Error("This workforce category is not supported by this queue.");
+    if (!isNonEmployeeProfileType(current.data.profile_type)) throw new Error("This engagement type is not supported by this queue.");
     const locationId = String(current.data.profile_location_id ?? "");
     if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) throw new Error("You do not have access to this location.");
     if (!["submitted", "under_review"].includes(String(current.data.status))) throw new Error("This exit case has already been decided.");
@@ -311,7 +320,7 @@ export async function completeWorkforceSettlement(formData: FormData) {
       .eq("company_id", companyId).eq("id", caseId).maybeSingle();
     if (current.error) throw new Error(current.error.message);
     if (!current.data || current.data.status !== "settlement_pending") throw new Error("Choose an exit awaiting settlement.");
-    if (!isNonEmployeeProfileType(current.data.profile_type)) throw new Error("This workforce category is not supported by this queue.");
+    if (!isNonEmployeeProfileType(current.data.profile_type)) throw new Error("This engagement type is not supported by this queue.");
     const locationId = String(current.data.profile_location_id ?? "");
     if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) throw new Error("You do not have access to this location.");
     const masters = await supabaseAdmin.from("workforce_exit_checklist_master").select("id, label, is_required")

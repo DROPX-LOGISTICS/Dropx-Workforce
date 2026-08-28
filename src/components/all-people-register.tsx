@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, EllipsisVertical, Eye, Pencil, Search, X } from "lucide-react";
+import { Download, EllipsisVertical, Eye, Pencil, Search, Trash2, X } from "lucide-react";
+import { deletePeopleProfile } from "@/app/people/all/actions";
 import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
+import { SubmitButton } from "@/components/submit-button";
 import { allPeopleExportColumns, type AllPeopleExportKey, type AllPeopleExportValues } from "@/lib/all-people-export";
 
 export type AllPeopleRow = {
@@ -21,6 +23,7 @@ export type AllPeopleRow = {
   viewHref: string;
   editHref: string;
   canEdit: boolean;
+  canDelete: boolean;
   exportValues: AllPeopleExportValues;
 };
 
@@ -135,6 +138,24 @@ function AllPeopleActionMenu({ row }: { row: AllPeopleRow }) {
             <PendingLink className="row-action-item" href={row.editHref}>
               <Pencil aria-hidden="true" size={15} /> Edit
             </PendingLink>
+          ) : null}
+          {row.canDelete ? (
+            <form action={deletePeopleProfile}>
+              <input name="profile_id" type="hidden" value={row.id} />
+              <input name="category_code" type="hidden" value={row.categoryCode} />
+              <SubmitButton
+                className="row-action-item row-action-item-danger"
+                confirmCancelText="Cancel"
+                confirmDescription={`This permanently removes ${row.fullName}'s ${row.category.toLowerCase()} profile and cannot be undone.`}
+                confirmMessage={`Delete ${row.fullName}? Profiles with protected attendance, payroll, leave, mapping, or lifecycle history cannot be deleted.`}
+                confirmSubmitClassName="button danger"
+                confirmSubmitText="Delete profile"
+                confirmTitle="Delete profile"
+                pendingText="Deleting"
+              >
+                <Trash2 aria-hidden="true" size={15} /> Delete
+              </SubmitButton>
+            </form>
           ) : null}
         </div>
       ) : null}

@@ -6,10 +6,16 @@ import { CampaignReport, type Campaign } from "@/components/campaign-report";
 
 export function NotificationHistoryPanel({
   campaignError,
-  campaigns
+  campaigns,
+  emptyMessage = "No notification campaigns found for this period.",
+  subtitle = "Track WhatsApp campaign history here. Instagram and Facebook campaigns can use this same report when added.",
+  title = "Notification history"
 }: {
   campaignError: string | null;
   campaigns: Campaign[];
+  emptyMessage?: string;
+  subtitle?: string;
+  title?: string;
 }) {
   const router = useRouter();
   const [isRefreshing, startRefresh] = useTransition();
@@ -30,13 +36,13 @@ export function NotificationHistoryPanel({
       campaignError={campaignError}
       campaigns={campaigns}
       compactRecipients
-      emptyMessage="No notification campaigns found for this period."
+      emptyMessage={emptyMessage}
       isRefreshing={isRefreshing}
       onRefresh={refreshHistory}
       recipientIdentifierLabel="User ID"
       showChannel
-      subtitle="Track WhatsApp campaign history here. Instagram and Facebook campaigns can use this same report when added."
-      title="Notification history"
+      subtitle={subtitle}
+      title={title}
     />
   );
 }

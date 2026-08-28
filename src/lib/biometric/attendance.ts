@@ -494,6 +494,91 @@ export async function rebuildAttendanceDay(companyId: string, enrolmentId: strin
   if (firstUpsert.error) throw new Error(firstUpsert.error.message);
 }
 
+export type AttendanceReviewReason = "unmapped" | "duplicate" | "inactive";
+
+export async function rebuildAttendanceReviewDay({
+  companyId,
+  enrolmentId,
+  punchDate,
+  reason
+}: {
+  companyId: string;
+  enrolmentId: string;
+  punchDate: string;
+  reason: AttendanceReviewReason;
+}) {
+  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+
+  let punchQuery = supabaseAdmin
+    .from("attendance_punches")
+    .select("id,punch_time,worker_type,employee_id,field_executive_id,profile_type,account_id,location_id")
+    .eq("company_id", companyId)
+    .eq("enrolment_id", enrolmentId)
+    .eq("punch_date", punchDate)
+    .order("punch_time", { ascending: true });
+  if (reason !== "inactive") punchQuery = punchQuery.eq("calculated", false);
+  const punchResult = await punchQuery;
+  if (punchResult.error) throw new Error(punchResult.error.message);
+
+  const punches = punchResult.data ?? [];
+  if (!punches.length) return;
+  for (let index = 0; index < punches.length; index += 1) {
+    const order = index + 1;
+    const update = await supabaseAdmin
+      .from("attendance_punches")
+      .update({ punch_order: order, punch_label: punchLabel(order) })
+      .eq("id", punches[index].id);
+    if (update.error) throw new Error(update.error.message);
+  }
+  const firstPunch = punches[0];
+  const latestPunch = punches[punches.length - 1];
+  const punchTimes = punches.map((punch) => punch.punch_time).filter(Boolean);
+  const summary = summarizeFirstInLastOut(punchTimes);
+  const workerSnapshot = await loadDailyWorkerSnapshot({
+    companyId,
+    employeeId: latestPunch.employee_id ?? null,
+    fallbackLocationId: latestPunch.location_id ?? null,
+    fieldExecutiveId: latestPunch.field_executive_id ?? null,
+    profileType: latestPunch.profile_type ?? null,
+    accountId: latestPunch.account_id ?? null
+  });
+  const isInactive = reason === "inactive";
+  const workerName = workerSnapshot.workerName ??
+    (reason === "duplicate" ? `Duplicate biometric ID ${enrolmentId}` : `Unmapped biometric ID ${enrolmentId}`);
+  const remark = isInactive
+    ? "Inactive People profile punched. HR review required."
+    : reason === "duplicate"
+      ? "Biometric ID is assigned more than once. Correct the duplicate mapping."
+      : "Biometric ID is not mapped to a People profile. Assign it in the employee or contractor profile.";
+
+  const payload = {
+    company_id: companyId,
+    enrolment_id: enrolmentId,
+    worker_type: isInactive ? latestPunch.worker_type : "unmapped",
+    employee_id: latestPunch.employee_id ?? null,
+    field_executive_id: latestPunch.field_executive_id ?? null,
+    location_id: latestPunch.location_id ?? null,
+    employee_code: workerSnapshot.workerCode ?? enrolmentId,
+    station_code: workerSnapshot.stationCode,
+    worker_name: workerName,
+    punch_date: punchDate,
+    in_time: firstPunch.punch_time,
+    out_time: summary.lastOutTime,
+    punch_count: punches.length,
+    work_minutes: summary.workMinutes,
+    status: isInactive ? "I" : "U",
+    remark,
+    in_source: "biometric_review",
+    out_source: summary.lastOutTime ? "biometric_review" : null,
+    updated_at: new Date().toISOString()
+  };
+
+  const upsert = await supabaseAdmin
+    .from("attendance_daily")
+    .upsert(payload, { onConflict: "company_id,enrolment_id,punch_date" });
+  if (upsert.error) throw new Error(upsert.error.message);
+}
+
 type HistoricalRawPunchRow = {
   id: string;
   device_id: string | null;

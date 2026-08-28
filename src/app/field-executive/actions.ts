@@ -12,6 +12,10 @@ import { syncBiometricEnrolment } from "@/lib/biometric/enrolments";
 import { generateBiometricEnrolmentId } from "@/lib/biometric/ids";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { cleanCountryCode } from "@/lib/country-codes";
+import {
+  firstDesignationBusinessCategory,
+  type DesignationPeopleModule
+} from "@/lib/designation-business-categories";
 import { assertWorkerDesignationMappedToIdSeries, generateConfiguredBiometricId, generateConfiguredWorkerId } from "@/lib/dropx-id-generation";
 import { requireDesignationOnboardingAccess } from "@/lib/designation-onboarding-access";
 import { requireDesignationPortalAccess } from "@/lib/designation-portal-access";
@@ -53,6 +57,29 @@ function entityLabelForReturnPath(returnPath: FieldExecutiveReturnPath) {
 
 function tableForReturnPath(returnPath: FieldExecutiveReturnPath) {
   return nonEmployeeConfigForRoute(returnPath).table;
+}
+
+function requiredPeopleModule(returnPath: FieldExecutiveReturnPath): DesignationPeopleModule | null {
+  const profileType = nonEmployeeConfigForRoute(returnPath).profileType;
+  if (profileType === "field_executive") return "delivery_network";
+  if (currentAccessSurface() === "workforce" && ["contractor", "vendor", "worker"].includes(profileType)) {
+    return "delivery_network";
+  }
+  if (["contractor", "vendor", "worker"].includes(profileType)) return "people_hr";
+  return null;
+}
+
+function requireDesignationPeopleModule(
+  designation: { designation_category?: unknown },
+  returnPath: FieldExecutiveReturnPath
+) {
+  const expected = requiredPeopleModule(returnPath);
+  if (!expected) return;
+  const actual = firstDesignationBusinessCategory(designation.designation_category)?.people_module;
+  if (actual === expected) return;
+  throw new Error(expected === "delivery_network"
+    ? "Selected designation is not assigned to the Delivery Network category."
+    : "Selected designation is not assigned to the People / HR category.");
 }
 
 function fieldExecutiveRedirect(params?: Record<string, string>, returnPath: FieldExecutiveReturnPath = "/field-executive"): never {
@@ -232,17 +259,18 @@ export async function createFieldExecutive(formData: FormData) {
     const configuredDirectActivate = await loadWorkforceCategoryDirectActivate(companyId, config.designationCategory);
     // Delivery-associate / field-executive profiles always pass through the HO
     // Workforce Lifecycle queue. Direct activation remains available only for
-    // the other independently configured workforce categories.
+    // the other independently configured engagement types.
     const directActivate = config.profileType !== "field_executive" && configuredDirectActivate;
     const directPayload = directActivate ? normalizeFieldExecutivePayload(formData).payload : null;
     const designationRuleResult = await supabaseAdmin.from("designations")
-      .select("id, code, profile_field_rules, onboarding_role_ids, portal_permissions")
+      .select("id, code, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), profile_field_rules, onboarding_role_ids, portal_permissions")
       .eq("company_id", companyId)
       .eq("name", designation)
       .eq("is_active", true)
       .maybeSingle();
     if (designationRuleResult.error) throw new Error(designationRuleResult.error.message);
     if (!designationRuleResult.data) throw new Error("Selected designation is not available.");
+    requireDesignationPeopleModule(designationRuleResult.data, returnPath);
     requireDesignationOnboardingAccess(designationRuleResult.data, authorization);
     requireDesignationPortalAccess(designationRuleResult.data, currentAccessSurface(), "add", { isOwner: isCompanyOwner(authorization) });
     const dashboardRules = directActivate
@@ -313,7 +341,9 @@ export async function createFieldExecutive(formData: FormData) {
     const requestHost = headers().get("host")?.split(":")[0].toLowerCase() ?? "";
     const applicationSource = requestHost === "ops.dropxlogistics.com" || requestHost.startsWith("ops-")
       ? "ops"
-      : "dashboard";
+      : requestHost === "workforce.dropxlogistics.com" || requestHost.startsWith("workforce-") || (requestHost.endsWith(".vercel.app") && requestHost.includes("workforce"))
+        ? "workforce"
+        : "dashboard";
     const lifecyclePayload = config.profileType === "field_executive" ? {
       approval_required: true,
       onboarding_application_source: applicationSource,
@@ -439,10 +469,214 @@ export async function createFieldExecutive(formData: FormData) {
   }
 
   fieldExecutiveRedirect({
-    notice: returnPath === "/field-executive"
+    notice: config.profileType === "field_executive"
       ? `${entityLabel} onboarding request created. The applicant must submit the profile and agreement before HO activation.`
       : `${entityLabel} added successfully.`
   }, returnPath);
+}
+
+function canApproveWorkforceProfileChanges(authorization: Awaited<ReturnType<typeof requirePagePermission>>) {
+  const roleCode = String(authorization.roleCode ?? "").trim().toUpperCase();
+  return isCompanyOwner(authorization) || ["ZONAL_HEAD", "ZONE_HEAD", "ZH"].includes(roleCode);
+}
+
+export async function requestFieldExecutiveProfileChange(formData: FormData) {
+  const returnPath = safeReturnPath(formData);
+  const authorization = await requirePagePermission("delivery_associates", "view");
+  const companyId = requireCompanyId(authorization);
+  if (returnPath !== "/field-executive" || currentAccessSurface() !== "ops") {
+    fieldExecutiveRedirect({ error: "Profile corrections are available from Ops Pulse Workforce Onboarding." }, returnPath);
+  }
+  if (!supabaseAdmin) fieldExecutiveRedirect({ error: "Supabase service role key is not configured." }, returnPath);
+
+  try {
+    const id = required(formData.get("id"), "Field executive");
+    const fullName = required(formData.get("full_name"), "Full name").slice(0, 120);
+    const mobileCountryCode = cleanCountryCode(formData.get("mobile_country_code"));
+    const mobile = required(formData.get("mobile"), "Mobile number").replace(/\D/g, "");
+    const email = required(formData.get("email"), "Email").toLowerCase().slice(0, 180);
+    const dateOfJoin = required(formData.get("date_of_join"), "Date of join");
+    const locationId = required(formData.get("location_id"), "Location");
+    const designation = required(formData.get("designation"), "Designation").slice(0, 100);
+    if (!/^\d{10}$/.test(mobile)) throw new Error("Mobile number must contain exactly 10 digits.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address.");
+    const parsedDateOfJoin = new Date(`${dateOfJoin}T00:00:00Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfJoin) || Number.isNaN(parsedDateOfJoin.getTime()) || parsedDateOfJoin.toISOString().slice(0, 10) !== dateOfJoin) {
+      throw new Error("Enter a valid joining date.");
+    }
+
+    const target = await supabaseAdmin
+      .from("field_executives")
+      .select("id,full_name,mobile_country_code,mobile,email,date_of_join,location_id,designation,created_by,onboarding_status,stations(station_code)")
+      .eq("company_id", companyId)
+      .eq("id", id)
+      .maybeSingle();
+    if (target.error) throw new Error(target.error.message);
+    if (!target.data) throw new Error("Workforce profile was not found.");
+    if (String(target.data.created_by ?? "") !== authorization.userId) {
+      throw new Error("You can only correct profiles that you initiated.");
+    }
+    if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) {
+      throw new Error("You do not have access to the selected location.");
+    }
+
+    const [locationResult, designationResult] = await Promise.all([
+      supabaseAdmin.from("stations")
+        .select("id,station_code")
+        .eq("company_id", companyId)
+        .eq("id", locationId)
+        .eq("is_active", true)
+        .maybeSingle(),
+      supabaseAdmin.from("designations")
+        .select("code,designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active),portal_permissions")
+        .eq("company_id", companyId)
+        .eq("name", designation)
+        .eq("is_active", true)
+        .maybeSingle()
+    ]);
+    if (locationResult.error || designationResult.error) {
+      throw new Error(locationResult.error?.message || designationResult.error?.message);
+    }
+    if (!locationResult.data) throw new Error("Selected location is not available.");
+    if (!designationResult.data) throw new Error("Selected designation is not available.");
+    if (designation !== String(target.data.designation ?? "")) {
+      requireDesignationPeopleModule(designationResult.data, returnPath);
+    }
+    requireDesignationPortalAccess(designationResult.data, "ops", "view", { isOwner: isCompanyOwner(authorization) });
+
+    const [mobileDuplicate, emailDuplicate, pendingRequest] = await Promise.all([
+      supabaseAdmin.from("field_executives").select("id").eq("company_id", companyId).eq("mobile", mobile).neq("id", id).limit(1),
+      supabaseAdmin.from("field_executives").select("id").eq("company_id", companyId).ilike("email", email).neq("id", id).limit(1),
+      supabaseAdmin.from("workforce_profile_change_requests").select("id").eq("company_id", companyId).eq("field_executive_id", id).eq("status", "pending").maybeSingle()
+    ]);
+    const lookupError = mobileDuplicate.error || emailDuplicate.error || pendingRequest.error;
+    if (lookupError) throw new Error(lookupError.message);
+    if ((mobileDuplicate.data ?? []).length || (emailDuplicate.data ?? []).length) {
+      throw new Error("The requested mobile number or email is already linked to another Workforce profile.");
+    }
+    if (pendingRequest.data) throw new Error("A profile correction is already waiting for approval.");
+
+    const currentStation = Array.isArray(target.data.stations) ? target.data.stations[0] : target.data.stations;
+    const currentValues = {
+      full_name: target.data.full_name,
+      mobile_country_code: target.data.mobile_country_code,
+      mobile: target.data.mobile,
+      email: target.data.email,
+      date_of_join: target.data.date_of_join,
+      location_id: target.data.location_id,
+      location_code: currentStation?.station_code ?? null,
+      designation: target.data.designation
+    };
+    const proposedValues = {
+      full_name: fullName,
+      mobile_country_code: mobileCountryCode,
+      mobile,
+      email,
+      date_of_join: dateOfJoin,
+      location_id: locationId,
+      location_code: locationResult.data.station_code,
+      designation
+    };
+    if (JSON.stringify(currentValues) === JSON.stringify(proposedValues)) {
+      throw new Error("Change at least one invitation detail before submitting.");
+    }
+
+    const inserted = await supabaseAdmin.from("workforce_profile_change_requests").insert({
+      company_id: companyId,
+      field_executive_id: id,
+      requested_by: authorization.userId,
+      status: "pending",
+      current_values: currentValues,
+      proposed_values: proposedValues
+    }).select("id").single();
+    if (inserted.error) throw new Error(inserted.error.message);
+    const event = await supabaseAdmin.from("workforce_onboarding_events").insert({
+      company_id: companyId,
+      field_executive_id: id,
+      event_code: "profile_change_requested",
+      from_status: target.data.onboarding_status ?? null,
+      to_status: "pending_change_approval",
+      remarks: `Invitation-detail correction requested by ${authorization.fullName || authorization.email || "Ops Pulse user"}.`,
+      actor_user_id: authorization.userId,
+      source_portal: "ops",
+      metadata: { change_request_id: inserted.data.id, approval_roles: ["ZONAL_HEAD", "OWNER"] }
+    });
+    if (event.error) console.warn("Unable to write profile correction event:", event.error.message);
+    revalidatePath(returnPath);
+    fieldExecutiveRedirect({ notice: "Profile correction sent to the Zonal Head and Owner for approval." }, returnPath);
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    fieldExecutiveRedirect({ error: error instanceof Error ? error.message : "Unable to request the profile correction." }, returnPath);
+  }
+}
+
+export async function reviewFieldExecutiveProfileChange(formData: FormData) {
+  const returnPath = safeReturnPath(formData);
+  const authorization = await requirePagePermission("delivery_associates", "view");
+  const companyId = requireCompanyId(authorization);
+  if (returnPath !== "/field-executive" || currentAccessSurface() !== "ops") {
+    fieldExecutiveRedirect({ error: "Profile correction approvals are available from Ops Pulse." }, returnPath);
+  }
+  if (!canApproveWorkforceProfileChanges(authorization)) {
+    fieldExecutiveRedirect({ error: "Only a Zonal Head or Owner can approve profile corrections." }, returnPath);
+  }
+  if (!supabaseAdmin) fieldExecutiveRedirect({ error: "Supabase service role key is not configured." }, returnPath);
+
+  try {
+    const requestId = required(formData.get("request_id"), "Profile change request");
+    const decision = required(formData.get("decision"), "Decision").toLowerCase();
+    const reviewNote = String(formData.get("review_note") ?? "").trim().slice(0, 1000);
+    if (!["approved", "rejected"].includes(decision)) throw new Error("Choose Approve or Reject.");
+    if (decision === "rejected" && !reviewNote) throw new Error("Enter a rejection reason.");
+    const pending = await supabaseAdmin.from("workforce_profile_change_requests")
+      .select("id,field_executive_id,proposed_values")
+      .eq("company_id", companyId)
+      .eq("id", requestId)
+      .eq("status", "pending")
+      .maybeSingle();
+    if (pending.error) throw new Error(pending.error.message);
+    if (!pending.data) throw new Error("Pending profile change request was not found.");
+    const target = await supabaseAdmin.from("field_executives")
+      .select("location_id")
+      .eq("company_id", companyId)
+      .eq("id", pending.data.field_executive_id)
+      .maybeSingle();
+    if (target.error) throw new Error(target.error.message);
+    if (!target.data) throw new Error("Workforce profile was not found.");
+    const proposedLocationId = String((pending.data.proposed_values as Record<string, unknown> | null)?.location_id ?? "");
+    if (!authorization.hasAllLocationAccess && (
+      !authorization.locationScopeIds.includes(String(target.data.location_id ?? "")) ||
+      !authorization.locationScopeIds.includes(proposedLocationId)
+    )) {
+      throw new Error("You can only review profile corrections within your location scope.");
+    }
+
+    const reviewed = await supabaseAdmin.rpc("review_workforce_profile_change_request", {
+      p_company_id: companyId,
+      p_request_id: requestId,
+      p_approver_id: authorization.userId,
+      p_decision: decision,
+      p_review_note: reviewNote || null
+    });
+    if (reviewed.error) throw new Error(reviewed.error.message);
+    const event = await supabaseAdmin.from("workforce_onboarding_events").insert({
+      company_id: companyId,
+      field_executive_id: pending.data.field_executive_id,
+      event_code: decision === "approved" ? "profile_change_approved" : "profile_change_rejected",
+      from_status: "pending_change_approval",
+      to_status: decision,
+      remarks: reviewNote || `Profile correction ${decision} by ${authorization.fullName || authorization.email || "approver"}.`,
+      actor_user_id: authorization.userId,
+      source_portal: "ops",
+      metadata: { change_request_id: requestId, approver_role: authorization.roleCode }
+    });
+    if (event.error) console.warn("Unable to write profile correction review event:", event.error.message);
+    revalidatePath(returnPath);
+    fieldExecutiveRedirect({ notice: decision === "approved" ? "Profile correction approved and applied." : "Profile correction rejected." }, returnPath);
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    fieldExecutiveRedirect({ error: error instanceof Error ? error.message : "Unable to review the profile correction." }, returnPath);
+  }
 }
 
 export async function updateFieldExecutive(formData: FormData) {
@@ -460,7 +694,7 @@ export async function updateFieldExecutive(formData: FormData) {
     const executiveId = id;
     const existingResult = await supabaseAdmin
       .from(table)
-      .select("biometric_id, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path")
+      .select("biometric_id, designation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path")
       .eq("id", executiveId)
       .eq("company_id", companyId)
       .maybeSingle();
@@ -481,13 +715,16 @@ export async function updateFieldExecutive(formData: FormData) {
 
     const designationResult = await supabaseAdmin
       .from("designations")
-      .select("code, profile_field_rules, portal_permissions")
+      .select("code, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), profile_field_rules, portal_permissions")
       .eq("company_id", companyId)
       .eq("name", payload.designation)
       .eq("is_active", true)
       .maybeSingle();
     if (designationResult.error) throw new Error(designationResult.error.message);
     if (!designationResult.data) throw new Error("Selected designation is not available.");
+    if (payload.designation !== String((existingResult.data as { designation?: string | null } | null)?.designation ?? "")) {
+      requireDesignationPeopleModule(designationResult.data, returnPath);
+    }
     requireDesignationPortalAccess(designationResult.data, currentAccessSurface(), "edit", { isOwner: isCompanyOwner(authorization) });
     const dashboardRules = (await loadWorkforceCategoryRules(
       companyId,
@@ -813,7 +1050,9 @@ export async function bulkImportFieldExecutives(formData: FormData) {
   const requestHost = headers().get("host")?.split(":")[0].toLowerCase() ?? "";
   const applicationSource = requestHost === "ops.dropxlogistics.com" || requestHost.startsWith("ops-")
     ? "ops"
-    : "dashboard";
+    : requestHost === "workforce.dropxlogistics.com" || requestHost.startsWith("workforce-") || (requestHost.endsWith(".vercel.app") && requestHost.includes("workforce"))
+      ? "workforce"
+      : "dashboard";
 
   try {
     if (currentAccessSurface() === "ops") {
@@ -846,7 +1085,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
     const designationCodes = Array.from(new Set(rows.map((row) => row.designationCode)));
     const [locationsResult, designationsResult] = await Promise.all([
       supabaseAdmin.from("stations").select("id, station_code").eq("company_id", companyId).in("station_code", locationCodes),
-      supabaseAdmin.from("designations").select("id, code, name, onboarding_categories, onboarding_role_ids, portal_permissions").eq("company_id", companyId).eq("is_active", true).in("code", designationCodes)
+      supabaseAdmin.from("designations").select("id, code, name, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), onboarding_categories, onboarding_role_ids, portal_permissions").eq("company_id", companyId).eq("is_active", true).in("code", designationCodes)
     ]);
     if (locationsResult.error) throw new Error(locationsResult.error.message);
     if (designationsResult.error) throw new Error(designationsResult.error.message);
@@ -855,6 +1094,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
     const designations = new Map((designationsResult.data ?? []).map((designation) => [String(designation.code).toUpperCase(), {
       id: String(designation.id),
       name: String(designation.name),
+      designation_category: designation.designation_category,
       onboarding_role_ids: designation.onboarding_role_ids,
       portal_permissions: designation.portal_permissions,
       workerCategory: config.category
@@ -866,6 +1106,7 @@ export async function bulkImportFieldExecutives(formData: FormData) {
       const designation = designations.get(row.designationCode);
       if (!locationId) throw new Error(`Row ${rowNumber}: Location ${row.locationCode} not found.`);
       if (!designation) throw new Error(`Row ${rowNumber}: Designation code ${row.designationCode} not found.`);
+      requireDesignationPeopleModule(designation, returnPath);
       requireDesignationOnboardingAccess(designation, authorization);
       requireDesignationPortalAccess(designation, currentAccessSurface(), "add", { isOwner: isCompanyOwner(authorization) });
       await assertWorkerDesignationMappedToIdSeries({ companyId, designationId: designation.id });

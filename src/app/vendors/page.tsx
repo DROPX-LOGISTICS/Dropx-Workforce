@@ -1,4 +1,5 @@
 import { FieldExecutivePageContent } from "@/components/field-executive-page-content";
+import { currentAccessSurface } from "@/lib/access-surface";
 
 export default function VendorsPage({
   searchParams
@@ -17,13 +18,17 @@ export default function VendorsPage({
     designation?: string;
   };
 }) {
+  const isWorkforce = currentAccessSurface() === "workforce";
   return (
     <FieldExecutivePageContent
       activeLabel="Vendors"
-      addTitle="Add vendor"
-      bulkImportDescription="Upload existing vendor rows and keep profile completion pending for DropX One."
-      bulkImportTitle="Bulk upload vendors"
+      addTitle={isWorkforce ? "Add Workforce vendor" : "Add vendor"}
+      bulkImportDescription={isWorkforce
+        ? "Upload Van Renter, Van Vendor, Sorter, House Keeping and other vendor-network rows while keeping registration compatible with DropX One."
+        : "Upload existing vendor rows and keep profile completion pending for DropX One."}
+      bulkImportTitle={isWorkforce ? "Bulk upload Workforce vendors" : "Bulk upload vendors"}
       designationCategoryFilter={["vendors"]}
+      designationPeopleModule={isWorkforce ? "delivery_network" : "people_hr"}
       detailSubtitle="Complete vendor profile"
       editId={searchParams?.edit}
       editTitle="Edit vendor"
@@ -33,8 +38,8 @@ export default function VendorsPage({
       listTitle="Vendor register"
       notice={searchParams?.notice}
       pageCode="vendors"
-      pageSubtitle="Register and maintain vendors by location."
-      pageTitle="Vendors"
+      pageSubtitle={isWorkforce ? "Register and maintain the Workforce vendor network by location." : "Register and maintain vendors by location."}
+      pageTitle={isWorkforce ? "Workforce Vendors" : "Vendors"}
       returnPath="/vendors"
       viewId={searchParams?.view}
       addFormValues={{

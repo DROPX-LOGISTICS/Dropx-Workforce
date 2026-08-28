@@ -1,5 +1,6 @@
 export const designationPortalOptions = [
   { code: "dashboard", label: "Dashboard" },
+  { code: "workforce", label: "Workforce" },
   { code: "hrms", label: "HRMS" },
   { code: "ops", label: "OPS" },
   { code: "recruitment", label: "Recruitment" }
@@ -12,6 +13,7 @@ export type DesignationPortalPermissions = Record<DesignationPortalCode, Designa
 
 export const defaultDesignationPortalPermissions: DesignationPortalPermissions = {
   dashboard: { add: true, view: true, edit: true },
+  workforce: { add: false, view: false, edit: false },
   hrms: { add: false, view: false, edit: false },
   ops: { add: false, view: false, edit: false },
   recruitment: { add: false, view: false, edit: false }

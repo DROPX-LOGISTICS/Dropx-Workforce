@@ -66,6 +66,14 @@ const opsGroups: PermissionGroup[] = [
   { key: "users", label: "Users & Access", codes: ["users"] }
 ];
 
+const workforceGroups: PermissionGroup[] = [
+  { key: "workforce_operations", label: "Workforce Operations", codes: ["delivery_associates", "people_review"] },
+  { key: "id_rate_cards", label: "IDs & Rate Cards", codes: ["executive_id_onboarding", "provider_mapping"] },
+  { key: "communications", label: "Communications", codes: ["workforce_communications", "workforce_communications_app", "workforce_communications_whatsapp", "workforce_communications_history"] },
+  { key: "users", label: "Workforce Access", codes: ["users"] },
+  { key: "master_data", label: "Workforce Master", codes: ["designations"] }
+];
+
 function emptyPermissionState(pages: PermissionPage[]) {
   return Object.fromEntries(pages.map((page) => [page.id, { view: false, add: false, edit: false }])) as Record<string, Record<PermissionAction, boolean>>;
 }
@@ -94,7 +102,11 @@ export function PermissionMatrix({
   });
 
   const groups = useMemo(() => {
-    const definitions = surface === "ops" ? opsGroups : dashboardGroups;
+    const definitions = surface === "ops"
+      ? opsGroups
+      : surface === "workforce"
+        ? workforceGroups
+        : dashboardGroups;
     const definedGroups = definitions.map((definition) => ({
       ...definition,
       pages: pages.filter((page) => definition.codes.includes(page.code) || definition.matches?.(page)),

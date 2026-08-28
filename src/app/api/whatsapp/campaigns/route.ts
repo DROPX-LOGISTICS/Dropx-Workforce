@@ -1,8 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { waitUntil } from "@vercel/functions";
+import { currentAccessSurface } from "@/lib/access-surface";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { loadWorkforceCommunicationRecipients } from "@/lib/workforce-communication-recipients";
 import { uploadWhatsAppMedia } from "@/lib/whatsapp-media";
 import { extractWhatsAppTemplateVariables, getWhatsAppTemplateHeaderMediaType, type WhatsAppTemplateComponent, type WhatsAppTemplateHeaderMediaType } from "@/lib/whatsapp-template";
 
@@ -39,7 +41,11 @@ function clean(value: unknown) {
 }
 
 export async function POST(request: NextRequest) {
-  const authorization = await requirePagePermission("notifications_whatsapp", "add");
+  const surface = currentAccessSurface();
+  const authorization = await requirePagePermission(
+    surface === "workforce" ? "workforce_communications_whatsapp" : "notifications_whatsapp",
+    "add"
+  );
   const companyId = requireCompanyId(authorization);
   if (!supabaseAdmin) return NextResponse.json({ error: "Supabase service role key is not configured." }, { status: 500 });
 
@@ -74,7 +80,36 @@ export async function POST(request: NextRequest) {
       mappings = body.mappings ?? {};
       recipients = body.recipients ?? [];
     }
-    recipients = recipients.filter((recipient) => clean(recipient.mobile));
+    if (surface === "workforce") {
+      const allowedRecipients = await loadWorkforceCommunicationRecipients(authorization);
+      const allowedById = new Map(allowedRecipients.map((recipient) => {
+        const id = `${recipient.profileType}:${recipient.accountId}`;
+        return [id, {
+          id,
+          source: "Workforce",
+          name: recipient.name,
+          mobile: recipient.mobile,
+          email: recipient.email,
+          location: recipient.location,
+          provider: recipient.provider,
+          model: recipient.model,
+          role: recipient.designation,
+          designation: recipient.designation,
+          status: recipient.status,
+          dropx_id: recipient.reference,
+          biometric_id: recipient.biometricId,
+          country_code: recipient.countryCode
+        }];
+      }));
+      const requestedIds = Array.from(new Set(recipients.map((recipient) => clean(recipient.id)).filter(Boolean)));
+      const invalidRecipient = requestedIds.find((id) => !allowedById.has(id));
+      if (invalidRecipient) throw new Error("One or more recipients are outside the Workforce designation master.");
+      recipients = requestedIds.map((id) => allowedById.get(id)!).filter((recipient) => clean(recipient.mobile));
+      sourceMode = "workforce";
+    } else {
+      if (sourceMode === "workforce") throw new Error("Workforce campaigns must be created from the Workforce product.");
+      recipients = recipients.filter((recipient) => clean(recipient.mobile));
+    }
 
     if (!templateId) throw new Error("Select a WhatsApp template.");
     if (!whatsappProfileId) throw new Error("Select a WhatsApp profile.");

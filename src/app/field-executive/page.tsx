@@ -19,22 +19,23 @@ export default function FieldExecutivePage({
 }) {
   return (
     <FieldExecutivePageContent
-      activeLabel="Workforce Onboarding"
-      addTitle="Request workforce onboarding"
-      bulkImportDescription="Upload workforce onboarding requests. Every applicant remains pending until profile submission, agreement acceptance and HO activation."
-      bulkImportTitle="Bulk onboarding requests"
-      designationCategoryFilter={["field_executives"]}
-      detailSubtitle="Workforce application and profile"
+      activeLabel="Delivery Network Onboarding"
+      addTitle="Request Delivery Network onboarding"
+      bulkImportDescription="Upload Delivery Network onboarding requests. Every applicant remains pending until profile submission, agreement acceptance and HO activation."
+      bulkImportTitle="Bulk Delivery Network requests"
+      designationCategoryFilter={["field_executives", "contractors", "vendors", "workers"]}
+      designationPeopleModule="delivery_network"
+      detailSubtitle="Delivery Network application and profile"
       editId={searchParams?.edit}
       editTitle="Edit workforce request"
-      emptyListLabel="No workforce onboarding requests yet."
-      entityLabel="Workforce applicant"
+      emptyListLabel="No Delivery Network onboarding requests yet."
+      entityLabel="Delivery Network applicant"
       errorMessage={searchParams?.error}
-      listTitle="Workforce onboarding requests"
+      listTitle="Delivery Network onboarding requests"
       notice={searchParams?.notice}
       pageCode="delivery_associates"
-      pageSubtitle="Create DA/DCD/ODCD requests and track them through candidate submission and HO activation."
-      pageTitle="Workforce Onboarding"
+      pageSubtitle="Create DA, PTDA, DCD/ODCD, Wishmaster, Sorter and similar partner requests, then track submission and activation."
+      pageTitle="Delivery Network Onboarding"
       returnPath="/field-executive"
       viewId={searchParams?.view}
       addFormValues={{

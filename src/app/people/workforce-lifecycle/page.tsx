@@ -88,20 +88,20 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
   const resultMap = new Map(checklistResults.map((item) => [`${item.field_executive_id}:${item.checklist_item_id}`, item]));
   const applicantMap = new Map(applicants.map((item) => [item.id, item]));
 
-  return <AppShell active="Workforce Lifecycle" pageCode="people_review">
-    <PageHead eyebrow="HO Workforce Control" title="Workforce Lifecycle" subtitle="Approve and activate workforce requests from Recruit and Ops, then manage resignation, termination and final settlement without mixing HR profiles." />
+  return <AppShell active="Activation & Lifecycle" pageCode="people_review">
+    <PageHead eyebrow="Workforce" title="Activation & Lifecycle" subtitle="Approve and activate Workforce requests, then manage exits and final settlement without mixing People / HR profiles." />
     {searchParams?.notice ? <div className="notice">{searchParams.notice}</div> : null}
     {searchParams?.error || error ? <div className="error-box"><strong>Action required</strong><p>{searchParams?.error || error}</p></div> : null}
     <section className="workforce-lifecycle-summary">
       <article><ClipboardCheck /><span>Awaiting HO</span><strong>{pending.filter((item) => item.onboarding_status === "under_review").length}</strong></article>
-      <article><UserCheck /><span>Active workforce</span><strong>{active.length}</strong></article>
+      <article><UserCheck /><span>Active partners</span><strong>{active.length}</strong></article>
       <article><LogOut /><span>Open exits</span><strong>{openExits.length}</strong></article>
       <article><ShieldCheck /><span>Agreements accepted</span><strong>{acceptedIds.size}</strong></article>
     </section>
     <nav className="workforce-lifecycle-tabs" aria-label="Workforce lifecycle sections">
-      <PendingLink className={tab === "onboarding" ? "active" : ""} href="/people/workforce-lifecycle?tab=onboarding">Onboarding approvals</PendingLink>
-      <PendingLink className={tab === "active" ? "active" : ""} href="/people/workforce-lifecycle?tab=active">Active workforce</PendingLink>
-      <PendingLink className={tab === "exits" ? "active" : ""} href="/people/workforce-lifecycle?tab=exits">Exit & settlement</PendingLink>
+      <PendingLink className={tab === "onboarding" ? "active" : ""} href="?tab=onboarding">Onboarding approvals</PendingLink>
+      <PendingLink className={tab === "active" ? "active" : ""} href="?tab=active">Active partners</PendingLink>
+      <PendingLink className={tab === "exits" ? "active" : ""} href="?tab=exits">Exit & settlement</PendingLink>
     </nav>
 
     {tab === "onboarding" ? <section className="workforce-lifecycle-grid">

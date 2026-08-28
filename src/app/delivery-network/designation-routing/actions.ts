@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
 import { writeEventLog } from "@/lib/event-log";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
@@ -44,6 +45,28 @@ export async function saveDesignationRoute(formData: FormData) {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
     const designationId = required(formData.get("designation_id"), "Designation");
     const registerId = clean(formData.get("register_id"));
+    const designationResult = await supabaseAdmin
+      .from("designations")
+      .select("id, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active)")
+      .eq("id", designationId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (designationResult.error) throw new Error(designationResult.error.message);
+    if (firstDesignationBusinessCategory(designationResult.data?.designation_category)?.people_module !== "delivery_network") {
+      throw new Error("Only Workforce designations can be routed from Workforce Master.");
+    }
+    if (registerId) {
+      const registerResult = await supabaseAdmin
+        .from("workforce_register_master")
+        .select("id, table_name, is_active")
+        .eq("id", registerId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+      if (registerResult.error) throw new Error(registerResult.error.message);
+      if (!registerResult.data?.is_active || !["workforce", "vendors"].includes(registerResult.data.table_name)) {
+        throw new Error("Workforce designations can route only to Workforce or Vendors.");
+      }
+    }
     const registrationEnabled = Boolean(registerId && formData.has("registration_enabled"));
     const result = await supabaseAdmin.rpc("set_designation_register_route", {
       p_actor_user_id: authorization.userId,
@@ -110,12 +133,15 @@ export async function updateRegisterMaster(formData: FormData) {
     const name = required(formData.get("name"), "Register name");
     const current = await supabaseAdmin
       .from("workforce_register_master")
-      .select("id, code, name, is_active")
+      .select("id, code, name, table_name, is_active")
       .eq("id", registerId)
       .eq("company_id", companyId)
       .maybeSingle();
     if (current.error) throw new Error(current.error.message);
     if (!current.data) throw new Error("Register was not found.");
+    if (!["workforce", "vendors"].includes(current.data.table_name)) {
+      throw new Error("People registers are managed by onboarding type and cannot be changed from Workforce Master.");
+    }
 
     const update = await supabaseAdmin
       .from("workforce_register_master")

@@ -27,6 +27,12 @@ type DesignationRow = {
   is_active: boolean;
 };
 
+type DesignationCategoryRow = {
+  id: string;
+  name: string;
+  people_module: string;
+};
+
 type RouteRow = {
   id: string;
   designation_id: string;
@@ -95,7 +101,7 @@ export default async function WorkforceDesignationRoutingPage({
         .order("name"),
       supabaseAdmin
         .from("designation_categories")
-        .select("id, name")
+        .select("id, name, people_module")
         .eq("company_id", companyId),
       supabaseAdmin
         .from("designation_register_routes")
@@ -112,8 +118,14 @@ export default async function WorkforceDesignationRoutingPage({
     ];
 
   const error = registerResult.error?.message || designationResult.error?.message || categoryResult.error?.message || routeResult.error?.message || countResult.error?.message || null;
-  const registers = (registerResult.data ?? []) as RegisterRow[];
-  const categories = new Map((categoryResult.data ?? []).map((row) => [String(row.id), String(row.name)]));
+  const registers = ((registerResult.data ?? []) as RegisterRow[]).filter((register) =>
+    register.table_name === "workforce" || register.table_name === "vendors"
+  );
+  const categoryRows = (categoryResult.data ?? []) as DesignationCategoryRow[];
+  const categories = new Map(categoryRows.map((row) => [row.id, row.name]));
+  const workforceCategoryIds = new Set(
+    categoryRows.filter((row) => row.people_module === "delivery_network").map((row) => row.id)
+  );
   const routes = new Map(((routeResult.data ?? []) as RouteRow[]).map((route) => [route.designation_id, route]));
   const registerById = new Map(registers.map((register) => [register.id, register]));
   const counts = (countResult.data ?? []) as CountRow[];
@@ -122,7 +134,10 @@ export default async function WorkforceDesignationRoutingPage({
 
   const query = String(searchParams?.q ?? "").trim().toLowerCase();
   const statusFilter = String(searchParams?.status ?? "all");
-  const designations = ((designationResult.data ?? []) as DesignationRow[]).filter((designation) => {
+  const workforceDesignations = ((designationResult.data ?? []) as DesignationRow[]).filter((designation) =>
+    Boolean(designation.designation_category_id && workforceCategoryIds.has(designation.designation_category_id))
+  );
+  const designations = workforceDesignations.filter((designation) => {
     const route = routes.get(designation.id);
     const mapped = Boolean(route?.register_id);
     if (statusFilter === "mapped" && !mapped) return false;
@@ -130,14 +145,14 @@ export default async function WorkforceDesignationRoutingPage({
     if (statusFilter === "review" && !["needs_review", "failed"].includes(route?.reconciliation_status ?? "")) return false;
     return `${designation.code} ${designation.name} ${categories.get(designation.designation_category_id ?? "") ?? ""}`.toLowerCase().includes(query);
   });
-  const unmappedCount = ((designationResult.data ?? []) as DesignationRow[]).filter((designation) => !routes.get(designation.id)?.register_id).length;
+  const unmappedCount = workforceDesignations.filter((designation) => !routes.get(designation.id)?.register_id).length;
 
   return (
     <AppShell active="Designation Routing" pageCode="designations">
       <PageHead
         eyebrow="Workforce Master"
         title="Designation Routing"
-        subtitle="Choose the one register that owns each designation. This master controls reconciliation and every new registration."
+        subtitle="Route Workforce roles only. Employee and independent-contractor onboarding remains controlled by People engagement type."
       />
 
       {error ? (
@@ -164,7 +179,7 @@ export default async function WorkforceDesignationRoutingPage({
             <div className="panel-head">
               <div>
                 <h2>Register Master</h2>
-                <p className="subtle">These database rows define the available routing targets. Physical table codes are protected system identifiers.</p>
+                <p className="subtle">Only Workforce-owned profile destinations are available here. Physical table codes are protected system identifiers.</p>
               </div>
             </div>
             <div className="table-wrap">
@@ -198,7 +213,7 @@ export default async function WorkforceDesignationRoutingPage({
             <div className="panel-head toolbar">
               <div>
                 <h2>Designation to register mapping</h2>
-                <p className="subtle">{designations.length} shown · {unmappedCount} unmapped and blocked for new registration</p>
+                <p className="subtle">{designations.length} of {workforceDesignations.length} Workforce roles shown · {unmappedCount} unmapped</p>
               </div>
               <form action={routingPath} className="master-toolbar">
                 <input className="field" defaultValue={searchParams?.q ?? ""} name="q" placeholder="Search designation" />

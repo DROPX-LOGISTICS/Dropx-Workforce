@@ -13,6 +13,11 @@ import {
   type DesignationPeopleModule
 } from "@/lib/designation-business-categories";
 import { designationCategoryLabel, normalizeDesignationCategories } from "@/lib/designation-categories";
+import {
+  designationProfileDestinationLabel,
+  inferDesignationProfileDestination,
+  type DesignationProfileDestination
+} from "@/lib/designation-profile-destination";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import {
   createDesignation,
@@ -55,6 +60,7 @@ type DesignationRow = {
   name: string;
   designation_category_id?: string | null;
   designation_category?: DesignationBusinessCategory | DesignationBusinessCategory[] | null;
+  profile_destination?: DesignationProfileDestination | null;
   provider_ids: string[];
   location_ids?: string[];
   model_ids?: string[] | null;
@@ -110,7 +116,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
   }
 
   const [designationsResult, providersResult, locationsResult, modelsResult, categoriesResult, businessCategoriesResult, rolesResult] = await Promise.all([
-    supabaseAdmin.from("designations").select("id, code, name, designation_category_id, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_field_operations, is_active").eq("company_id", companyId).order("code"),
+    supabaseAdmin.from("designations").select("id, code, name, designation_category_id, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), profile_destination, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_field_operations, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("providers").select("id, code, name, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("stations").select("id, station_code, station_name, hide_from_location_list").eq("company_id", companyId).eq("is_active", true).order("station_code"),
     supabaseAdmin.from("location_models").select("id, provider_id, code, name, is_active, providers (code, name)").eq("company_id", companyId).eq("is_active", true).order("code"),
@@ -143,6 +149,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
       portal_permissions: null,
       designation_category_id: null,
       designation_category: null,
+      profile_destination: null,
       is_field_operations: false,
     }));
     designationError = fallbackError;
@@ -221,10 +228,19 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
     : (locationsResult.data ?? []).filter((location) => locationScopeIds.includes(location.id) && !location.hide_from_location_list);
 
   return {
-    designations: (designationRows as DesignationRow[]).map((designation) => ({
-      ...designation,
-      onboarding_categories: normalizeDesignationCategories(designation.onboarding_categories)
-    })),
+    designations: (designationRows as DesignationRow[]).map((designation) => {
+      const businessCategory = firstDesignationBusinessCategory(designation.designation_category);
+      const onboardingCategories = normalizeDesignationCategories(designation.onboarding_categories);
+      return {
+        ...designation,
+        onboarding_categories: onboardingCategories,
+        profile_destination: inferDesignationProfileDestination({
+          onboardingCategories,
+          peopleModule: businessCategory?.people_module ?? null,
+          profileDestination: designation.profile_destination
+        })
+      };
+    }),
     providers: (providersResult.data ?? []) as ProviderRow[],
     locations: locations as LocationRow[],
     models: (modelsResult.data ?? []) as ModelRow[],
@@ -279,7 +295,7 @@ export async function DesignationMasterPageContent({
       .join(" ");
     const categoryText = normalizeDesignationCategories(designation.onboarding_categories).map((category) => categoryNameByCode.get(category) ?? designationCategoryLabel(category)).join(" ");
     const businessCategory = firstDesignationBusinessCategory(designation.designation_category);
-    return `${designation.code} ${designation.name} ${providerText} ${modelText} ${categoryText} ${businessCategory?.name ?? "unassigned"}`.toLowerCase().includes(query);
+    return `${designation.code} ${designation.name} ${providerText} ${modelText} ${categoryText} ${businessCategory?.name ?? "unassigned"} ${designationProfileDestinationLabel(designation.profile_destination)}`.toLowerCase().includes(query);
   });
   const editDesignation = scopedDesignations.find((designation) => designation.id === searchParams?.edit) ?? null;
   const createAction = scope.peopleModule === "people_hr"
@@ -328,7 +344,7 @@ export async function DesignationMasterPageContent({
       ) : null}
 
       {!error ? (
-        <section className="panel">
+        <section className="panel designation-master-panel">
           <div className="panel-head toolbar">
             <div>
               <h2>Designation list</h2>
@@ -344,16 +360,14 @@ export async function DesignationMasterPageContent({
             </div>
           </div>
           <div className="table-wrap">
-            <table>
+            <table className="designation-master-table">
               <thead>
                 <tr>
-                  <th>Code</th>
                   <th>Designation</th>
-                  <th>Designation category</th>
-                  <th>Engagement types</th>
-                  <th>Models</th>
-                  <th>App pages</th>
-                  <th>Field operations</th>
+                  <th>Profile destination</th>
+                  <th>Engagement</th>
+                  <th>Coverage</th>
+                  <th>Field ops</th>
                   <th>Status</th>
                   {pagePermission.canEdit ? <th>Action</th> : null}
                 </tr>
@@ -365,42 +379,40 @@ export async function DesignationMasterPageContent({
                     .filter(Boolean) as ModelRow[];
                   return (
                     <tr key={designation.id}>
-                      <td><strong>{designation.code}</strong></td>
-                      <td>{designation.name}</td>
-                      <td>{firstDesignationBusinessCategory(designation.designation_category)?.name
-                        ? <span className="mini-tag">{firstDesignationBusinessCategory(designation.designation_category)?.name}</span>
-                        : <span className="status-pill warn">Unassigned</span>}</td>
                       <td>
-                        <div className="mini-chip-list">
-                          {normalizeDesignationCategories(designation.onboarding_categories).map((category) => (
-                            <span className="mini-tag" key={category}>{categoryNameByCode.get(category) ?? designationCategoryLabel(category)}</span>
-                          ))}
+                        <div className="designation-name-cell">
+                          <span>{designation.code}</span>
+                          <strong>{designation.name}</strong>
                         </div>
                       </td>
                       <td>
-                        {designationModels.length ? (
-                          <div className="mini-chip-list">
-                            {designationModels.slice(0, 3).map((model) => <span className="mini-tag" key={model.id}>{model.code}</span>)}
-                            {designationModels.length > 3 ? <span className="mini-tag">+{designationModels.length - 3}</span> : null}
-                          </div>
-                        ) : <span className="subtle">-</span>}
+                        <span className={`destination-badge ${designation.profile_destination ?? "unset"}`}>
+                          {designationProfileDestinationLabel(designation.profile_destination)}
+                        </span>
                       </td>
                       <td>
-                        {(designation.app_page_access ?? ["dashboard", "attendance", "leave"]).length ? (
-                          <div className="mini-chip-list">
-                            {(designation.app_page_access ?? ["dashboard", "attendance", "leave"]).map((page) => (
-                              <span className="mini-tag" key={page}>{page.replace(/_/g, " ")}</span>
-                            ))}
-                          </div>
-                        ) : <span className="subtle">No pages</span>}
+                        <div className="mini-chip-list">
+                          {normalizeDesignationCategories(designation.onboarding_categories).slice(0, 1).map((category) => (
+                            <span className="mini-tag" key={category}>{categoryNameByCode.get(category) ?? designationCategoryLabel(category)}</span>
+                          ))}
+                          {normalizeDesignationCategories(designation.onboarding_categories).length > 1
+                            ? <span className="designation-more-count">+{normalizeDesignationCategories(designation.onboarding_categories).length - 1}</span>
+                            : null}
+                        </div>
                       </td>
-                      <td>{designation.is_field_operations ? <span className="mini-tag">Included</span> : <span className="subtle">-</span>}</td>
+                      <td>
+                        <div className="designation-coverage-cell">
+                          <span>{designationModels.length} model{designationModels.length === 1 ? "" : "s"}</span>
+                          <span>{(designation.app_page_access ?? []).length} app page{(designation.app_page_access ?? []).length === 1 ? "" : "s"}</span>
+                        </div>
+                      </td>
+                      <td><span className={`designation-boolean ${designation.is_field_operations ? "yes" : "no"}`}>{designation.is_field_operations ? "Yes" : "No"}</span></td>
                       <td><StatusPill status={designation.is_active ? "Active" : "Inactive"} /></td>
                       {pagePermission.canEdit ? <td><PendingLink className="button secondary compact" href={`${scope.basePath}?edit=${designation.id}`} scroll={false}>Edit</PendingLink></td> : null}
                     </tr>
                   );
                 }) : (
-                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 9 : 8}>No designations found.</td></tr>
+                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 7 : 6}>No designations found.</td></tr>
                 )}
               </tbody>
             </table>
@@ -418,7 +430,7 @@ export async function DesignationMasterPageContent({
               </div>
               <PendingLink className="icon-button" href={scope.basePath} scroll={false} aria-label="Close">x</PendingLink>
             </div>
-            <DesignationForm action={createAction} businessCategories={scopedBusinessCategories} categories={categories} roles={roles} models={models.map((model) => ({
+            <DesignationForm action={createAction} businessCategories={scopedBusinessCategories} categories={categories} peopleModule={scope.peopleModule} roles={roles} models={models.map((model) => ({
               id: model.id,
               code: model.code,
               name: model.name,
@@ -438,7 +450,7 @@ export async function DesignationMasterPageContent({
               </div>
               <PendingLink className="icon-button" href={scope.basePath} scroll={false} aria-label="Close">x</PendingLink>
             </div>
-            <DesignationForm action={updateAction} businessCategories={scopedBusinessCategories} categories={categories} initial={editDesignation} roles={roles} models={models.map((model) => ({
+            <DesignationForm action={updateAction} businessCategories={scopedBusinessCategories} categories={categories} initial={editDesignation} peopleModule={scope.peopleModule} roles={roles} models={models.map((model) => ({
               id: model.id,
               code: model.code,
               name: model.name,

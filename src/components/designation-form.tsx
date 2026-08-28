@@ -11,6 +11,11 @@ import { SubmitButton } from "@/components/submit-button";
 import type { DesignationBusinessCategory } from "@/lib/designation-business-categories";
 import { normalizeDesignationCategories, type DesignationCategory } from "@/lib/designation-categories";
 import {
+  designationProfileDestinationsForModule,
+  inferDesignationProfileDestination,
+  type DesignationProfileDestination
+} from "@/lib/designation-profile-destination";
+import {
   designationPortalOptions,
   normalizeDesignationPortalPermissions
 } from "@/lib/designation-portal-access";
@@ -41,6 +46,7 @@ type DesignationInitial = {
   code: string;
   name: string;
   designation_category_id?: string | null;
+  profile_destination?: DesignationProfileDestination | null;
   provider_ids: string[];
   model_ids?: string[] | null;
   onboarding_categories?: string[] | null;
@@ -458,6 +464,7 @@ export function DesignationForm({
   initial,
   models,
   roles,
+  peopleModule,
   submitLabel = "Add designation"
 }: {
   action: (formData: FormData) => void;
@@ -467,6 +474,7 @@ export function DesignationForm({
   providers?: ProviderOption[];
   models: ModelOption[];
   roles: OnboardingRoleOption[];
+  peopleModule: DesignationBusinessCategory["people_module"] | null;
   submitLabel?: string;
 }) {
   const [selectedModels, setSelectedModels] = useState<string[]>(initial?.model_ids ?? []);
@@ -475,6 +483,12 @@ export function DesignationForm({
   );
   const selectedPages = (initial?.app_page_access ?? defaultAppPageAccess)
     .filter((page) => appPageOptions.some((option) => option.value === page));
+  const destinationOptions = designationProfileDestinationsForModule(peopleModule);
+  const defaultDestination = inferDesignationProfileDestination({
+    onboardingCategories: initial?.onboarding_categories,
+    peopleModule,
+    profileDestination: initial?.profile_destination
+  });
 
   return (
     <form action={action} className="designation-form">
@@ -528,17 +542,28 @@ export function DesignationForm({
       <section className="workforce-category-page-access designation-classification">
         <div>
           <strong>Designation classification</strong>
-          <p className="subtle">Define whether this designation belongs to Workforce or HR. This controls which dashboard and onboarding flow handles the profile.</p>
+          <p className="subtle">Define the owning product and the exact table that receives registrations for this designation.</p>
         </div>
-        <label>
-          Workforce / HR category
-          <select className="field" defaultValue={initial?.designation_category_id ?? (businessCategories.length === 1 ? businessCategories[0].id : "")} name="designation_category_id" required>
-            <option value="">Select Workforce or HR</option>
-            {businessCategories.map((category) => (
-              <option key={category.id} value={category.id}>{category.name}</option>
-            ))}
-          </select>
-        </label>
+        <div className="designation-classification-fields">
+          <label>
+            Workforce / HR category
+            <select className="field" defaultValue={initial?.designation_category_id ?? (businessCategories.length === 1 ? businessCategories[0].id : "")} name="designation_category_id" required>
+              <option value="">Select Workforce or HR</option>
+              {businessCategories.map((category) => (
+                <option key={category.id} value={category.id}>{category.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Profile destination
+            <select className="field" defaultValue={defaultDestination} name="profile_destination" required>
+              {destinationOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label} table</option>
+              ))}
+            </select>
+            <small>New and continuing registrations are mirrored into this table.</small>
+          </label>
+        </div>
       </section>
       <section className="workforce-category-page-access">
         <div>

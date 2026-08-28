@@ -11,6 +11,10 @@ import {
   type DesignationPeopleModule
 } from "@/lib/designation-business-categories";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
+import {
+  designationProfileDestinationAllowed,
+  normalizeDesignationProfileDestination
+} from "@/lib/designation-profile-destination";
 import { designationPortalOptions } from "@/lib/designation-portal-access";
 import { normalizeCategoryProfileFieldRules } from "@/lib/profile-field-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -87,6 +91,9 @@ function friendlyError(error: unknown, fallback: string) {
   if (message.toLowerCase().includes("designation_category")) {
     return "Designation Category setup is pending. Apply the designation category isolation migration, then try again.";
   }
+  if (message.toLowerCase().includes("profile_destination")) {
+    return "Profile destination setup is pending. Apply the committed designation profile destination migration, then try again.";
+  }
   return message;
 }
 
@@ -155,7 +162,16 @@ async function designationCategoryId(
   if (requiredPeopleModule && peopleModule !== requiredPeopleModule) {
     throw new Error(`${designationScopeLabel(requiredPeopleModule)} accepts ${requiredPeopleModule === "delivery_network" ? "Workforce" : "HR"} designations only.`);
   }
-  return data.id;
+  return { id: data.id, peopleModule };
+}
+
+function profileDestination(formData: FormData, peopleModule: DesignationPeopleModule) {
+  const destination = normalizeDesignationProfileDestination(formData.get("profile_destination"));
+  if (!destination) throw new Error("Profile destination is required.");
+  if (!designationProfileDestinationAllowed(peopleModule, destination)) {
+    throw new Error(`${designationScopeLabel(peopleModule)} cannot route profiles to the ${destination} table.`);
+  }
+  return destination;
 }
 
 async function requireExistingDesignationScope(
@@ -222,7 +238,8 @@ async function createDesignationForScope(formData: FormData, scope: DesignationA
 
     const code = required(formData.get("code"), "Designation code").toUpperCase();
     const name = required(formData.get("name"), "Designation name");
-    const categoryId = await designationCategoryId(companyId, formData, scope.peopleModule);
+    const designationCategory = await designationCategoryId(companyId, formData, scope.peopleModule);
+    const destination = profileDestination(formData, designationCategory.peopleModule);
     const categories = onboardingCategories(formData);
     await validateOnboardingCategories(companyId, categories);
     const roleIds = onboardingRoleIds(formData);
@@ -230,7 +247,8 @@ async function createDesignationForScope(formData: FormData, scope: DesignationA
     const { error } = await supabaseAdmin.from("designations").insert(withCompany({
       code,
       name,
-      designation_category_id: categoryId,
+      designation_category_id: designationCategory.id,
+      profile_destination: destination,
       provider_ids: providerIds(formData),
       model_ids: modelIds(formData),
       location_ids: [],
@@ -266,7 +284,8 @@ async function updateDesignationForScope(formData: FormData, scope: DesignationA
     await requireExistingDesignationScope(companyId, id, scope.peopleModule);
     const code = required(formData.get("code"), "Designation code").toUpperCase();
     const name = required(formData.get("name"), "Designation name");
-    const categoryId = await designationCategoryId(companyId, formData, scope.peopleModule);
+    const designationCategory = await designationCategoryId(companyId, formData, scope.peopleModule);
+    const destination = profileDestination(formData, designationCategory.peopleModule);
     const status = clean(formData.get("status")) === "inactive" ? false : true;
     const categories = onboardingCategories(formData);
     await validateOnboardingCategories(companyId, categories);
@@ -278,7 +297,8 @@ async function updateDesignationForScope(formData: FormData, scope: DesignationA
       .update({
         code,
         name,
-        designation_category_id: categoryId,
+        designation_category_id: designationCategory.id,
+        profile_destination: destination,
         provider_ids: providerIds(formData),
         model_ids: modelIds(formData),
         location_ids: [],

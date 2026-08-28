@@ -19439,3 +19439,310 @@ td strong,
   .wf-onboarding-journeys > article { min-height: 0; }
   .wf-lifecycle-map > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Workforce designation routing */
+.designation-routing-register-panel,
+.designation-routing-panel {
+  overflow: hidden;
+}
+
+.designation-register-table {
+  min-width: 980px;
+}
+
+.designation-register-table th,
+.designation-register-table td {
+  padding: 11px 14px;
+}
+
+.designation-register-table th:nth-child(1) { width: 25%; }
+.designation-register-table th:nth-child(2) { width: 17%; }
+.designation-register-table th:nth-child(3) { width: 38%; }
+.designation-register-table th:nth-child(4) { width: 11%; }
+.designation-register-table th:nth-child(5) { width: 9%; }
+
+.routing-identity,
+.routing-designation,
+.routing-reconciliation {
+  display: grid;
+  min-width: 0;
+}
+
+.routing-identity {
+  gap: 3px;
+}
+
+.routing-identity strong {
+  color: #344054;
+  font-size: 12.5px;
+}
+
+.routing-identity small {
+  color: #98a2b3;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+}
+
+.designation-routing-panel .panel-head {
+  align-items: flex-end;
+}
+
+.designation-routing-panel .master-toolbar {
+  flex-wrap: nowrap;
+}
+
+.designation-routing-panel .master-toolbar .field {
+  width: 220px;
+}
+
+.designation-routing-panel .master-toolbar .select {
+  width: 155px;
+}
+
+.designation-routing-wrap {
+  border: 0;
+  border-radius: 0;
+}
+
+.designation-routing-table {
+  min-width: 1320px;
+  table-layout: fixed;
+}
+
+.designation-routing-table .routing-col-designation { width: 19%; }
+.designation-routing-table .routing-col-records { width: 24%; }
+.designation-routing-table .routing-col-target { width: 20%; }
+.designation-routing-table .routing-col-registration { width: 10%; }
+.designation-routing-table .routing-col-reconciliation { width: 17%; }
+.designation-routing-table .routing-col-action { width: 10%; }
+
+.designation-routing-table th {
+  padding: 10px 14px;
+  color: #667085;
+  background: #f8fafc;
+  font-size: 10px;
+  letter-spacing: .025em;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.designation-routing-table td {
+  padding: 13px 14px;
+  color: #344054;
+  font-size: 12px;
+  line-height: 1.4;
+  vertical-align: top;
+}
+
+.designation-routing-table tbody tr:hover td {
+  background: #fffdfb;
+}
+
+.routing-designation {
+  gap: 7px;
+}
+
+.routing-designation > strong {
+  color: #1d2939;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.routing-designation > span {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.routing-designation small {
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 2px 7px;
+  border: 1px solid #e4e7ec;
+  border-radius: 999px;
+  color: #667085;
+  background: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.routing-designation small.is-active {
+  border-color: #abefc6;
+  color: #067647;
+  background: #ecfdf3;
+}
+
+.routing-designation small.is-inactive {
+  border-color: #fecdca;
+  color: #b42318;
+  background: #fef3f2;
+}
+
+.routing-record-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.routing-record-count {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 7px 8px;
+  border: 1px solid #e4e7ec;
+  border-radius: 7px;
+  background: #fcfcfd;
+}
+
+.routing-record-count strong {
+  overflow: hidden;
+  color: #475467;
+  font-size: 10px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.routing-record-count small {
+  color: #667085;
+  font-size: 9px;
+  line-height: 1.3;
+  white-space: normal;
+}
+
+.routing-empty {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  color: #98a2b3;
+  font-size: 11px;
+}
+
+.routing-target-form .select {
+  width: 100%;
+  min-width: 0;
+  font-size: 11.5px;
+}
+
+.routing-target-note {
+  display: block;
+  margin-top: 6px;
+  color: #667085;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.routing-registration-toggle {
+  width: fit-content;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid #e4e7ec;
+  border-radius: 7px;
+  color: #475467;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.routing-reconciliation {
+  justify-items: start;
+  gap: 5px;
+}
+
+.routing-reconciliation > small {
+  color: #667085;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.routing-result {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  color: #667085;
+  font-size: 9.5px;
+}
+
+.routing-result strong {
+  color: #344054;
+  font-size: 10px;
+}
+
+.routing-result strong.has-failures {
+  color: #b42318;
+}
+
+.routing-result i {
+  color: #d0d5dd;
+  font-style: normal;
+}
+
+.routing-failure-details {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.routing-failure-details summary {
+  width: fit-content;
+  color: #b54708;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.routing-failure-details p {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+  padding: 7px;
+  border: 1px solid #fedf89;
+  border-radius: 6px;
+  color: #93370d;
+  background: #fffaeb;
+  font-size: 8.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.routing-failure-details p strong {
+  font-size: 8.5px;
+}
+
+.routing-action-cell {
+  text-align: right;
+}
+
+.routing-action-cell .button {
+  width: 100%;
+  min-width: 118px;
+  height: auto;
+  min-height: 34px;
+  padding: 7px 10px;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+@media (max-width: 900px) {
+  .designation-routing-panel .panel-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .designation-routing-panel .master-toolbar {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: stretch;
+  }
+
+  .designation-routing-panel .master-toolbar .field,
+  .designation-routing-panel .master-toolbar .select {
+    flex: 1 1 180px;
+    width: auto;
+  }
+}

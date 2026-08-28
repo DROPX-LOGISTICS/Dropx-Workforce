@@ -44,6 +44,11 @@ type RouteRow = {
     moved?: number;
     retained?: number;
     failed?: number;
+    failure_samples?: Array<{
+      source_register?: string;
+      source_profile_id?: string;
+      error?: string;
+    }>;
   } | null;
 };
 
@@ -73,6 +78,19 @@ function loadFlash() {
 function formatDate(value: string | null) {
   if (!value) return "Not run";
   return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function registerLabel(tableName: string) {
+  const labels: Record<string, string> = {
+    contractors: "Contractors",
+    employees: "Employees",
+    field_executives: "Field executives",
+    vendors: "Vendors",
+    workforce: "Workforce",
+    workforce_helpers: "Legacy helpers",
+    workers: "Helpers"
+  };
+  return labels[tableName] ?? tableName.replaceAll("_", " ");
 }
 
 export const dynamic = "force-dynamic";
@@ -118,8 +136,9 @@ export default async function WorkforceDesignationRoutingPage({
     ];
 
   const error = registerResult.error?.message || designationResult.error?.message || categoryResult.error?.message || routeResult.error?.message || countResult.error?.message || null;
+  const workforceRegisterTables = new Set(["workforce", "vendors", "workers"]);
   const registers = ((registerResult.data ?? []) as RegisterRow[]).filter((register) =>
-    register.table_name === "workforce" || register.table_name === "vendors"
+    workforceRegisterTables.has(register.table_name)
   );
   const categoryRows = (categoryResult.data ?? []) as DesignationCategoryRow[];
   const categories = new Map(categoryRows.map((row) => [row.id, row.name]));
@@ -175,7 +194,7 @@ export default async function WorkforceDesignationRoutingPage({
 
       {!error ? (
         <>
-          <section className="panel">
+          <section className="panel designation-routing-register-panel">
             <div className="panel-head">
               <div>
                 <h2>Register Master</h2>
@@ -183,7 +202,7 @@ export default async function WorkforceDesignationRoutingPage({
               </div>
             </div>
             <div className="table-wrap">
-              <table>
+              <table className="designation-register-table">
                 <thead><tr><th>Register</th><th>Physical table</th><th>Purpose</th><th>Status</th><th>Action</th></tr></thead>
                 <tbody>
                   {registers.map((register) => (
@@ -194,7 +213,12 @@ export default async function WorkforceDesignationRoutingPage({
                           <input className="field" defaultValue={register.name} name="name" required style={{ minWidth: 210 }} />
                         </form>
                       </td>
-                      <td><strong>{register.code}</strong><small>{register.table_name}</small></td>
+                      <td>
+                        <div className="routing-identity">
+                          <strong>{register.code}</strong>
+                          <small>{register.table_name}</small>
+                        </div>
+                      </td>
                       <td>{register.description ?? "-"}</td>
                       <td>
                         <label className="check-row">
@@ -209,7 +233,7 @@ export default async function WorkforceDesignationRoutingPage({
             </div>
           </section>
 
-          <section className="panel">
+          <section className="panel designation-routing-panel">
             <div className="panel-head toolbar">
               <div>
                 <h2>Designation to register mapping</h2>
@@ -226,8 +250,16 @@ export default async function WorkforceDesignationRoutingPage({
                 <button className="button secondary compact" type="submit">Filter</button>
               </form>
             </div>
-            <div className="table-wrap">
-              <table>
+            <div className="table-wrap designation-routing-wrap">
+              <table className="designation-routing-table">
+                <colgroup>
+                  <col className="routing-col-designation" />
+                  <col className="routing-col-records" />
+                  <col className="routing-col-target" />
+                  <col className="routing-col-registration" />
+                  <col className="routing-col-reconciliation" />
+                  <col className="routing-col-action" />
+                </colgroup>
                 <thead><tr><th>Designation</th><th>Current records</th><th>Target register</th><th>New registration</th><th>Reconciliation</th><th>Action</th></tr></thead>
                 <tbody>
                   {designations.map((designation) => {
@@ -235,19 +267,33 @@ export default async function WorkforceDesignationRoutingPage({
                     const register = route?.register_id ? registerById.get(route.register_id) : null;
                     const currentCounts = (countsByDesignation.get(designation.id) ?? []).filter((row) => Number(row.total_count) > 0);
                     const reconciliation = route?.last_reconciliation ?? {};
+                    const failureSamples = reconciliation.failure_samples ?? [];
                     return (
                       <tr key={designation.id}>
                         <td>
-                          <strong>{designation.name}</strong>
-                          <small>{designation.code} · {categories.get(designation.designation_category_id ?? "") ?? "Uncategorised"} · {designation.is_active ? "Active" : "Inactive"}</small>
+                          <div className="routing-designation">
+                            <strong>{designation.name}</strong>
+                            <span>
+                              <small>{designation.code}</small>
+                              <small>{categories.get(designation.designation_category_id ?? "") ?? "Uncategorised"}</small>
+                              <small className={designation.is_active ? "is-active" : "is-inactive"}>{designation.is_active ? "Active" : "Inactive"}</small>
+                            </span>
+                          </div>
                         </td>
                         <td>
-                          {currentCounts.length ? currentCounts.map((row) => (
-                            <small key={row.table_name}>{row.table_name}: {Number(row.active_count)} active / {Number(row.total_count)} total</small>
-                          )) : <span className="subtle">No records</span>}
+                          {currentCounts.length ? (
+                            <div className="routing-record-stack">
+                              {currentCounts.map((row) => (
+                                <span className="routing-record-count" key={row.table_name}>
+                                  <strong>{registerLabel(row.table_name)}</strong>
+                                  <small>{Number(row.active_count)} active · {Number(row.total_count)} total</small>
+                                </span>
+                              ))}
+                            </div>
+                          ) : <span className="routing-empty">No records</span>}
                         </td>
                         <td>
-                          <form action={saveDesignationRoute} id={`route-${designation.id}`}>
+                          <form action={saveDesignationRoute} className="routing-target-form" id={`route-${designation.id}`}>
                             <input name="designation_id" type="hidden" value={designation.id} />
                             <select className="select" defaultValue={route?.register_id ?? ""} name="register_id">
                               <option value="">Unmapped — block registration</option>
@@ -256,19 +302,38 @@ export default async function WorkforceDesignationRoutingPage({
                               ))}
                             </select>
                           </form>
-                          <small>{register ? `Runtime target: ${register.table_name}` : "No runtime target"}</small>
+                          <small className="routing-target-note">{register ? `Writes to ${registerLabel(register.table_name)}` : "New registration is blocked"}</small>
                         </td>
                         <td>
-                          <label className="check-row">
+                          <label className="check-row routing-registration-toggle">
                             <input defaultChecked={Boolean(route?.registration_enabled)} form={`route-${designation.id}`} name="registration_enabled" type="checkbox" /> Enabled
                           </label>
                         </td>
                         <td>
-                          <StatusPill status={(route?.reconciliation_status ?? "unmapped").replaceAll("_", " ")} />
-                          <small>{formatDate(route?.last_reconciled_at ?? null)}</small>
-                          {route?.last_reconciled_at ? <small>{reconciliation.moved ?? 0} moved · {reconciliation.failed ?? 0} failed</small> : null}
+                          <div className="routing-reconciliation">
+                            <StatusPill status={(route?.reconciliation_status ?? "unmapped").replaceAll("_", " ")} />
+                            <small>{formatDate(route?.last_reconciled_at ?? null)}</small>
+                            {route?.last_reconciled_at ? (
+                              <span className="routing-result">
+                                <strong>{reconciliation.moved ?? 0}</strong> moved
+                                <i aria-hidden="true">·</i>
+                                <strong className={(reconciliation.failed ?? 0) > 0 ? "has-failures" : ""}>{reconciliation.failed ?? 0}</strong> failed
+                              </span>
+                            ) : null}
+                            {failureSamples.length ? (
+                              <details className="routing-failure-details">
+                                <summary>View failure reason</summary>
+                                {failureSamples.slice(0, 2).map((failure, index) => (
+                                  <p key={`${failure.source_register ?? "source"}-${failure.source_profile_id ?? index}`}>
+                                    <strong>{registerLabel(failure.source_register ?? "record")}</strong>
+                                    <span>{failure.error ?? "Reconciliation failed."}</span>
+                                  </p>
+                                ))}
+                              </details>
+                            ) : null}
+                          </div>
                         </td>
-                        <td>
+                        <td className="routing-action-cell">
                           {permission.canEdit ? (
                             <SubmitButton
                               className="button compact"

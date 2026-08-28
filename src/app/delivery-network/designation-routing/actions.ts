@@ -10,6 +10,7 @@ import { writeEventLog } from "@/lib/event-log";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const routingPath = "/delivery-network/designation-routing";
+const workforceRegisterTables = new Set(["workforce", "vendors", "workers"]);
 
 function clean(value: FormDataEntryValue | null) {
   const text = String(value ?? "").trim();
@@ -63,8 +64,8 @@ export async function saveDesignationRoute(formData: FormData) {
         .eq("company_id", companyId)
         .maybeSingle();
       if (registerResult.error) throw new Error(registerResult.error.message);
-      if (!registerResult.data?.is_active || !["workforce", "vendors"].includes(registerResult.data.table_name)) {
-        throw new Error("Workforce designations can route only to Workforce or Vendors.");
+      if (!registerResult.data?.is_active || !workforceRegisterTables.has(registerResult.data.table_name)) {
+        throw new Error("Workforce designations can route only to Workforce, Vendors, or Helpers.");
       }
     }
     const registrationEnabled = Boolean(registerId && formData.has("registration_enabled"));
@@ -139,7 +140,7 @@ export async function updateRegisterMaster(formData: FormData) {
       .maybeSingle();
     if (current.error) throw new Error(current.error.message);
     if (!current.data) throw new Error("Register was not found.");
-    if (!["workforce", "vendors"].includes(current.data.table_name)) {
+    if (!workforceRegisterTables.has(current.data.table_name)) {
       throw new Error("People registers are managed by onboarding type and cannot be changed from Workforce Master.");
     }
 

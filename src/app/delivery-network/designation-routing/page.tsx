@@ -59,6 +59,11 @@ type CountRow = {
   active_count: number;
 };
 
+type LegacyHelperRow = {
+  designation: string | null;
+  is_active: boolean;
+};
+
 const routingPath = "/delivery-network/designation-routing";
 
 function loadFlash() {
@@ -105,7 +110,7 @@ export default async function WorkforceDesignationRoutingPage({
   const permission = authorization.permissions.designations;
   const flash = loadFlash();
 
-  const [registerResult, designationResult, categoryResult, routeResult, countResult] = supabaseAdmin
+  const [registerResult, designationResult, categoryResult, routeResult, countResult, helperResult] = supabaseAdmin
     ? await Promise.all([
       supabaseAdmin
         .from("workforce_register_master")
@@ -125,17 +130,22 @@ export default async function WorkforceDesignationRoutingPage({
         .from("designation_register_routes")
         .select("id, designation_id, register_id, registration_enabled, reconciliation_status, last_reconciled_at, last_reconciliation")
         .eq("company_id", companyId),
-      supabaseAdmin.rpc("designation_register_counts", { p_company_id: companyId })
+      supabaseAdmin.rpc("designation_register_counts", { p_company_id: companyId }),
+      supabaseAdmin
+        .from("workforce_helpers")
+        .select("designation, is_active")
+        .eq("company_id", companyId)
     ])
     : [
       { data: null, error: { message: "Supabase service role key is not configured." } },
       { data: null, error: null },
       { data: null, error: null },
       { data: null, error: null },
+      { data: null, error: null },
       { data: null, error: null }
     ];
 
-  const error = registerResult.error?.message || designationResult.error?.message || categoryResult.error?.message || routeResult.error?.message || countResult.error?.message || null;
+  const error = registerResult.error?.message || designationResult.error?.message || categoryResult.error?.message || routeResult.error?.message || countResult.error?.message || helperResult.error?.message || null;
   const workforceRegisterTables = new Set(["workforce", "vendors", "workers", "workforce_helpers"]);
   const registers = ((registerResult.data ?? []) as RegisterRow[]).filter((register) =>
     workforceRegisterTables.has(register.table_name)
@@ -147,15 +157,34 @@ export default async function WorkforceDesignationRoutingPage({
   );
   const routes = new Map(((routeResult.data ?? []) as RouteRow[]).map((route) => [route.designation_id, route]));
   const registerById = new Map(registers.map((register) => [register.id, register]));
-  const counts = (countResult.data ?? []) as CountRow[];
-  const countsByDesignation = new Map<string, CountRow[]>();
-  counts.forEach((row) => countsByDesignation.set(row.designation_id, [...(countsByDesignation.get(row.designation_id) ?? []), row]));
-
   const query = String(searchParams?.q ?? "").trim().toLowerCase();
   const statusFilter = String(searchParams?.status ?? "all");
   const workforceDesignations = ((designationResult.data ?? []) as DesignationRow[]).filter((designation) =>
     Boolean(designation.designation_category_id && workforceCategoryIds.has(designation.designation_category_id))
   );
+  const countsByDesignation = new Map<string, CountRow[]>();
+  ((countResult.data ?? []) as CountRow[]).forEach((row) => {
+    countsByDesignation.set(row.designation_id, [...(countsByDesignation.get(row.designation_id) ?? []), row]);
+  });
+  const legacyHelpers = (helperResult.data ?? []) as LegacyHelperRow[];
+  workforceDesignations.forEach((designation) => {
+    const matchingHelpers = legacyHelpers.filter((helper) => {
+      const value = String(helper.designation ?? "").trim().toLowerCase();
+      return value === designation.code.trim().toLowerCase() || value === designation.name.trim().toLowerCase();
+    });
+    if (!matchingHelpers.length) return;
+    const currentRows = countsByDesignation.get(designation.id) ?? [];
+    if (currentRows.some((row) => row.table_name === "workforce_helpers")) return;
+    countsByDesignation.set(designation.id, [
+      ...currentRows,
+      {
+        designation_id: designation.id,
+        table_name: "workforce_helpers",
+        total_count: matchingHelpers.length,
+        active_count: matchingHelpers.filter((helper) => helper.is_active).length
+      }
+    ]);
+  });
   const designations = workforceDesignations.filter((designation) => {
     const route = routes.get(designation.id);
     const mapped = Boolean(route?.register_id);

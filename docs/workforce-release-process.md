@@ -2,6 +2,11 @@
 
 The Workforce product has an independent GitHub repository, Vercel project, and production domain. The main dashboard is not part of this release chain.
 
+- GitHub source: `DROPX-LOGISTICS/Dropx-Workforce`
+- Vercel project: `dropx-workforce`
+- Production branch: `main`
+- Production domain: `workforce.dropxlogistics.com`
+
 ## Application changes
 
 1. Create and verify the change locally.

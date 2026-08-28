@@ -18,6 +18,8 @@ The Workforce product has an independent GitHub repository, Vercel project, and 
 
 Direct local production deployments are intentionally not part of this process.
 
+Runtime credentials stay in Vercel's encrypted environment and must never be committed. At minimum, production requires `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` before a Git-triggered deployment is accepted.
+
 ## Database changes
 
 1. Create a timestamped file under `supabase/migrations`.

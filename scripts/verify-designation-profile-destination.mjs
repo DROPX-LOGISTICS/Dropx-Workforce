@@ -17,6 +17,7 @@ const routeFunction = routeStart >= 0 && routeEnd > routeStart
 const checks = [
   [form.includes('name="profile_destination"'), "Designation form must submit profile_destination."],
   [list.includes("<th>Profile destination</th>"), "Designation list must show the profile destination."],
+  [list.includes("destinationCompatibleResult") && list.includes("profile_destination: null"), "A pending destination migration must retain the classified designation list."],
   [actions.includes("profile_destination: destination"), "Designation actions must persist profile_destination."],
   [routeFunction.includes("designation.profile_destination"), "Registration routing must read designation.profile_destination."],
   [!routeFunction.includes("onboarding_categories_value"), "Registration routing must not infer a table from engagement types."],

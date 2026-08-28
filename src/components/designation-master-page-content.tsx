@@ -127,32 +127,45 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
   let designationRows: unknown[] = designationsResult.data ?? [];
   let designationError: { message?: string } | null = designationsResult.error;
   if (isMissingColumnError(designationsResult.error)) {
-    let fallbackRows: unknown[] = [];
-    let fallbackError: { message?: string } | null = null;
-    const fallbackResult = await supabaseAdmin.from("designations").select("id, code, name, provider_ids, location_ids, onboarding_categories, is_active").eq("company_id", companyId).order("code");
-    if (isMissingColumnError(fallbackResult.error)) {
-      const legacyResult = await supabaseAdmin.from("designations").select("id, code, name, provider_ids, is_active").eq("company_id", companyId).order("code");
-      fallbackRows = (legacyResult.data ?? []).map((row) => ({ ...row, location_ids: [], model_ids: [] }));
-      fallbackError = legacyResult.error;
+    const destinationCompatibleResult = await supabaseAdmin
+      .from("designations")
+      .select("id, code, name, designation_category_id, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_field_operations, is_active")
+      .eq("company_id", companyId)
+      .order("code");
+    if (!destinationCompatibleResult.error) {
+      designationRows = (destinationCompatibleResult.data ?? []).map((row) => ({
+        ...row,
+        profile_destination: null
+      }));
+      designationError = null;
     } else {
-      fallbackRows = fallbackResult.data ?? [];
-      fallbackError = fallbackResult.error;
+      let fallbackRows: unknown[] = [];
+      let fallbackError: { message?: string } | null = null;
+      const fallbackResult = await supabaseAdmin.from("designations").select("id, code, name, provider_ids, location_ids, onboarding_categories, is_active").eq("company_id", companyId).order("code");
+      if (isMissingColumnError(fallbackResult.error)) {
+        const legacyResult = await supabaseAdmin.from("designations").select("id, code, name, provider_ids, is_active").eq("company_id", companyId).order("code");
+        fallbackRows = (legacyResult.data ?? []).map((row) => ({ ...row, location_ids: [], model_ids: [] }));
+        fallbackError = legacyResult.error;
+      } else {
+        fallbackRows = fallbackResult.data ?? [];
+        fallbackError = fallbackResult.error;
+      }
+      designationRows = fallbackRows.map((row) => ({
+        ...(row as Record<string, unknown>),
+        location_ids: Array.isArray((row as { location_ids?: unknown }).location_ids) ? (row as { location_ids: string[] }).location_ids : [],
+        model_ids: Array.isArray((row as { model_ids?: unknown }).model_ids) ? (row as { model_ids: string[] }).model_ids : [],
+        onboarding_categories: Array.isArray((row as { onboarding_categories?: unknown }).onboarding_categories) ? (row as { onboarding_categories: string[] }).onboarding_categories : ["employees"],
+        app_page_access: ["dashboard", "attendance", "leave"],
+        profile_field_rules: {},
+        onboarding_role_ids: [],
+        portal_permissions: null,
+        designation_category_id: null,
+        designation_category: null,
+        profile_destination: null,
+        is_field_operations: false,
+      }));
+      designationError = fallbackError;
     }
-    designationRows = fallbackRows.map((row) => ({
-      ...(row as Record<string, unknown>),
-      location_ids: Array.isArray((row as { location_ids?: unknown }).location_ids) ? (row as { location_ids: string[] }).location_ids : [],
-      model_ids: Array.isArray((row as { model_ids?: unknown }).model_ids) ? (row as { model_ids: string[] }).model_ids : [],
-      onboarding_categories: Array.isArray((row as { onboarding_categories?: unknown }).onboarding_categories) ? (row as { onboarding_categories: string[] }).onboarding_categories : ["employees"],
-      app_page_access: ["dashboard", "attendance", "leave"],
-      profile_field_rules: {},
-      onboarding_role_ids: [],
-      portal_permissions: null,
-      designation_category_id: null,
-      designation_category: null,
-      profile_destination: null,
-      is_field_operations: false,
-    }));
-    designationError = fallbackError;
   }
 
   if (designationError) {

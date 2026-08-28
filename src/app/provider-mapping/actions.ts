@@ -54,6 +54,7 @@ function rowNumber(formData: FormData, index: number, field: string, label: stri
 function nonEmptyRow(formData: FormData, index: number) {
   return [
     "id",
+    "workforce_id",
     "source_type",
     "mapping_id",
     "dropx_id",
@@ -83,7 +84,8 @@ function previousDate(dateValue: string) {
 async function saveExecutiveMappingRow(formData: FormData, index: number, createdBy: string, companyId: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
 
-  const id = rowRequired(formData, index, "id", "Field executive");
+  const id = rowRequired(formData, index, "id", "Workforce source profile");
+  const workforceId = rowRequired(formData, index, "workforce_id", "Workforce profile");
   const sourceType = rowRequired(formData, index, "source_type", "Worker source");
   if (sourceType !== "employee" && sourceType !== "contractor" && sourceType !== "field_executive") {
     throw new Error(`Row ${index + 1}: Worker source is invalid.`);
@@ -107,32 +109,15 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
 
   if (methodError) throw new Error(methodError.message);
 
-  const [{ data: worker }, { data: station }] = await Promise.all([
-    sourceType === "employee"
-      ? supabaseAdmin
-        .from("employees")
-        .select("id, designation_id")
-        .eq("id", id)
-        .eq("company_id", companyId)
-        .eq("is_active", true)
-        .is("deleted_at", null)
-        .maybeSingle()
-      : sourceType === "contractor"
-        ? supabaseAdmin
-          .from("contractors")
-          .select("id, designation")
-          .eq("id", id)
-          .eq("company_id", companyId)
-          .eq("is_active", true)
-          .is("deleted_at", null)
-          .maybeSingle()
-        : supabaseAdmin
-        .from("field_executives")
-        .select("id")
-        .eq("id", id)
-        .eq("company_id", companyId)
-        .eq("is_active", true)
-        .maybeSingle(),
+  const [{ data: worker, error: workerError }, { data: station }] = await Promise.all([
+    supabaseAdmin
+      .from("workforce")
+      .select("id, designation_id, source_profile_id, source_profile_type")
+      .eq("id", workforceId)
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .neq("migration_state", "reclassified")
+      .maybeSingle(),
     supabaseAdmin
       .from("stations")
       .select("id")
@@ -141,21 +126,21 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
       .maybeSingle()
   ]);
 
+  if (workerError) throw new Error(workerError.message);
   if (!worker) throw new Error(`Row ${index + 1}: Delivery Network partner was not found for this company.`);
-  if (sourceType === "employee" || sourceType === "contractor") {
-    let designationQuery = supabaseAdmin
-      .from("designations")
-      .select("id, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active)")
-      .eq("company_id", companyId)
-      .eq("is_active", true);
-    designationQuery = sourceType === "employee"
-      ? designationQuery.eq("id", String((worker as { designation_id?: string | null }).designation_id ?? ""))
-      : designationQuery.ilike("name", String((worker as { designation?: string | null }).designation ?? ""));
-    const designationResult = await designationQuery.maybeSingle();
-    if (designationResult.error) throw new Error(designationResult.error.message);
-    if (firstDesignationBusinessCategory(designationResult.data?.designation_category)?.people_module !== "delivery_network") {
-      throw new Error(`Row ${index + 1}: Designation is not assigned to Delivery Network.`);
-    }
+  if (worker.source_profile_id !== id || worker.source_profile_type !== sourceType) {
+    throw new Error(`Row ${index + 1}: Workforce source identity does not match this mapping row.`);
+  }
+  const designationResult = await supabaseAdmin
+    .from("designations")
+    .select("id, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active)")
+    .eq("company_id", companyId)
+    .eq("id", worker.designation_id)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (designationResult.error) throw new Error(designationResult.error.message);
+  if (firstDesignationBusinessCategory(designationResult.data?.designation_category)?.people_module !== "delivery_network") {
+    throw new Error(`Row ${index + 1}: Designation is not assigned to Workforce.`);
   }
   if (!station) throw new Error(`Row ${index + 1}: Location was not found for this company.`);
 
@@ -226,6 +211,14 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
     status: effectiveTo ? "closed" : "active",
     updated_at: new Date().toISOString()
   }, companyId);
+
+  const now = new Date().toISOString();
+  const canonicalUpdate = await supabaseAdmin
+    .from("workforce")
+    .update({ dropx_id: dropxId, location_id: stationId, updated_at: now })
+    .eq("id", workforceId)
+    .eq("company_id", companyId);
+  if (canonicalUpdate.error) throw new Error(canonicalUpdate.error.message);
 
   const workerUpdate = sourceType === "employee"
     ? supabaseAdmin.from("employees").update({ employee_code: dropxId, location_id: stationId, updated_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId)

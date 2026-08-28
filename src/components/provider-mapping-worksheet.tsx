@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { saveProviderMappingWorksheet } from "@/app/provider-mapping/actions";
 import { SubmitButton } from "@/components/submit-button";
@@ -13,6 +13,7 @@ export type LocationOption = {
 
 export type MappingWorksheetRow = {
   id: string;
+  workforceId: string;
   sourceType: "employee" | "contractor" | "field_executive";
   mappingId: string;
   dropxId: string;
@@ -50,6 +51,7 @@ export type PaymentMethodOption = {
 function rowSignature(row: MappingWorksheetRow) {
   return [
     row.id,
+    row.workforceId,
     row.sourceType,
     row.mappingId,
     row.dropxId,
@@ -103,6 +105,10 @@ export function ProviderMappingWorksheet({
   const initialSignatures = useMemo(() => initialRows.map(rowSignature), [initialRows]);
   const [rows, setRows] = useState(initialRows);
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [mappingStatus, setMappingStatus] = useState("all");
+  const [pageSize, setPageSize] = useState("25");
+  const [currentPage, setCurrentPage] = useState(1);
 
   function dismissSuccessMessage() {
     document.getElementById("provider-mapping-success")?.remove();
@@ -197,15 +203,42 @@ export function ProviderMappingWorksheet({
 
   const dirtyRows = rows.map((row, index) => rowSignature(row) !== (initialSignatures[index] ?? ""));
   const hasDirtyRows = dirtyRows.some(Boolean);
-  const locationLabelById = new Map(locations.map((location) => [location.id, location.label]));
-  const paymentMethodById = new Map(paymentMethods.map((method) => [method.id, method]));
+  const locationLabelById = useMemo(
+    () => new Map(locations.map((location) => [location.id, location.label])),
+    [locations]
+  );
+  const paymentMethodById = useMemo(
+    () => new Map(paymentMethods.map((method) => [method.id, method])),
+    [paymentMethods]
+  );
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
+  const filteredIndexes = rows.flatMap((row, index) => {
+    const matchesSearch = !normalizedSearch || [
+      row.dropxId,
+      row.dropxName,
+      row.providerMemberId,
+      locationLabelById.get(row.stationId) ?? ""
+    ].some((value) => value.toLocaleLowerCase().includes(normalizedSearch));
+    const mapped = Boolean(row.mappingId || (row.providerMemberId && row.paymentMethodId));
+    const matchesStatus = mappingStatus === "all" || (mappingStatus === "mapped" ? mapped : !mapped);
+    return matchesSearch && matchesStatus ? [index] : [];
+  });
+  const numericPageSize = Number(pageSize);
+  const totalPages = Math.max(1, Math.ceil(filteredIndexes.length / numericPageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * numericPageSize;
+  const paginatedIndexes = new Set(filteredIndexes.slice(pageStart, pageStart + numericPageSize));
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, mappingStatus, pageSize]);
 
   if (!rows.length) {
     return (
       <section className="panel">
         <div className="empty-state">
           <strong>No DropX IDs available for mapping.</strong>
-          <p className="subtle">Add field executives or import mapping rows first, then maintain provider IDs and payment setup here.</p>
+          <p className="subtle">Complete a Workforce registration with a DropX ID first, then maintain provider IDs and payment setup here.</p>
         </div>
       </section>
     );
@@ -230,10 +263,44 @@ export function ProviderMappingWorksheet({
           </SubmitButton>
         </div>
 
+        <div className="mapping-toolbar">
+          <label className="mapping-toolbar-search">Search Workforce
+            <input
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="DropX ID, name, location or provider ID"
+              type="search"
+              value={searchQuery}
+            />
+          </label>
+          <label>Status
+            <select onChange={(event) => setMappingStatus(event.target.value)} value={mappingStatus}>
+              <option value="all">All mappings</option>
+              <option value="mapped">Mapped</option>
+              <option value="unmapped">Unmapped</option>
+            </select>
+          </label>
+          <label>Rows
+            <select onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+          <div className="mapping-toolbar-summary">
+            <span>{filteredIndexes.length} of {rows.length} Workforce profiles</span>
+            <div>
+              <button disabled={safePage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} type="button">Previous</button>
+              <strong>{safePage} / {totalPages}</strong>
+              <button disabled={safePage === totalPages} onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))} type="button">Next</button>
+            </div>
+          </div>
+        </div>
+
         <div className="mapping-rows">
           {rows.map((row, index) => (
-            <div className={`mapping-row-card ${dirtyRows[index] ? "unsaved-row" : ""}`} key={`${row.id || row.dropxId}-${index}`}>
+            <div className={`mapping-row-card ${dirtyRows[index] ? "unsaved-row" : ""}`} hidden={!paginatedIndexes.has(index)} key={`${row.workforceId}-${index}`}>
               <input type="hidden" name={`rows[${index}][id]`} value={row.id} />
+              <input type="hidden" name={`rows[${index}][workforce_id]`} value={row.workforceId} />
               <input type="hidden" name={`rows[${index}][source_type]`} value={row.sourceType} />
               <input type="hidden" name={`rows[${index}][mapping_id]`} value={row.mappingId} />
               <input type="hidden" name={`rows[${index}][dropx_id]`} value={row.dropxId} />
@@ -319,6 +386,12 @@ export function ProviderMappingWorksheet({
               </div>
             </div>
           ))}
+          {!filteredIndexes.length ? (
+            <div className="mapping-no-results">
+              <strong>No matching Workforce profiles</strong>
+              <span>Change the search or mapping status filter.</span>
+            </div>
+          ) : null}
         </div>
       </section>
     </form>

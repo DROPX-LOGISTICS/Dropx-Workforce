@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { headers } from "next/headers";
+import { GeistMono } from "geist/font/mono";
+import { GeistSans } from "geist/font/sans";
 import { OpsPwaRegister } from "@/components/ops-pwa-register";
 import "./globals.css";
 
@@ -33,7 +35,7 @@ export function generateMetadata(): Metadata {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   const opsHost = isOpsHost();
   return (
-    <html lang="en">
+    <html className={`${GeistSans.variable} ${GeistMono.variable}`} lang="en">
       <body>
         {opsHost ? <OpsPwaRegister /> : null}
         {children}

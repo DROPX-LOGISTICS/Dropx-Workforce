@@ -1,5 +1,21 @@
 begin;
 
+alter table public.workforce_register_master
+  drop constraint if exists workforce_register_master_table_check;
+
+alter table public.workforce_register_master
+  add constraint workforce_register_master_table_check
+  check (
+    table_name in (
+      'employees',
+      'contractors',
+      'workforce',
+      'vendors',
+      'workers',
+      'workforce_helpers'
+    )
+  );
+
 -- Housekeeping profiles already live in workforce_helpers. Make that physical
 -- register a supported source and target so the master can preserve the
 -- existing record instead of forcing it into a stricter generic worker table.

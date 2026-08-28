@@ -19505,29 +19505,29 @@ td strong,
 }
 
 .designation-routing-table {
-  min-width: 1320px;
+  min-width: 1160px;
   table-layout: fixed;
 }
 
-.designation-routing-table .routing-col-designation { width: 19%; }
-.designation-routing-table .routing-col-records { width: 24%; }
-.designation-routing-table .routing-col-target { width: 20%; }
+.designation-routing-table .routing-col-designation { width: 18%; }
+.designation-routing-table .routing-col-records { width: 26%; }
+.designation-routing-table .routing-col-target { width: 19%; }
 .designation-routing-table .routing-col-registration { width: 10%; }
-.designation-routing-table .routing-col-reconciliation { width: 17%; }
-.designation-routing-table .routing-col-action { width: 10%; }
+.designation-routing-table .routing-col-reconciliation { width: 16%; }
+.designation-routing-table .routing-col-action { width: 11%; }
 
 .designation-routing-table th {
-  padding: 10px 14px;
+  padding: 10px 12px;
   color: #667085;
   background: #f8fafc;
-  font-size: 10px;
+  font-size: 10.5px;
   letter-spacing: .025em;
   line-height: 1.25;
   white-space: normal;
 }
 
 .designation-routing-table td {
-  padding: 13px 14px;
+  padding: 13px 12px;
   color: #344054;
   font-size: 12px;
   line-height: 1.4;
@@ -19600,12 +19600,11 @@ td strong,
 }
 
 .routing-record-count strong {
-  overflow: hidden;
   color: #475467;
   font-size: 10px;
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .routing-record-count small {
@@ -19720,7 +19719,7 @@ td strong,
 
 .routing-action-cell .button {
   width: 100%;
-  min-width: 118px;
+  min-width: 100px;
   height: auto;
   min-height: 34px;
   padding: 7px 10px;

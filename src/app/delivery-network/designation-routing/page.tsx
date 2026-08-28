@@ -327,11 +327,11 @@ export default async function WorkforceDesignationRoutingPage({
                             <select className="select" defaultValue={route?.register_id ?? ""} name="register_id">
                               <option value="">Unmapped — block registration</option>
                               {registers.filter((item) => item.is_active || item.id === route?.register_id).map((item) => (
-                                <option key={item.id} value={item.id}>{item.name} ({item.table_name})</option>
+                                <option key={item.id} value={item.id}>{item.name}</option>
                               ))}
                             </select>
                           </form>
-                          <small className="routing-target-note">{register ? `Writes to ${registerLabel(register.table_name)}` : "New registration is blocked"}</small>
+                          <small className="routing-target-note">{register ? `New profiles go to ${register.name}` : "New registration is blocked"}</small>
                         </td>
                         <td>
                           <label className="check-row routing-registration-toggle">

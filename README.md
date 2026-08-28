@@ -2,6 +2,8 @@
 
 Production: [workforce.dropxlogistics.com](https://workforce.dropxlogistics.com)
 
+Source: [DROPX-LOGISTICS/Dropx-Workforce](https://github.com/DROPX-LOGISTICS/Dropx-Workforce)
+
 Independent Workforce operations product for associate and operations-partner onboarding, registration, activation, provider IDs, rate cards, communications, and lifecycle management.
 
 ## Current Status
@@ -52,10 +54,7 @@ Keep the Supabase redirect allowlist including `https://workforce.dropxlogistics
 
 ## Vercel Setup
 
-1. Push this folder to a GitHub repository.
-2. Import the repository in Vercel.
-3. Set the environment variables above in Vercel project settings.
-4. Deploy.
+The dedicated `dropx-workforce` Vercel project is connected to this repository. Production releases must originate from a pushed GitHub commit; direct local deployments are prohibited. Database migrations use the GitHub workflow documented in [docs/workforce-release-process.md](docs/workforce-release-process.md).
 
 ## Workforce Product Areas
 

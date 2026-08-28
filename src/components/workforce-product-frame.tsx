@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Menu,
   MessageSquareMore,
+  ReceiptIndianRupee,
   Settings2,
   ShieldCheck,
   UsersRound,
@@ -29,6 +30,7 @@ type WorkforceProductFrameProps = {
 const navigationIcons: Record<string, typeof LayoutDashboard> = {
   delivery_associates: UsersRound,
   provider_mapping: Fingerprint,
+  workforce_earnings: ReceiptIndianRupee,
   workforce_communications: MessageSquareMore,
   users: ShieldCheck,
   designations: Settings2
@@ -62,12 +64,13 @@ function iconFor(item: NavItem) {
 export function WorkforceProductFrame({ active, actions, children, items }: WorkforceProductFrameProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
+  const activeGroup = items.find((item) => item.children?.some((child) => child.label === active))?.label ?? null;
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(activeGroup);
 
   useEffect(() => {
     setMobileOpen(false);
-    setExpandedGroup(null);
-  }, [active, pathname]);
+    setExpandedGroup(activeGroup);
+  }, [activeGroup, pathname]);
 
   useEffect(() => {
     document.body.classList.toggle("workforce-mobile-open", mobileOpen);

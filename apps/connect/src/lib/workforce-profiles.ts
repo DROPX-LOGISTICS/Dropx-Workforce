@@ -39,9 +39,9 @@ export function workforceLabel(profileType: NonEmployeeProfileType) {
 }
 
 export function profileFieldRuleCategory(profileType: NonEmployeeProfileType) {
-  // Workforce classification comes from the designation master. Contractors
-  // remain only the legacy fallback field set for the registration form.
-  if (profileType === "workforce") return "contractors" as const;
+  if (profileType === "workforce") {
+    throw new Error("Canonical Workforce profiles must resolve registration policy from Designation Master.");
+  }
   if (profileType === "contractor") return "contractors" as const;
   if (profileType === "vendor") return "vendors" as const;
   if (profileType === "worker") return "workers" as const;

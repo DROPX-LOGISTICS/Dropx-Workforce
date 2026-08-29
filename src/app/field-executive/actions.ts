@@ -59,6 +59,19 @@ function tableForReturnPath(returnPath: FieldExecutiveReturnPath) {
   return nonEmployeeConfigForRoute(returnPath).table;
 }
 
+function registrationCategoryForDesignation(
+  designation: { onboarding_categories?: unknown; registration_category_code?: unknown },
+  compatibilityFallback: string
+) {
+  const categories = Array.isArray(designation.onboarding_categories)
+    ? designation.onboarding_categories.map((value) => String(value).trim().toLowerCase()).filter(Boolean)
+    : [];
+  const configured = String(designation.registration_category_code ?? "").trim().toLowerCase();
+  if (configured && categories.includes(configured)) return configured;
+  if (categories.length === 1) return categories[0];
+  return compatibilityFallback;
+}
+
 function requiredPeopleModule(returnPath: FieldExecutiveReturnPath): DesignationPeopleModule | null {
   const profileType = nonEmployeeConfigForRoute(returnPath).profileType;
   if (profileType === "field_executive") return "delivery_network";
@@ -258,15 +271,8 @@ export async function createFieldExecutive(formData: FormData) {
     const dateOfJoin = required(formData.get("date_of_join"), "Date of join");
     const locationId = required(formData.get("location_id"), "Location");
     const designation = required(formData.get("designation"), "Designation");
-    const configuredDirectActivate = await loadWorkforceCategoryDirectActivate(companyId, config.designationCategory);
-    // Delivery-associate / field-executive profiles always pass through the HO
-    // Workforce Lifecycle queue. Direct activation remains available only for
-    // the other independently configured engagement types.
-    const canonicalOnboarding = config.profileType === "workforce" || config.profileType === "field_executive";
-    const directActivate = !canonicalOnboarding && configuredDirectActivate;
-    const directPayload = directActivate ? normalizeFieldExecutivePayload(formData).payload : null;
     const designationRuleResult = await supabaseAdmin.from("designations")
-      .select("id, code, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), profile_field_rules, onboarding_role_ids, portal_permissions")
+      .select("id, code, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), onboarding_categories, registration_category_code, profile_field_rules, onboarding_role_ids, portal_permissions")
       .eq("company_id", companyId)
       .eq("name", designation)
       .eq("is_active", true)
@@ -276,12 +282,23 @@ export async function createFieldExecutive(formData: FormData) {
     requireDesignationPeopleModule(designationRuleResult.data, returnPath);
     requireDesignationOnboardingAccess(designationRuleResult.data, authorization);
     requireDesignationPortalAccess(designationRuleResult.data, currentAccessSurface(), "add", { isOwner: isCompanyOwner(authorization) });
+    const registrationCategory = registrationCategoryForDesignation(
+      designationRuleResult.data,
+      config.designationCategory
+    );
+    const configuredDirectActivate = await loadWorkforceCategoryDirectActivate(companyId, registrationCategory);
+    // Delivery-associate / field-executive profiles always pass through the HO
+    // Workforce Lifecycle queue. Direct activation remains available only for
+    // the other independently configured engagement types.
+    const canonicalOnboarding = config.profileType === "workforce" || config.profileType === "field_executive";
+    const directActivate = !canonicalOnboarding && configuredDirectActivate;
+    const directPayload = directActivate ? normalizeFieldExecutivePayload(formData).payload : null;
     const dashboardRules = directActivate
       ? (await loadWorkforceCategoryRules(
         companyId,
-        config.designationCategory,
+        registrationCategory,
         designationRuleResult.data.profile_field_rules,
-        config.designationCategory
+        registrationCategory
       )).dashboard
       : { enabled: [] as string[], required: [] as string[] };
 
@@ -464,7 +481,7 @@ export async function createFieldExecutive(formData: FormData) {
         mobile: `${mobileCountryCode}${mobile}`,
         dropxId,
         biometricId: biometricId ?? "",
-        workforceCategoryCode: config.designationCategory,
+        workforceCategoryCode: registrationCategory,
         dateOfJoin,
         locationCode: stationRelation?.station_code ?? "",
         locationName: stationRelation?.station_name ?? "",
@@ -730,7 +747,7 @@ export async function updateFieldExecutive(formData: FormData) {
 
     const designationResult = await supabaseAdmin
       .from("designations")
-      .select("code, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), profile_field_rules, portal_permissions")
+      .select("id, code, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), onboarding_categories, registration_category_code, profile_field_rules, portal_permissions")
       .eq("company_id", companyId)
       .eq("name", payload.designation)
       .eq("is_active", true)
@@ -741,11 +758,15 @@ export async function updateFieldExecutive(formData: FormData) {
       requireDesignationPeopleModule(designationResult.data, returnPath);
     }
     requireDesignationPortalAccess(designationResult.data, currentAccessSurface(), "edit", { isOwner: isCompanyOwner(authorization) });
+    const registrationCategory = registrationCategoryForDesignation(
+      designationResult.data,
+      config.designationCategory
+    );
     const dashboardRules = (await loadWorkforceCategoryRules(
       companyId,
-      config.designationCategory,
+      registrationCategory,
       designationResult.data?.profile_field_rules,
-      config.designationCategory
+      registrationCategory
     )).dashboard;
     const dashboardEnabled = new Set(dashboardRules.enabled);
     const profilePayloadKeys: Record<string, keyof typeof payload> = {
@@ -798,6 +819,7 @@ export async function updateFieldExecutive(formData: FormData) {
       date_of_join: payload.date_of_join,
       location_id: payload.location_id,
       designation: payload.designation,
+      ...(config.profileType === "workforce" ? { designation_id: designationResult.data.id } : {}),
       biometric_id: payload.biometric_id,
       is_active: payload.is_active,
       statutory_applicability: payload.statutory_applicability

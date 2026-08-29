@@ -54,6 +54,7 @@ type DesignationRow = {
   designation_category?: DesignationBusinessCategory | DesignationBusinessCategory[] | null;
   model_ids?: string[] | null;
   onboarding_categories?: string[] | null;
+  registration_category_code?: string | null;
   profile_field_rules?: unknown;
   onboarding_role_ids?: string[] | null;
   portal_permissions?: unknown;
@@ -764,20 +765,30 @@ async function loadFieldExecutiveData(
 
   let designationsResult: { data: unknown[] | null; error: { message?: string } | null } = await supabaseAdmin
     .from("designations")
-    .select("id, code, name, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), model_ids, onboarding_categories, profile_field_rules, onboarding_role_ids, portal_permissions, is_active")
+    .select("id, code, name, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), model_ids, onboarding_categories, registration_category_code, profile_field_rules, onboarding_role_ids, portal_permissions, is_active")
     .eq("company_id", companyId)
     .eq("is_active", true)
     .order("name");
   if (isMissingColumnError(designationsResult.error)) {
-    const fallbackDesignationsResult: { data: unknown[] | null; error: { message?: string } | null } = await supabaseAdmin
+    const registrationFallback: { data: unknown[] | null; error: { message?: string } | null } = await supabaseAdmin
+      .from("designations")
+      .select("id, code, name, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), model_ids, onboarding_categories, profile_field_rules, onboarding_role_ids, portal_permissions, is_active")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .order("name");
+    const fallbackDesignationsResult: { data: unknown[] | null; error: { message?: string } | null } = registrationFallback.error
+      ? await supabaseAdmin
       .from("designations")
       .select("id, code, name, is_active")
       .eq("company_id", companyId)
       .eq("is_active", true)
-      .order("name");
+      .order("name")
+      : registrationFallback;
     designationsResult = {
       ...fallbackDesignationsResult,
-      data: (fallbackDesignationsResult.data ?? []).map((designation) => ({ ...(designation as Record<string, unknown>), designation_category: null, model_ids: [], onboarding_categories: ["employees"], profile_field_rules: {}, onboarding_role_ids: [], portal_permissions: null }))
+      data: (fallbackDesignationsResult.data ?? []).map((designation) => registrationFallback.error
+        ? ({ ...(designation as Record<string, unknown>), designation_category: null, model_ids: [], onboarding_categories: ["employees"], registration_category_code: null, profile_field_rules: {}, onboarding_role_ids: [], portal_permissions: null })
+        : ({ ...(designation as Record<string, unknown>), registration_category_code: null }))
     };
   }
 
@@ -1041,20 +1052,23 @@ export async function FieldExecutivePageContent({
     editExecutive.created_by === authorization.userId &&
     latestCorrectionByExecutive.get(editExecutive.id)?.status !== "pending"
   );
+  const defaultRuleCategory = designations[0]?.registration_category_code
+    ?? designations[0]?.onboarding_categories?.[0]
+    ?? workforceConfig.designationCategory;
   const categoryRules = await loadWorkforceCategoryRules(
     companyId,
-    workforceConfig.designationCategory,
+    defaultRuleCategory,
     designations[0]?.profile_field_rules ?? profileDesignations[0]?.profile_field_rules,
-    workforceConfig.designationCategory
+    defaultRuleCategory
   );
   const statutoryEnabled = await loadWorkforceCategoryStatutoryEnabled(
     companyId,
-    workforceConfig.designationCategory,
+    defaultRuleCategory,
     false
   );
   const configuredDirectActivate = await loadWorkforceCategoryDirectActivate(
     companyId,
-    workforceConfig.designationCategory
+    defaultRuleCategory
   );
   const directActivate = workforceConfig.profileType !== "field_executive" && configuredDirectActivate;
   const activeMessage = error ?? errorMessage ?? notice;
@@ -1078,9 +1092,9 @@ export async function FieldExecutivePageContent({
       canEdit: canAccessDesignationPortal(designation, accessSurface, "edit", { isOwner: ownerAccess }),
     dashboardRules: (await loadWorkforceCategoryRules(
       companyId,
-      workforceConfig.designationCategory,
+      designation.registration_category_code ?? designation.onboarding_categories?.[0] ?? workforceConfig.designationCategory,
       designation.profile_field_rules,
-      workforceConfig.designationCategory
+      designation.registration_category_code ?? designation.onboarding_categories?.[0] ?? workforceConfig.designationCategory
     )).dashboard
   });
   const designationOptions = await Promise.all(designations.map(toDesignationOption));

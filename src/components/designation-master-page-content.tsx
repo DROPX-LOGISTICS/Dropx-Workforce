@@ -61,6 +61,7 @@ type DesignationRow = {
   designation_category_id?: string | null;
   designation_category?: DesignationBusinessCategory | DesignationBusinessCategory[] | null;
   profile_destination?: DesignationProfileDestination | null;
+  registration_category_code?: string | null;
   provider_ids: string[];
   location_ids?: string[];
   model_ids?: string[] | null;
@@ -116,7 +117,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
   }
 
   const [designationsResult, providersResult, locationsResult, modelsResult, categoriesResult, businessCategoriesResult, rolesResult] = await Promise.all([
-    supabaseAdmin.from("designations").select("id, code, name, designation_category_id, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), profile_destination, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_field_operations, is_active").eq("company_id", companyId).order("code"),
+    supabaseAdmin.from("designations").select("id, code, name, designation_category_id, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), profile_destination, registration_category_code, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_field_operations, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("providers").select("id, code, name, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("stations").select("id, station_code, station_name, hide_from_location_list").eq("company_id", companyId).eq("is_active", true).order("station_code"),
     supabaseAdmin.from("location_models").select("id, provider_id, code, name, is_active, providers (code, name)").eq("company_id", companyId).eq("is_active", true).order("code"),
@@ -127,15 +128,15 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
   let designationRows: unknown[] = designationsResult.data ?? [];
   let designationError: { message?: string } | null = designationsResult.error;
   if (isMissingColumnError(designationsResult.error)) {
-    const destinationCompatibleResult = await supabaseAdmin
+    const registrationCompatibleResult = await supabaseAdmin
       .from("designations")
-      .select("id, code, name, designation_category_id, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_field_operations, is_active")
+      .select("id, code, name, designation_category_id, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), profile_destination, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_field_operations, is_active")
       .eq("company_id", companyId)
       .order("code");
-    if (!destinationCompatibleResult.error) {
-      designationRows = (destinationCompatibleResult.data ?? []).map((row) => ({
+    if (!registrationCompatibleResult.error) {
+      designationRows = (registrationCompatibleResult.data ?? []).map((row) => ({
         ...row,
-        profile_destination: null
+        registration_category_code: null
       }));
       designationError = null;
     } else {
@@ -162,6 +163,7 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
         designation_category_id: null,
         designation_category: null,
         profile_destination: null,
+        registration_category_code: null,
         is_field_operations: false,
       }));
       designationError = fallbackError;

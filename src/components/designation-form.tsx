@@ -47,6 +47,7 @@ type DesignationInitial = {
   name: string;
   designation_category_id?: string | null;
   profile_destination?: DesignationProfileDestination | null;
+  registration_category_code?: string | null;
   provider_ids: string[];
   model_ids?: string[] | null;
   onboarding_categories?: string[] | null;
@@ -481,6 +482,11 @@ export function DesignationForm({
   const [selectedCategories, setSelectedCategories] = useState<DesignationCategory[]>(
     normalizeDesignationCategories(initial?.onboarding_categories)
   );
+  const [registrationCategory, setRegistrationCategory] = useState(() => {
+    const categories = normalizeDesignationCategories(initial?.onboarding_categories);
+    const configured = String(initial?.registration_category_code ?? "");
+    return categories.includes(configured) ? configured : categories[0] ?? "";
+  });
   const selectedPages = (initial?.app_page_access ?? defaultAppPageAccess)
     .filter((page) => appPageOptions.some((option) => option.value === page));
   const destinationOptions = designationProfileDestinationsForModule(peopleModule);
@@ -489,6 +495,11 @@ export function DesignationForm({
     peopleModule,
     profileDestination: initial?.profile_destination
   });
+
+  useEffect(() => {
+    if (selectedCategories.includes(registrationCategory)) return;
+    setRegistrationCategory(selectedCategories[0] ?? "");
+  }, [registrationCategory, selectedCategories]);
 
   return (
     <form action={action} className="designation-form">
@@ -512,6 +523,25 @@ export function DesignationForm({
           Engagement type
           <CategoryMultiSelect categories={categories} selected={selectedCategories} setSelected={setSelectedCategories} />
           <small>Employee, contractor, vendor, worker, or another configured legal relationship.</small>
+        </label>
+        <label>
+          Registration policy
+          <select
+            className="field"
+            disabled={!selectedCategories.length}
+            name="registration_category_code"
+            onChange={(event) => setRegistrationCategory(event.target.value)}
+            required
+            value={registrationCategory}
+          >
+            {!selectedCategories.length ? <option value="">Select an engagement type first</option> : null}
+            {selectedCategories.map((category) => (
+              <option key={category} value={category}>
+                {categories.find((option) => option.code === category)?.name ?? category}
+              </option>
+            ))}
+          </select>
+          <small>Controls registration fields, statutory options and DropX One access for this designation.</small>
         </label>
         <label>
           Models

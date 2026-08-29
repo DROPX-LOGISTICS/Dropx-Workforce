@@ -9,12 +9,11 @@ import {
 } from "../../../../src/lib/profile-drafts";
 import { saveProfileVerifications } from "../../../../src/lib/profile-verifications";
 import { supabaseAdmin } from "../../../../src/lib/supabase-admin";
-import { loadWorkforceCategoryRules } from "../../../../src/lib/workforce-category-rules";
+import { loadWorkforceRegistrationPolicy } from "../../../../src/lib/workforce-registration-policy";
 import { assertMinimumProfileAge } from "../../../../src/lib/profile-age";
 import { createProfileSubmittedNotification } from "../../../../src/lib/app-notifications";
 import {
   isNonEmployeeProfileType,
-  profileFieldRuleCategory,
   type NonEmployeeProfileType,
   workforceLabel,
   workforceTable
@@ -31,6 +30,7 @@ type FieldExecutiveRow = {
   date_of_join: string | null;
   location_id: string | null;
   designation: string | null;
+  designation_id?: string | null;
   gender: string | null;
   date_of_birth: string | null;
   aadhaar_number: string | null;
@@ -66,6 +66,7 @@ type FieldExecutiveRow = {
   profile_photo_path: string | null;
   onboarding_status: string | null;
   profile_return_remarks?: string | null;
+  statutory_applicability?: string[] | null;
   stations?: { station_code: string | null; station_name: string | null } | { station_code: string | null; station_name: string | null }[] | null;
 };
 
@@ -228,26 +229,27 @@ async function requireExecutiveAccess(executiveId: string, profileType: string) 
 async function loadExecutive(executiveId: string, companyId: string, profileType: NonEmployeeProfileType) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const table = workforceTable(profileType);
-  const result = await supabaseAdmin
-    .from(table)
-    .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, eshram_uan, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, pf_uan, pf_account_no, esi_no, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, profile_return_remarks, stations (station_code, station_name)")
+  const designationIdColumn = profileType === "workforce" ? ", designation_id" : "";
+  const profileQuery: any = supabaseAdmin.from(table);
+  const result = await profileQuery
+    .select(`id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation${designationIdColumn}, gender, date_of_birth, aadhaar_number, pan_number, eshram_uan, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, pf_uan, pf_account_no, esi_no, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, profile_return_remarks, statutory_applicability, stations (station_code, station_name)`)
     .eq("id", executiveId)
     .eq("company_id", companyId)
     .maybeSingle();
   if (result.error && /eshram_uan|column/i.test(result.error.message)) {
-    const fallbackResult = await supabaseAdmin
-      .from(table)
-      .select("id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation, gender, date_of_birth, aadhaar_number, pan_number, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, profile_return_remarks, stations (station_code, station_name)")
+    const fallbackQuery: any = supabaseAdmin.from(table);
+    const fallbackResult = await fallbackQuery
+      .select(`id, company_id, dropx_id, full_name, email, mobile_country_code, mobile, date_of_join, location_id, designation${designationIdColumn}, gender, date_of_birth, aadhaar_number, pan_number, address, postal_pin, landmark, state_code, father_name, blood_group, is_handicapped, bank_account_no, ifsc_code, driving_license_no, driving_license_exp_date, vehicle_reg_no, vehicle_reg_exp_date, vehicle_insurance_exp_date, vehicle_pollution_exp_date, biometric_id, emergency_contact_name, emergency_contact_number, emergency_contact_relation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path, onboarding_status, profile_return_remarks, statutory_applicability, stations (station_code, station_name)`)
       .eq("id", executiveId)
       .eq("company_id", companyId)
       .maybeSingle();
     if (fallbackResult.error) throw new Error(fallbackResult.error.message);
     if (!fallbackResult.data) throw new Error(`${workforceLabel(profileType)} profile was not found.`);
-    return { ...fallbackResult.data, eshram_uan: null } as FieldExecutiveRow;
+    return { ...fallbackResult.data, eshram_uan: null } as unknown as FieldExecutiveRow;
   }
   if (result.error) throw new Error(result.error.message);
   if (!result.data) throw new Error(`${workforceLabel(profileType)} profile was not found.`);
-  return result.data as FieldExecutiveRow;
+  return result.data as unknown as FieldExecutiveRow;
 }
 
 async function signedProfileUrl(path: string | null) {
@@ -258,18 +260,12 @@ async function signedProfileUrl(path: string | null) {
   return result.data?.signedUrl ?? "";
 }
 
-async function loadApplicableAgreement(row: FieldExecutiveRow, profileType: NonEmployeeProfileType): Promise<WorkforceAgreementView | null> {
+async function loadApplicableAgreement(
+  row: FieldExecutiveRow,
+  profileType: NonEmployeeProfileType,
+  designationCode: string
+): Promise<WorkforceAgreementView | null> {
   if (!supabaseAdmin) return null;
-  const designation = row.designation
-    ? await supabaseAdmin
-      .from("designations")
-      .select("code")
-      .eq("company_id", row.company_id)
-      .ilike("name", row.designation)
-      .maybeSingle()
-    : null;
-  if (designation?.error) throw new Error(designation.error.message);
-  const designationCode = String(designation?.data?.code ?? "").trim().toUpperCase();
   const today = new Date().toISOString().slice(0, 10);
   const agreements = await supabaseAdmin
     .from("workforce_agreement_master")
@@ -309,25 +305,15 @@ async function loadApplicableAgreement(row: FieldExecutiveRow, profileType: NonE
 
 async function serializeExecutive(row: FieldExecutiveRow, profileType: NonEmployeeProfileType) {
   const station = firstRelation(row.stations);
-  const designationResult = row.designation && supabaseAdmin
-    ? await supabaseAdmin
-      .from("designations")
-      .select("code, profile_field_rules")
-      .eq("company_id", row.company_id)
-      .eq("name", row.designation)
-      .maybeSingle()
-    : null;
-  const categoryCode = profileFieldRuleCategory(profileType);
-  const fieldRules = (await loadWorkforceCategoryRules(
-    row.company_id,
-    categoryCode,
-    designationResult?.data?.profile_field_rules,
-    categoryCode
-  )).dropx_one;
+  const policy = await loadWorkforceRegistrationPolicy({
+    companyId: row.company_id,
+    designationId: row.designation_id,
+    designationName: row.designation,
+    profileType
+  });
   const agreement = ["workforce", "field_executive"].includes(profileType)
-    ? await loadApplicableAgreement(row, profileType)
+    ? await loadApplicableAgreement(row, profileType, policy.designationCode)
     : null;
-  const designationCode = String(designationResult?.data?.code ?? "").trim().toUpperCase();
   return {
     id: row.id,
     readOnly: {
@@ -368,9 +354,11 @@ async function serializeExecutive(row: FieldExecutiveRow, profileType: NonEmploy
       insuranceExpiry: formatDisplayDate(row.vehicle_insurance_exp_date) === "-" ? "" : formatDisplayDate(row.vehicle_insurance_exp_date),
       pollutionExpiry: formatDisplayDate(row.vehicle_pollution_exp_date) === "-" ? "" : formatDisplayDate(row.vehicle_pollution_exp_date)
     },
-    designationCode,
-    statutoryApplicability: ["pf", "esi"],
-    fieldRules,
+    designationCode: policy.designationCode,
+    registrationCategoryCode: policy.categoryCode,
+    statutoryApplicability: row.statutory_applicability ?? ["not_applicable"],
+    statutoryEnabled: policy.statutoryEnabled,
+    fieldRules: policy.fieldRules.dropx_one,
     uploads: {
       aadhaarFront: Boolean(row.aadhaar_front_path),
       aadhaarBack: Boolean(row.aadhaar_back_path),
@@ -442,8 +430,14 @@ export async function POST(request: Request) {
       : null;
     const manualReviewRequired = String(formData.get("manual_review_required") ?? "") === "true";
     const currentExecutive = await loadExecutive(account.id, account.companyId, account.profileType);
+    const registrationPolicy = await loadWorkforceRegistrationPolicy({
+      companyId: account.companyId,
+      designationId: currentExecutive.designation_id,
+      designationName: currentExecutive.designation,
+      profileType: account.profileType
+    });
     const requiredAgreement = ["workforce", "field_executive"].includes(account.profileType)
-      ? await loadApplicableAgreement(currentExecutive, account.profileType)
+      ? await loadApplicableAgreement(currentExecutive, account.profileType, registrationPolicy.designationCode)
       : null;
     if (requiredAgreement) {
       const accepted = String(formData.get("agreement_accepted") ?? "") === "true";
@@ -462,26 +456,7 @@ export async function POST(request: Request) {
       companyId: account.companyId,
       profileType: account.profileType
     });
-    const designationResult = currentExecutive.designation
-      ? await supabaseAdmin
-        .from("designations")
-        .select("code, profile_field_rules")
-        .eq("company_id", account.companyId)
-        .eq("name", currentExecutive.designation)
-        .maybeSingle()
-      : null;
-    const categoryCode = profileFieldRuleCategory(account.profileType);
-    const rules = (await loadWorkforceCategoryRules(
-      account.companyId,
-      categoryCode,
-      designationResult?.data?.profile_field_rules,
-      categoryCode
-    )).dropx_one;
-    if (rules.enabled.length === 0) {
-      throw new Error(
-        "Profile fields are not configured for this category and designation. Contact an administrator."
-      );
-    }
+    const rules = registrationPolicy.fieldRules.dropx_one;
     const requiredFields = new Set(rules.required);
     const isRequired = (key: string) => requiredFields.has(key);
     const textValue = (key: string, label: string) => isRequired(key) ? requiredText(formData.get(key), label) : cleanText(formData.get(key));
@@ -524,6 +499,54 @@ export async function POST(request: Request) {
       vehicle_pollution_exp_date: dateValue("vehicle_pollution_exp_date", "Pollution expiry date"),
       updated_at: new Date().toISOString()
     };
+    const profileColumnByRule: Record<string, string> = {
+      gender: "gender",
+      date_of_birth: "date_of_birth",
+      aadhaar_number: "aadhaar_number",
+      pan_number: "pan_number",
+      eshram_uan: "eshram_uan",
+      father_name: "father_name",
+      blood_group: "blood_group",
+      is_handicapped: "is_handicapped",
+      address: "address",
+      state_code: "state_code",
+      pincode: "postal_pin",
+      landmark: "landmark",
+      bank_account_no: "bank_account_no",
+      ifsc: "ifsc_code",
+      pf_uan: "pf_uan",
+      pf_account_no: "pf_account_no",
+      esi_no: "esi_no",
+      driving_license_no: "driving_license_no",
+      driving_license_exp_date: "driving_license_exp_date",
+      vehicle_reg_no: "vehicle_reg_no",
+      vehicle_reg_exp_date: "vehicle_reg_exp_date",
+      vehicle_insurance_exp_date: "vehicle_insurance_exp_date",
+      vehicle_pollution_exp_date: "vehicle_pollution_exp_date",
+      emergency_contact_name: "emergency_contact_name",
+      emergency_contact_number: "emergency_contact_number",
+      emergency_contact_relation: "emergency_contact_relation"
+    };
+    const enabledFields = new Set(rules.enabled);
+    for (const [ruleKey, column] of Object.entries(profileColumnByRule)) {
+      if (!enabledFields.has(ruleKey)) delete updatePayload[column];
+    }
+    const uploadPolicies = [
+      { key: "aadhaar_front", slot: "aadhaar_front", current: currentExecutive.aadhaar_front_path },
+      { key: "aadhaar_back", slot: "aadhaar_back", current: currentExecutive.aadhaar_back_path },
+      { key: "pan_upload", slot: "pan_upload", current: currentExecutive.pan_upload_path },
+      { key: "dl_front", slot: "dl_front", current: currentExecutive.dl_front_path },
+      { key: "dl_back", slot: "dl_back", current: currentExecutive.dl_back_path },
+      { key: "profile_photo", slot: "profile_photo", current: currentExecutive.profile_photo_path }
+    ] as const;
+    for (const upload of uploadPolicies) {
+      if (!requiredFields.has(upload.key)) continue;
+      const value = formData.get(upload.key);
+      const hasNewFile = value instanceof File && value.size > 0;
+      if (!hasNewFile && !upload.current && !draft?.filePaths[upload.slot]) {
+        throw new Error(`${upload.key.replaceAll("_", " ")} is required.`);
+      }
+    }
 
     const profileUpdateResult = await supabaseAdmin
       .from(table)
@@ -540,13 +563,14 @@ export async function POST(request: Request) {
       values: verificationValues.length ? verificationValues : draftVerificationValues(draft)
     });
 
+    const enabledUpload = (key: string) => enabledFields.has(key) ? formData.get(key) : null;
     const uploads = await Promise.all([
-      uploadExecutiveFile(formData.get("aadhaar_front"), account.companyId, account.id, "aadhaar-front"),
-      uploadExecutiveFile(formData.get("aadhaar_back"), account.companyId, account.id, "aadhaar-back"),
-      uploadExecutiveFile(formData.get("pan_upload"), account.companyId, account.id, "pan"),
-      uploadExecutiveFile(formData.get("dl_front"), account.companyId, account.id, "dl-front"),
-      uploadExecutiveFile(formData.get("dl_back"), account.companyId, account.id, "dl-back"),
-      uploadExecutiveFile(formData.get("profile_photo"), account.companyId, account.id, "photo")
+      uploadExecutiveFile(enabledUpload("aadhaar_front"), account.companyId, account.id, "aadhaar-front"),
+      uploadExecutiveFile(enabledUpload("aadhaar_back"), account.companyId, account.id, "aadhaar-back"),
+      uploadExecutiveFile(enabledUpload("pan_upload"), account.companyId, account.id, "pan"),
+      uploadExecutiveFile(enabledUpload("dl_front"), account.companyId, account.id, "dl-front"),
+      uploadExecutiveFile(enabledUpload("dl_back"), account.companyId, account.id, "dl-back"),
+      uploadExecutiveFile(enabledUpload("profile_photo"), account.companyId, account.id, "photo")
     ]);
     const [
       uploadedAadhaarFrontPath,
@@ -556,12 +580,12 @@ export async function POST(request: Request) {
       uploadedDlBackPath,
       uploadedProfilePhotoPath
     ] = uploads;
-    const aadhaarFrontPath = uploadedAadhaarFrontPath ?? draft?.filePaths.aadhaar_front ?? null;
-    const aadhaarBackPath = uploadedAadhaarBackPath ?? draft?.filePaths.aadhaar_back ?? null;
-    const panUploadPath = uploadedPanPath ?? draft?.filePaths.pan_upload ?? null;
-    const dlFrontPath = uploadedDlFrontPath ?? draft?.filePaths.dl_front ?? null;
-    const dlBackPath = uploadedDlBackPath ?? draft?.filePaths.dl_back ?? null;
-    const profilePhotoPath = uploadedProfilePhotoPath ?? draft?.filePaths.profile_photo ?? null;
+    const aadhaarFrontPath = enabledFields.has("aadhaar_front") ? uploadedAadhaarFrontPath ?? draft?.filePaths.aadhaar_front ?? null : null;
+    const aadhaarBackPath = enabledFields.has("aadhaar_back") ? uploadedAadhaarBackPath ?? draft?.filePaths.aadhaar_back ?? null : null;
+    const panUploadPath = enabledFields.has("pan_upload") ? uploadedPanPath ?? draft?.filePaths.pan_upload ?? null : null;
+    const dlFrontPath = enabledFields.has("dl_front") ? uploadedDlFrontPath ?? draft?.filePaths.dl_front ?? null : null;
+    const dlBackPath = enabledFields.has("dl_back") ? uploadedDlBackPath ?? draft?.filePaths.dl_back ?? null : null;
+    const profilePhotoPath = enabledFields.has("profile_photo") ? uploadedProfilePhotoPath ?? draft?.filePaths.profile_photo ?? null : null;
     if (requiredAgreement && !requiredAgreement.acceptedAt) {
       const acceptedAt = new Date().toISOString();
       const agreementIdentity = account.profileType === "field_executive"

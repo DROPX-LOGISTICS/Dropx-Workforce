@@ -141,6 +141,14 @@ function onboardingCategories(formData: FormData) {
   return categories;
 }
 
+function registrationCategoryCode(formData: FormData, categories: string[]) {
+  const code = required(formData.get("registration_category_code"), "Registration policy").toLowerCase();
+  if (!categories.includes(code)) {
+    throw new Error("Registration policy must be one of the selected engagement types.");
+  }
+  return code;
+}
+
 async function designationCategoryId(
   companyId: string,
   formData: FormData,
@@ -241,6 +249,7 @@ async function createDesignationForScope(formData: FormData, scope: DesignationA
     const designationCategory = await designationCategoryId(companyId, formData, scope.peopleModule);
     const destination = profileDestination(formData, designationCategory.peopleModule);
     const categories = onboardingCategories(formData);
+    const registrationCategory = registrationCategoryCode(formData, categories);
     await validateOnboardingCategories(companyId, categories);
     const roleIds = onboardingRoleIds(formData);
     await validateOnboardingRoles(companyId, roleIds);
@@ -253,6 +262,7 @@ async function createDesignationForScope(formData: FormData, scope: DesignationA
       model_ids: modelIds(formData),
       location_ids: [],
       onboarding_categories: categories,
+      registration_category_code: registrationCategory,
       profile_field_rules: profileFieldRules(formData, categories),
       app_page_access: appPageAccess(formData),
       onboarding_role_ids: roleIds,
@@ -288,6 +298,7 @@ async function updateDesignationForScope(formData: FormData, scope: DesignationA
     const destination = profileDestination(formData, designationCategory.peopleModule);
     const status = clean(formData.get("status")) === "inactive" ? false : true;
     const categories = onboardingCategories(formData);
+    const registrationCategory = registrationCategoryCode(formData, categories);
     await validateOnboardingCategories(companyId, categories);
     const roleIds = onboardingRoleIds(formData);
     await validateOnboardingRoles(companyId, roleIds);
@@ -303,6 +314,7 @@ async function updateDesignationForScope(formData: FormData, scope: DesignationA
         model_ids: modelIds(formData),
         location_ids: [],
         onboarding_categories: categories,
+        registration_category_code: registrationCategory,
         profile_field_rules: profileFieldRules(formData, categories),
         app_page_access: appPageAccess(formData),
         onboarding_role_ids: roleIds,

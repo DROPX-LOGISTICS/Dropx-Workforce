@@ -65,6 +65,7 @@ type DesignationAccessRow = {
   code: string;
   name: string;
   onboarding_categories: string[] | null;
+  registration_category_code?: string | null;
   app_page_access?: string[] | null;
 };
 
@@ -109,7 +110,6 @@ const defaultPageAccess = ["dashboard", "attendance", "leave", "settings"];
 
 function categoryCodeForProfile(profileType: ConnectAccount["profileType"]) {
   if (profileType === "employee") return "employees";
-  if (profileType === "workforce") return "workforce";
   if (profileType === "field_executive") return "field_executives";
   if (profileType === "contractor") return "contractors";
   if (profileType === "vendor") return "vendors";
@@ -117,8 +117,8 @@ function categoryCodeForProfile(profileType: ConnectAccount["profileType"]) {
   return "";
 }
 
-function designationLookupKey(companyId: string, categoryCode: string, value: string) {
-  return `${companyId}:${categoryCode}:${value.trim().toLowerCase()}`;
+function designationLookupKey(companyId: string, value: string) {
+  return `${companyId}:${value.trim().toLowerCase()}`;
 }
 
 function intersectPageAccess(categoryPages: string[], designationPages?: string[] | null) {
@@ -312,33 +312,50 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
   const designationResult = companyIds.length
     ? await supabaseAdmin
       .from("designations")
-      .select("id, company_id, code, name, onboarding_categories, app_page_access")
+      .select("id, company_id, code, name, onboarding_categories, registration_category_code, app_page_access")
       .in("company_id", companyIds)
       .eq("is_active", true)
     : { data: [], error: null };
   let designationRows: DesignationAccessRow[] = (designationResult.data ?? []) as DesignationAccessRow[];
   let designationAccessAvailable = true;
   if (isMissingColumnError(designationResult.error)) {
-    designationAccessAvailable = false;
-    const fallbackResult = companyIds.length
+    const registrationFallback = companyIds.length
       ? await supabaseAdmin
         .from("designations")
-        .select("id, company_id, code, name, onboarding_categories")
+        .select("id, company_id, code, name, onboarding_categories, app_page_access")
         .in("company_id", companyIds)
         .eq("is_active", true)
       : { data: [], error: null };
-    if (fallbackResult.error && !isMissingColumnError(fallbackResult.error)) {
-      throw new Error(fallbackResult.error.message);
+    if (!registrationFallback.error) {
+      designationRows = (registrationFallback.data ?? []).map((designation) => ({
+        ...designation,
+        registration_category_code: null
+      })) as DesignationAccessRow[];
+    } else {
+      designationAccessAvailable = false;
+      const fallbackResult = companyIds.length
+        ? await supabaseAdmin
+          .from("designations")
+          .select("id, company_id, code, name, onboarding_categories")
+          .in("company_id", companyIds)
+          .eq("is_active", true)
+        : { data: [], error: null };
+      if (fallbackResult.error && !isMissingColumnError(fallbackResult.error)) {
+        throw new Error(fallbackResult.error.message);
+      }
+      designationRows = (fallbackResult.data ?? []).map((designation) => ({
+        ...designation,
+        registration_category_code: null,
+        app_page_access: null
+      })) as DesignationAccessRow[];
     }
-    designationRows = (fallbackResult.data ?? []).map((designation) => ({
-      ...designation,
-      app_page_access: null
-    })) as DesignationAccessRow[];
   } else if (designationResult.error) {
     throw new Error(designationResult.error.message);
   }
   const pageAccessByDesignationId = new Map<string, string[] | null>();
   const pageAccessByDesignationKey = new Map<string, string[] | null>();
+  const categoryByDesignationId = new Map<string, string>();
+  const categoryByDesignationKey = new Map<string, string>();
   for (const designation of designationRows) {
     const pages = designationAccessAvailable && Array.isArray((designation as { app_page_access?: unknown }).app_page_access)
       ? (designation as { app_page_access: unknown[] }).app_page_access.map(String)
@@ -347,15 +364,20 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
     const categories = Array.isArray(designation.onboarding_categories)
       ? designation.onboarding_categories.map(String)
       : [];
-    for (const category of categories) {
-      pageAccessByDesignationKey.set(
-        designationLookupKey(String(designation.company_id), category, String(designation.name)),
-        pages
-      );
-      pageAccessByDesignationKey.set(
-        designationLookupKey(String(designation.company_id), category, String(designation.code)),
-        pages
-      );
+    const configuredCategory = String(designation.registration_category_code ?? "").trim().toLowerCase();
+    const registrationCategory = categories.includes(configuredCategory)
+      ? configuredCategory
+      : categories.length === 1
+        ? categories[0]
+        : "";
+    const nameKey = designationLookupKey(String(designation.company_id), String(designation.name));
+    const codeKey = designationLookupKey(String(designation.company_id), String(designation.code));
+    pageAccessByDesignationKey.set(nameKey, pages);
+    pageAccessByDesignationKey.set(codeKey, pages);
+    if (registrationCategory) {
+      categoryByDesignationId.set(String(designation.id), registrationCategory);
+      categoryByDesignationKey.set(nameKey, registrationCategory);
+      categoryByDesignationKey.set(codeKey, registrationCategory);
     }
   }
   const preferenceResult = await supabaseAdmin
@@ -374,12 +396,19 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
   return Promise.all(accounts
     .filter((account) => companyNameById.has(account.company_id))
     .map(async (account): Promise<ConnectAccount> => {
-      const categoryCode = categoryCodeForProfile(account.profile_type);
+      const designationKey = account.role
+        ? designationLookupKey(account.company_id, account.role)
+        : "";
+      const categoryCode = (account.designation_id
+        ? categoryByDesignationId.get(account.designation_id)
+        : designationKey
+          ? categoryByDesignationKey.get(designationKey)
+          : undefined) ?? categoryCodeForProfile(account.profile_type);
       const categoryPages = pageAccessByCategory.get(`${account.company_id}:${categoryCode}`) ?? defaultPageAccess;
       const designationPages = account.designation_id
         ? pageAccessByDesignationId.get(account.designation_id)
-        : account.role
-          ? pageAccessByDesignationKey.get(designationLookupKey(account.company_id, categoryCode, account.role))
+        : designationKey
+          ? pageAccessByDesignationKey.get(designationKey)
           : undefined;
 
       return {

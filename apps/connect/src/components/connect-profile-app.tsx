@@ -27,7 +27,9 @@ type Profile = {
   readOnly: Record<string, string>;
   editable: Record<string, string>;
   designationCode?: string;
+  registrationCategoryCode?: string;
   statutoryApplicability: string[];
+  statutoryEnabled?: boolean;
   fieldRules?: { enabled?: string[]; required?: string[] };
   uploads: Record<string, boolean>;
   uploadUrls: Record<string, string>;
@@ -382,6 +384,7 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
   }, [executive, profile]);
   const required = useMemo(() => new Set(profile?.fieldRules?.required ?? []), [profile]);
   const completed = statusReadOnly(profile?.status);
+  const statutoryEnabled = profile?.statutoryEnabled ?? executive;
 
   const set = (key: string, value: string, clear: string[] = []) => {
     setValues((current) => ({
@@ -509,7 +512,7 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
       ...(enabled.has("pan_number") ? ["pan"] : []),
       ...(enabled.has("pan_number") && enabled.has("aadhaar_number") && attempted("pan") && !currentCheck("pan")?.blockSubmit ? ["pan_aadhaar"] : []),
       ...(enabled.has("bank_account_no") && enabled.has("ifsc") ? ["bank"] : []),
-      ...(pfAnswer === "yes" && enabled.has("pf_uan") && (executive || profile?.statutoryApplicability?.includes("pf")) ? ["pf_uan"] : []),
+      ...(pfAnswer === "yes" && enabled.has("pf_uan") && statutoryEnabled ? ["pf_uan"] : []),
       ...(enabled.has("driving_license_no") ? ["dl"] : []),
       ...(enabled.has("vehicle_reg_no") ? ["vehicle"] : [])
     ];
@@ -828,7 +831,7 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
     </ProfileSection>
     {["eshram_uan","pf_uan","pf_account_no","esi_no"].some((field) => enabled.has(field)) ? <ProfileSection title="Statutory details">
       {input("eshram_uan","eShram UAN")}
-      {(executive || profile.statutoryApplicability?.includes("pf")) && enabled.has("pf_uan") ? <>
+      {statutoryEnabled && enabled.has("pf_uan") ? <>
         <label className="dx-field">
           <span>Do you have PF UAN? *</span>
           <select required value={pfAnswer} onChange={(event) => {
@@ -844,8 +847,8 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
           <VerificationText checks={[currentCheck("pf_uan")]} />
         </> : null}
       </> : null}
-      {executive || profile.statutoryApplicability?.includes("pf") ? input("pf_account_no","PF Account No") : null}
-      {(executive || profile.statutoryApplicability?.includes("esi")) && enabled.has("esi_no") ? <>
+      {statutoryEnabled ? input("pf_account_no","PF Account No") : null}
+      {statutoryEnabled && enabled.has("esi_no") ? <>
         <label className="dx-field">
           <span>Do you have ESI No? *</span>
           <select required value={esiAnswer} onChange={(event) => {

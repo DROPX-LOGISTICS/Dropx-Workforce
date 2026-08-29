@@ -5,6 +5,11 @@ import { basename, join } from "node:path";
 const migrationsDirectory = join(process.cwd(), "supabase", "migrations");
 const migrationPattern = /^(\d{14})_(.+)\.sql$/;
 const maximumPendingMigrations = Number(process.env.MAX_PENDING_MIGRATIONS ?? "12");
+const migrationStartVersion = process.env.SUPABASE_MIGRATION_START_VERSION?.trim() ?? "";
+
+if (migrationStartVersion && !/^\d{14}$/.test(migrationStartVersion)) {
+  throw new Error("SUPABASE_MIGRATION_START_VERSION must be a 14-digit migration version.");
+}
 
 function localMigrations() {
   const trackedFiles = execFileSync("git", ["ls-files", "--", "supabase/migrations/*.sql"], {
@@ -139,10 +144,15 @@ if (mode !== "--preview" && mode !== "--apply") {
 }
 
 const remoteVersions = await remoteMigrationVersions();
-const pendingMigrations = migrations.filter((migration) => !remoteVersions.has(migration.version));
+const applicableMigrations = migrationStartVersion
+  ? migrations.filter((migration) => migration.version >= migrationStartVersion)
+  : migrations;
+const pendingMigrations = applicableMigrations.filter((migration) => !remoteVersions.has(migration.version));
 
 console.log(`Remote migration history: ${remoteVersions.size} versions.`);
 console.log(`Committed local migrations: ${migrations.length} versions.`);
+console.log(`Configured migration baseline: ${migrationStartVersion || "none"}.`);
+console.log(`Applicable committed migrations: ${applicableMigrations.length}.`);
 console.log(`Pending migrations: ${pendingMigrations.length}.`);
 for (const migration of pendingMigrations) console.log(`- ${migration.fileName}`);
 

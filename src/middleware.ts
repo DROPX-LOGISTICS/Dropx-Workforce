@@ -15,6 +15,9 @@ const MOVED_OPS_PAYMENT_PATHS = [
 ];
 const WORKFORCE_ROOTS = [
   "/delivery-network",
+  "/master/payment-methods",
+  "/master/payment-banks",
+  "/master/payment-heads",
   "/users",
   "/unauthorized"
 ];

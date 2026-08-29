@@ -124,16 +124,32 @@ export const workforceNavItems: NavItem[] = [
     children: [
       { code: "delivery_associates", label: "Workforce Register", href: "/delivery-network/associates" },
       { code: "delivery_associates", label: "Onboard Workforce", href: "/delivery-network/onboarding" },
-      { code: "people_review", label: "Activation & Lifecycle", href: "/delivery-network/lifecycle" }
+      { code: "people_review", label: "Activation & Lifecycle", href: "/delivery-network/lifecycle" },
+      { code: "workforce_activity", label: "Attendance & Activity", href: "/delivery-network/activity" }
     ]
   },
   {
     code: "provider_mapping",
-    label: "IDs & Rate Cards",
+    label: "IDs & Pay Setup",
     icon: "ID",
     children: [
       { code: "executive_id_onboarding", label: "Provider ID Onboarding", href: "/delivery-network/id-onboarding" },
-      { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping" }
+      { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping" },
+      { code: "payment_methods", label: "Payment Methods", href: "/master/payment-methods" },
+      { code: "master_payment_heads", label: "Payment Heads", href: "/master/payment-heads" },
+      { code: "master_payment_banks", label: "Payment Banks", href: "/master/payment-banks" },
+      { code: "workforce_rate_cards", label: "Rate Cards", href: "/delivery-network/rate-cards" }
+    ]
+  },
+  {
+    code: "workforce_earnings",
+    label: "Earnings & Payroll",
+    icon: "₹",
+    children: [
+      { code: "workforce_earnings", label: "Live Earnings", href: "/delivery-network/earnings" },
+      { code: "workforce_incentives", label: "Incentives", href: "/delivery-network/incentives" },
+      { code: "workforce_adjustments", label: "Ad hoc Adjustments", href: "/delivery-network/adjustments" },
+      { code: "workforce_payroll", label: "Payroll Runs", href: "/delivery-network/payroll" }
     ]
   },
   {

@@ -117,6 +117,9 @@ create index if not exists workforce_rate_cards_approved_by_idx
   on public.workforce_rate_cards (approved_by) where approved_by is not null;
 
 alter table public.workforce_rate_cards
+  drop constraint if exists workforce_rate_cards_active_scope_period_excl;
+
+alter table public.workforce_rate_cards
   add constraint workforce_rate_cards_active_scope_period_excl
   exclude using gist (
     company_id with =,

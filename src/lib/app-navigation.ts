@@ -177,6 +177,7 @@ export const workforceNavItems: NavItem[] = [
     children: [
       { code: "workforce_categories", label: "Registration Policies", href: "/delivery-network/engagement-types" },
       { code: "designations", label: "Workforce Designations", href: "/delivery-network/designations" },
+      { code: "designations", label: "DropX One User Preview", href: "/delivery-network/dropx-one-preview" },
       { code: "designations", label: "Designation Routing", href: "/delivery-network/designation-routing" }
     ]
   }

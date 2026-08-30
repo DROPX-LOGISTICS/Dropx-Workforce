@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const dashboardUrl = process.env.DASHBOARD_URL?.replace(/\/$/, "") || "https://dashboard.dropxlogistics.com";
+const workforceUrl = process.env.WORKFORCE_URL?.replace(/\/$/, "") || "https://workforce.dropxlogistics.com";
 
 export async function GET(request: NextRequest) {
-  const target = new URL("/api/connect/workforce-self-service", dashboardUrl);
+  const target = new URL("/api/connect/workforce-self-service", workforceUrl);
   request.nextUrl.searchParams.forEach((value, key) => target.searchParams.set(key, value));
   const response = await fetch(target, {
     cache: "no-store",

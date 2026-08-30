@@ -22,6 +22,7 @@ import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import {
   createWorkforceDesignation,
   deleteWorkforceDesignation,
+  transferWorkforceDesignationToPeople,
   updateWorkforceDesignation
 } from "@/app/master/designations/actions";
 
@@ -463,6 +464,36 @@ export async function DesignationMasterPageContent({
               name: model.name,
               provider: (Array.isArray(model.providers) ? model.providers[0] : model.providers)?.name ?? null
             }))} submitLabel="Save changes" />
+            {authorization.isMasterOwner ? (
+              <form action={transferWorkforceDesignationToPeople} className="danger-form">
+                <input name="id" type="hidden" value={editDesignation.id} />
+                <label>
+                  Transfer destination in People
+                  <select
+                    className="field"
+                    defaultValue={editDesignation.onboarding_categories.includes("workers")
+                      ? "workers"
+                      : editDesignation.onboarding_categories.includes("contractors")
+                        ? "contractors"
+                        : "employees"}
+                    name="people_profile_destination"
+                  >
+                    <option value="employees">Employees</option>
+                    <option value="contractors">Independent contractors</option>
+                    <option value="workers">Workers</option>
+                  </select>
+                </label>
+                <SubmitButton
+                  className="button secondary"
+                  confirmDescription="The designation will disappear from Workforce and become editable in the People Designation Master. Existing profiles remain in their selected legal-engagement table."
+                  confirmMessage={`Transfer ${editDesignation.name} to People?`}
+                  confirmSubmitText="Transfer to People"
+                  pendingText="Transferring"
+                >
+                  Transfer to People master
+                </SubmitButton>
+              </form>
+            ) : null}
             <form action={deleteAction} className="danger-form">
               <input name="id" type="hidden" value={editDesignation.id} />
               <SubmitButton

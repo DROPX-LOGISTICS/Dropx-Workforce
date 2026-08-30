@@ -356,3 +356,59 @@ export async function updateWorkforceDesignation(formData: FormData) {
 export async function deleteWorkforceDesignation(formData: FormData) {
   return deleteDesignationForScope(formData, workforceDesignationScope);
 }
+
+export async function transferWorkforceDesignationToPeople(formData: FormData) {
+  const authorization = await requirePagePermission("designations", "edit");
+  const companyId = requireCompanyId(authorization);
+  try {
+    if (!authorization.isMasterOwner) {
+      throw new Error("Only Super Admin can transfer a designation between products.");
+    }
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+
+    const id = required(formData.get("id"), "Designation");
+    const destination = required(formData.get("people_profile_destination"), "People profile destination").toLowerCase();
+    if (!["employees", "contractors", "workers"].includes(destination)) {
+      throw new Error("Select an employee, contractor or worker destination in People.");
+    }
+    await requireExistingDesignationScope(companyId, id, workforceDesignationScope.peopleModule);
+
+    const categoryResult = await supabaseAdmin
+      .from("designation_categories")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("people_module", "people_hr")
+      .eq("is_active", true)
+      .order("sort_order")
+      .order("name")
+      .limit(1)
+      .maybeSingle();
+    if (categoryResult.error) throw new Error(categoryResult.error.message);
+    if (!categoryResult.data?.id) throw new Error("Create an active People designation category before transferring this role.");
+
+    const designationResult = await supabaseAdmin
+      .from("designations")
+      .update({
+        designation_category_id: categoryResult.data.id,
+        profile_destination: destination,
+        onboarding_categories: [destination],
+        registration_category_code: destination,
+        is_field_operations: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .select("id, name")
+      .maybeSingle();
+    if (designationResult.error || !designationResult.data) {
+      throw new Error(designationResult.error?.message ?? "Designation was not found.");
+    }
+
+    revalidatePath("/delivery-network/designations");
+    revalidatePath("/settings/designations");
+    designationRedirect({ notice: `${designationResult.data.name} transferred to the People Designation Master.` }, workforceDesignationScope.returnPath);
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    designationRedirect({ error: friendlyError(error, "Unable to transfer the designation to People.") }, workforceDesignationScope.returnPath);
+  }
+}

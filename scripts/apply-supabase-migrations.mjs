@@ -113,6 +113,45 @@ async function remoteMigrationVersions() {
   return new Set(historyRows.map((row) => String(row.version ?? "").trim()).filter(Boolean));
 }
 
+async function auditDesignationRouting() {
+  const result = await managementQuery(
+    `select
+       company.code::text as company_code,
+       count(designation.id)::integer as total_designations,
+       count(designation.id) filter (
+         where category.people_module = 'delivery_network'
+       )::integer as workforce_designations,
+       count(designation.id) filter (
+         where category.people_module = 'people_hr'
+       )::integer as hr_designations,
+       count(designation.id) filter (
+         where designation.designation_category_id is null
+       )::integer as unassigned_designations
+     from public.companies company
+     left join public.designations designation
+       on designation.company_id = company.id
+     left join public.designation_categories category
+       on category.id = designation.designation_category_id
+      and category.company_id = designation.company_id
+     group by company.id, company.code
+     having count(designation.id) > 0
+     order by company.code;`,
+    { readOnly: true }
+  );
+  const rows = rowsFromResponse(result);
+  console.log("Designation routing audit:");
+  for (const row of rows) {
+    console.log(JSON.stringify({
+      companyCode: String(row.company_code ?? ""),
+      hrDesignations: Number(row.hr_designations ?? 0),
+      totalDesignations: Number(row.total_designations ?? 0),
+      unassignedDesignations: Number(row.unassigned_designations ?? 0),
+      workforceDesignations: Number(row.workforce_designations ?? 0)
+    }));
+  }
+  if (!rows.length) console.log("No designation rows found in production.");
+}
+
 function migrationQuery(migration) {
   const originalSql = readFileSync(migration.path, "utf8");
   const migrationSql = stripOuterTransaction(originalSql);
@@ -139,8 +178,13 @@ if (mode === "--check") {
   process.exit(0);
 }
 
+if (mode === "--audit") {
+  await auditDesignationRouting();
+  process.exit(0);
+}
+
 if (mode !== "--preview" && mode !== "--apply") {
-  throw new Error("Use --check, --preview, or --apply.");
+  throw new Error("Use --check, --preview, --apply, or --audit.");
 }
 
 const remoteVersions = await remoteMigrationVersions();

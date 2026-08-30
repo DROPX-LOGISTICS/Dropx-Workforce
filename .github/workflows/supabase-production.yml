@@ -51,3 +51,6 @@ jobs:
 
       - name: Apply committed migrations
         run: node scripts/apply-supabase-migrations.mjs --apply
+
+      - name: Audit Workforce designation routing
+        run: node scripts/apply-supabase-migrations.mjs --audit

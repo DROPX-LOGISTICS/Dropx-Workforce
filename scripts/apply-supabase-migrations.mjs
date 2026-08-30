@@ -126,7 +126,11 @@ async function auditDesignationRouting() {
        )::integer as hr_designations,
        count(designation.id) filter (
          where designation.designation_category_id is null
-       )::integer as unassigned_designations
+       )::integer as unassigned_designations,
+       count(designation.id) filter (
+         where designation.designation_category_id is not null
+           and category.id is null
+       )::integer as unresolved_category_designations
      from public.companies company
      left join public.designations designation
        on designation.company_id = company.id
@@ -146,10 +150,39 @@ async function auditDesignationRouting() {
       hrDesignations: Number(row.hr_designations ?? 0),
       totalDesignations: Number(row.total_designations ?? 0),
       unassignedDesignations: Number(row.unassigned_designations ?? 0),
+      unresolvedCategoryDesignations: Number(row.unresolved_category_designations ?? 0),
       workforceDesignations: Number(row.workforce_designations ?? 0)
     }));
   }
   if (!rows.length) console.log("No designation rows found in production.");
+
+  const requiredColumns = [
+    "app_page_access",
+    "designation_category_id",
+    "is_field_operations",
+    "location_ids",
+    "model_ids",
+    "onboarding_categories",
+    "onboarding_role_ids",
+    "portal_permissions",
+    "profile_destination",
+    "profile_field_rules",
+    "provider_ids",
+    "registration_category_code"
+  ];
+  const columnResult = await managementQuery(
+    `select required.column_name
+     from unnest(array[${requiredColumns.map(sqlLiteral).join(", ")}]) required(column_name)
+     left join information_schema.columns column_info
+       on column_info.table_schema = 'public'
+      and column_info.table_name = 'designations'
+      and column_info.column_name = required.column_name
+     where column_info.column_name is null
+     order by required.column_name;`,
+    { readOnly: true }
+  );
+  const missingColumns = rowsFromResponse(columnResult).map((row) => String(row.column_name ?? "")).filter(Boolean);
+  console.log(`Missing designation columns: ${missingColumns.length ? missingColumns.join(", ") : "none"}.`);
 }
 
 function migrationQuery(migration) {

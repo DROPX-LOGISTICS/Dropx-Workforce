@@ -23,6 +23,7 @@ const workforceNavigation = navigation.slice(navigation.indexOf("export const wo
 const checks = [
   [migration.trimStart().startsWith("begin;") && migration.trimEnd().endsWith("commit;"), "Migration must be transactional."],
   [!destructivePattern.test(migration), "Migration must not mutate employee, contractor, Workforce, registration-link, or payment workflow tables."],
+  [!/@[a-z0-9.-]+\.[a-z]{2,}/i.test(migration) && !migration.includes("configured_owners"), "Product owners must be assigned from the Super Admin Dashboard, never hardcoded in SQL."],
   [migration.includes("company_product_memberships") && migration.includes("source_system = 'legacy_dashboard'"), "Migration must preserve legacy access through additive product memberships."],
   [migration.includes("station_responsibility_assignments") && migration.includes("effective_to"), "Station responsibility replacements must retain effective-dated history."],
   [userActions.includes('from("company_product_memberships")') && !userActions.includes("Workforce user access is add-only"), "Workforce must manage its own users through product memberships."],

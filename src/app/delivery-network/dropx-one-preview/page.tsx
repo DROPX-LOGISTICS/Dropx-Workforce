@@ -77,7 +77,14 @@ export default async function DropxOneUserPreviewPage() {
         const categoryByCode = new Map(categories.map((category) => [category.code.trim().toLowerCase(), category]));
 
         users = recipientResult
-          .filter((record) => !["rejected", "cancelled"].includes(record.status.trim().toLowerCase()))
+          .filter((record) => record.isActive || [
+            "pending",
+            "registration in progress",
+            "submitted",
+            "under review",
+            "returned",
+            "draft"
+          ].includes(record.status.trim().toLowerCase()))
           .sort((left, right) => Number(right.isActive) - Number(left.isActive) || left.name.localeCompare(right.name))
           .map((record) => {
             const designation = designationByName.get(String(record.designation ?? "").trim().toLowerCase());

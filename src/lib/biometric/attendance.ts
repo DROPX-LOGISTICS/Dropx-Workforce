@@ -192,11 +192,12 @@ async function assignmentShiftForDate({
 }) {
   if (!supabaseAdmin) return null;
   const isEmployee = profileType === "employee" || Boolean(employeeId);
-  if (!isEmployee && profileType !== "contractor") return null;
+  const isWorkforce = profileType === "workforce";
+  if (!isEmployee && !isWorkforce && profileType !== "contractor") return null;
   const workerId = isEmployee ? employeeId : accountId;
   if (!workerId) return null;
   const table = isEmployee ? "hr_employee_shift_assignments" : "hr_contractor_shift_assignments";
-  const idColumn = isEmployee ? "employee_id" : "contractor_id";
+  const idColumn = isEmployee ? "employee_id" : isWorkforce ? "workforce_id" : "contractor_id";
   const result = await supabaseAdmin
     .from(table)
     .select("effective_from,effective_to,hr_shifts(start_time,end_time)")

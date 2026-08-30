@@ -208,9 +208,9 @@ async function loadAttendanceNotificationContext({
   };
 
   let shift: AttendanceShift | null = null;
-  if (workerId && (workerType === "employee" || workerType === "contractor")) {
+  if (workerId && (workerType === "employee" || workerType === "contractor" || workerType === "workforce")) {
     const table = workerType === "employee" ? "hr_employee_shift_assignments" : "hr_contractor_shift_assignments";
-    const workerColumn = workerType === "employee" ? "employee_id" : "contractor_id";
+    const workerColumn = workerType === "employee" ? "employee_id" : workerType === "workforce" ? "workforce_id" : "contractor_id";
     const assignmentResult = await supabaseAdmin
       .from(table)
       .select("effective_from,effective_to,hr_shifts(start_time,end_time,grace_in_minutes,grace_out_minutes)")

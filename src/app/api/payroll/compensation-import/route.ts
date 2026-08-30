@@ -64,7 +64,7 @@ async function loadPeople(companyId: string, kind: CompensationImportKind): Prom
   }
   while (true) {
     const result = await supabaseAdmin
-      .from("contractors")
+      .from("workforce")
       .select("id, dropx_id, full_name, is_active")
       .eq("company_id", companyId)
       .order("id")
@@ -100,12 +100,14 @@ async function loadConfiguredIds(companyId: string, kind: CompensationImportKind
     } else {
       const result = await supabaseAdmin
         .from("hr_contractor_pay_profiles")
-        .select("contractor_id")
+        .select("workforce_id")
         .eq("company_id", companyId)
         .is("effective_to", null)
-        .in("contractor_id", chunk);
+        .in("workforce_id", chunk);
       if (result.error) throw new Error(result.error.message);
-      (result.data ?? []).forEach((row) => configured.add(row.contractor_id));
+      (result.data ?? []).forEach((row) => {
+        if (row.workforce_id) configured.add(row.workforce_id);
+      });
     }
   }
   return configured;

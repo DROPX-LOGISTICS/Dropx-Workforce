@@ -29,6 +29,7 @@ function input(overrides = {}) {
     }],
     mappings: [{
       id: "mapping-1",
+      workforce_id: null,
       field_executive_id: "source-1",
       contractor_id: null,
       employee_id: null,
@@ -81,6 +82,21 @@ test("calculates live mapped earnings from shipment count and configured rate", 
   assert.equal(result.exceptions.length, 0);
   assert.equal(result.summaries[0].bankAccountNo, "1234567890");
   assert.equal(result.summaries[0].ifscCode, "TEST0001");
+});
+
+test("resolves mappings transitioned directly to the canonical Workforce register", () => {
+  const base = input();
+  const result = calculateWorkforceEarnings(input({
+    mappings: [{
+      ...base.mappings[0],
+      workforce_id: "workforce-1",
+      field_executive_id: null
+    }]
+  }));
+  assert.equal(result.totalShipments, 30);
+  assert.equal(result.totalBase, 300);
+  assert.equal(result.lines[0].workforceId, "workforce-1");
+  assert.equal(result.lines[0].status, "ready");
 });
 
 test("supports the payment-head keys already stored in provider mappings", () => {

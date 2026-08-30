@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Download } from "lucide-react";
 import { useFormStatus } from "react-dom";
 import { saveProviderMappingWorksheet } from "@/app/provider-mapping/actions";
 import { SubmitButton } from "@/components/submit-button";
@@ -48,6 +49,36 @@ export type PaymentMethodOption = {
   components: PaymentMethodComponentOption[];
 };
 
+export type ProviderPendingMappingRow = {
+  id: string;
+  providerMemberId: string;
+  providerName: string;
+  sourceName: string;
+  stationCode: string;
+  firstSeen: string;
+  lastSeen: string;
+  dailyRows: number;
+  deliveries: number;
+  reason: string;
+};
+
+function csvCell(value: unknown) {
+  let text = String(value ?? "");
+  if (/^[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
+  const headers = rows.length ? Object.keys(rows[0]) : [];
+  const csv = [headers.map(csvCell).join(","), ...rows.map((row) => headers.map((header) => csvCell(row[header])).join(","))].join("\n");
+  const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function rowSignature(row: MappingWorksheetRow) {
   return [
     row.id,
@@ -94,12 +125,16 @@ export function ProviderMappingWorksheet({
   canEdit,
   locations,
   mappings,
-  paymentMethods
+  paymentMethods,
+  providerPending,
+  providerPendingPeriod
 }: {
   canEdit: boolean;
   locations: LocationOption[];
   mappings: MappingWorksheetRow[];
   paymentMethods: PaymentMethodOption[];
+  providerPending: ProviderPendingMappingRow[];
+  providerPendingPeriod: string;
 }) {
   const initialRows = useMemo(() => mappings, [mappings]);
   const initialSignatures = useMemo(() => initialRows.map(rowSignature), [initialRows]);
@@ -107,6 +142,8 @@ export function ProviderMappingWorksheet({
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [mappingStatus, setMappingStatus] = useState("all");
+  const [directionView, setDirectionView] = useState<"provider" | "dropx">("provider");
+  const [stationFilter, setStationFilter] = useState("");
   const [pageSize, setPageSize] = useState("25");
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -221,7 +258,14 @@ export function ProviderMappingWorksheet({
     ].some((value) => value.toLocaleLowerCase().includes(normalizedSearch));
     const mapped = Boolean(row.mappingId || (row.providerMemberId && row.paymentMethodId));
     const matchesStatus = mappingStatus === "all" || (mappingStatus === "mapped" ? mapped : !mapped);
-    return matchesSearch && matchesStatus ? [index] : [];
+    const matchesStation = !stationFilter || row.stationId === stationFilter;
+    return matchesSearch && matchesStatus && matchesStation ? [index] : [];
+  });
+  const filteredProviderPending = providerPending.filter((row) => {
+    const matchesSearch = !normalizedSearch || [row.providerMemberId, row.providerName, row.sourceName, row.stationCode]
+      .some((value) => value.toLocaleLowerCase().includes(normalizedSearch));
+    const station = locations.find((location) => location.id === stationFilter)?.label.split(" - ")[0] ?? "";
+    return matchesSearch && (!stationFilter || row.stationCode === station);
   });
   const numericPageSize = Number(pageSize);
   const totalPages = Math.max(1, Math.ceil(filteredIndexes.length / numericPageSize));
@@ -231,7 +275,7 @@ export function ProviderMappingWorksheet({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, mappingStatus, pageSize]);
+  }, [searchQuery, mappingStatus, pageSize, stationFilter, directionView]);
 
   if (!rows.length) {
     return (
@@ -256,15 +300,22 @@ export function ProviderMappingWorksheet({
         <div className="panel-head">
           <div>
             <h2>ID & pay mapping worksheet</h2>
-            <p className="subtle">DropX ID, name, and location are read-only. Select a payment method to show only its configured fields.</p>
+            <p className="subtle">Reconcile both directions: source provider IDs without a DropX identity and Workforce DropX IDs without a provider ID.</p>
           </div>
-          <SubmitButton disabled={!canEdit || !hasDirtyRows} disabledText={canEdit ? "No edits" : "No edit access"}>
-            Save all
-          </SubmitButton>
+          {directionView === "dropx" ? <SubmitButton disabled={!canEdit || !hasDirtyRows} disabledText={canEdit ? "No edits" : "No edit access"}>Save all</SubmitButton> : null}
+        </div>
+
+        <div className="mapping-direction-tabs">
+          <button className={directionView === "provider" ? "active" : ""} onClick={() => { setDirectionView("provider"); setMappingStatus("all"); }} type="button">
+            Provider IDs pending DropX ID <strong>{providerPending.length}</strong>
+          </button>
+          <button className={directionView === "dropx" ? "active" : ""} onClick={() => { setDirectionView("dropx"); setMappingStatus("unmapped"); }} type="button">
+            DropX IDs pending provider ID <strong>{rows.filter((row) => !row.providerMemberId.trim()).length}</strong>
+          </button>
         </div>
 
         <div className="mapping-toolbar">
-          <label className="mapping-toolbar-search">Search Workforce
+          <label className="mapping-toolbar-search">Search {directionView === "provider" ? "provider backlog" : "Workforce"}
             <input
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="DropX ID, name, location or provider ID"
@@ -272,13 +323,19 @@ export function ProviderMappingWorksheet({
               value={searchQuery}
             />
           </label>
-          <label>Status
+          <label>Station
+            <select onChange={(event) => setStationFilter(event.target.value)} value={stationFilter}>
+              <option value="">All stations</option>
+              {locations.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}
+            </select>
+          </label>
+          {directionView === "dropx" ? <label>Status
             <select onChange={(event) => setMappingStatus(event.target.value)} value={mappingStatus}>
               <option value="all">All mappings</option>
               <option value="mapped">Mapped</option>
-              <option value="unmapped">Unmapped</option>
+              <option value="unmapped">Provider ID pending</option>
             </select>
-          </label>
+          </label> : <span className="mapping-period-note">MTD source: {providerPendingPeriod}</span>}
           <label>Rows
             <select onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
               <option value="25">25</option>
@@ -287,16 +344,28 @@ export function ProviderMappingWorksheet({
             </select>
           </label>
           <div className="mapping-toolbar-summary">
-            <span>{filteredIndexes.length} of {rows.length} Workforce profiles</span>
-            <div>
+            <span>{directionView === "provider" ? `${filteredProviderPending.length} provider IDs pending` : `${filteredIndexes.length} of ${rows.length} Workforce profiles`}</span>
+            {directionView === "dropx" ? <div>
               <button disabled={safePage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} type="button">Previous</button>
               <strong>{safePage} / {totalPages}</strong>
               <button disabled={safePage === totalPages} onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))} type="button">Next</button>
-            </div>
+            </div> : null}
+            <button className="mapping-download" onClick={() => directionView === "provider"
+              ? downloadCsv("provider-ids-pending-dropx-id.csv", filteredProviderPending.map((row) => ({
+                  "Provider ID": row.providerMemberId, Provider: row.providerName, "Source name": row.sourceName, Station: row.stationCode,
+                  "First seen": row.firstSeen, "Last seen": row.lastSeen, "Daily rows": row.dailyRows, Deliveries: row.deliveries, Reason: row.reason
+                })))
+              : downloadCsv("dropx-ids-provider-mapping.csv", filteredIndexes.map((index) => ({
+                  "DropX ID": rows[index].dropxId, Name: rows[index].dropxName, Station: locationLabelById.get(rows[index].stationId) ?? "",
+                  "Provider ID": rows[index].providerMemberId, Status: rows[index].providerMemberId ? "Mapped" : "Pending", "Effective from": rows[index].effectiveFrom
+                })))} type="button"><Download size={13} /> Download CSV</button>
           </div>
         </div>
 
-        <div className="mapping-rows">
+        {directionView === "provider" ? <div className="table-wrap mapping-pending-table"><table><thead><tr><th>Provider ID</th><th>Source name</th><th>Provider</th><th>Station</th><th>Activity</th><th>Last seen</th><th>Reason</th></tr></thead><tbody>
+          {filteredProviderPending.map((row) => <tr key={row.id}><td><strong className="mono">{row.providerMemberId}</strong></td><td>{row.sourceName}</td><td>{row.providerName}</td><td>{row.stationCode}</td><td>{row.deliveries.toLocaleString("en-IN")} delivered<small>{row.dailyRows} daily rows</small></td><td>{row.lastSeen}<small>First {row.firstSeen}</small></td><td><span className="wf-pay-state unmapped">Pending DropX ID</span><small>{row.reason}</small></td></tr>)}
+          {!filteredProviderPending.length ? <tr><td className="empty-cell" colSpan={7}>No provider IDs are pending for these filters.</td></tr> : null}
+        </tbody></table></div> : <div className="mapping-rows">
           {rows.map((row, index) => (
             <div className={`mapping-row-card ${dirtyRows[index] ? "unsaved-row" : ""}`} hidden={!paginatedIndexes.has(index)} key={`${row.workforceId}-${index}`}>
               <input type="hidden" name={`rows[${index}][id]`} value={row.id} />
@@ -392,7 +461,7 @@ export function ProviderMappingWorksheet({
               <span>Change the search or mapping status filter.</span>
             </div>
           ) : null}
-        </div>
+        </div>}
       </section>
     </form>
   );

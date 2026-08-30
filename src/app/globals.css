@@ -46,9 +46,17 @@
 
 .workforce-product .wf-range-bar { display:flex; align-items:end; gap:10px; margin-bottom:15px; padding:12px 14px; border:1px solid var(--wf-line); border-radius:13px; background:#fff; box-shadow:var(--wf-shadow-sm); }
 .workforce-product .wf-range-bar label { display:grid; gap:4px; color:var(--wf-muted); font-size:9px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }
-.workforce-product .wf-range-bar input { min-height:36px; padding:0 10px; border:1px solid #d7dce6; border-radius:8px; color:var(--wf-ink); font:inherit; font-size:11px; }
+.workforce-product .wf-range-bar input,
+.workforce-product .wf-range-bar select { min-height:36px; padding:0 10px; border:1px solid #d7dce6; border-radius:8px; background:#fff; color:var(--wf-ink); font:inherit; font-size:11px; }
 .workforce-product .wf-range-bar button { min-height:36px; padding:0 14px; border:0; border-radius:8px; background:#1b263c; color:#fff; font:inherit; font-size:11px; font-weight:800; cursor:pointer; }
 .workforce-product .wf-range-bar > span { margin-left:auto; align-self:center; color:var(--wf-muted); font-size:10.5px; }
+.workforce-product .wf-filter-bar { flex-wrap:wrap; }
+.workforce-product .wf-filter-bar label:has(input[type="search"]) { flex:1 1 210px; }
+.workforce-product .wf-filter-bar input[type="search"] { width:100%; }
+.workforce-product .wf-filter-reset { display:inline-flex; align-items:center; min-height:36px; padding:0 10px; color:#687386; font-size:10px; font-weight:800; }
+.workforce-product .wf-period-pills { display:flex; gap:6px; margin:-4px 0 10px; }
+.workforce-product .wf-period-pills a { display:inline-flex; align-items:center; min-height:30px; padding:0 11px; border:1px solid var(--wf-line); border-radius:999px; background:#fff; color:#687386; font-size:9.5px; font-weight:800; }
+.workforce-product .wf-period-pills a.active { border-color:#f4a17f; background:#fff2eb; color:#c94118; }
 
 .workforce-product .wf-finance-kpis { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; margin-bottom:16px; }
 .workforce-product .wf-finance-kpis.dashboard { margin-top:-3px; }
@@ -70,6 +78,17 @@
 .workforce-product .wf-finance-tabs a strong { min-width:20px; padding:2px 6px; border-radius:999px; background:#dde2ea; color:#596376; font-size:9px; text-align:center; }
 .workforce-product .wf-finance-tabs a.active { background:#fff; color:#1b263c; box-shadow:0 2px 8px rgba(26,36,58,.08); }
 .workforce-product .wf-finance-tabs a.active strong { background:#fff0e7; color:#d94b20; }
+.workforce-product .wf-finance-tabs .wf-tab-export { margin-left:auto; color:#c94118; }
+.workforce-product .mapping-direction-tabs { display:flex; gap:6px; padding:12px 18px 0; border-top:1px solid var(--wf-line); background:#f9fafb; }
+.workforce-product .mapping-direction-tabs button { display:flex; align-items:center; gap:8px; min-height:38px; padding:0 13px; border:1px solid var(--wf-line); border-radius:9px; background:#fff; color:#657083; font:inherit; font-size:10.5px; font-weight:800; cursor:pointer; }
+.workforce-product .mapping-direction-tabs button.active { border-color:#f0a183; background:#fff1ea; color:#c94118; }
+.workforce-product .mapping-direction-tabs strong { min-width:24px; padding:2px 6px; border-radius:999px; background:#edf0f4; font-size:9px; text-align:center; }
+.workforce-product .mapping-period-note { align-self:end; min-height:40px; padding:12px 4px; color:#7b8494; font-size:10px; }
+.workforce-product .mapping-toolbar-summary .mapping-download { display:inline-flex; align-items:center; gap:5px; border-color:#ef9b7b; color:#c94118; }
+.workforce-product .mapping-pending-table table { min-width:920px; width:100%; border-collapse:collapse; }
+.workforce-product .mapping-pending-table th { padding:10px 13px; background:#f7f8fa; color:#70798a; font-size:8.5px; letter-spacing:.055em; text-align:left; text-transform:uppercase; }
+.workforce-product .mapping-pending-table td { padding:12px 13px; border-top:1px solid var(--wf-line); color:#3e495b; font-size:10.5px; vertical-align:top; }
+.workforce-product .mapping-pending-table td > small { display:block; margin-top:3px; color:#8b94a3; font-size:8.75px; }
 
 .workforce-product .wf-finance-panel { margin-bottom:16px; overflow:hidden; border:1px solid var(--wf-line); border-radius:var(--wf-radius); background:#fff; box-shadow:var(--wf-shadow-sm); }
 .workforce-product .wf-finance-panel > header { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:76px; padding:15px 18px; border-bottom:1px solid var(--wf-line); }

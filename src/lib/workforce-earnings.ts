@@ -71,6 +71,7 @@ type CpsShipmentRow = {
 
 type ProviderMappingRow = {
   id: string;
+  workforce_id: string | null;
   field_executive_id: string | null;
   contractor_id: string | null;
   employee_id: string | null;
@@ -216,6 +217,7 @@ function sourceKey(type: string | null | undefined, id: string | null | undefine
 }
 
 function mappingSource(mapping: ProviderMappingRow) {
+  if (mapping.workforce_id) return sourceKey("workforce", mapping.workforce_id);
   if (mapping.field_executive_id) return sourceKey("field_executive", mapping.field_executive_id);
   if (mapping.contractor_id) return sourceKey("contractor", mapping.contractor_id);
   if (mapping.employee_id) return sourceKey("employee", mapping.employee_id);
@@ -335,7 +337,11 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
   });
   const stationByCode = new Map(input.stations.map((station) => [key(station.station_code), station]));
   const stationById = new Map(input.stations.map((station) => [station.id, station]));
-  const workforceBySource = new Map(input.workforce.map((profile) => [sourceKey(profile.source_profile_type, profile.source_profile_id), profile]));
+  const workforceBySource = new Map<string, WorkforceProfileRow>();
+  input.workforce.forEach((profile) => {
+    workforceBySource.set(sourceKey("workforce", profile.id), profile);
+    workforceBySource.set(sourceKey(profile.source_profile_type, profile.source_profile_id), profile);
+  });
   const workforceById = new Map(input.workforce.map((profile) => [profile.id, profile]));
   const mappingsByMember = new Map<string, ProviderMappingRow[]>();
   input.mappings.forEach((mapping) => {
@@ -660,7 +666,7 @@ export async function loadWorkforceEarnings(
   const [shipmentResult, mappingResult, workforceResult, providerResult, rateCardResult, campaignResult, adjustmentResult] = await Promise.all([
     loadShipmentRows(companyId, from, to, stationCodes),
     supabaseAdmin.from("field_executive_provider_mappings")
-      .select("id, field_executive_id, contractor_id, employee_id, provider_id, station_id, provider_member_id, effective_from, effective_to, pay_type, payment_values, delivery_rate, pickup_rate, mfn_rate, mfn_return_rate, guarantee_amount, fuel_rate, status")
+      .select("id, workforce_id, field_executive_id, contractor_id, employee_id, provider_id, station_id, provider_member_id, effective_from, effective_to, pay_type, payment_values, delivery_rate, pickup_rate, mfn_rate, mfn_return_rate, guarantee_amount, fuel_rate, status")
       .eq("company_id", companyId).neq("status", "cancelled").lte("effective_from", to).or(`effective_to.is.null,effective_to.gte.${from}`),
     supabaseAdmin.from("workforce")
       .select("id, full_name, dropx_id, designation_id, location_id, source_profile_type, source_profile_id, onboarding_status, lifecycle_status, is_active, bank_account_no, ifsc_code")

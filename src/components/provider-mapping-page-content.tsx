@@ -5,12 +5,14 @@ import {
   ProviderMappingWorksheet,
   type LocationOption,
   type MappingWorksheetRow,
+  type ProviderPendingMappingRow,
   type PaymentMethodOption
 } from "@/components/provider-mapping-worksheet";
 import { type AuthorizationContext, requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { loadWorkforceEarnings, workforceToday } from "@/lib/workforce-earnings";
 
 type LocationRow = {
   id: string;
@@ -285,7 +287,34 @@ export async function ProviderMappingPageContent({
 }) {
   const authorization = await requirePagePermission(pageCode, "access");
   const permission = authorization.permissions[pageCode];
-  const { locations, mappings, paymentMethods, error } = await loadMappingData(authorization);
+  const today = workforceToday();
+  const monthStart = `${today.slice(0, 8)}01`;
+  const [{ locations, mappings, paymentMethods, error }, earnings] = await Promise.all([
+    loadMappingData(authorization),
+    loadWorkforceEarnings(authorization, monthStart, today)
+  ]);
+  const pendingByProviderId = new Map<string, ProviderPendingMappingRow>();
+  earnings.lines.filter((line) => line.sourceType === "shipment" && line.status === "unmapped").forEach((line) => {
+    const key = `${line.providerId ?? line.providerName}:${line.stationCode}:${line.providerMemberId}`;
+    const current = pendingByProviderId.get(key) ?? {
+      id: key,
+      providerMemberId: line.providerMemberId,
+      providerName: line.providerName,
+      sourceName: line.workerName,
+      stationCode: line.stationCode,
+      firstSeen: line.workDate,
+      lastSeen: line.workDate,
+      dailyRows: 0,
+      deliveries: 0,
+      reason: line.holdReasons.join(" · ")
+    };
+    current.firstSeen = current.firstSeen < line.workDate ? current.firstSeen : line.workDate;
+    current.lastSeen = current.lastSeen > line.workDate ? current.lastSeen : line.workDate;
+    current.dailyRows += 1;
+    current.deliveries += line.totalDelivery;
+    pendingByProviderId.set(key, current);
+  });
+  const providerPending = Array.from(pendingByProviderId.values()).sort((left, right) => right.deliveries - left.deliveries || left.providerMemberId.localeCompare(right.providerMemberId));
   const flash = loadFlashMessage();
   const flashError = flash.error;
   const flashNotice = flash.notice;
@@ -322,6 +351,8 @@ export async function ProviderMappingPageContent({
           locations={locations}
           mappings={mappings}
           paymentMethods={paymentMethods}
+          providerPending={providerPending}
+          providerPendingPeriod={`${monthStart} to ${today}`}
         />
       ) : null}
     </AppShell>

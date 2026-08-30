@@ -7,15 +7,9 @@ import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import {
   firstDesignationBusinessCategory,
-  normalizeDesignationPeopleModule,
   type DesignationPeopleModule
 } from "@/lib/designation-business-categories";
 import { normalizeDesignationCategories } from "@/lib/designation-categories";
-import {
-  designationProfileDestinationAllowed,
-  normalizeDesignationProfileDestination
-} from "@/lib/designation-profile-destination";
-import { designationPortalOptions } from "@/lib/designation-portal-access";
 import { normalizeCategoryProfileFieldRules } from "@/lib/profile-field-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { normalizeWorkforceAppPageAccess } from "@/lib/workforce-app-pages";
@@ -107,17 +101,6 @@ function onboardingRoleIds(formData: FormData) {
   return Array.from(new Set(formData.getAll("onboarding_role_ids").map((value) => String(value ?? "").trim()).filter(Boolean)));
 }
 
-function portalPermissions(formData: FormData) {
-  return Object.fromEntries(designationPortalOptions.map(({ code }) => {
-    const edit = formData.has(`portal_${code}_edit`);
-    return [code, {
-      add: formData.has(`portal_${code}_add`),
-      view: formData.has(`portal_${code}_view`) || edit,
-      edit
-    }];
-  }));
-}
-
 async function validateOnboardingRoles(companyId: string, roleIds: string[]) {
   if (!roleIds.length) return;
   const { data, error } = await supabaseAdmin!.from("user_roles").select("id").eq("company_id", companyId).eq("is_active", true).in("id", roleIds);
@@ -142,37 +125,20 @@ function registrationCategoryCode(formData: FormData, categories: string[]) {
   return code;
 }
 
-async function designationCategoryId(
-  companyId: string,
-  formData: FormData,
-  requiredPeopleModule: DesignationPeopleModule | null
-) {
-  const categoryId = required(formData.get("designation_category_id"), "Designation category");
+async function workforceDesignationCategoryId(companyId: string) {
   const { data, error } = await supabaseAdmin!
     .from("designation_categories")
-    .select("id, people_module")
-    .eq("id", categoryId)
+    .select("id")
     .eq("company_id", companyId)
+    .eq("people_module", "delivery_network")
     .eq("is_active", true)
+    .order("sort_order")
+    .order("name")
+    .limit(1)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  const peopleModule = normalizeDesignationPeopleModule(data?.people_module);
-  if (!data || !peopleModule) {
-    throw new Error("Select an active designation category for this company.");
-  }
-  if (requiredPeopleModule && peopleModule !== requiredPeopleModule) {
-    throw new Error(`${designationScopeLabel(requiredPeopleModule)} accepts ${requiredPeopleModule === "delivery_network" ? "Workforce" : "HR"} designations only.`);
-  }
-  return { id: data.id, peopleModule };
-}
-
-function profileDestination(formData: FormData, peopleModule: DesignationPeopleModule) {
-  const destination = normalizeDesignationProfileDestination(formData.get("profile_destination"));
-  if (!destination) throw new Error("Profile destination is required.");
-  if (!designationProfileDestinationAllowed(peopleModule, destination)) {
-    throw new Error(`${designationScopeLabel(peopleModule)} cannot route profiles to the ${destination} table.`);
-  }
-  return destination;
+  if (!data?.id) throw new Error("An active Workforce designation category is required for this company.");
+  return data.id;
 }
 
 async function requireExistingDesignationScope(
@@ -235,8 +201,7 @@ async function createDesignationForScope(formData: FormData, scope: DesignationA
 
     const code = required(formData.get("code"), "Designation code").toUpperCase();
     const name = required(formData.get("name"), "Designation name");
-    const designationCategory = await designationCategoryId(companyId, formData, scope.peopleModule);
-    const destination = profileDestination(formData, designationCategory.peopleModule);
+    const designationCategoryId = await workforceDesignationCategoryId(companyId);
     const categories = onboardingCategories(formData);
     const registrationCategory = registrationCategoryCode(formData, categories);
     await validateOnboardingCategories(companyId, categories);
@@ -245,8 +210,8 @@ async function createDesignationForScope(formData: FormData, scope: DesignationA
     const { error } = await supabaseAdmin.from("designations").insert(withCompany({
       code,
       name,
-      designation_category_id: designationCategory.id,
-      profile_destination: destination,
+      designation_category_id: designationCategoryId,
+      profile_destination: "workforce",
       provider_ids: providerIds(formData),
       model_ids: modelIds(formData),
       location_ids: [],
@@ -255,7 +220,6 @@ async function createDesignationForScope(formData: FormData, scope: DesignationA
       profile_field_rules: profileFieldRules(formData, categories),
       app_page_access: appPageAccess(formData),
       onboarding_role_ids: roleIds,
-      portal_permissions: portalPermissions(formData),
       is_field_operations: formData.has("is_field_operations"),
       is_active: true
     }, companyId));
@@ -281,8 +245,7 @@ async function updateDesignationForScope(formData: FormData, scope: DesignationA
     await requireExistingDesignationScope(companyId, id, scope.peopleModule);
     const code = required(formData.get("code"), "Designation code").toUpperCase();
     const name = required(formData.get("name"), "Designation name");
-    const designationCategory = await designationCategoryId(companyId, formData, scope.peopleModule);
-    const destination = profileDestination(formData, designationCategory.peopleModule);
+    const designationCategoryId = await workforceDesignationCategoryId(companyId);
     const status = clean(formData.get("status")) === "inactive" ? false : true;
     const categories = onboardingCategories(formData);
     const registrationCategory = registrationCategoryCode(formData, categories);
@@ -295,8 +258,8 @@ async function updateDesignationForScope(formData: FormData, scope: DesignationA
       .update({
         code,
         name,
-        designation_category_id: designationCategory.id,
-        profile_destination: destination,
+        designation_category_id: designationCategoryId,
+        profile_destination: "workforce",
         provider_ids: providerIds(formData),
         model_ids: modelIds(formData),
         location_ids: [],
@@ -305,7 +268,6 @@ async function updateDesignationForScope(formData: FormData, scope: DesignationA
         profile_field_rules: profileFieldRules(formData, categories),
         app_page_access: appPageAccess(formData),
         onboarding_role_ids: roleIds,
-        portal_permissions: portalPermissions(formData),
         is_field_operations: formData.has("is_field_operations"),
         is_active: status,
         updated_at: new Date().toISOString()

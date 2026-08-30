@@ -125,7 +125,8 @@ export const workforceNavItems: NavItem[] = [
       { code: "delivery_associates", label: "Workforce Register", href: "/delivery-network/associates" },
       { code: "delivery_associates", label: "Onboard Workforce", href: "/delivery-network/onboarding" },
       { code: "people_review", label: "Activation & Lifecycle", href: "/delivery-network/lifecycle" },
-      { code: "workforce_activity", label: "Attendance & Activity", href: "/delivery-network/activity" }
+      { code: "workforce_activity", label: "Attendance & Activity", href: "/delivery-network/activity" },
+      { code: "workforce_activity", label: "Associate Rostering", href: "/delivery-network/associate-rostering" }
     ]
   },
   {

@@ -9,7 +9,6 @@ import {
   Fingerprint,
   Gauge,
   HandCoins,
-  LogOut,
   Menu,
   Settings,
   UserRound
@@ -57,7 +56,7 @@ export function DropxOneDesignationPreview({
         <dl>
           <div><dt>Designation</dt><dd>{designationName || "New designation"}</dd></div>
           <div><dt>Engagement</dt><dd>{scopeLabel}</dd></div>
-          <div><dt>App menu</dt><dd>{configuredPages.length + 3} pages</dd></div>
+          <div><dt>App menu</dt><dd>{configuredPages.length + 2} pages</dd></div>
         </dl>
         <div className="dropx-one-preview-switch" aria-label="Preview screen">
           <button className={view === "menu" ? "active" : ""} onClick={() => setView("menu")} type="button">App menu</button>
@@ -89,12 +88,7 @@ export function DropxOneDesignationPreview({
                 ))}
                 <div>
                   <UserRound />
-                  <span>My Profile</span>
-                  <ChevronRight />
-                </div>
-                <div>
-                  <LogOut />
-                  <span>Resignation &amp; exit</span>
+                  <span>My Profile <small>Profile, guide &amp; resignation</small></span>
                   <ChevronRight />
                 </div>
                 <div>
@@ -103,7 +97,7 @@ export function DropxOneDesignationPreview({
                   <ChevronRight />
                 </div>
               </nav>
-              {!configuredPages.length ? <p>No optional Workforce pages enabled. Profile, Resignation &amp; exit, and Settings remain available.</p> : null}
+              {!configuredPages.length ? <p>No optional Workforce pages enabled. Profile (including guide and resignation) and Settings remain available.</p> : null}
             </section>
           ) : (
             <section className="dropx-one-registration-preview">

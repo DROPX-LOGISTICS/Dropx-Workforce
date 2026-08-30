@@ -932,7 +932,7 @@ export async function reviewFieldExecutiveProfile(formData: FormData) {
     if (!current.data) throw new Error(`${entityLabel} was not found.`);
     const reviewDesignation = await supabaseAdmin
       .from("designations")
-      .select("portal_permissions")
+      .select("designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active),portal_permissions")
       .eq("company_id", companyId)
       .eq("name", String(current.data.designation ?? ""))
       .eq("is_active", true)

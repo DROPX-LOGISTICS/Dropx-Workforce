@@ -15,10 +15,10 @@ const routeFunction = routeStart >= 0 && routeEnd > routeStart
   : "";
 
 const checks = [
-  [form.includes('name="profile_destination"'), "Designation form must submit profile_destination."],
-  [list.includes("<th>Profile destination</th>"), "Designation list must show the profile destination."],
+  [!form.includes('name="profile_destination"') && !form.includes('name="designation_category_id"'), "Workforce designation UI must not expose internal classification or table routing."],
+  [!form.includes("Portal Access") && !list.includes("<th>Profile destination</th>"), "Workforce designation UI must not expose cross-platform or destination controls."],
   [list.includes("registrationCompatibleResult") && list.includes("registration_category_code: null") && list.includes("profile_destination: null"), "Pending registration-policy and destination migrations must retain the classified designation list."],
-  [actions.includes("profile_destination: destination"), "Designation actions must persist profile_destination."],
+  [actions.includes('profile_destination: "workforce"') && actions.includes("workforceDesignationCategoryId"), "Workforce designation actions must resolve the Workforce category and canonical table on the server."],
   [routeFunction.includes("designation.profile_destination"), "Registration routing must read designation.profile_destination."],
   [!routeFunction.includes("onboarding_categories_value"), "Registration routing must not infer a table from engagement types."],
   [!routeFunction.match(/upper\(designation\.code\)\s+in\s*\(/i), "Registration routing must not contain a designation-code allowlist."]

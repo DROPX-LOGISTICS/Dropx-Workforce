@@ -8,6 +8,15 @@ import { workforceTable, type WorkforceProfileType } from "../../../../src/lib/w
 type AppProfileType = ConnectAccount["profileType"];
 type PeopleProfileType = "employee" | "contractor";
 type FieldProfileType = "workforce" | "field_executive" | "vendor" | "worker";
+const workforceResignationReasons = [
+  { id: "personal_reasons", name: "Personal reasons", comment_required: true },
+  { id: "better_opportunity", name: "Better opportunity", comment_required: true },
+  { id: "relocation", name: "Relocation", comment_required: true },
+  { id: "health_reasons", name: "Health reasons", comment_required: true },
+  { id: "education", name: "Education", comment_required: true },
+  { id: "family_commitments", name: "Family commitments", comment_required: true },
+  { id: "other", name: "Other", comment_required: true }
+] as const;
 
 function db() { if (!supabaseAdmin) throw new Error("Database is unavailable."); return supabaseAdmin; }
 function clean(value: unknown) { return String(value ?? "").trim(); }
@@ -85,8 +94,8 @@ async function loadFieldPayload(account: ConnectAccount, profileType: FieldProfi
     .order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (error) throw new Error(error.message);
   return {
-    policy: { resignation_notice_days: 0, withdrawal_allowed: true, manager_approval_levels: 1 },
-    reasons: [{ id: "voluntary", name: "Voluntary resignation", comment_required: true }],
+    policy: { resignation_notice_days: 14, withdrawal_allowed: true, manager_approval_levels: 1 },
+    reasons: workforceResignationReasons,
     exitCase: data ? serializeFieldCase(data) : null, queueLabel: "Workforce Lifecycle"
   };
 }
@@ -200,7 +209,9 @@ async function submitPeople(account: ConnectAccount, profileType: PeopleProfileT
 
 async function submitField(account: ConnectAccount, profileType: FieldProfileType, body: Record<string, unknown>) {
   const requestedDate = clean(body.requestedLastWorkingDate); const reason = clean(body.comments);
+  const reasonCode = clean(body.reasonId);
   if (!validDate(requestedDate)) throw new Error("Select a valid requested last working date.");
+  if (!workforceResignationReasons.some((item) => item.id === reasonCode)) throw new Error("Select a valid resignation reason.");
   if (reason.length < 5) throw new Error("Provide a clear resignation reason.");
   const table = workforceTable(profileType as WorkforceProfileType);
   const [{ data: profile, error: profileError }, { data: existing }] = await Promise.all([
@@ -213,7 +224,7 @@ async function submitField(account: ConnectAccount, profileType: FieldProfileTyp
   const { data: created, error } = await db().from("workforce_lifecycle_cases").insert({
     company_id: account.companyId, field_executive_id: profileType === "field_executive" ? account.id : null,
     profile_type: profileType, profile_id: account.id, profile_location_id: profile.location_id,
-    case_type: "resignation", requested_effective_date: requestedDate, reason_code: "voluntary",
+    case_type: "resignation", requested_effective_date: requestedDate, reason_code: reasonCode,
     reason_details: reason, initiated_source: "connect"
   }).select("id").single();
   if (error) throw new Error(error.message);

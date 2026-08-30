@@ -11,15 +11,7 @@ import { DropxOneDesignationPreview } from "@/components/dropx-one-designation-p
 import { SubmitButton } from "@/components/submit-button";
 import type { DesignationBusinessCategory } from "@/lib/designation-business-categories";
 import { normalizeDesignationCategories, type DesignationCategory } from "@/lib/designation-categories";
-import {
-  designationProfileDestinationsForModule,
-  inferDesignationProfileDestination,
-  type DesignationProfileDestination
-} from "@/lib/designation-profile-destination";
-import {
-  designationPortalOptions,
-  normalizeDesignationPortalPermissions
-} from "@/lib/designation-portal-access";
+import type { DesignationProfileDestination } from "@/lib/designation-profile-destination";
 import {
   intersectProfileFieldChannelRules,
   normalizeCategoryProfileFieldRules,
@@ -68,43 +60,6 @@ export type OnboardingRoleOption = {
   code: string;
   name: string;
 };
-
-function PortalAccessMatrix({ initialValue }: { initialValue?: unknown }) {
-  const [permissions, setPermissions] = useState(() => normalizeDesignationPortalPermissions(initialValue));
-
-  function updatePermission(portal: typeof designationPortalOptions[number]["code"], action: "add" | "view" | "edit", checked: boolean) {
-    setPermissions((current) => {
-      const portalPermissions = { ...current[portal], [action]: checked };
-      if (action === "edit" && checked) portalPermissions.view = true;
-      if (action === "view" && !checked) portalPermissions.edit = false;
-      return { ...current, [portal]: portalPermissions };
-    });
-  }
-
-  return (
-    <div className="designation-portal-matrix">
-      <div className="designation-portal-head" aria-hidden="true">
-        <span>Portal</span><span>Add</span><span>View</span><span>Edit</span>
-      </div>
-      {designationPortalOptions.map((portal) => (
-        <div className="designation-portal-row" key={portal.code}>
-          <strong>{portal.label}</strong>
-          {(["add", "view", "edit"] as const).map((action) => (
-            <label key={action} title={`${action} People in ${portal.label}`}>
-              <input
-                checked={permissions[portal.code][action]}
-                name={`portal_${portal.code}_${action}`}
-                onChange={(event) => updatePermission(portal.code, action, event.target.checked)}
-                type="checkbox"
-              />
-              <span className="sr-only">{action}</span>
-            </label>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function OnboardingRoleMultiSelect({ options, selectedValues }: { options: OnboardingRoleOption[]; selectedValues: string[] }) {
   const [open, setOpen] = useState(false);
@@ -487,12 +442,10 @@ function ModelMultiSelect({
 
 export function DesignationForm({
   action,
-  businessCategories,
   categories,
   initial,
   models,
   roles,
-  peopleModule,
   submitLabel = "Add designation"
 }: {
   action: (formData: FormData) => void;
@@ -522,13 +475,6 @@ export function DesignationForm({
     (initial?.app_page_access ?? defaultAppPageAccess)
       .filter((page) => appPageOptions.some((option) => option.value === page))
   ));
-  const destinationOptions = designationProfileDestinationsForModule(peopleModule);
-  const defaultDestination = inferDesignationProfileDestination({
-    onboardingCategories: initial?.onboarding_categories,
-    peopleModule,
-    profileDestination: initial?.profile_destination
-  });
-
   useEffect(() => {
     if (selectedCategories.includes(registrationCategory)) return;
     setRegistrationCategory(selectedCategories[0] ?? "");
@@ -574,7 +520,7 @@ export function DesignationForm({
               </option>
             ))}
           </select>
-          <small>Controls registration fields and statutory options for this designation.</small>
+          <small>Controls registration fields and requirements for this designation.</small>
         </label>
         <label>
           Models
@@ -602,36 +548,10 @@ export function DesignationForm({
           </label>
         ) : null}
       </div>
-      <section className="workforce-category-page-access designation-classification">
-        <div>
-          <strong>Designation classification</strong>
-          <p className="subtle">Define the owning product and the exact table that receives registrations for this designation.</p>
-        </div>
-        <div className="designation-classification-fields">
-          <label>
-            Workforce / HR category
-            <select className="field" defaultValue={initial?.designation_category_id ?? (businessCategories.length === 1 ? businessCategories[0].id : "")} name="designation_category_id" required>
-              <option value="">Select Workforce or HR</option>
-              {businessCategories.map((category) => (
-                <option key={category.id} value={category.id}>{category.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Profile destination
-            <select className="field" defaultValue={defaultDestination} name="profile_destination" required>
-              {destinationOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label} table</option>
-              ))}
-            </select>
-            <small>New and continuing registrations are mirrored into this table.</small>
-          </label>
-        </div>
-      </section>
       <section className="workforce-category-page-access">
         <div>
           <strong>DropX One page access</strong>
-          <p className="subtle">Choose the Workforce app menu for this designation. My Profile, Resignation &amp; exit, and Settings are permanently available.</p>
+          <p className="subtle">Choose the Workforce app menu for this designation. Profile (including resignation &amp; exit) and Settings are permanently available.</p>
         </div>
         <AppPageAccessSelect initialPages={selectedPages} onChange={setSelectedPages} />
       </section>
@@ -641,13 +561,6 @@ export function DesignationForm({
           <p className="subtle">Only users with the selected roles can onboard this designation. If no role is selected, only Owner or Master Owner can onboard it.</p>
         </div>
         <OnboardingRoleMultiSelect options={roles} selectedValues={initial?.onboarding_role_ids ?? []} />
-      </section>
-      <section className="workforce-category-page-access designation-portal-access">
-        <div>
-          <strong>Portal Access</strong>
-          <p className="subtle">Choose which portals can add, view, or edit people assigned to this designation.</p>
-        </div>
-        <PortalAccessMatrix initialValue={initial?.portal_permissions} />
       </section>
       {!selectedCategories.length ? (
         <div className="designation-field-rule-empty">Select one or more registration policies.</div>

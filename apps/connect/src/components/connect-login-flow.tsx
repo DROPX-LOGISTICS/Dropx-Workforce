@@ -431,11 +431,10 @@ export function ConnectLoginFlow() {
         {account.profileType !== "employee" && allowed(account, "payments") ? <button onClick={() => open("payments")}><BadgeIndianRupee />Payments<ChevronRight /></button> : null}
         {account.profileType !== "employee" && allowed(account, "advances") ? <button onClick={() => open("advances")}><HandCoins />Advances<ChevronRight /></button> : null}
         {allowed(account, "attendance") ? <button onClick={() => open("attendance")}><Fingerprint />Attendance<ChevronRight /></button> : null}
-        {account.profileType !== "employee" && allowed(account, "roster") ? <button onClick={() => open("roster")}><CalendarDays />Roster<ChevronRight /></button> : null}
+        {account.profileType !== "employee" && allowed(account, "roster") ? <button onClick={() => open("roster")}><CalendarDays />Associate Rostering<ChevronRight /></button> : null}
         {account.profileType !== "employee" && allowed(account, "performance") ? <button onClick={() => open("performance")}><BarChart3 />Performance<ChevronRight /></button> : null}
         <button onClick={() => open("profile")}><UserRound />My Profile<ChevronRight /></button>
         {account.profileType === "employee" && allowed(account, "leave") ? <button onClick={() => open("leave")}><CalendarDays />Leave<ChevronRight /></button> : null}
-        <button onClick={() => open("exit")}><LogOut />Resignation & exit<ChevronRight /></button>
         <button onClick={() => open("settings")}><Settings />Settings<ChevronRight /></button>
       </nav>
       <button className="signout" onClick={logout}><LogOut />Sign out</button>
@@ -457,12 +456,12 @@ export function ConnectLoginFlow() {
       {step === "dashboard" && account ? <ConnectDashboard account={account} onAttendance={() => open("attendance")} onProfile={() => open("profile")} /> : null}
       {step === "payments" && account ? <ConnectWorkforceSelfService account={account} view="payments" /> : null}
       {step === "advances" && account ? <ConnectWorkforceSelfService account={account} view="advances" /> : null}
-      {step === "profile" && account ? <ConnectProfileApp account={account} onPhoto={(url) => setAvatar(url)} onSubmitted={profileSubmitted} /> : null}
+      {step === "profile" && account ? <ConnectProfileApp account={account} onExit={() => open("exit")} onPhoto={(url) => setAvatar(url)} onSubmitted={profileSubmitted} /> : null}
       {step === "attendance" && account ? <ConnectAttendance account={account} /> : null}
       {step === "roster" && account ? <ConnectWorkforceSelfService account={account} view="roster" /> : null}
       {step === "performance" && account ? <ConnectWorkforceSelfService account={account} view="performance" /> : null}
       {step === "leave" && account ? <ConnectLeave account={account} /> : null}
-      {step === "exit" && account ? <ConnectExitManagement account={account} onBack={() => open(landingPage(account))} /> : null}
+      {step === "exit" && account ? <ConnectExitManagement account={account} onBack={() => open("profile")} /> : null}
       {step === "settings" ? <section className="dx-settings"><h1>Settings</h1><label>Default account<select disabled={pending} value={defaultKey} onChange={(e) => saveDefaultAccount(e.target.value)}><option value="">Select default account</option>{accounts.map((row) => <option key={accountKey(row)} value={accountKey(row)}>{row.companyName} - {row.reference || row.name}</option>)}</select></label><label className="toggle"><span><strong>Enable biometric login</strong><small>Use Face ID or device authentication when available.</small></span><input defaultChecked={localStorage.getItem(biometricKey) === "true"} onChange={(e) => enrollBiometric(e.target.checked)} type="checkbox" /></label><button onClick={resetPin}>Change PIN</button></section> : null}
     </main>}
   </div>;

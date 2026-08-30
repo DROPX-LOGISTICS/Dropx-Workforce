@@ -20,6 +20,7 @@ export const defaultDesignationPortalPermissions: DesignationPortalPermissions =
 };
 
 export type DesignationPortalAccess = {
+  designation_category?: unknown;
   portal_permissions?: unknown;
 };
 
@@ -64,6 +65,9 @@ export function canAccessDesignationPortal(
   options?: DesignationPortalAccessOptions
 ) {
   if (options?.isOwner) return true;
+  if (firstDesignationBusinessCategory(designation?.designation_category)?.people_module === "delivery_network") {
+    return true;
+  }
   return normalizeDesignationPortalPermissions(designation?.portal_permissions)[portal][action];
 }
 
@@ -77,3 +81,4 @@ export function requireDesignationPortalAccess(
     throw new Error(`This designation does not allow ${action} access from ${designationPortalOptions.find((item) => item.code === portal)?.label ?? portal}.`);
   }
 }
+import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";

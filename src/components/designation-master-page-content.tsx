@@ -14,7 +14,6 @@ import {
 } from "@/lib/designation-business-categories";
 import { designationCategoryLabel, normalizeDesignationCategories } from "@/lib/designation-categories";
 import {
-  designationProfileDestinationLabel,
   inferDesignationProfileDestination,
   type DesignationProfileDestination
 } from "@/lib/designation-profile-destination";
@@ -313,7 +312,7 @@ export async function DesignationMasterPageContent({
       .map((category) => categoryNameByCode.get(category) ?? designationCategoryLabel(category))
       .join(" ");
     const businessCategory = firstDesignationBusinessCategory(designation.designation_category);
-    return `${designation.code} ${designation.name} ${providerText} ${modelText} ${categoryText} ${businessCategory?.name ?? "unassigned"} ${designationProfileDestinationLabel(designation.profile_destination)}`.toLowerCase().includes(query);
+    return `${designation.code} ${designation.name} ${providerText} ${modelText} ${categoryText} ${businessCategory?.name ?? "unassigned"}`.toLowerCase().includes(query);
   });
   const editDesignation = scopedDesignations.find((designation) => designation.id === searchParams?.edit) ?? null;
   const createAction = createWorkforceDesignation;
@@ -370,7 +369,6 @@ export async function DesignationMasterPageContent({
               <thead>
                 <tr>
                   <th>Designation</th>
-                  <th>Profile destination</th>
                   <th>Registration policy</th>
                   <th>Coverage</th>
                   <th>Field ops</th>
@@ -392,11 +390,6 @@ export async function DesignationMasterPageContent({
                           <span>{designation.code}</span>
                           <strong>{designation.name}</strong>
                         </div>
-                      </td>
-                      <td>
-                        <span className={`destination-badge ${designation.profile_destination ?? "unset"}`}>
-                          {designationProfileDestinationLabel(designation.profile_destination)}
-                        </span>
                       </td>
                       <td>
                         <div className="mini-chip-list">
@@ -421,7 +414,7 @@ export async function DesignationMasterPageContent({
                     </tr>
                   );
                 }) : (
-                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 7 : 6}>No designations found.</td></tr>
+                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 6 : 5}>No designations found.</td></tr>
                 )}
               </tbody>
             </table>

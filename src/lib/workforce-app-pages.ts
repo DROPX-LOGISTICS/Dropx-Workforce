@@ -3,7 +3,7 @@ export const workforceAppPageOptions = [
   { value: "payments", label: "Payments" },
   { value: "advances", label: "Advances" },
   { value: "attendance", label: "Attendance" },
-  { value: "roster", label: "Roster" },
+  { value: "roster", label: "Associate Rostering" },
   { value: "performance", label: "Performance" }
 ] as const;
 

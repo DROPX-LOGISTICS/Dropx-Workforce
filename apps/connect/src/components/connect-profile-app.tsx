@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  BadgeCheck, BriefcaseBusiness, CalendarDays, CircleX, Download, Fingerprint,
-  Mail, MapPin, Phone, ShieldCheck, TriangleAlert, UserRound, WalletCards
+  BadgeCheck, BookOpenCheck, BriefcaseBusiness, CalendarDays, ChevronRight, CircleX, Download, Fingerprint,
+  LogOut, Mail, MapPin, Phone, ShieldCheck, TriangleAlert, UserRound, WalletCards
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { minimumAgeError } from "../lib/profile-age";
@@ -78,6 +78,14 @@ const relations = ["Parent", "Spouse", "Child", "Other Relative", "Friend", "Oth
 const defaultWorkforceFields = ["gender","date_of_birth","aadhaar_number","pan_number","father_name","blood_group","is_handicapped","address","state_code","pincode","landmark","bank_account_no","ifsc","driving_license_no","driving_license_exp_date","vehicle_reg_no","vehicle_reg_exp_date","vehicle_insurance_exp_date","vehicle_pollution_exp_date","emergency_contact_number","emergency_contact_name","emergency_contact_relation","aadhaar_front","aadhaar_back","pan_upload","dl_front","dl_back","profile_photo"];
 const defaultEmployee = [...defaultWorkforceFields, "eshram_uan", "pf_uan", "pf_account_no", "esi_no"];
 const defaultExecutive = defaultWorkforceFields;
+const workforceFeatureGuide = [
+  { code: "dashboard", label: "Home", detail: "Your Workforce summary and pending actions." },
+  { code: "payments", label: "Payments", detail: "View processed and pending earnings." },
+  { code: "advances", label: "Advances", detail: "Track advance requests and recovery." },
+  { code: "attendance", label: "Attendance", detail: "View attendance and activity records." },
+  { code: "roster", label: "Associate Rostering", detail: "See assigned shifts and route rostering." },
+  { code: "performance", label: "Performance", detail: "Review available performance measures." }
+] as const;
 const fieldValueKeys: Record<string, string> = {
   date_of_birth: "dateOfBirth",
   aadhaar_number: "aadhaarNumber",
@@ -318,7 +326,7 @@ function ReadTile({ label, value, verified, url, full }: { label: string; value?
   </a>;
 }
 
-export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: AppAccount; onPhoto?: (url: string) => void; onSubmitted?: () => Promise<void> | void }) {
+export function ConnectProfileApp({ account, onExit, onPhoto, onSubmitted }: { account: AppAccount; onExit?: () => void; onPhoto?: (url: string) => void; onSubmitted?: () => Promise<void> | void }) {
   const executive = account.profileType !== "employee" && account.profileType !== "user";
   const endpoint = executive ? "/api/connect/field-executive-profile" : "/api/connect/profile";
   const query = executive
@@ -682,6 +690,9 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
       }}] : [])
     ].filter((section) => Object.keys(section.values).length);
     const verifyLabels: Record<string, string> = { "Aadhaar number": "pan_aadhaar", PAN: "pan", "Bank account no": "bank", "PF UAN": "pf_uan", "Driving license no": "dl", "Vehicle reg no": "vehicle" };
+    const visibleWorkforceFeatures = executive
+      ? workforceFeatureGuide.filter((feature) => (account.pageAccess ?? ["dashboard", "payments", "advances"]).includes(feature.code))
+      : [];
     return <div className="dx-profile-view">
       {notice ? <div className="dx-alert success">{notice}</div> : null}
       <div className="dx-profile-hero"><small>DROPX LOGISTICS</small><h1>Profile details</h1><i><UserRound /></i></div>
@@ -696,6 +707,15 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
           url={section.name === "Uploads" ? profile.uploadUrls[label.replace(/\s(.)/g, (_, character) => character.toUpperCase()).replace(/^./, (character) => character.toLowerCase())] : undefined}
         />)}</div>
       </section>)}
+      {executive ? <section className="dx-profile-guide">
+        <h2>My DropX One guide</h2>
+        <p><BookOpenCheck />These are the Workforce features enabled for your designation.</p>
+        <div>{visibleWorkforceFeatures.map((feature) => <article key={feature.code}><strong>{feature.label}</strong><small>{feature.detail}</small></article>)}</div>
+      </section> : null}
+      {onExit ? <section className="dx-profile-exit">
+        <h2>Resignation &amp; exit</h2>
+        <button onClick={onExit} type="button"><LogOut /><span><strong>Start or track resignation</strong><small>Select a reason, requested last working date and add your message.</small></span><ChevronRight /></button>
+      </section> : null}
     </div>;
   }
 
@@ -713,7 +733,7 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
       <div className="dx-agreement-highlights">
         <div><WalletCards /><span><strong>Per-package payment</strong><small>Rate and payable amount are available through the app.</small></span></div>
         <div><ShieldCheck /><span><strong>Shipment & cash custody</strong><small>Return pending shipments and cash to the hub the same day.</small></span></div>
-        <div><BriefcaseBusiness /><span><strong>Independent contractor</strong><small>Follow the assigned service metrics and operating rules.</small></span></div>
+        <div><BriefcaseBusiness /><span><strong>Workforce engagement</strong><small>Follow the assigned service metrics and operating rules.</small></span></div>
       </div>
       <div className="dx-agreement-copy dx-agreement-scroll">
         <div><strong>Agreement terms</strong><small>Version {profile.agreement.version}</small></div>
@@ -722,7 +742,7 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
       <div className="dx-agreement-action">
         <label className="dx-agreement-accept">
           <input checked={agreementAccepted} onChange={(event) => setAgreementAccepted(event.target.checked)} type="checkbox" />
-          <span>I have read and accept this agreement in my individual capacity as an independent contractor.</span>
+          <span>I have read and accept this agreement for my Workforce engagement.</span>
         </label>
         <button className="dx-save" disabled={!agreementAccepted} onClick={() => setAgreementGatePassed(true)} type="button">
           Accept and continue registration

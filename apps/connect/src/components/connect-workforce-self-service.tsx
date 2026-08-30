@@ -10,7 +10,7 @@ type Payload = { records: Array<Record<string, any>>; error?: string };
 const labels: Record<View, { eyebrow: string; title: string }> = {
   payments: { eyebrow: "WORKFORCE PAY", title: "Payments" },
   advances: { eyebrow: "FINANCIAL SUPPORT", title: "Advances" },
-  roster: { eyebrow: "WORK SCHEDULE", title: "Roster" },
+  roster: { eyebrow: "WORK SCHEDULE", title: "Associate Rostering" },
   performance: { eyebrow: "WORK SUMMARY", title: "Performance" }
 };
 

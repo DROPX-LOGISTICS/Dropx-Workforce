@@ -51,8 +51,7 @@ export function AppPageAccessSelect({
         })}
       </div>
       <div className="workforce-app-permanent-pages">
-        <span><LockKeyhole size={14} /><strong>My Profile</strong><small>Permanently enabled</small></span>
-        <span><LockKeyhole size={14} /><strong>Resignation &amp; exit</strong><small>Permanently enabled</small></span>
+        <span><LockKeyhole size={14} /><strong>My Profile</strong><small>Includes resignation &amp; exit</small></span>
         <span><LockKeyhole size={14} /><strong>Settings</strong><small>Permanently enabled</small></span>
       </div>
     </div>

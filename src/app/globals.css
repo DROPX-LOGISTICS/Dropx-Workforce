@@ -21150,3 +21150,25 @@ td strong,
   .workforce-product .wf-route-card > footer { align-items: stretch; flex-direction: column; }
   .workforce-product .wf-route-card > footer .button { width: 100%; }
 }
+
+.dropx-one-preview-wrap { align-items: flex-start; background: linear-gradient(135deg, #fff7ed, #f8fafc); border-top: 1px solid #eadfd4; display: grid; gap: 24px; grid-template-columns: minmax(180px, .8fr) minmax(260px, 1.2fr); margin: 22px -18px -18px; padding: 24px; }
+.dropx-one-preview-copy h4 { color: #172033; font-size: 17px; margin: 6px 0; }
+.dropx-one-preview-copy p { color: #68758a; font-size: 12px; line-height: 1.55; margin: 0; }
+.dropx-one-phone { background: #111827; border: 5px solid #111827; border-radius: 30px; box-shadow: 0 20px 36px rgba(15, 23, 42, .20); margin: 0 auto; max-width: 310px; padding: 8px; width: 100%; }
+.dropx-one-phone-speaker { background: #475569; border-radius: 999px; height: 4px; margin: 2px auto 9px; width: 54px; }
+.dropx-one-phone-screen { background: #f8fafc; border-radius: 19px; max-height: 590px; min-height: 500px; overflow: auto; }
+.dropx-one-phone-screen > header { background: linear-gradient(135deg, #f05223, #ff7a45); color: white; display: grid; gap: 2px; padding: 18px 16px 14px; }
+.dropx-one-phone-screen > header span { font-size: 16px; font-weight: 850; }
+.dropx-one-phone-screen > header small { color: rgba(255,255,255,.82); font-size: 10px; }
+.dropx-one-phone-screen > nav { background: white; border-bottom: 1px solid #e2e8f0; display: flex; gap: 6px; overflow-x: auto; padding: 9px; }
+.dropx-one-phone-screen > nav span { background: #fff1ea; border-radius: 999px; color: #b93813; flex: 0 0 auto; font-size: 9px; font-weight: 800; padding: 6px 8px; }
+.dropx-one-phone-screen > section { padding: 14px; }
+.dropx-one-phone-screen > section > strong { display: block; font-size: 13px; }
+.dropx-one-phone-screen > section > small { color: #64748b; display: block; font-size: 9px; margin: 3px 0 12px; }
+.dropx-one-preview-fields { display: grid; gap: 8px; }
+.dropx-one-preview-fields label { background: white; border: 1px solid #e2e8f0; border-radius: 9px; display: grid; gap: 6px; padding: 9px; }
+.dropx-one-preview-fields label span { color: #334155; font-size: 9px; font-weight: 750; }
+.dropx-one-preview-fields label b { color: #dc2626; }
+.dropx-one-preview-fields label i { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; color: #94a3b8; font-size: 9px; font-style: normal; padding: 8px; }
+.dropx-one-preview-fields p { color: #64748b; font-size: 11px; text-align: center; }
+@media (max-width: 780px) { .dropx-one-preview-wrap { grid-template-columns: 1fr; } }

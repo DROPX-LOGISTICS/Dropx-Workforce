@@ -207,7 +207,7 @@ function appPageAccess(formData: FormData) {
   return Array.from(new Set(
     formData.getAll("app_page_access")
       .map((value) => String(value ?? "").trim().toLowerCase())
-      .filter((value) => ["dashboard", "attendance", "leave"].includes(value))
+      .filter((value) => ["dashboard", "attendance", "roster", "leave", "performance"].includes(value))
   ));
 }
 

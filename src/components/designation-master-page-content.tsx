@@ -74,6 +74,8 @@ type WorkforceCategoryRow = {
   code: string;
   name: string;
   is_active: boolean;
+  profile_field_rules?: unknown;
+  app_page_access?: string[] | null;
 };
 
 function loadFlash() {
@@ -120,7 +122,7 @@ async function loadDesignations(
     supabaseAdmin.from("providers").select("id, code, name, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("stations").select("id, station_code, station_name, hide_from_location_list").eq("company_id", companyId).eq("is_active", true).order("station_code"),
     supabaseAdmin.from("location_models").select("id, provider_id, code, name, is_active, providers (code, name)").eq("company_id", companyId).eq("is_active", true).order("code"),
-    supabaseAdmin.from("workforce_categories").select("code, name, is_active").eq("company_id", companyId).eq("is_active", true).order("sort_order").order("name"),
+    supabaseAdmin.from("workforce_categories").select("code, name, is_active, profile_field_rules, app_page_access").eq("company_id", companyId).eq("is_active", true).order("sort_order").order("name"),
     supabaseAdmin.from("designation_categories").select("id, code, name, people_module, is_active").eq("company_id", companyId).eq("people_module", peopleModule).eq("is_active", true).order("sort_order").order("name"),
     supabaseAdmin.from("user_roles").select("id, code, name, is_active").eq("company_id", companyId).eq("is_active", true).order("name")
   ]);

@@ -10,6 +10,7 @@ import { normalizeCategoryProfileFieldRules } from "@/lib/profile-field-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const categoryPath = "/delivery-network/engagement-types";
+const peopleOnlyEngagementCodes = new Set(["employees", "field_executives"]);
 
 function clean(value: FormDataEntryValue | null) {
   const text = String(value ?? "").trim();
@@ -85,6 +86,7 @@ export async function createWorkforceCategory(formData: FormData) {
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
     const code = categoryCode(formData.get("code"));
+    if (peopleOnlyEngagementCodes.has(code)) throw new Error("People/HR employee engagement types cannot be created in Workforce.");
     const { error } = await supabaseAdmin.from("workforce_categories").insert(withCompany({
       code,
       name: required(formData.get("name"), "Engagement type name"),
@@ -128,6 +130,7 @@ export async function updateWorkforceCategory(formData: FormData) {
       .maybeSingle();
     if (existing.error) throw new Error(existing.error.message);
     if (!existing.data) throw new Error("Engagement type was not found.");
+    if (peopleOnlyEngagementCodes.has(existing.data.code)) throw new Error("People/HR employee engagement types cannot be edited in Workforce.");
 
     const code = existing.data.is_system ? existing.data.code : categoryCode(formData.get("code"));
     const { error } = await supabaseAdmin
@@ -167,6 +170,7 @@ export async function deleteWorkforceCategory(formData: FormData) {
       .maybeSingle();
     if (existing.error) throw new Error(existing.error.message);
     if (!existing.data) throw new Error("Engagement type was not found.");
+    if (peopleOnlyEngagementCodes.has(existing.data.code)) throw new Error("People/HR employee engagement types cannot be deleted in Workforce.");
     if (existing.data.is_system) throw new Error("System engagement types cannot be deleted.");
 
     const designationUsage = await supabaseAdmin

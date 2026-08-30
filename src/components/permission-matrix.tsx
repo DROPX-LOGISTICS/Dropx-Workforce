@@ -71,7 +71,7 @@ const workforceGroups: PermissionGroup[] = [
   { key: "id_rate_cards", label: "IDs & Rate Cards", codes: ["executive_id_onboarding", "provider_mapping"] },
   { key: "communications", label: "Communications", codes: ["workforce_communications", "workforce_communications_app", "workforce_communications_whatsapp", "workforce_communications_history"] },
   { key: "users", label: "Workforce Access", codes: ["users"] },
-  { key: "master_data", label: "Workforce Master", codes: ["designations"] }
+  { key: "master_data", label: "Workforce Master", codes: ["designations", "workforce_categories", "workforce_whatsapp"] }
 ];
 
 function emptyPermissionState(pages: PermissionPage[]) {

@@ -50,21 +50,6 @@ type CanonicalWorkforceRow = LegacyProfileRow & {
   compatibility_mode: boolean;
 };
 
-type EmployeeRow = {
-  id: string;
-  employee_code?: string | null;
-  biometric_id?: string | null;
-  full_name?: string | null;
-  mobile_country_code?: string | null;
-  mobile?: string | null;
-  email?: string | null;
-  designation_id?: string | null;
-  profile_completion_status?: string | null;
-  is_active?: boolean | null;
-  designations?: { code?: string | null; name?: string | null } | Array<{ code?: string | null; name?: string | null }> | null;
-  stations?: LocationRelation | LocationRelation[] | null;
-};
-
 function first<T>(value: T | T[] | null | undefined) {
   return Array.isArray(value) ? value[0] ?? null : value ?? null;
 }
@@ -142,10 +127,8 @@ export async function loadWorkforceCommunicationRecipients(authorization: Author
   if (designationResult.error) throw new Error(designationResult.error.message);
 
   const workforceDesignationKeys = new Set<string>();
-  const workforceDesignationIds = new Set<string>();
   for (const designation of designationResult.data ?? []) {
     if (firstDesignationBusinessCategory(designation.designation_category)?.people_module !== "delivery_network") continue;
-    workforceDesignationIds.add(String(designation.id));
     workforceDesignationKeys.add(normalized(designation.code));
     workforceDesignationKeys.add(normalized(designation.name));
   }
@@ -168,17 +151,8 @@ export async function loadWorkforceCommunicationRecipients(authorization: Author
       .eq("company_id", companyId),
     authorization
   );
-  const employeeQuery = applyLocationScope(
-    admin
-      .from("employees")
-      .select(`id, employee_code, biometric_id, full_name, mobile_country_code, mobile, email, designation_id, profile_completion_status, is_active, designations (code, name), ${locationSelect}`)
-      .eq("company_id", companyId),
-    authorization
-  );
-
-  const [canonical, employees, fieldExecutives, contractors, vendors, workers, identityLinks] = await Promise.all([
+  const [canonical, fieldExecutives, contractors, vendors, workers, identityLinks] = await Promise.all([
     canonicalQuery,
-    employeeQuery,
     profileQuery("field_executives"),
     profileQuery("contractors"),
     profileQuery("vendors"),
@@ -189,7 +163,7 @@ export async function loadWorkforceCommunicationRecipients(authorization: Author
       .eq("company_id", companyId)
       .eq("compatibility_active", true)
   ]);
-  const error = canonical.error ?? employees.error ?? fieldExecutives.error ?? contractors.error ?? vendors.error ?? workers.error ?? identityLinks.error;
+  const error = canonical.error ?? fieldExecutives.error ?? contractors.error ?? vendors.error ?? workers.error ?? identityLinks.error;
   if (error) throw new Error(error.message);
 
   const movedLegacyKeys = new Set((identityLinks.data ?? [])
@@ -203,24 +177,6 @@ export async function loadWorkforceCommunicationRecipients(authorization: Author
 
   for (const row of (canonical.data ?? []) as unknown as CanonicalWorkforceRow[]) {
     add(recipientFromRow(row, "workforce", row.id, false));
-  }
-
-  for (const employee of (employees.data ?? []) as unknown as EmployeeRow[]) {
-    if (!employee.designation_id || !workforceDesignationIds.has(employee.designation_id)) continue;
-    const designation = first(employee.designations);
-    add(recipientFromRow({
-      id: employee.id,
-      dropx_id: employee.employee_code,
-      biometric_id: employee.biometric_id,
-      full_name: employee.full_name,
-      mobile_country_code: employee.mobile_country_code,
-      mobile: employee.mobile,
-      email: employee.email,
-      designation: designation?.name || designation?.code || "",
-      onboarding_status: employee.profile_completion_status,
-      is_active: employee.is_active,
-      stations: employee.stations
-    }, "employee", employee.id, false));
   }
 
   const addLegacyRows = (rows: LegacyProfileRow[], profileType: WorkforceRecipientProfileType) => {

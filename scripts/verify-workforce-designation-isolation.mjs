@@ -25,6 +25,31 @@ const checks = [
     file: "src/app/master/designations/actions.ts",
     required: ['peopleModule: "delivery_network"'],
     forbidden: ["allDesignationScope", "peopleDesignationScope", "createPeopleDesignation"]
+  },
+  {
+    file: "src/app/master/workforce-categories/page.tsx",
+    required: ['category.code !== "employees"', 'category.code !== "field_executives"'],
+    forbidden: ['subtitle="Configure employee, contractor']
+  },
+  {
+    file: "src/lib/workforce-communication-recipients.ts",
+    required: ['.from("workforce")'],
+    forbidden: ['.from("employees")', '"employee", employee.id']
+  },
+  {
+    file: "src/middleware.ts",
+    required: ['const WORKFORCE_ROOTS = [', 'isWorkforceHost &&', '!isWorkforcePath(path)'],
+    forbidden: []
+  },
+  {
+    file: "supabase/migrations/20260830220000_verified_legacy_workforce_cleanup.sql",
+    required: [
+      "preview_legacy_workforce_alias_cleanup",
+      "purge_verified_legacy_workforce_aliases",
+      "a registration draft has no canonical Workforce copy",
+      "pg_advisory_xact_lock"
+    ],
+    forbidden: []
   }
 ];
 

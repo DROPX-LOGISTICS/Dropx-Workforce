@@ -374,7 +374,11 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
     }
     const candidateProviderIds = new Set(mappingCandidates.map((candidate) => candidate.provider_id));
     const candidateStationIds = new Set(mappingCandidates.map((candidate) => candidate.station_id ?? "__ALL_STATIONS__"));
-    const candidateSources = new Set(mappingCandidates.map(mappingSource).filter(Boolean));
+    const candidateSources = new Set(mappingCandidates.map((candidate) => {
+      const source = mappingSource(candidate);
+      const candidateProfile = workforceBySource.get(source);
+      return candidateProfile ? sourceKey("workforce", candidateProfile.id) : source;
+    }).filter(Boolean));
     const mapping = station && (provider || candidateProviderIds.size === 1) && candidateStationIds.size === 1 && candidateSources.size === 1
       ? mappingCandidates.sort((left, right) => right.effective_from.localeCompare(left.effective_from))[0] ?? null
       : null;

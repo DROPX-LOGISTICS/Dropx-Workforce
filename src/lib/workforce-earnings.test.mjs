@@ -99,6 +99,21 @@ test("resolves mappings transitioned directly to the canonical Workforce registe
   assert.equal(result.lines[0].status, "ready");
 });
 
+test("treats canonical and retained legacy mappings for the same person as one identity", () => {
+  const base = input();
+  const result = calculateWorkforceEarnings(input({
+    mappings: [base.mappings[0], {
+      ...base.mappings[0],
+      id: "mapping-canonical",
+      workforce_id: "workforce-1",
+      field_executive_id: null
+    }]
+  }));
+  assert.equal(result.totalShipments, 30);
+  assert.equal(result.lines[0].workforceId, "workforce-1");
+  assert.notEqual(result.lines[0].status, "unmapped");
+});
+
 test("supports the payment-head keys already stored in provider mappings", () => {
   const base = input();
   const result = calculateWorkforceEarnings(input({

@@ -5548,6 +5548,17 @@ button.row-action-item {
   padding: 0 14px 14px;
 }
 
+.designation-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.designation-row-actions form {
+  margin: 0;
+}
+
 .button.danger {
   background: var(--danger);
   border-color: var(--danger);

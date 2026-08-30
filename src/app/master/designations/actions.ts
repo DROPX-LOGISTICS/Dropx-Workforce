@@ -291,9 +291,54 @@ async function deleteDesignationForScope(formData: FormData, scope: DesignationA
   const companyId = requireCompanyId(authorization);
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    const admin = supabaseAdmin;
     const id = required(formData.get("id"), "Designation");
     await requireExistingDesignationScope(companyId, id, scope.peopleModule);
-    const { error } = await supabaseAdmin.from("designations").delete().eq("id", id).eq("company_id", companyId);
+    const designationResult = await admin
+      .from("designations")
+      .select("id, code, name")
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (designationResult.error || !designationResult.data) {
+      throw new Error(designationResult.error?.message ?? "Designation was not found.");
+    }
+    const designation = designationResult.data;
+
+    const directDependencies = await Promise.all([
+      admin.from("employees").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("designation_id", id),
+      admin.from("workforce").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("designation_id", id)
+    ]);
+    const textRegisterDependencies = await Promise.all(
+      ["contractors", "field_executives", "vendors", "workers", "workforce_helpers"].map(async (table) => {
+        const result = await admin
+          .from(table)
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", companyId)
+          .in("designation", [designation.code, designation.name]);
+        return { table, ...result };
+      })
+    );
+    const dependencyError = [...directDependencies, ...textRegisterDependencies].find((result) => result.error)?.error;
+    if (dependencyError) throw new Error(`Could not verify designation usage: ${dependencyError.message}`);
+    const dependencies = [
+      { label: "employee profile", count: directDependencies[0].count ?? 0 },
+      { label: "Workforce profile", count: directDependencies[1].count ?? 0 },
+      ...textRegisterDependencies.map((result) => ({
+        label: `${result.table.replaceAll("_", " ")} profile`,
+        count: result.count ?? 0
+      }))
+    ].filter((item) => item.count > 0);
+    if (dependencies.length) {
+      const summary = dependencies
+        .map((item) => `${item.count} ${item.label}${item.count === 1 ? "" : "s"}`)
+        .join(", ");
+      throw new Error(`${designation.name} cannot be deleted because it is used by ${summary}. Reassign those records first, or set the designation to Inactive.`);
+    }
+    const { error } = await admin.from("designations").delete().eq("id", id).eq("company_id", companyId);
+    if (error?.code === "23503") {
+      throw new Error(`${designation.name} is linked to another record. Reassign it first, or set the designation to Inactive.`);
+    }
     if (error) throw new Error(error.message);
 
     revalidatePath("/delivery-network/designations");
@@ -327,8 +372,8 @@ export async function transferWorkforceDesignationToPeople(formData: FormData) {
 
     const id = required(formData.get("id"), "Designation");
     const destination = required(formData.get("people_profile_destination"), "People profile destination").toLowerCase();
-    if (!["employees", "workers"].includes(destination)) {
-      throw new Error("Select an employee or worker destination in People.");
+    if (!["employees", "contractors", "workers"].includes(destination)) {
+      throw new Error("Select an employee, contractor, or worker destination in People.");
     }
     await requireExistingDesignationScope(companyId, id, workforceDesignationScope.peopleModule);
 
@@ -345,6 +390,16 @@ export async function transferWorkforceDesignationToPeople(formData: FormData) {
     if (categoryResult.error) throw new Error(categoryResult.error.message);
     if (!categoryResult.data?.id) throw new Error("Create an active People designation category before transferring this role.");
 
+    const departmentResult = await supabaseAdmin
+      .from("hr_departments")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .eq("code", "OPS")
+      .maybeSingle();
+    if (departmentResult.error) throw new Error(departmentResult.error.message);
+    if (!departmentResult.data?.id) throw new Error("Create the active Operations department in People before transferring this role.");
+
     const designationResult = await supabaseAdmin
       .from("designations")
       .update({
@@ -352,6 +407,8 @@ export async function transferWorkforceDesignationToPeople(formData: FormData) {
         profile_destination: destination,
         onboarding_categories: [destination],
         registration_category_code: destination,
+        portal_scopes: ["people"],
+        portal_permissions: {},
         is_field_operations: false,
         updated_at: new Date().toISOString()
       })
@@ -362,6 +419,16 @@ export async function transferWorkforceDesignationToPeople(formData: FormData) {
     if (designationResult.error || !designationResult.data) {
       throw new Error(designationResult.error?.message ?? "Designation was not found.");
     }
+
+    const mappingResult = await supabaseAdmin.from("hr_designation_mappings").upsert({
+      company_id: companyId,
+      designation_id: id,
+      department_id: departmentResult.data.id,
+      is_available: true,
+      can_be_reporting_manager: false,
+      updated_by: authorization.userId
+    }, { onConflict: "company_id,designation_id" });
+    if (mappingResult.error) throw new Error(mappingResult.error.message);
 
     revalidatePath("/delivery-network/designations");
     revalidatePath("/settings/designations");

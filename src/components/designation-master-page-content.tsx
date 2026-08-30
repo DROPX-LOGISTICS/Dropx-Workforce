@@ -410,7 +410,23 @@ export async function DesignationMasterPageContent({
                       </td>
                       <td><span className={`designation-boolean ${designation.is_field_operations ? "yes" : "no"}`}>{designation.is_field_operations ? "Yes" : "No"}</span></td>
                       <td><StatusPill status={designation.is_active ? "Active" : "Inactive"} /></td>
-                      {pagePermission.canEdit ? <td><PendingLink className="button secondary compact" href={`${scope.basePath}?edit=${designation.id}`} scroll={false}>Edit</PendingLink></td> : null}
+                      {pagePermission.canEdit ? <td>
+                        <div className="designation-row-actions">
+                          <PendingLink className="button secondary compact" href={`${scope.basePath}?edit=${designation.id}`} scroll={false}>Edit</PendingLink>
+                          <form action={deleteAction}>
+                            <input name="id" type="hidden" value={designation.id} />
+                            <SubmitButton
+                              className="button warning compact"
+                              confirmDescription="Only an unused designation can be deleted. Existing registrations, profiles, roster, pay, and history are protected."
+                              confirmMessage={`Permanently delete ${designation.name}?`}
+                              confirmSubmitText="Delete designation"
+                              pendingText="Deleting"
+                            >
+                              Delete
+                            </SubmitButton>
+                          </form>
+                        </div>
+                      </td> : null}
                     </tr>
                   );
                 }) : (
@@ -465,16 +481,23 @@ export async function DesignationMasterPageContent({
                   Transfer destination in People
                   <select
                     className="field"
-                    defaultValue={editDesignation.onboarding_categories.includes("workers") ? "workers" : "employees"}
+                    defaultValue={
+                      editDesignation.onboarding_categories.includes("contractors")
+                        ? "contractors"
+                        : editDesignation.onboarding_categories.includes("workers")
+                          ? "workers"
+                          : "employees"
+                    }
                     name="people_profile_destination"
                   >
                     <option value="employees">Employees</option>
+                    <option value="contractors">Independent contractors</option>
                     <option value="workers">Workers</option>
                   </select>
                 </label>
                 <SubmitButton
                   className="button secondary"
-                  confirmDescription="The designation will disappear from Workforce and become editable in the People Designation Master. Existing profiles remain in their selected legal-engagement table."
+                  confirmDescription="The designation will disappear from Workforce, become available in the People Designation Master under Operations, and keep existing profiles in their selected legal-engagement table."
                   confirmMessage={`Transfer ${editDesignation.name} to People?`}
                   confirmSubmitText="Transfer to People"
                   pendingText="Transferring"

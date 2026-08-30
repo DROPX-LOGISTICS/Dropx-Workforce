@@ -390,6 +390,34 @@ export async function transferWorkforceDesignationToPeople(formData: FormData) {
     if (categoryResult.error) throw new Error(categoryResult.error.message);
     if (!categoryResult.data?.id) throw new Error("Create an active People designation category before transferring this role.");
 
+    const registerResult = await supabaseAdmin
+      .from("workforce_register_master")
+      .select("id, table_name, is_active")
+      .eq("company_id", companyId)
+      .eq("table_name", destination)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (registerResult.error) throw new Error(registerResult.error.message);
+    if (!registerResult.data?.id) throw new Error(`The ${destination} register is not active. Activate it before transferring this designation.`);
+
+    const reconciliationResult = await supabaseAdmin.rpc("set_designation_register_route", {
+      p_actor_user_id: authorization.userId,
+      p_company_id: companyId,
+      p_designation_id: id,
+      p_reconcile: true,
+      p_register_id: registerResult.data.id,
+      p_registration_enabled: true
+    });
+    if (reconciliationResult.error) throw new Error(reconciliationResult.error.message);
+    const reconciliation = (reconciliationResult.data ?? {}) as {
+      reconciliation?: { failed?: number; failure_samples?: Array<{ error?: string }> };
+    };
+    const failedProfiles = Number(reconciliation.reconciliation?.failed ?? 0);
+    if (failedProfiles > 0) {
+      const sample = reconciliation.reconciliation?.failure_samples?.[0]?.error;
+      throw new Error(`${failedProfiles} existing profile${failedProfiles === 1 ? "" : "s"} could not be moved safely.${sample ? ` ${sample}` : ""}`);
+    }
+
     const departmentResult = await supabaseAdmin
       .from("hr_departments")
       .select("id")

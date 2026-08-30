@@ -75,8 +75,8 @@ type ProfileDraft = {
 const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const states = ["AN","AP","AR","AS","BR","CG","CH","DD","DL","DN","GA","GJ","HP","HR","JH","JK","KA","KL","LA","LD","MH","ML","MN","MP","MZ","NL","OD","PB","PY","RJ","SK","TN","TR","TS","UK","UP","WB"];
 const relations = ["Parent", "Spouse", "Child", "Other Relative", "Friend", "Other"];
-const defaultWorkforceFields = ["gender","date_of_birth","aadhaar_number","pan_number","eshram_uan","father_name","blood_group","is_handicapped","address","state_code","pincode","landmark","bank_account_no","ifsc","pf_uan","pf_account_no","esi_no","driving_license_no","driving_license_exp_date","vehicle_reg_no","vehicle_reg_exp_date","vehicle_insurance_exp_date","vehicle_pollution_exp_date","emergency_contact_number","emergency_contact_name","emergency_contact_relation","aadhaar_front","aadhaar_back","pan_upload","dl_front","dl_back","profile_photo"];
-const defaultEmployee = defaultWorkforceFields;
+const defaultWorkforceFields = ["gender","date_of_birth","aadhaar_number","pan_number","father_name","blood_group","is_handicapped","address","state_code","pincode","landmark","bank_account_no","ifsc","driving_license_no","driving_license_exp_date","vehicle_reg_no","vehicle_reg_exp_date","vehicle_insurance_exp_date","vehicle_pollution_exp_date","emergency_contact_number","emergency_contact_name","emergency_contact_relation","aadhaar_front","aadhaar_back","pan_upload","dl_front","dl_back","profile_photo"];
+const defaultEmployee = [...defaultWorkforceFields, "eshram_uan", "pf_uan", "pf_account_no", "esi_no"];
 const defaultExecutive = defaultWorkforceFields;
 const fieldValueKeys: Record<string, string> = {
   date_of_birth: "dateOfBirth",
@@ -384,7 +384,7 @@ export function ConnectProfileApp({ account, onPhoto, onSubmitted }: { account: 
   }, [executive, profile]);
   const required = useMemo(() => new Set(profile?.fieldRules?.required ?? []), [profile]);
   const completed = statusReadOnly(profile?.status);
-  const statutoryEnabled = profile?.statutoryEnabled ?? executive;
+  const statutoryEnabled = profile?.statutoryEnabled ?? false;
 
   const set = (key: string, value: string, clear: string[] = []) => {
     setValues((current) => ({

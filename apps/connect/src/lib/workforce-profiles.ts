@@ -32,7 +32,7 @@ export function workforceTable(profileType: WorkforceProfileType) {
 
 export function workforceLabel(profileType: NonEmployeeProfileType) {
   if (profileType === "workforce") return "Workforce associate";
-  if (profileType === "contractor") return "Independent contractor";
+  if (profileType === "contractor") return "Workforce associate";
   if (profileType === "vendor") return "Vendor";
   if (profileType === "worker") return "Worker";
   return "Field executive";

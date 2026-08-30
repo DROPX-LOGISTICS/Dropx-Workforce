@@ -2,7 +2,7 @@ export const designationCategoryOptions = [
   { value: "employees", label: "Employees" },
   { value: "field_executives", label: "Field executives" },
   { value: "vendors", label: "Vendors" },
-  { value: "contractors", label: "Independent Contractor" },
+  { value: "contractors", label: "Workforce" },
   { value: "workers", label: "Workers" }
 ] as const;
 

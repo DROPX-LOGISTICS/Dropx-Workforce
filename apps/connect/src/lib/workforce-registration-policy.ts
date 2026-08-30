@@ -194,6 +194,8 @@ export async function loadWorkforceRegistrationPolicy({
     pageAccess: Array.isArray(categoryResult.data.app_page_access)
       ? categoryResult.data.app_page_access.map(String)
       : [],
-    statutoryEnabled: Boolean(categoryResult.data.statutory_enabled)
+    // PF and ESI are HR employee payroll fields. Workforce registration never
+    // exposes them, even when an old category row still carries the legacy flag.
+    statutoryEnabled: false
   };
 }

@@ -87,7 +87,7 @@ export const navItems: NavItem[] = [
       { code: "master_payment_banks", label: "Payment Banks", href: "/master/payment-banks" },
       { code: "master_payment_heads", label: "Payment Heads", href: "/master/payment-heads" },
       { code: "master_contacts", label: "Contacts", href: "/master/contacts" },
-      { code: "workforce_categories", label: "Engagement Types", href: "/master/workforce-categories" },
+      { code: "workforce_categories", label: "Registration Policies", href: "/master/workforce-categories" },
       { code: "workforce_whatsapp", label: "Workforce WhatsApp", href: "/master/workforce-whatsapp" },
       { code: "designations", label: "Workforce Designations", href: "/delivery-network/designations" },
       { code: "biometric_devices", label: "Device Master", href: "/master/biometric-devices" },
@@ -174,7 +174,7 @@ export const workforceNavItems: NavItem[] = [
     label: "Workforce Master",
     icon: "WM",
     children: [
-      { code: "workforce_categories", label: "Engagement Types", href: "/delivery-network/engagement-types" },
+      { code: "workforce_categories", label: "Registration Policies", href: "/delivery-network/engagement-types" },
       { code: "designations", label: "Workforce Designations", href: "/delivery-network/designations" },
       { code: "designations", label: "Designation Routing", href: "/delivery-network/designation-routing" }
     ]

@@ -1,13 +1,9 @@
 "use client";
 
-import {
-  AppPageAccessSelect,
-  appPageOptions,
-  defaultAppPageAccess
-} from "@/components/app-page-access-select";
 import { FieldRuleMatrix } from "@/components/designation-form";
 import {
   normalizeCategoryProfileFieldRules,
+  workforceUnavailableProfileFieldKeys,
   workforceProfileFields
 } from "@/lib/profile-field-rules";
 import { SubmitButton } from "@/components/submit-button";
@@ -34,15 +30,12 @@ export function WorkforceCategoryForm({
   submitLabel: string;
 }) {
   const rules = normalizeCategoryProfileFieldRules(initial?.profile_field_rules);
-  const selectedPages = (initial?.app_page_access ?? defaultAppPageAccess)
-    .filter((page) => appPageOptions.some((option) => option.value === page));
-
   return (
     <form action={action} className="designation-form">
       {initial ? <input name="id" type="hidden" value={initial.id} /> : null}
       <div className="form-grid three">
         <label>
-          Engagement type code
+          Registration policy code
           <input
             className="field"
             defaultValue={initial?.code ?? ""}
@@ -54,8 +47,8 @@ export function WorkforceCategoryForm({
           />
         </label>
         <label>
-          Engagement type name
-          <input className="field" defaultValue={initial?.name ?? ""} name="name" placeholder="Enter engagement type name" required />
+          Registration policy name
+          <input className="field" defaultValue={initial?.name ?? ""} name="name" placeholder="Enter registration policy name" required />
         </label>
         {initial ? (
           <label>
@@ -70,32 +63,8 @@ export function WorkforceCategoryForm({
 
       <section className="workforce-category-page-access">
         <div>
-          <strong>Statutory applicability</strong>
-          <p className="subtle">Show the Not Applicable, PF and ESI selection while onboarding this engagement type.</p>
-        </div>
-        <label className="checkbox-line">
-          <input
-            defaultChecked={initial?.statutory_enabled ?? false}
-            name="statutory_enabled"
-            type="checkbox"
-            value="true"
-          />
-          Enable statutory applicability
-        </label>
-      </section>
-
-      <section className="workforce-category-page-access">
-        <div>
-          <strong>DropX One page access</strong>
-          <p className="subtle">Choose engagement-type-controlled pages. My Profile and Settings are always available.</p>
-        </div>
-        <AppPageAccessSelect initialPages={selectedPages} />
-      </section>
-
-      <section className="workforce-category-page-access">
-        <div>
           <strong>Direct activation</strong>
-          <p className="subtle">Let dashboard users complete this engagement type's enabled onboarding fields and activate the profile immediately.</p>
+          <p className="subtle">Let authorized Workforce users complete this policy's enabled onboarding fields and activate the profile immediately.</p>
         </div>
         <label className="checkbox-line">
           <input
@@ -104,12 +73,13 @@ export function WorkforceCategoryForm({
             type="checkbox"
             value="true"
           />
-          Enable direct activation from Dashboard
+          Enable direct activation from Workforce
         </label>
       </section>
 
       <div className="workforce-category-rule-matrix">
         <FieldRuleMatrix
+          disabledFieldKeys={Array.from(workforceUnavailableProfileFieldKeys)}
           fields={workforceProfileFields}
           rules={rules}
           title="Onboarding fields"

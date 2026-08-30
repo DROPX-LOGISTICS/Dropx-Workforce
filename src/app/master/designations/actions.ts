@@ -18,6 +18,7 @@ import {
 import { designationPortalOptions } from "@/lib/designation-portal-access";
 import { normalizeCategoryProfileFieldRules } from "@/lib/profile-field-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { normalizeWorkforceAppPageAccess } from "@/lib/workforce-app-pages";
 
 function clean(value: FormDataEntryValue | null) {
   const text = String(value ?? "").trim();
@@ -126,9 +127,9 @@ async function validateOnboardingRoles(companyId: string, roleIds: string[]) {
 
 function onboardingCategories(formData: FormData) {
   const categories = normalizeDesignationCategories(formData.getAll("onboarding_categories"), []);
-  if (!categories.length) throw new Error("Select at least one engagement type.");
+  if (!categories.length) throw new Error("Select at least one registration policy.");
   if (categories.some((category) => category === "employees" || category === "field_executives")) {
-    throw new Error("Employee and Field Executive engagement types belong to People and cannot be used for a Workforce designation.");
+    throw new Error("Employee and Field Executive policies belong to People and cannot be used for a Workforce designation.");
   }
   return categories;
 }
@@ -136,7 +137,7 @@ function onboardingCategories(formData: FormData) {
 function registrationCategoryCode(formData: FormData, categories: string[]) {
   const code = required(formData.get("registration_category_code"), "Registration policy").toLowerCase();
   if (!categories.includes(code)) {
-    throw new Error("Registration policy must be one of the selected engagement types.");
+    throw new Error("Registration policy must be one of the selected policies.");
   }
   return code;
 }
@@ -202,16 +203,12 @@ async function validateOnboardingCategories(companyId: string, categories: strin
     .in("code", categories);
   if (error) throw new Error(error.message);
   if ((data ?? []).length !== categories.length) {
-    throw new Error("Remove deleted engagement types before saving this designation.");
+    throw new Error("Remove deleted registration policies before saving this designation.");
   }
 }
 
 function appPageAccess(formData: FormData) {
-  return Array.from(new Set(
-    formData.getAll("app_page_access")
-      .map((value) => String(value ?? "").trim().toLowerCase())
-      .filter((value) => ["dashboard", "attendance", "roster", "leave", "performance"].includes(value))
-  ));
+  return normalizeWorkforceAppPageAccess(formData.getAll("app_page_access"));
 }
 
 function profileFieldRules(formData: FormData, categories: string[]) {
@@ -368,8 +365,8 @@ export async function transferWorkforceDesignationToPeople(formData: FormData) {
 
     const id = required(formData.get("id"), "Designation");
     const destination = required(formData.get("people_profile_destination"), "People profile destination").toLowerCase();
-    if (!["employees", "contractors", "workers"].includes(destination)) {
-      throw new Error("Select an employee, contractor or worker destination in People.");
+    if (!["employees", "workers"].includes(destination)) {
+      throw new Error("Select an employee or worker destination in People.");
     }
     await requireExistingDesignationScope(companyId, id, workforceDesignationScope.peopleModule);
 

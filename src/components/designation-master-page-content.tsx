@@ -157,7 +157,7 @@ async function loadDesignations(
         location_ids: Array.isArray((row as { location_ids?: unknown }).location_ids) ? (row as { location_ids: string[] }).location_ids : [],
         model_ids: Array.isArray((row as { model_ids?: unknown }).model_ids) ? (row as { model_ids: string[] }).model_ids : [],
         onboarding_categories: Array.isArray((row as { onboarding_categories?: unknown }).onboarding_categories) ? (row as { onboarding_categories: string[] }).onboarding_categories : ["employees"],
-        app_page_access: ["dashboard", "attendance", "leave"],
+        app_page_access: ["dashboard", "payments", "advances"],
         profile_field_rules: {},
         onboarding_role_ids: [],
         portal_permissions: null,
@@ -234,7 +234,7 @@ async function loadDesignations(
   const fallbackCategories: WorkforceCategoryRow[] = [
     { code: "employees", name: "Employees", is_active: true },
     { code: "field_executives", name: "Field Executives", is_active: true },
-    { code: "contractors", name: "Independent Contractor", is_active: true },
+    { code: "contractors", name: "Workforce", is_active: true },
     { code: "vendors", name: "Vendors", is_active: true },
     { code: "workers", name: "Workers", is_active: true }
   ];
@@ -261,7 +261,8 @@ async function loadDesignations(
     locations: locations as LocationRow[],
     models: (modelsResult.data ?? []) as ModelRow[],
     categories: (categoriesResult.error ? fallbackCategories : (categoriesResult.data ?? []) as WorkforceCategoryRow[])
-      .filter((category) => !peopleOnlyEngagementCodes.has(category.code)),
+      .filter((category) => !peopleOnlyEngagementCodes.has(category.code))
+      .map((category) => category.code === "contractors" ? { ...category, name: "Workforce" } : category),
     businessCategories: (businessCategoriesResult.data ?? []) as DesignationBusinessCategory[],
     roles: rolesResult.error ? [] : (rolesResult.data ?? []) as UserRoleRow[],
     error: null
@@ -370,7 +371,7 @@ export async function DesignationMasterPageContent({
                 <tr>
                   <th>Designation</th>
                   <th>Profile destination</th>
-                  <th>Engagement</th>
+                  <th>Registration policy</th>
                   <th>Coverage</th>
                   <th>Field ops</th>
                   <th>Status</th>
@@ -471,15 +472,10 @@ export async function DesignationMasterPageContent({
                   Transfer destination in People
                   <select
                     className="field"
-                    defaultValue={editDesignation.onboarding_categories.includes("workers")
-                      ? "workers"
-                      : editDesignation.onboarding_categories.includes("contractors")
-                        ? "contractors"
-                        : "employees"}
+                    defaultValue={editDesignation.onboarding_categories.includes("workers") ? "workers" : "employees"}
                     name="people_profile_destination"
                   >
                     <option value="employees">Employees</option>
-                    <option value="contractors">Independent contractors</option>
                     <option value="workers">Workers</option>
                   </select>
                 </label>

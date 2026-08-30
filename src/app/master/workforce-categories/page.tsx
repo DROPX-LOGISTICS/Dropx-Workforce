@@ -65,18 +65,19 @@ export default async function WorkforceCategoriesPage({
     } as typeof result;
   }
   const categories = ((result.data ?? []) as WorkforceCategoryInitial[])
-    .filter((category) => category.code !== "employees" && category.code !== "field_executives");
+    .filter((category) => category.code !== "employees" && category.code !== "field_executives")
+    .map((category) => category.code === "contractors" ? { ...category, name: "Workforce" } : category);
   const query = String(searchParams?.q ?? "").trim().toLowerCase();
   const filtered = categories.filter((category) => `${category.code} ${category.name}`.toLowerCase().includes(query));
   const editing = categories.find((category) => category.id === searchParams?.edit) ?? null;
   const flash = loadFlash();
 
   return (
-    <AppShell active="Engagement Types" pageCode="workforce_categories">
+    <AppShell active="Registration Policies" pageCode="workforce_categories">
       <PageHead
         eyebrow="Master Data"
-        title="Engagement Types"
-        subtitle="Configure Workforce engagement types and their DropX One registration rules. People/HR employee categories are intentionally excluded."
+        title="Registration Policies"
+        subtitle="Configure onboarding rules used by Workforce designations. All resulting profiles stay in the canonical Workforce table; People/HR employee rules are excluded."
       />
 
       {result.error ? (
@@ -101,34 +102,26 @@ export default async function WorkforceCategoriesPage({
         <section className="panel">
           <div className="panel-head toolbar">
             <div>
-              <h2>Engagement type list</h2>
+              <h2>Registration policy list</h2>
               <p className="subtle">{filtered.length} of {categories.length} records</p>
             </div>
             <div className="master-toolbar">
               <form action={categoryPath} className="inline-search">
-                <input className="field" defaultValue={searchParams?.q ?? ""} name="q" placeholder="Search engagement type" />
+                <input className="field" defaultValue={searchParams?.q ?? ""} name="q" placeholder="Search registration policy" />
                 <button className="button secondary compact" type="submit">Search</button>
               </form>
-              {permission.canAdd ? <PendingLink className="button compact" href={`${categoryPath}?add=1`} scroll={false}>Add engagement type</PendingLink> : null}
+              {permission.canAdd ? <PendingLink className="button compact" href={`${categoryPath}?add=1`} scroll={false}>Add registration policy</PendingLink> : null}
             </div>
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Code</th><th>Engagement type</th><th>Statutory</th><th>Activation</th><th>App pages</th><th>Type</th><th>Status</th><th>Action</th></tr></thead>
+              <thead><tr><th>Code</th><th>Registration policy</th><th>Activation</th><th>Type</th><th>Status</th><th>Action</th></tr></thead>
               <tbody>
                 {filtered.map((category) => (
                   <tr key={category.id}>
-                    <td><strong>{category.code}</strong></td>
+                    <td><strong>{category.code === "contractors" ? "workforce" : category.code}</strong></td>
                     <td>{category.name}</td>
-                    <td>{category.statutory_enabled ? "Enabled" : "Not enabled"}</td>
                     <td>{category.direct_activate ? "Direct" : "App onboarding"}</td>
-                    <td>{[
-                      ...(category.app_page_access ?? [])
-                        .filter((page) => page === "dashboard" || page === "attendance")
-                        .map((page) => page.replaceAll("_", " ")),
-                      "settings",
-                      "my profile"
-                    ].join(", ")}</td>
                     <td>{category.is_system ? "System" : "Custom"}</td>
                     <td><StatusPill status={category.is_active ? "Active" : "Inactive"} /></td>
                     <td>{permission.canEdit ? <PendingLink className="button secondary compact" href={`${categoryPath}?edit=${category.id}`} scroll={false}>Edit</PendingLink> : "-"}</td>
@@ -144,10 +137,10 @@ export default async function WorkforceCategoriesPage({
         <div className="modal-backdrop">
           <section className="modal-panel wide designation-modal">
             <div className="panel-head">
-              <div><h2>Add engagement type</h2><p className="subtle">Define the engagement type and its onboarding fields.</p></div>
+              <div><h2>Add registration policy</h2><p className="subtle">Define reusable onboarding fields for Workforce designations.</p></div>
               <PendingLink className="icon-button" href={categoryPath} scroll={false} aria-label="Close">x</PendingLink>
             </div>
-            <WorkforceCategoryForm action={createWorkforceCategory} submitLabel="Add engagement type" />
+            <WorkforceCategoryForm action={createWorkforceCategory} submitLabel="Add registration policy" />
           </section>
         </div>
       ) : null}
@@ -156,7 +149,7 @@ export default async function WorkforceCategoriesPage({
         <div className="modal-backdrop">
           <section className="modal-panel wide designation-modal">
             <div className="panel-head">
-              <div><h2>Edit engagement type</h2><p className="subtle">These rules apply to every designation assigned to this engagement type.</p></div>
+              <div><h2>Edit registration policy</h2><p className="subtle">These rules apply to every Workforce designation assigned to this policy.</p></div>
               <PendingLink className="icon-button" href={categoryPath} scroll={false} aria-label="Close">x</PendingLink>
             </div>
             <WorkforceCategoryForm action={updateWorkforceCategory} initial={editing} submitLabel="Save changes" />
@@ -165,12 +158,12 @@ export default async function WorkforceCategoriesPage({
                 <input name="id" type="hidden" value={editing.id} />
                 <SubmitButton
                   className="button danger"
-                  confirmDescription="This is available only when no designation or people record uses the engagement type."
-                  confirmMessage={`Delete ${editing.name}? The engagement type will be removed from onboarding, ID settings, and engagement type lists.`}
-                  confirmSubmitText="Delete engagement type"
+                  confirmDescription="This is available only when no designation or Workforce record uses the registration policy."
+                  confirmMessage={`Delete ${editing.name}? The registration policy will be removed from onboarding and designation settings.`}
+                  confirmSubmitText="Delete registration policy"
                   pendingText="Deleting"
                 >
-                  Delete engagement type
+                  Delete registration policy
                 </SubmitButton>
               </form>
             ) : null}
@@ -179,12 +172,12 @@ export default async function WorkforceCategoriesPage({
                 <input name="id" type="hidden" value={editing.id} />
                 <SubmitButton
                   className="button danger"
-                  confirmDescription="Workers will be removed from all designations and engagement type lists. Historical worker profile records will be retained."
-                  confirmMessage="Force delete Workers engagement type?"
+                  confirmDescription="Workers will be removed from all designation policy lists. Historical Workforce records will be retained."
+                  confirmMessage="Force delete Workers registration policy?"
                   confirmSubmitText="Force delete"
                   pendingText="Deleting"
                 >
-                  Force delete engagement type
+                  Force delete registration policy
                 </SubmitButton>
               </form>
             ) : null}

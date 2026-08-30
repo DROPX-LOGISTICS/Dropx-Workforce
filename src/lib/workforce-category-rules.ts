@@ -38,6 +38,7 @@ export async function loadWorkforceCategoryStatutoryEnabled(
   categoryCode: string,
   fallback = categoryCode === "employees"
 ) {
+  if (categoryCode !== "employees") return false;
   if (!supabaseAdmin) return fallback;
   const result = await supabaseAdmin
     .from("workforce_categories")

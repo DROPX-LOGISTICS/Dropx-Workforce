@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Bell, CalendarDays, CheckCheck, ChevronRight, Fingerprint, Gauge, LogOut, Menu, Settings, SwitchCamera, UserRound, UsersRound, X } from "lucide-react";
+import { BadgeIndianRupee, BarChart3, Bell, CalendarDays, CheckCheck, ChevronRight, Fingerprint, Gauge, HandCoins, LogOut, Menu, Settings, SwitchCamera, UserRound, UsersRound, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ConnectAttendance } from "./connect-attendance";
 import { ConnectDashboard } from "./connect-dashboard";
@@ -10,8 +10,10 @@ import { ConnectLeave } from "./connect-leave";
 import { AppAccount, ConnectProfileApp } from "./connect-profile-app";
 import { countryCodeOptions } from "@/lib/country-codes";
 import { ConnectOwnerPreviewSwitcher } from "./connect-owner-preview-switcher";
+import { ConnectWorkforceSelfService } from "./connect-workforce-self-service";
 
-type Step = "mobile" | "pin" | "otp" | "createPin" | "unlock" | "accounts" | "dashboard" | "profile" | "attendance" | "leave" | "exit" | "settings";
+type AppPage = "dashboard" | "payments" | "advances" | "attendance" | "roster" | "performance" | "leave";
+type Step = "mobile" | "pin" | "otp" | "createPin" | "unlock" | "accounts" | AppPage | "profile" | "exit" | "settings";
 type ConnectNotification = {
   id: string;
   title: string;
@@ -27,14 +29,20 @@ const accountKey = (account: AppAccount) => `${account.profileType}:${account.co
 const accountIdentity = (account?: AppAccount | null) =>
   [account?.reference, account?.biometricId].filter(Boolean).join(" | ");
 const active = (account?: AppAccount | null) => account?.status?.toLowerCase() === "active";
-const defaultPageAccess = ["dashboard", "attendance", "leave", "settings"];
-const allowed = (account: AppAccount | null, page: "dashboard" | "attendance" | "leave" | "settings") =>
-  page === "settings" || (account?.pageAccess ?? defaultPageAccess).includes(page);
+const defaultPages = (account: AppAccount | null) => account?.profileType === "employee"
+  ? ["dashboard", "attendance", "leave"]
+  : ["dashboard", "payments", "advances"];
+const allowed = (account: AppAccount | null, page: AppPage) =>
+  (account?.pageAccess ?? defaultPages(account)).includes(page);
 
 function landingPage(account: AppAccount): Step {
   if (!active(account)) return "profile";
   if (allowed(account, "dashboard")) return "dashboard";
+  if (allowed(account, "payments")) return "payments";
+  if (allowed(account, "advances")) return "advances";
   if (allowed(account, "attendance")) return "attendance";
+  if (allowed(account, "roster")) return "roster";
+  if (allowed(account, "performance")) return "performance";
   if (allowed(account, "leave")) return "leave";
   return "profile";
 }
@@ -378,9 +386,7 @@ export function ConnectLoginFlow() {
       setStep("profile");
       return;
     }
-    if (next === "dashboard" && !allowed(account, "dashboard")) return;
-    if (next === "attendance" && !allowed(account, "attendance")) return;
-    if (next === "leave" && !allowed(account, "leave")) return;
+    if (["dashboard", "payments", "advances", "attendance", "roster", "performance", "leave"].includes(next) && !allowed(account, next as AppPage)) return;
     setStep(next);
   }
 
@@ -396,7 +402,7 @@ export function ConnectLoginFlow() {
     setStep(refreshed ? landingPage(refreshed) : "accounts");
   }
 
-  const loggedIn = ["accounts","dashboard","profile","attendance","leave","exit","settings"].includes(step);
+  const loggedIn = ["accounts","dashboard","payments","advances","profile","attendance","roster","performance","leave","exit","settings"].includes(step);
   if (checking) return <div className="dx-auth"><Loader text="" /></div>;
 
   return <div className={`dx-app ${loggedIn ? "logged-in" : ""}`}>
@@ -421,10 +427,14 @@ export function ConnectLoginFlow() {
     {drawer && account ? <><button aria-label="Close menu" className="dx-scrim" onClick={() => setDrawer(false)} /><aside className="dx-drawer">
       <div><Image alt="DropX" height={44} src="/dropx-logo.png" width={126} /><button aria-label="Switch accounts" onClick={() => open("accounts")}><SwitchCamera /></button><button aria-label="Close" onClick={() => setDrawer(false)}><X /></button></div>
       <nav>
-        {allowed(account, "dashboard") ? <button onClick={() => open("dashboard")}><Gauge />Dashboard<ChevronRight /></button> : null}
-        <button onClick={() => open("profile")}><UserRound />My Profile<ChevronRight /></button>
+        {allowed(account, "dashboard") ? <button onClick={() => open("dashboard")}><Gauge />Home<ChevronRight /></button> : null}
+        {account.profileType !== "employee" && allowed(account, "payments") ? <button onClick={() => open("payments")}><BadgeIndianRupee />Payments<ChevronRight /></button> : null}
+        {account.profileType !== "employee" && allowed(account, "advances") ? <button onClick={() => open("advances")}><HandCoins />Advances<ChevronRight /></button> : null}
         {allowed(account, "attendance") ? <button onClick={() => open("attendance")}><Fingerprint />Attendance<ChevronRight /></button> : null}
-        {allowed(account, "leave") ? <button onClick={() => open("leave")}><CalendarDays />Leave<ChevronRight /></button> : null}
+        {account.profileType !== "employee" && allowed(account, "roster") ? <button onClick={() => open("roster")}><CalendarDays />Roster<ChevronRight /></button> : null}
+        {account.profileType !== "employee" && allowed(account, "performance") ? <button onClick={() => open("performance")}><BarChart3 />Performance<ChevronRight /></button> : null}
+        <button onClick={() => open("profile")}><UserRound />My Profile<ChevronRight /></button>
+        {account.profileType === "employee" && allowed(account, "leave") ? <button onClick={() => open("leave")}><CalendarDays />Leave<ChevronRight /></button> : null}
         <button onClick={() => open("exit")}><LogOut />Resignation & exit<ChevronRight /></button>
         <button onClick={() => open("settings")}><Settings />Settings<ChevronRight /></button>
       </nav>
@@ -445,8 +455,12 @@ export function ConnectLoginFlow() {
       {error ? <div className="dx-alert error">{error}<button onClick={() => setError("")}><X /></button></div> : null}
       {step === "accounts" ? <section className="dx-accounts"><h1>Choose account</h1>{accounts.map((row) => <button key={accountKey(row)} onClick={() => choose(row)}><i>{row.profilePhotoUrl ? <img alt="" src={row.profilePhotoUrl} /> : <UsersRound />}</i><span><strong>{row.companyName}</strong><em>{row.name || row.reference}</em><small>{row.reference} {row.biometricId ? ` | ${row.biometricId}` : ""}</small></span><ChevronRight /></button>)}</section> : null}
       {step === "dashboard" && account ? <ConnectDashboard account={account} onAttendance={() => open("attendance")} onProfile={() => open("profile")} /> : null}
+      {step === "payments" && account ? <ConnectWorkforceSelfService account={account} view="payments" /> : null}
+      {step === "advances" && account ? <ConnectWorkforceSelfService account={account} view="advances" /> : null}
       {step === "profile" && account ? <ConnectProfileApp account={account} onPhoto={(url) => setAvatar(url)} onSubmitted={profileSubmitted} /> : null}
       {step === "attendance" && account ? <ConnectAttendance account={account} /> : null}
+      {step === "roster" && account ? <ConnectWorkforceSelfService account={account} view="roster" /> : null}
+      {step === "performance" && account ? <ConnectWorkforceSelfService account={account} view="performance" /> : null}
       {step === "leave" && account ? <ConnectLeave account={account} /> : null}
       {step === "exit" && account ? <ConnectExitManagement account={account} onBack={() => open(landingPage(account))} /> : null}
       {step === "settings" ? <section className="dx-settings"><h1>Settings</h1><label>Default account<select disabled={pending} value={defaultKey} onChange={(e) => saveDefaultAccount(e.target.value)}><option value="">Select default account</option>{accounts.map((row) => <option key={accountKey(row)} value={accountKey(row)}>{row.companyName} - {row.reference || row.name}</option>)}</select></label><label className="toggle"><span><strong>Enable biometric login</strong><small>Use Face ID or device authentication when available.</small></span><input defaultChecked={localStorage.getItem(biometricKey) === "true"} onChange={(e) => enrollBiometric(e.target.checked)} type="checkbox" /></label><button onClick={resetPin}>Change PIN</button></section> : null}

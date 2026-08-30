@@ -53,7 +53,7 @@ export const nonEmployeeProfileConfigs: Record<NonEmployeeProfileType, NonEmploy
   contractor: {
     category: "contractor",
     designationCategory: "contractors",
-    label: "Independent contractor",
+    label: "Workforce associate",
     pageCode: "contractors",
     profileType: "contractor",
     route: "/contractors",

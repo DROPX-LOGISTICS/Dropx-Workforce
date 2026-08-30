@@ -27,6 +27,7 @@ import {
   type ProfileFieldChannelRules,
   type ProfileFieldRule,
   type ProfileFieldRuleSet,
+  workforceUnavailableProfileFieldKeys,
   workforceProfileFields
 } from "@/lib/profile-field-rules";
 
@@ -263,7 +264,8 @@ function CategoryMultiSelect({
 
 export function FieldRuleMatrix({
   categoryRules,
-  designationName = "Engagement type",
+  designationName = "Registration policy",
+  disabledFieldKeys = [],
   fields,
   namePrefix,
   pageAccess = defaultAppPageAccess,
@@ -272,14 +274,20 @@ export function FieldRuleMatrix({
 }: {
   categoryRules?: unknown;
   designationName?: string;
+  disabledFieldKeys?: string[];
   fields: ProfileFieldRule[];
   namePrefix?: string;
   pageAccess?: string[];
   rules: ProfileFieldChannelRules;
   title: string;
 }) {
-  const [dropxOne, setDropxOne] = useState<ProfileFieldRuleSet>(rules.dropx_one);
-  const [dashboard, setDashboard] = useState<ProfileFieldRuleSet>(rules.dashboard);
+  const disabledFields = new Set(disabledFieldKeys);
+  const availableRules = (value: ProfileFieldRuleSet): ProfileFieldRuleSet => ({
+    enabled: value.enabled.filter((key) => !disabledFields.has(key)),
+    required: value.required.filter((key) => !disabledFields.has(key))
+  });
+  const [dropxOne, setDropxOne] = useState<ProfileFieldRuleSet>(() => availableRules(rules.dropx_one));
+  const [dashboard, setDashboard] = useState<ProfileFieldRuleSet>(() => availableRules(rules.dashboard));
 
   function toggleRule(
     scope: ProfileFieldRuleSet,
@@ -328,11 +336,12 @@ export function FieldRuleMatrix({
         <div className="designation-rule-group" key={group}>
           <h4>{group}</h4>
           <div className="designation-rule-list">
-            {groupFields.map((field) => (
-              <div className="designation-rule-row" key={field.key}>
+            {groupFields.map((field) => {
+              const unavailable = disabledFields.has(field.key);
+              return <div className={`designation-rule-row ${unavailable ? "unavailable" : ""}`} key={field.key}>
                 <div className="designation-rule-name">
                   <strong>{field.label}</strong>
-                  <small>{field.kind}</small>
+                  <small>{unavailable ? "Switch off · verification API pending" : field.kind}</small>
                 </div>
                 {([
                   ["DropX One", dropxOne, setDropxOne],
@@ -344,6 +353,7 @@ export function FieldRuleMatrix({
                       <input
                         checked={scope.enabled.includes(field.key)}
                         className="matrix-checkbox"
+                        disabled={unavailable}
                         onChange={() => toggleRule(scope, setScope, field.key, "enabled")}
                         type="checkbox"
                       />
@@ -353,6 +363,7 @@ export function FieldRuleMatrix({
                       <input
                         checked={scope.required.includes(field.key)}
                         className="matrix-checkbox"
+                        disabled={unavailable}
                         onChange={() => toggleRule(scope, setScope, field.key, "required")}
                         type="checkbox"
                       />
@@ -360,8 +371,8 @@ export function FieldRuleMatrix({
                     </label>
                   </div>
                 ))}
-              </div>
-            ))}
+              </div>;
+            })}
           </div>
         </div>
       ))}
@@ -542,9 +553,9 @@ export function DesignationForm({
           <input className="field" name="name" onChange={(event) => setDesignationName(event.target.value)} placeholder="Enter designation name" required value={designationName} />
         </label>
         <label>
-          Engagement type
+          Registration policy
           <CategoryMultiSelect categories={categories} selected={selectedCategories} setSelected={setSelectedCategories} />
-          <small>Contractor, vendor, worker, or another Workforce legal relationship. HR employees are managed in People.</small>
+          <small>Select the registration-field policy. Every profile created here is stored in the canonical Workforce table.</small>
         </label>
         <label>
           Registration policy
@@ -556,14 +567,14 @@ export function DesignationForm({
             required
             value={registrationCategory}
           >
-            {!selectedCategories.length ? <option value="">Select an engagement type first</option> : null}
+            {!selectedCategories.length ? <option value="">Select a registration policy first</option> : null}
             {selectedCategories.map((category) => (
               <option key={category} value={category}>
                 {categories.find((option) => option.code === category)?.name ?? category}
               </option>
             ))}
           </select>
-          <small>Controls registration fields, statutory options and DropX One access for this designation.</small>
+          <small>Controls registration fields and statutory options for this designation.</small>
         </label>
         <label>
           Models
@@ -620,7 +631,7 @@ export function DesignationForm({
       <section className="workforce-category-page-access">
         <div>
           <strong>DropX One page access</strong>
-          <p className="subtle">A page is available only when enabled for both this designation and its engagement type. My Profile and Settings are always available.</p>
+          <p className="subtle">Choose the Workforce app menu for this designation. My Profile, Resignation &amp; exit, and Settings are permanently available.</p>
         </div>
         <AppPageAccessSelect initialPages={selectedPages} onChange={setSelectedPages} />
       </section>
@@ -639,20 +650,19 @@ export function DesignationForm({
         <PortalAccessMatrix initialValue={initial?.portal_permissions} />
       </section>
       {!selectedCategories.length ? (
-        <div className="designation-field-rule-empty">Select one or more engagement types.</div>
+        <div className="designation-field-rule-empty">Select one or more registration policies.</div>
       ) : (
         <div className={`designation-field-rule-grid ${selectedCategories.length === 1 ? "single" : ""}`}>
           {selectedCategories.map((category) => {
             const categoryOption = categories.find((option) => option.code === category);
-            const categoryPages = categoryOption?.app_page_access ?? defaultAppPageAccess;
-            const effectivePages = selectedPages.filter((page) => categoryPages.includes(page));
             return <FieldRuleMatrix
               categoryRules={categoryOption?.profile_field_rules}
               designationName={designationName}
+              disabledFieldKeys={Array.from(workforceUnavailableProfileFieldKeys)}
               fields={workforceProfileFields}
               key={category}
               namePrefix={category}
-              pageAccess={effectivePages}
+              pageAccess={selectedPages}
               rules={profileFieldRulesForCategory(initial?.profile_field_rules, category)}
               title={`${categories.find((option) => option.code === category)?.name ?? category} fields`}
             />;

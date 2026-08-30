@@ -19,7 +19,7 @@ export type DesignationProfileFieldRules = Record<string, ProfileFieldChannelRul
 
 export type ProfileFieldRuleCategory = string;
 
-export const workforceProfileFields: ProfileFieldRule[] = [
+const sharedWorkforceProfileFields: ProfileFieldRule[] = [
   { key: "gender", label: "Gender", group: "Personal details", kind: "select" },
   { key: "date_of_birth", label: "Date of birth", group: "Personal details", kind: "date" },
   { key: "aadhaar_number", label: "Aadhaar number", group: "Personal details", kind: "number" },
@@ -34,9 +34,6 @@ export const workforceProfileFields: ProfileFieldRule[] = [
   { key: "landmark", label: "Landmark", group: "Address", kind: "text" },
   { key: "bank_account_no", label: "Bank account no", group: "Bank details", kind: "text" },
   { key: "ifsc", label: "IFSC", group: "Bank details", kind: "text" },
-  { key: "pf_uan", label: "PF UAN", group: "Statutory details", kind: "text" },
-  { key: "pf_account_no", label: "PF Account No", group: "Statutory details", kind: "text" },
-  { key: "esi_no", label: "ESI No", group: "Statutory details", kind: "text" },
   { key: "driving_license_no", label: "Driving license no", group: "Driving and vehicle", kind: "text" },
   { key: "driving_license_exp_date", label: "DL expiry date", group: "Driving and vehicle", kind: "date" },
   { key: "vehicle_reg_no", label: "Vehicle reg no", group: "Driving and vehicle", kind: "text" },
@@ -54,8 +51,19 @@ export const workforceProfileFields: ProfileFieldRule[] = [
   { key: "profile_photo", label: "Photo upload", group: "Uploads", kind: "file" }
 ];
 
-export const employeeProfileFields = workforceProfileFields;
+const employeeOnlyStatutoryFields: ProfileFieldRule[] = [
+  { key: "pf_uan", label: "PF UAN", group: "Statutory details", kind: "text" },
+  { key: "pf_account_no", label: "PF Account No", group: "Statutory details", kind: "text" },
+  { key: "esi_no", label: "ESI No", group: "Statutory details", kind: "text" }
+];
+
+export const workforceUnavailableProfileFieldKeys = new Set(["eshram_uan"]);
+export const workforceProfileFields = sharedWorkforceProfileFields;
+export const employeeProfileFields = [...sharedWorkforceProfileFields, ...employeeOnlyStatutoryFields];
 export const fieldExecutiveProfileFields = workforceProfileFields;
+
+const enabledWorkforceProfileFields = workforceProfileFields
+  .filter((field) => !workforceUnavailableProfileFieldKeys.has(field.key));
 
 function normalizeRuleSet(
   value: unknown,
@@ -102,10 +110,10 @@ export function normalizeProfileFieldRules(value: unknown): DesignationProfileFi
   const legacyNonEmployeeRules = record.field_executives;
   return {
     employees: normalizeChannelRules(record.employees, employeeProfileFields),
-    field_executives: normalizeChannelRules(legacyNonEmployeeRules, fieldExecutiveProfileFields),
-    contractors: normalizeChannelRules(record.contractors ?? legacyNonEmployeeRules, fieldExecutiveProfileFields),
-    vendors: normalizeChannelRules(record.vendors ?? legacyNonEmployeeRules, fieldExecutiveProfileFields),
-    workers: normalizeChannelRules(record.workers ?? legacyNonEmployeeRules, fieldExecutiveProfileFields)
+    field_executives: normalizeChannelRules(legacyNonEmployeeRules, enabledWorkforceProfileFields),
+    contractors: normalizeChannelRules(record.contractors ?? legacyNonEmployeeRules, enabledWorkforceProfileFields),
+    vendors: normalizeChannelRules(record.vendors ?? legacyNonEmployeeRules, enabledWorkforceProfileFields),
+    workers: normalizeChannelRules(record.workers ?? legacyNonEmployeeRules, enabledWorkforceProfileFields)
   };
 }
 
@@ -120,7 +128,7 @@ export function profileFieldRulesForCategory(
     ?? (categoryCode === "contractors" || categoryCode === "vendors" || categoryCode === "workers"
       ? legacyNonEmployeeRules
       : record[fallbackCategory]);
-  return normalizeChannelRules(categoryValue, workforceProfileFields);
+  return normalizeChannelRules(categoryValue, enabledWorkforceProfileFields);
 }
 
 export function intersectProfileFieldChannelRules(
@@ -144,7 +152,7 @@ export function intersectProfileFieldChannelRules(
 }
 
 export function normalizeCategoryProfileFieldRules(value: unknown): ProfileFieldChannelRules {
-  return normalizeChannelRules(value, workforceProfileFields);
+  return normalizeChannelRules(value, enabledWorkforceProfileFields);
 }
 
 export function emptyProfileFieldRules(): DesignationProfileFieldRules {

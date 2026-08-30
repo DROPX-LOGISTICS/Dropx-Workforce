@@ -8,6 +8,7 @@ import {
   workforceLabel,
   workforceTable
 } from "@/lib/workforce-profiles";
+import { defaultPageAccess, normalizeAppPageAccess } from "./app-pages";
 
 export type ConnectAccount = {
   id: string;
@@ -106,7 +107,7 @@ async function signedProfilePhotoUrl(path?: string | null) {
   return result.data?.signedUrl ?? "";
 }
 
-const defaultPageAccess = ["dashboard", "attendance", "leave", "settings"];
+const legacyDefaultPageAccess = ["dashboard", "attendance", "leave"];
 
 function categoryCodeForProfile(profileType: ConnectAccount["profileType"]) {
   if (profileType === "employee") return "employees";
@@ -305,7 +306,7 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
     for (const category of categoryResult.data ?? []) {
       const pages = Array.isArray(category.app_page_access)
         ? category.app_page_access.map(String)
-        : defaultPageAccess;
+        : legacyDefaultPageAccess;
       pageAccessByCategory.set(`${category.company_id}:${category.code}`, pages);
     }
   }
@@ -404,7 +405,7 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
         : designationKey
           ? categoryByDesignationKey.get(designationKey)
           : undefined) ?? categoryCodeForProfile(account.profile_type);
-      const categoryPages = pageAccessByCategory.get(`${account.company_id}:${categoryCode}`) ?? defaultPageAccess;
+      const categoryPages = pageAccessByCategory.get(`${account.company_id}:${categoryCode}`) ?? defaultPageAccess(account.profile_type);
       const designationPages = account.designation_id
         ? pageAccessByDesignationId.get(account.designation_id)
         : designationKey
@@ -422,9 +423,9 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       status: account.status ?? null,
       biometricId: account.biometric_id ?? null,
       profilePhotoUrl: await signedProfilePhotoUrl(account.profile_photo_path),
-      pageAccess: account.profile_type === "user"
-        ? defaultPageAccess
-        : intersectPageAccess(categoryPages, designationPages),
+      pageAccess: account.profile_type === "employee"
+        ? normalizeAppPageAccess(account.profile_type, intersectPageAccess(categoryPages, designationPages))
+        : normalizeAppPageAccess(account.profile_type, designationPages ?? defaultPageAccess(account.profile_type)),
       isDefault: account.profile_type !== "user" &&
         defaultPreference?.default_company_id === account.company_id &&
         defaultPreference?.default_profile_type === account.profile_type &&

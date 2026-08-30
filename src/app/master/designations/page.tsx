@@ -1,23 +1,7 @@
-import { DesignationMasterPageContent } from "@/components/designation-master-page-content";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default function DesignationsPage({
-  searchParams
-}: {
-  searchParams?: { add?: string; edit?: string; q?: string };
-}) {
-  return (
-    <DesignationMasterPageContent
-      scope={{
-        activeLabel: "Designations",
-        basePath: "/master/designations",
-        eyebrow: "Master Data",
-        peopleModule: null,
-        subtitle: "Maintain every Workforce and HR designation from one master.",
-        title: "Designations"
-      }}
-      searchParams={searchParams}
-    />
-  );
+export default function DesignationsPage() {
+  redirect("/delivery-network/designations");
 }

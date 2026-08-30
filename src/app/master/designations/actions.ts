@@ -31,18 +31,8 @@ function required(value: FormDataEntryValue | null, field: string) {
 }
 
 type DesignationActionScope = {
-  peopleModule: DesignationPeopleModule | null;
-  returnPath: "/master/designations" | "/people/designations" | "/delivery-network/designations";
-};
-
-const allDesignationScope: DesignationActionScope = {
-  peopleModule: null,
-  returnPath: "/master/designations"
-};
-
-const peopleDesignationScope: DesignationActionScope = {
-  peopleModule: "people_hr",
-  returnPath: "/people/designations"
+  peopleModule: "delivery_network";
+  returnPath: "/delivery-network/designations";
 };
 
 const workforceDesignationScope: DesignationActionScope = {
@@ -50,10 +40,9 @@ const workforceDesignationScope: DesignationActionScope = {
   returnPath: "/delivery-network/designations"
 };
 
-function designationScopeLabel(peopleModule: DesignationPeopleModule | null) {
+function designationScopeLabel(peopleModule: DesignationPeopleModule) {
   if (peopleModule === "delivery_network") return "Workforce Designation Master";
-  if (peopleModule === "people_hr") return "People Designation Master";
-  return "Designation Master";
+  return "People Designation Master";
 }
 
 function designationRedirect(params: { error?: string; notice?: string }, returnPath: DesignationActionScope["returnPath"]) {
@@ -272,8 +261,6 @@ async function createDesignationForScope(formData: FormData, scope: DesignationA
     }, companyId));
     if (error) throw new Error(error.message);
 
-    revalidatePath("/master/designations");
-    revalidatePath("/people/designations");
     revalidatePath("/delivery-network/designations");
     revalidatePath("/delivery-network");
     revalidatePath("/delivery-network/onboarding");
@@ -327,8 +314,6 @@ async function updateDesignationForScope(formData: FormData, scope: DesignationA
       .eq("company_id", companyId);
     if (error) throw new Error(error.message);
 
-    revalidatePath("/master/designations");
-    revalidatePath("/people/designations");
     revalidatePath("/delivery-network/designations");
     revalidatePath("/delivery-network");
     revalidatePath("/delivery-network/onboarding");
@@ -349,8 +334,6 @@ async function deleteDesignationForScope(formData: FormData, scope: DesignationA
     const { error } = await supabaseAdmin.from("designations").delete().eq("id", id).eq("company_id", companyId);
     if (error) throw new Error(error.message);
 
-    revalidatePath("/master/designations");
-    revalidatePath("/people/designations");
     revalidatePath("/delivery-network/designations");
     designationRedirect({ notice: "Designation deleted." }, scope.returnPath);
   } catch (error) {
@@ -359,36 +342,12 @@ async function deleteDesignationForScope(formData: FormData, scope: DesignationA
   }
 }
 
-export async function createDesignation(formData: FormData) {
-  return createDesignationForScope(formData, allDesignationScope);
-}
-
-export async function createPeopleDesignation(formData: FormData) {
-  return createDesignationForScope(formData, peopleDesignationScope);
-}
-
 export async function createWorkforceDesignation(formData: FormData) {
   return createDesignationForScope(formData, workforceDesignationScope);
 }
 
-export async function updateDesignation(formData: FormData) {
-  return updateDesignationForScope(formData, allDesignationScope);
-}
-
-export async function updatePeopleDesignation(formData: FormData) {
-  return updateDesignationForScope(formData, peopleDesignationScope);
-}
-
 export async function updateWorkforceDesignation(formData: FormData) {
   return updateDesignationForScope(formData, workforceDesignationScope);
-}
-
-export async function deleteDesignation(formData: FormData) {
-  return deleteDesignationForScope(formData, allDesignationScope);
-}
-
-export async function deletePeopleDesignation(formData: FormData) {
-  return deleteDesignationForScope(formData, peopleDesignationScope);
 }
 
 export async function deleteWorkforceDesignation(formData: FormData) {

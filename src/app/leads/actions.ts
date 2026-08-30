@@ -806,7 +806,7 @@ export async function createLeadSop(formData: FormData) {
 
     await syncDesignationFromSop(code, name, companyId);
     revalidatePath("/leads/ad-sop");
-    revalidatePath("/master/designations");
+    revalidatePath("/delivery-network/designations");
     setLeadsFlash({ notice: "Ad SOP added." });
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
@@ -843,7 +843,7 @@ export async function updateLeadSop(formData: FormData) {
 
     await syncDesignationFromSop(code, name, companyId);
     revalidatePath("/leads/ad-sop");
-    revalidatePath("/master/designations");
+    revalidatePath("/delivery-network/designations");
     setLeadsFlash({ notice: "Ad SOP updated." });
   } catch (error) {
     if (isNextRedirectError(error)) throw error;

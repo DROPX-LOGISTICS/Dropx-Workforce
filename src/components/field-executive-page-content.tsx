@@ -22,7 +22,6 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { countryCodeOptions } from "@/lib/country-codes";
 import { formatDashboardDate } from "@/lib/date-format";
 import {
-  firstDesignationBusinessCategory,
   type DesignationBusinessCategory,
   type DesignationPeopleModule
 } from "@/lib/designation-business-categories";
@@ -728,7 +727,7 @@ function FieldExecutiveBulkImportPanel({
 async function loadFieldExecutiveData(
   authorization: AuthorizationContext,
   designationCategoryFilter: DesignationCategoryFilter[],
-  designationPeopleModule: DesignationPeopleModule | undefined,
+  designationPeopleModule: DesignationPeopleModule,
   table: "workforce" | "field_executives" | "contractors" | "vendors" | "workers",
   accessSurface: AccessSurface,
   editId?: string,
@@ -765,30 +764,26 @@ async function loadFieldExecutiveData(
 
   let designationsResult: { data: unknown[] | null; error: { message?: string } | null } = await supabaseAdmin
     .from("designations")
-    .select("id, code, name, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), model_ids, onboarding_categories, registration_category_code, profile_field_rules, onboarding_role_ids, portal_permissions, is_active")
+    .select("id, code, name, designation_category:designation_categories!designations_designation_category_id_fkey!inner(id, code, name, people_module, is_active), model_ids, onboarding_categories, registration_category_code, profile_field_rules, onboarding_role_ids, portal_permissions, is_active")
     .eq("company_id", companyId)
     .eq("is_active", true)
+    .eq("designation_category.people_module", designationPeopleModule)
+    .eq("designation_category.is_active", true)
     .order("name");
   if (isMissingColumnError(designationsResult.error)) {
     const registrationFallback: { data: unknown[] | null; error: { message?: string } | null } = await supabaseAdmin
       .from("designations")
-      .select("id, code, name, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), model_ids, onboarding_categories, profile_field_rules, onboarding_role_ids, portal_permissions, is_active")
+      .select("id, code, name, designation_category:designation_categories!designations_designation_category_id_fkey!inner(id, code, name, people_module, is_active), model_ids, onboarding_categories, profile_field_rules, onboarding_role_ids, portal_permissions, is_active")
       .eq("company_id", companyId)
       .eq("is_active", true)
+      .eq("designation_category.people_module", designationPeopleModule)
+      .eq("designation_category.is_active", true)
       .order("name");
-    const fallbackDesignationsResult: { data: unknown[] | null; error: { message?: string } | null } = registrationFallback.error
-      ? await supabaseAdmin
-      .from("designations")
-      .select("id, code, name, is_active")
-      .eq("company_id", companyId)
-      .eq("is_active", true)
-      .order("name")
-      : registrationFallback;
     designationsResult = {
-      ...fallbackDesignationsResult,
-      data: (fallbackDesignationsResult.data ?? []).map((designation) => registrationFallback.error
-        ? ({ ...(designation as Record<string, unknown>), designation_category: null, model_ids: [], onboarding_categories: ["employees"], registration_category_code: null, profile_field_rules: {}, onboarding_role_ids: [], portal_permissions: null })
-        : ({ ...(designation as Record<string, unknown>), registration_category_code: null }))
+      ...registrationFallback,
+      data: registrationFallback.error
+        ? []
+        : (registrationFallback.data ?? []).map((designation) => ({ ...(designation as Record<string, unknown>), registration_category_code: null }))
     };
   }
 
@@ -866,9 +861,7 @@ async function loadFieldExecutiveData(
     const categories = normalizeDesignationCategories(designation.onboarding_categories);
     return designationCategoryFilter.some((category) => categories.includes(category));
   });
-  const designations = profileDesignations.filter((designation) => (
-    !designationPeopleModule || firstDesignationBusinessCategory(designation.designation_category)?.people_module === designationPeopleModule
-  ));
+  const designations = profileDesignations;
   const allowedLocationIds = new Set(locations.map((location) => location.id));
   // The designation master is the final visibility boundary. Filtering only by
   // engagement type lets legacy HR contractors leak into the Workforce portal.
@@ -963,7 +956,7 @@ export async function FieldExecutivePageContent({
   bulkImportDescription?: string;
   bulkImportTitle?: string;
   designationCategoryFilter?: DesignationCategoryFilter[];
-  designationPeopleModule?: DesignationPeopleModule;
+  designationPeopleModule: DesignationPeopleModule;
   detailSubtitle?: string;
   errorMessage?: string;
   editId?: string;

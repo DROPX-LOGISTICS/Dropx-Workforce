@@ -66,7 +66,7 @@ function isNextRedirectError(error: unknown) {
 
 function revalidateWorkforceCategoryPaths() {
   revalidatePath("/master/workforce-categories");
-  revalidatePath("/master/designations");
+  revalidatePath("/delivery-network/designations");
   revalidatePath("/settings/dropx-id-generation");
   revalidatePath("/settings/meta");
   revalidatePath("/people/all");

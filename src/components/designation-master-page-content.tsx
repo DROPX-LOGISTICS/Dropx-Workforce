@@ -20,14 +20,8 @@ import {
 } from "@/lib/designation-profile-destination";
 import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
 import {
-  createDesignation,
-  createPeopleDesignation,
   createWorkforceDesignation,
-  deleteDesignation,
-  deletePeopleDesignation,
   deleteWorkforceDesignation,
-  updateDesignation,
-  updatePeopleDesignation,
   updateWorkforceDesignation
 } from "@/app/master/designations/actions";
 
@@ -102,7 +96,12 @@ function isMissingColumnError(error: unknown) {
     message.includes("designation_categories") || message.includes("designation_category_id");
 }
 
-async function loadDesignations(companyId: string, locationScopeIds: string[], hasAllLocationAccess: boolean) {
+async function loadDesignations(
+  companyId: string,
+  locationScopeIds: string[],
+  hasAllLocationAccess: boolean,
+  peopleModule: DesignationPeopleModule
+) {
   if (!supabaseAdmin) {
     return {
       designations: [] as DesignationRow[],
@@ -117,12 +116,12 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
   }
 
   const [designationsResult, providersResult, locationsResult, modelsResult, categoriesResult, businessCategoriesResult, rolesResult] = await Promise.all([
-    supabaseAdmin.from("designations").select("id, code, name, designation_category_id, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), profile_destination, registration_category_code, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_field_operations, is_active").eq("company_id", companyId).order("code"),
+    supabaseAdmin.from("designations").select("id, code, name, designation_category_id, designation_category:designation_categories!designations_designation_category_id_fkey!inner(id, code, name, people_module, is_active), profile_destination, registration_category_code, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_field_operations, is_active").eq("company_id", companyId).eq("designation_category.people_module", peopleModule).eq("designation_category.is_active", true).order("code"),
     supabaseAdmin.from("providers").select("id, code, name, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("stations").select("id, station_code, station_name, hide_from_location_list").eq("company_id", companyId).eq("is_active", true).order("station_code"),
     supabaseAdmin.from("location_models").select("id, provider_id, code, name, is_active, providers (code, name)").eq("company_id", companyId).eq("is_active", true).order("code"),
     supabaseAdmin.from("workforce_categories").select("code, name, is_active").eq("company_id", companyId).eq("is_active", true).order("sort_order").order("name"),
-    supabaseAdmin.from("designation_categories").select("id, code, name, people_module, is_active").eq("company_id", companyId).eq("is_active", true).order("sort_order").order("name"),
+    supabaseAdmin.from("designation_categories").select("id, code, name, people_module, is_active").eq("company_id", companyId).eq("people_module", peopleModule).eq("is_active", true).order("sort_order").order("name"),
     supabaseAdmin.from("user_roles").select("id, code, name, is_active").eq("company_id", companyId).eq("is_active", true).order("name")
   ]);
   let designationRows: unknown[] = designationsResult.data ?? [];
@@ -130,8 +129,10 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
   if (isMissingColumnError(designationsResult.error)) {
     const registrationCompatibleResult = await supabaseAdmin
       .from("designations")
-      .select("id, code, name, designation_category_id, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active), profile_destination, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_field_operations, is_active")
+      .select("id, code, name, designation_category_id, designation_category:designation_categories!designations_designation_category_id_fkey!inner(id, code, name, people_module, is_active), profile_destination, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_field_operations, is_active")
       .eq("company_id", companyId)
+      .eq("designation_category.people_module", peopleModule)
+      .eq("designation_category.is_active", true)
       .order("code");
     if (!registrationCompatibleResult.error) {
       designationRows = (registrationCompatibleResult.data ?? []).map((row) => ({
@@ -142,15 +143,10 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
     } else {
       let fallbackRows: unknown[] = [];
       let fallbackError: { message?: string } | null = null;
-      const fallbackResult = await supabaseAdmin.from("designations").select("id, code, name, provider_ids, location_ids, onboarding_categories, is_active").eq("company_id", companyId).order("code");
-      if (isMissingColumnError(fallbackResult.error)) {
-        const legacyResult = await supabaseAdmin.from("designations").select("id, code, name, provider_ids, is_active").eq("company_id", companyId).order("code");
-        fallbackRows = (legacyResult.data ?? []).map((row) => ({ ...row, location_ids: [], model_ids: [] }));
-        fallbackError = legacyResult.error;
-      } else {
-        fallbackRows = fallbackResult.data ?? [];
-        fallbackError = fallbackResult.error;
-      }
+      // Product isolation is fail-closed. A database that cannot classify a
+      // designation must not fall back to exposing the shared legacy master.
+      fallbackRows = [];
+      fallbackError = registrationCompatibleResult.error;
       designationRows = fallbackRows.map((row) => ({
         ...(row as Record<string, unknown>),
         location_ids: Array.isArray((row as { location_ids?: unknown }).location_ids) ? (row as { location_ids: string[] }).location_ids : [],
@@ -268,9 +264,9 @@ async function loadDesignations(companyId: string, locationScopeIds: string[], h
 
 export type DesignationMasterScope = {
   activeLabel: string;
-  basePath: "/master/designations" | "/people/designations" | "/delivery-network/designations";
+  basePath: "/delivery-network/designations";
   eyebrow: string;
-  peopleModule: DesignationPeopleModule | null;
+  peopleModule: "delivery_network";
   subtitle: string;
   title: string;
 };
@@ -285,18 +281,14 @@ export async function DesignationMasterPageContent({
   const authorization = await requirePagePermission("designations", "access");
   const companyId = requireCompanyId(authorization);
   const pagePermission = authorization.permissions.designations;
-  const { designations, providers, models, categories, businessCategories, roles, error } = await loadDesignations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess);
+  const { designations, providers, models, categories, businessCategories, roles, error } = await loadDesignations(companyId, authorization.locationScopeIds, authorization.hasAllLocationAccess, scope.peopleModule);
   const flash = loadFlash();
   const query = String(searchParams?.q ?? "").trim().toLowerCase();
   const providerById = new Map(providers.map((provider) => [provider.id, provider]));
   const modelById = new Map(models.map((model) => [model.id, model]));
   const categoryNameByCode = new Map(categories.map((category) => [category.code, category.name]));
-  const scopedDesignations = scope.peopleModule
-    ? designations.filter((designation) => firstDesignationBusinessCategory(designation.designation_category)?.people_module === scope.peopleModule)
-    : designations;
-  const scopedBusinessCategories = scope.peopleModule
-    ? businessCategories.filter((category) => category.people_module === scope.peopleModule)
-    : businessCategories;
+  const scopedDesignations = designations;
+  const scopedBusinessCategories = businessCategories;
   const filteredDesignations = scopedDesignations.filter((designation) => {
     const providerText = designation.provider_ids
       .map((providerId) => providerById.get(providerId))
@@ -313,21 +305,9 @@ export async function DesignationMasterPageContent({
     return `${designation.code} ${designation.name} ${providerText} ${modelText} ${categoryText} ${businessCategory?.name ?? "unassigned"} ${designationProfileDestinationLabel(designation.profile_destination)}`.toLowerCase().includes(query);
   });
   const editDesignation = scopedDesignations.find((designation) => designation.id === searchParams?.edit) ?? null;
-  const createAction = scope.peopleModule === "people_hr"
-    ? createPeopleDesignation
-    : scope.peopleModule === "delivery_network"
-      ? createWorkforceDesignation
-      : createDesignation;
-  const updateAction = scope.peopleModule === "people_hr"
-    ? updatePeopleDesignation
-    : scope.peopleModule === "delivery_network"
-      ? updateWorkforceDesignation
-      : updateDesignation;
-  const deleteAction = scope.peopleModule === "people_hr"
-    ? deletePeopleDesignation
-    : scope.peopleModule === "delivery_network"
-      ? deleteWorkforceDesignation
-      : deleteDesignation;
+  const createAction = createWorkforceDesignation;
+  const updateAction = updateWorkforceDesignation;
+  const deleteAction = deleteWorkforceDesignation;
 
   return (
     <AppShell active={scope.activeLabel} pageCode="designations">

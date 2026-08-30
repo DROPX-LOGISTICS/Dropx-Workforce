@@ -89,7 +89,7 @@ export const navItems: NavItem[] = [
       { code: "master_contacts", label: "Contacts", href: "/master/contacts" },
       { code: "workforce_categories", label: "Engagement Types", href: "/master/workforce-categories" },
       { code: "workforce_whatsapp", label: "Workforce WhatsApp", href: "/master/workforce-whatsapp" },
-      { code: "designations", label: "Designations", href: "/master/designations" },
+      { code: "designations", label: "Workforce Designations", href: "/delivery-network/designations" },
       { code: "biometric_devices", label: "Device Master", href: "/master/biometric-devices" },
       { code: "master_documents", label: "Documents", href: "/master/documents" },
       { code: "master_imports", label: "Import Master", href: "/master/imports" },

@@ -25,6 +25,7 @@ function loadFlash() {
 }
 
 export const dynamic = "force-dynamic";
+const categoryPath = "/delivery-network/engagement-types";
 
 function isMissingCategoryColumn(message?: string) {
   const text = String(message ?? "").toLowerCase();
@@ -103,11 +104,11 @@ export default async function WorkforceCategoriesPage({
               <p className="subtle">{filtered.length} of {categories.length} records</p>
             </div>
             <div className="master-toolbar">
-              <form action="/master/workforce-categories" className="inline-search">
+              <form action={categoryPath} className="inline-search">
                 <input className="field" defaultValue={searchParams?.q ?? ""} name="q" placeholder="Search engagement type" />
                 <button className="button secondary compact" type="submit">Search</button>
               </form>
-              {permission.canAdd ? <PendingLink className="button compact" href="/master/workforce-categories?add=1" scroll={false}>Add engagement type</PendingLink> : null}
+              {permission.canAdd ? <PendingLink className="button compact" href={`${categoryPath}?add=1`} scroll={false}>Add engagement type</PendingLink> : null}
             </div>
           </div>
           <div className="table-wrap">
@@ -129,7 +130,7 @@ export default async function WorkforceCategoriesPage({
                     ].join(", ")}</td>
                     <td>{category.is_system ? "System" : "Custom"}</td>
                     <td><StatusPill status={category.is_active ? "Active" : "Inactive"} /></td>
-                    <td>{permission.canEdit ? <PendingLink className="button secondary compact" href={`/master/workforce-categories?edit=${category.id}`} scroll={false}>Edit</PendingLink> : "-"}</td>
+                    <td>{permission.canEdit ? <PendingLink className="button secondary compact" href={`${categoryPath}?edit=${category.id}`} scroll={false}>Edit</PendingLink> : "-"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -143,7 +144,7 @@ export default async function WorkforceCategoriesPage({
           <section className="modal-panel wide designation-modal">
             <div className="panel-head">
               <div><h2>Add engagement type</h2><p className="subtle">Define the engagement type and its onboarding fields.</p></div>
-              <PendingLink className="icon-button" href="/master/workforce-categories" scroll={false} aria-label="Close">x</PendingLink>
+              <PendingLink className="icon-button" href={categoryPath} scroll={false} aria-label="Close">x</PendingLink>
             </div>
             <WorkforceCategoryForm action={createWorkforceCategory} submitLabel="Add engagement type" />
           </section>
@@ -155,7 +156,7 @@ export default async function WorkforceCategoriesPage({
           <section className="modal-panel wide designation-modal">
             <div className="panel-head">
               <div><h2>Edit engagement type</h2><p className="subtle">These rules apply to every designation assigned to this engagement type.</p></div>
-              <PendingLink className="icon-button" href="/master/workforce-categories" scroll={false} aria-label="Close">x</PendingLink>
+              <PendingLink className="icon-button" href={categoryPath} scroll={false} aria-label="Close">x</PendingLink>
             </div>
             <WorkforceCategoryForm action={updateWorkforceCategory} initial={editing} submitLabel="Save changes" />
             {!editing.is_system ? (

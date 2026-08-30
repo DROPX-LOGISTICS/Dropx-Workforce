@@ -15,12 +15,10 @@ const MOVED_OPS_PAYMENT_PATHS = [
 ];
 const WORKFORCE_ROOTS = [
   "/delivery-network",
-  "/master/payment-methods",
-  "/master/payment-banks",
-  "/master/payment-heads",
   "/users",
   "/unauthorized"
 ];
+const MOVED_FINANCE_PATHS = ["/master/payment-methods", "/master/payment-banks", "/master/payment-heads"];
 const WORKFORCE_EXACT_PATHS = new Set(["/"]);
 
 function cleanOpsPath(path: string) {
@@ -91,6 +89,11 @@ export async function middleware(request: NextRequest) {
   const isDashboardHost = host === "dashboard.dropxlogistics.com";
   const isSharedOpsPath = path === "/fleet" || path.startsWith("/fleet/") ||
     path === "/business-documents" || path.startsWith("/business-documents/");
+
+  if (isWorkforceHost && MOVED_FINANCE_PATHS.some((root) => path === root || path.startsWith(`${root}/`))) {
+    const financeBase = process.env.FINANCE_APP_URL?.trim() || "https://fin.dropxlogistics.com";
+    return NextResponse.redirect(new URL(path + request.nextUrl.search, financeBase));
+  }
 
   const opsAppUrl = process.env.OPS_APP_URL?.trim();
   if (isDashboardHost && opsAppUrl && (path === "/ops-pulse" || path.startsWith("/ops-pulse/"))) {

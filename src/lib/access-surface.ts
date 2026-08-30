@@ -85,13 +85,12 @@ const sharedPageCodes = new Set([
 
 export const workforceAccessPageCodes = [
   "delivery_associates",
+  "vendors",
+  "workers",
   "executive_id_onboarding",
   "provider_mapping",
   "people_review",
   "workforce_activity",
-  "payment_methods",
-  "master_payment_banks",
-  "master_payment_heads",
   "workforce_rate_cards",
   "workforce_earnings",
   "workforce_incentives",
@@ -101,6 +100,8 @@ export const workforceAccessPageCodes = [
   "workforce_communications_app",
   "workforce_communications_whatsapp",
   "workforce_communications_history",
+  "workforce_categories",
+  "workforce_whatsapp",
   "users",
   "designations"
 ] as const;

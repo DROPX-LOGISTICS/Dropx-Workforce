@@ -135,9 +135,6 @@ export const workforceNavItems: NavItem[] = [
     children: [
       { code: "executive_id_onboarding", label: "Provider ID Onboarding", href: "/delivery-network/id-onboarding" },
       { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping" },
-      { code: "payment_methods", label: "Payment Methods", href: "/master/payment-methods" },
-      { code: "master_payment_heads", label: "Payment Heads", href: "/master/payment-heads" },
-      { code: "master_payment_banks", label: "Payment Banks", href: "/master/payment-banks" },
       { code: "workforce_rate_cards", label: "Rate Cards", href: "/delivery-network/rate-cards" }
     ]
   },
@@ -168,7 +165,7 @@ export const workforceNavItems: NavItem[] = [
     label: "Workforce Access",
     icon: "UA",
     children: [
-      { code: "users", label: "Add User", href: "/users?section=users" },
+      { code: "users", label: "Users & Access", href: "/users?section=users" },
       { code: "users", label: "User Roles", href: "/users?section=roles" }
     ]
   },
@@ -177,6 +174,7 @@ export const workforceNavItems: NavItem[] = [
     label: "Workforce Master",
     icon: "WM",
     children: [
+      { code: "workforce_categories", label: "Engagement Types", href: "/delivery-network/engagement-types" },
       { code: "designations", label: "Workforce Designations", href: "/delivery-network/designations" },
       { code: "designations", label: "Designation Routing", href: "/delivery-network/designation-routing" }
     ]

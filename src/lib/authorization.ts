@@ -131,6 +131,14 @@ function isMissingColumnError(error: unknown) {
   return message.includes("column") && (message.includes("does not exist") || message.includes("schema cache"));
 }
 
+function isOptionalProductOwnerSchemaError(error: unknown) {
+  const code = String((error as { code?: unknown })?.code ?? "");
+  const message = String((error as { message?: unknown })?.message ?? "").toLowerCase();
+  return ["42P01", "PGRST204", "PGRST205"].includes(code) ||
+    (message.includes("company_product_owners") || message.includes("company_product_memberships")) &&
+    (message.includes("does not exist") || message.includes("schema cache"));
+}
+
 function inheritGroupedParentPermissions(permissions: Record<string, PagePermission>) {
   for (const [parentCode, childCodes] of Object.entries(groupedParentPermissions)) {
     const inherited = childCodes.reduce<PagePermission>((acc, code) => {
@@ -348,6 +356,73 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
         };
       });
     }
+  }
+
+  const membershipResult = await supabaseAdmin
+    .from("company_product_memberships")
+    .select("role_id, has_all_location_access, location_scope_ids")
+    .eq("company_id", companyId)
+    .eq("user_id", profile.id)
+    .eq("product_code", "workforce")
+    .eq("is_active", true);
+  if (membershipResult.error && !isOptionalProductOwnerSchemaError(membershipResult.error)) return null;
+  const membershipRoleIds = (membershipResult.data ?? [])
+    .map((membership) => membership.role_id)
+    .filter((roleId): roleId is string => Boolean(roleId));
+  if ((membershipResult.data ?? []).some((membership) => membership.has_all_location_access)) {
+    hasAllLocationAccess = true;
+  }
+  locationScopeIds = Array.from(new Set([
+    ...locationScopeIds,
+    ...(membershipResult.data ?? []).flatMap((membership) => membership.location_scope_ids ?? [])
+  ]));
+
+  const productOwnerResult = await supabaseAdmin
+    .from("company_product_owners")
+    .select("role_id")
+    .eq("company_id", companyId)
+    .eq("user_id", profile.id)
+    .eq("product_code", "workforce")
+    .eq("is_active", true);
+  if (productOwnerResult.error && !isOptionalProductOwnerSchemaError(productOwnerResult.error)) return null;
+  const productOwnerRoleIds = [...membershipRoleIds, ...(productOwnerResult.data ?? [])
+    .map((assignment) => assignment.role_id)
+    .filter((roleId): roleId is string => Boolean(roleId))];
+  if (productOwnerRoleIds.length) {
+    const [ownerRolesResult, ownerPagesResult, ownerGrantsResult] = await Promise.all([
+      supabaseAdmin
+        .from("user_roles")
+        .select("id, location_access_mode, is_active")
+        .eq("company_id", companyId)
+        .in("id", productOwnerRoleIds),
+      supabaseAdmin
+        .from("app_pages")
+        .select("id, code")
+        .eq("company_id", companyId)
+        .eq("is_active", true),
+      supabaseAdmin
+        .from("role_page_permissions")
+        .select("role_id, page_id, can_view, can_add, can_edit")
+        .eq("company_id", companyId)
+        .in("role_id", productOwnerRoleIds)
+    ]);
+    if (ownerRolesResult.error || ownerPagesResult.error || ownerGrantsResult.error) return null;
+    const activeOwnerRoleIds = new Set((ownerRolesResult.data ?? []).filter((role) => role.is_active).map((role) => role.id));
+    if ((ownerRolesResult.data ?? []).some((role) => role.is_active && role.location_access_mode === "all_locations")) {
+      hasAllLocationAccess = true;
+    }
+    const codeByPageId = new Map((ownerPagesResult.data ?? []).map((page) => [page.id, page.code]));
+    (ownerGrantsResult.data ?? []).forEach((grant) => {
+      if (!activeOwnerRoleIds.has(grant.role_id)) return;
+      const code = codeByPageId.get(grant.page_id);
+      if (!code) return;
+      const current = permissions[code] ?? noPermission;
+      permissions[code] = {
+        canView: current.canView || grant.can_view || grant.can_edit,
+        canAdd: current.canAdd || grant.can_add,
+        canEdit: current.canEdit || grant.can_edit
+      };
+    });
   }
 
   inheritGroupedParentPermissions(permissions);

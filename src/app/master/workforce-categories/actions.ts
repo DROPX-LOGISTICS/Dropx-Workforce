@@ -9,6 +9,8 @@ import { dynamicWorkforceTable } from "@/lib/dynamic-workforce";
 import { normalizeCategoryProfileFieldRules } from "@/lib/profile-field-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
+const categoryPath = "/delivery-network/engagement-types";
+
 function clean(value: FormDataEntryValue | null) {
   const text = String(value ?? "").trim();
   return text || null;
@@ -53,10 +55,10 @@ function categoryRedirect(params: { error?: string; notice?: string }) {
   cookies().set("dropx_workforce_category_flash", JSON.stringify(params), {
     httpOnly: true,
     maxAge: 20,
-    path: "/master/workforce-categories",
+    path: categoryPath,
     sameSite: "lax"
   });
-  redirect("/master/workforce-categories");
+  redirect(categoryPath);
 }
 
 function isNextRedirectError(error: unknown) {
@@ -65,8 +67,8 @@ function isNextRedirectError(error: unknown) {
 }
 
 function revalidateWorkforceCategoryPaths() {
-  revalidatePath("/master/workforce-categories");
-  revalidatePath("/delivery-network/designations");
+  revalidatePath(categoryPath);
+  revalidatePath("/master/designations");
   revalidatePath("/settings/dropx-id-generation");
   revalidatePath("/settings/meta");
   revalidatePath("/people/all");

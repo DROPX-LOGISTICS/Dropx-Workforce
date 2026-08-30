@@ -3,7 +3,6 @@ import { AddUserForm } from "@/components/add-user-form";
 import { DismissibleModal, DismissModalButton } from "@/components/dismissible-modal";
 import { ManageUserForm } from "@/components/manage-user-form";
 import { PageHead } from "@/components/page-head";
-import { PendingLink } from "@/components/pending-link";
 import { PermissionMatrix } from "@/components/permission-matrix";
 import { SearchableSelect } from "@/components/searchable-select";
 import { SubmitButton } from "@/components/submit-button";
@@ -314,6 +313,14 @@ async function loadAccessData(
     return result;
   })();
 
+  const membershipsPromise = surface === "workforce" && options.includeUsers
+    ? client
+      .from("company_product_memberships")
+      .select("user_id, role_id, reports_to_user_id, location_scope_ids, is_active")
+      .eq("company_id", companyId)
+      .eq("product_code", "workforce")
+    : Promise.resolve({ data: [], error: null });
+
   const locationsPromise = (async (): Promise<{ data: RawLocationRow[] | null; error: { message?: string } | null }> => {
     if (!options.includeUsers && !options.includeRoleEditorData) return { data: [], error: null };
     const locationSelect = `
@@ -365,16 +372,31 @@ async function loadAccessData(
     return result;
   })();
 
-  const [pagesResult, rolesResult, permissionsResult, usersResult, locationsResult] = await Promise.all([
+  const [pagesResult, rolesResult, permissionsResult, usersResult, membershipsResult, locationsResult] = await Promise.all([
     pagesPromise,
     rolesPromise,
     permissionsPromise,
     usersPromise,
+    membershipsPromise,
     locationsPromise
   ]);
 
   const rawLocations = (locationsResult.data ?? []) as unknown as RawLocationRow[];
-  const users = (usersResult.data ?? []) as UserRow[];
+  const profileUsers = (usersResult.data ?? []) as UserRow[];
+  const memberships = membershipsResult.error ? [] : membershipsResult.data ?? [];
+  const membershipByUserId = new Map(memberships.map((membership) => [membership.user_id, membership]));
+  const users = memberships.length
+    ? profileUsers.filter((user) => membershipByUserId.has(user.id)).map((user) => {
+      const membership = membershipByUserId.get(user.id)!;
+      return {
+        ...user,
+        role_id: membership.role_id,
+        reports_to_user_id: membership.reports_to_user_id,
+        location_scope_ids: membership.location_scope_ids,
+        is_active: membership.is_active
+      };
+    })
+    : profileUsers;
 
   return {
     pages: ((pagesResult.data ?? []) as AppPageRow[])
@@ -414,12 +436,22 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   const showAddRole = pagePermission.canAdd && searchParams?.addRole === "1";
   const surfacePageIds = new Set(pages.map((page) => page.id));
   const surfacePermissions = permissions.filter((permission) => surfacePageIds.has(permission.page_id));
-  const surfaceRoleIds = new Set(surfacePermissions
-    .filter((permission) => permission.can_view || permission.can_add || permission.can_edit)
-    .map((permission) => permission.role_id));
-  const visibleRoles = isWorkforceSurface ? roles.filter((role) => surfaceRoleIds.has(role.id)) : roles;
-  const editUser = !isWorkforceSurface && pagePermission.canEdit
-    ? users.find((user) => user.id === searchParams?.editUser) ?? null
+  const visibleRoles = isWorkforceSurface
+    ? roles.filter((role) => {
+      if (role.is_system || role.code === "OWNER") return false;
+      const grants = permissions.filter((permission) => (
+        permission.role_id === role.id &&
+        (permission.can_view || permission.can_add || permission.can_edit)
+      ));
+      return grants.length > 0 && grants.every((permission) => surfacePageIds.has(permission.page_id));
+    })
+    : roles;
+  const visibleRoleIds = new Set(visibleRoles.map((role) => role.id));
+  const visibleUsers = isWorkforceSurface
+    ? users.filter((user) => Boolean(user.role_id && visibleRoleIds.has(user.role_id)))
+    : users;
+  const editUser = pagePermission.canEdit
+    ? visibleUsers.find((user) => user.id === searchParams?.editUser) ?? null
     : null;
   const editRole = pagePermission.canEdit ? visibleRoles.find((role) => role.id === searchParams?.editRole) ?? null : null;
   const roleModalError = showAddRole || editRole ? searchParams?.userError ?? null : null;
@@ -437,14 +469,14 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     provider: location.providers?.name ?? null,
     model: location.location_models?.name || location.location_models?.code || null
   }));
-  const addUserRoles = roles.map((role) => ({
+  const addUserRoles = visibleRoles.map((role) => ({
     id: role.id,
     code: role.code,
     locationAccessMode: role.location_access_mode,
     name: role.name,
     parentRoleId: role.parent_role_id
   }));
-  const addUserProfiles = users.map((user) => ({
+  const addUserProfiles = visibleUsers.map((user) => ({
     id: user.id,
     fullName: user.full_name,
     email: user.email,
@@ -452,12 +484,12 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     roleId: user.role_id,
     locationScopeIds: user.location_scope_ids ?? []
   }));
-  const reportingRoleOptions = roles.map((role) => ({
+  const reportingRoleOptions = visibleRoles.map((role) => ({
     value: role.id,
     label: role.name,
     helper: role.code
   }));
-  const editRoleReportingOptions = roles.filter((role) => role.id !== editRole?.id).map((role) => ({
+  const editRoleReportingOptions = visibleRoles.filter((role) => role.id !== editRole?.id).map((role) => ({
     value: role.id,
     label: role.name,
     helper: role.code
@@ -465,15 +497,15 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   const editRolePermissions = editRole
     ? permissions.filter((permission) => permission.role_id === editRole.id)
     : [];
-  const assignedRoleUsers = editRole ? users.filter((user) => user.role_id === editRole.id).length : 0;
-  const childRoles = editRole ? roles.filter((role) => role.parent_role_id === editRole.id).length : 0;
+  const assignedRoleUsers = editRole ? visibleUsers.filter((user) => user.role_id === editRole.id).length : 0;
+  const childRoles = editRole ? visibleRoles.filter((role) => role.parent_role_id === editRole.id).length : 0;
   const roleHasDependencies = assignedRoleUsers + childRoles > 0;
-  const excludedReplacementRoles = editRole ? descendantRoleIds(roles, editRole.id) : new Set<string>();
+  const excludedReplacementRoles = editRole ? descendantRoleIds(visibleRoles, editRole.id) : new Set<string>();
   if (editRole) excludedReplacementRoles.add(editRole.id);
-  const replacementRoleOptions = roles
+  const replacementRoleOptions = visibleRoles
     .filter((role) => role.is_active && !excludedReplacementRoles.has(role.id))
     .map((role) => ({ value: role.id, label: role.name, helper: role.code }));
-  const directReportees = editUser ? users.filter((user) => user.reports_to_user_id === editUser.id).length : 0;
+  const directReportees = editUser ? visibleUsers.filter((user) => user.reports_to_user_id === editUser.id).length : 0;
   const linkedLocationEmailCount = editUser?.email
     ? locations.filter((location) => location.station_email?.toLowerCase() === editUser.email?.toLowerCase()).length
     : 0;
@@ -482,9 +514,9 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     ? locations.filter((location) => location.station_manager_email?.toLowerCase() === editUser.email?.toLowerCase()).length
     : 0;
   const userHasDependencies = directReportees + managedLocations > 0;
-  const excludedReplacementUsers = editUser ? descendantUserIds(users, editUser.id) : new Set<string>();
+  const excludedReplacementUsers = editUser ? descendantUserIds(visibleUsers, editUser.id) : new Set<string>();
   if (editUser) excludedReplacementUsers.add(editUser.id);
-  const replacementUserOptions = users
+  const replacementUserOptions = visibleUsers
     .filter((user) => user.is_active && !excludedReplacementUsers.has(user.id))
     .map((user) => ({
       value: user.id,
@@ -493,18 +525,18 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     }));
 
   const activeLabel = isWorkforceSurface
-    ? showRolesSection ? "User Roles" : "Add User"
+    ? showRolesSection ? "User Roles" : "Users & Access"
     : "Users & Access";
 
   return (
     <AppShell active={activeLabel}>
       <PageHead
         eyebrow={`${accessSurfaceLabel(accessSurface)} admin setup`}
-        title={showRolesSection ? "User roles and permissions" : isWorkforceSurface ? "Add Workforce user" : "Users and station access"}
+        title={showRolesSection ? "User roles and permissions" : isWorkforceSurface ? "Workforce users and access" : "Users and station access"}
         subtitle={showRolesSection
           ? `Define role hierarchy and permissions for the ${accessSurfaceLabel(accessSurface).toLowerCase()} frontend only. Other frontend permissions are preserved.`
           : isWorkforceSurface
-            ? "Create a Workforce login with a Workforce-enabled role and location scope. The company-wide user directory is not exposed here."
+            ? "Create and manage Workforce-only users, roles, reporting lines, and location scope without Dashboard access."
             : `Create users and manage access for the ${accessSurfaceLabel(accessSurface).toLowerCase()} frontend.`}
       />
 
@@ -530,7 +562,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
         </section>
       ) : null}
 
-      {showUsersSection && !isWorkforceSurface && (pagePermission.canView || pagePermission.canEdit) ? (
+      {showUsersSection && (pagePermission.canView || pagePermission.canEdit) ? (
       <UsersListPanel
         canAdd={pagePermission.canAdd}
         canEdit={pagePermission.canEdit}
@@ -549,47 +581,15 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
           station_manager_email: location.station_manager_email,
           state: location.state
         }))}
-        roles={roles.map((role) => ({
+        roles={visibleRoles.map((role) => ({
           id: role.id,
           code: role.code,
           locationAccessMode: role.location_access_mode,
           name: role.name,
           parentRoleId: role.parent_role_id
         }))}
-        users={users}
+        users={visibleUsers}
       />
-      ) : null}
-
-      {showUsersSection && isWorkforceSurface ? (
-        <section className="panel workforce-add-user-panel">
-          <div className="panel-head">
-            <div>
-              <h2>New Workforce user</h2>
-              <p className="subtle">Only Workforce-enabled roles can be assigned. Existing company users are not listed or editable from this product.</p>
-            </div>
-            <span className="status-pill good">Add only</span>
-          </div>
-          <div className="panel-body">
-            {pagePermission.canAdd ? (
-              visibleRoles.length ? (
-                <AddUserForm
-                  assignableRoleIds={[...surfaceRoleIds]}
-                  roles={addUserRoles}
-                  users={addUserProfiles}
-                  locations={locationScopeOptions}
-                />
-              ) : (
-                <div className="workforce-user-empty">
-                  <strong>Create a Workforce role first</strong>
-                  <p className="subtle">At least one active role needs Workforce permissions before a user can be added.</p>
-                  <PendingLink className="button" href="/users?section=roles&addRole=1">Add Workforce role</PendingLink>
-                </div>
-              )
-            ) : (
-              <p className="subtle">Your role does not have permission to add Workforce users.</p>
-            )}
-          </div>
-        </section>
       ) : null}
 
       {showRolesSection && (pagePermission.canView || pagePermission.canEdit) ? (
@@ -603,7 +603,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       />
       ) : null}
 
-      {showAddUser && !isWorkforceSurface ? (
+      {showAddUser ? (
         <DismissibleModal closeHref={sectionHref("users")}>
           <section className="modal-panel wide" aria-label="Add user">
             <div className="panel-head">
@@ -782,7 +782,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
               }}
               users={addUserProfiles}
             />
-            {!editUserIsLocationManaged ? <form action={deleteUser} className="danger-form">
+            {!isWorkforceSurface && !editUserIsLocationManaged ? <form action={deleteUser} className="danger-form">
               <input type="hidden" name="id" value={editUser.id} />
               <SubmitButton
                 className="button warning"

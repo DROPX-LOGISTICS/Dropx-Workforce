@@ -17,20 +17,9 @@ import {
   defaultWorkforceAppPageAccess,
   normalizeWorkforceAppPageAccess
 } from "@/lib/workforce-app-pages";
+import { loadWorkforceCommunicationRecipients } from "@/lib/workforce-communication-recipients";
 
 export const dynamic = "force-dynamic";
-
-type WorkforceRow = {
-  id: string;
-  full_name: string | null;
-  dropx_id: string | null;
-  designation_id: string | null;
-  designation: string | null;
-  onboarding_status: string | null;
-  is_active: boolean | null;
-  location_id: string | null;
-  stations?: { station_code?: string | null; station_name?: string | null } | Array<{ station_code?: string | null; station_name?: string | null }> | null;
-};
 
 type DesignationRow = {
   id: string;
@@ -44,19 +33,6 @@ type DesignationRow = {
 };
 
 type CategoryRow = { code: string; profile_field_rules: unknown };
-
-function relation<T>(value: T | T[] | null | undefined) {
-  return Array.isArray(value) ? value[0] ?? null : value ?? null;
-}
-
-function statusLabel(status: string | null, isActive: boolean | null) {
-  const value = String(status ?? "pending").trim().toLowerCase();
-  if (isActive || value === "active") return "Active";
-  if (value === "under_review") return "Under review";
-  if (value === "returned") return "Returned";
-  if (value === "submitted") return "Submitted";
-  return "Registration in progress";
-}
 
 function registrationCategory(designation: DesignationRow | undefined) {
   const configured = String(designation?.registration_category_code ?? "").trim().toLowerCase();
@@ -76,67 +52,55 @@ export default async function DropxOneUserPreviewPage() {
   if (!supabaseAdmin) {
     error = "Supabase service role key is not configured.";
   } else {
-    let workforceQuery = supabaseAdmin
-      .from("workforce")
-      .select("id,full_name,dropx_id,designation_id,designation,onboarding_status,is_active,location_id,stations:stations!workforce_location_id_fkey(station_code,station_name)")
-      .eq("company_id", companyId)
-      .is("deleted_at", null)
-      .not("migration_state", "in", "(reclassified,moved_to_vendor)")
-      .not("onboarding_status", "in", "(rejected,cancelled)")
-      .order("is_active", { ascending: false })
-      .order("full_name");
-    if (!authorization.hasAllLocationAccess) {
-      workforceQuery = workforceQuery.in("location_id", authorization.locationScopeIds.length
-        ? authorization.locationScopeIds
-        : ["00000000-0000-0000-0000-000000000000"]);
-    }
+    try {
+      const [recipientResult, designationResult, categoryResult] = await Promise.all([
+        loadWorkforceCommunicationRecipients(authorization),
+        supabaseAdmin
+          .from("designations")
+          .select("id,code,name,app_page_access,onboarding_categories,registration_category_code,profile_field_rules,designation_category:designation_categories!designations_designation_category_id_fkey(id,code,name,people_module,is_active)")
+          .eq("company_id", companyId)
+          .eq("is_active", true)
+          .order("name"),
+        supabaseAdmin
+          .from("workforce_categories")
+          .select("code,profile_field_rules")
+          .eq("company_id", companyId)
+          .eq("is_active", true)
+      ]);
 
-    const [workforceResult, designationResult, categoryResult] = await Promise.all([
-      workforceQuery,
-      supabaseAdmin
-        .from("designations")
-        .select("id,code,name,app_page_access,onboarding_categories,registration_category_code,profile_field_rules,designation_category:designation_categories!designations_designation_category_id_fkey(id,code,name,people_module,is_active)")
-        .eq("company_id", companyId)
-        .eq("is_active", true)
-        .order("name"),
-      supabaseAdmin
-        .from("workforce_categories")
-        .select("code,profile_field_rules")
-        .eq("company_id", companyId)
-        .eq("is_active", true)
-    ]);
+      error = designationResult.error?.message ?? categoryResult.error?.message ?? null;
+      if (!error) {
+        const designations = ((designationResult.data ?? []) as DesignationRow[])
+          .filter((designation) => firstDesignationBusinessCategory(designation.designation_category)?.people_module === "delivery_network");
+        const categories = (categoryResult.data ?? []) as CategoryRow[];
+        const designationByName = new Map(designations.map((designation) => [designation.name.trim().toLowerCase(), designation]));
+        const categoryByCode = new Map(categories.map((category) => [category.code.trim().toLowerCase(), category]));
 
-    error = workforceResult.error?.message ?? designationResult.error?.message ?? categoryResult.error?.message ?? null;
-    if (!error) {
-      const workforce = (workforceResult.data ?? []) as WorkforceRow[];
-      const designations = ((designationResult.data ?? []) as DesignationRow[])
-        .filter((designation) => firstDesignationBusinessCategory(designation.designation_category)?.people_module === "delivery_network");
-      const categories = (categoryResult.data ?? []) as CategoryRow[];
-      const designationById = new Map(designations.map((designation) => [designation.id, designation]));
-      const designationByName = new Map(designations.map((designation) => [designation.name.trim().toLowerCase(), designation]));
-      const categoryByCode = new Map(categories.map((category) => [category.code.trim().toLowerCase(), category]));
-
-      users = workforce.map((record) => {
-        const designation = designationById.get(String(record.designation_id ?? ""))
-          ?? designationByName.get(String(record.designation ?? "").trim().toLowerCase());
-        const categoryCode = registrationCategory(designation);
-        const categoryRules = normalizeCategoryProfileFieldRules(categoryByCode.get(categoryCode)?.profile_field_rules);
-        const designationRules = profileFieldRulesForCategory(designation?.profile_field_rules, categoryCode, "field_executives");
-        const station = relation(record.stations);
-        const pages = normalizeWorkforceAppPageAccess(
-          Array.isArray(designation?.app_page_access) ? designation.app_page_access : defaultWorkforceAppPageAccess
-        );
-        return {
-          id: record.id,
-          name: record.full_name || "Unnamed Workforce user",
-          reference: record.dropx_id || "",
-          designation: designation?.name || record.designation || "Workforce",
-          status: statusLabel(record.onboarding_status, record.is_active),
-          location: station?.station_code || station?.station_name || "",
-          pageAccess: pages,
-          fieldRules: intersectProfileFieldChannelRules(categoryRules, designationRules)
-        };
-      });
+        users = recipientResult
+          .filter((record) => !["rejected", "cancelled"].includes(record.status.trim().toLowerCase()))
+          .sort((left, right) => Number(right.isActive) - Number(left.isActive) || left.name.localeCompare(right.name))
+          .map((record) => {
+            const designation = designationByName.get(String(record.designation ?? "").trim().toLowerCase());
+            const categoryCode = registrationCategory(designation);
+            const categoryRules = normalizeCategoryProfileFieldRules(categoryByCode.get(categoryCode)?.profile_field_rules);
+            const designationRules = profileFieldRulesForCategory(designation?.profile_field_rules, categoryCode, "field_executives");
+            const pages = normalizeWorkforceAppPageAccess(
+              Array.isArray(designation?.app_page_access) ? designation.app_page_access : defaultWorkforceAppPageAccess
+            );
+            return {
+              id: `${record.profileType}:${record.accountId}`,
+              name: record.name || "Unnamed Workforce user",
+              reference: record.reference || "",
+              designation: designation?.name || record.designation || "Workforce",
+              status: record.status,
+              location: record.location || "",
+              pageAccess: pages,
+              fieldRules: intersectProfileFieldChannelRules(categoryRules, designationRules)
+            };
+          });
+      }
+    } catch (loadError) {
+      error = loadError instanceof Error ? loadError.message : "Unable to load registered Workforce users.";
     }
   }
 

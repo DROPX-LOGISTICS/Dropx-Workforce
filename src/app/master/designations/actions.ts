@@ -127,6 +127,9 @@ async function validateOnboardingRoles(companyId: string, roleIds: string[]) {
 function onboardingCategories(formData: FormData) {
   const categories = normalizeDesignationCategories(formData.getAll("onboarding_categories"), []);
   if (!categories.length) throw new Error("Select at least one engagement type.");
+  if (categories.some((category) => category === "employees" || category === "field_executives")) {
+    throw new Error("Employee and Field Executive engagement types belong to People and cannot be used for a Workforce designation.");
+  }
   return categories;
 }
 

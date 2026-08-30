@@ -494,13 +494,16 @@ export function DesignationForm({
   peopleModule: DesignationBusinessCategory["people_module"] | null;
   submitLabel?: string;
 }) {
+  const availableCategoryCodes = new Set(categories.map((category) => category.code));
+  const initialCategories = normalizeDesignationCategories(initial?.onboarding_categories)
+    .filter((category) => availableCategoryCodes.has(category));
   const [selectedModels, setSelectedModels] = useState<string[]>(initial?.model_ids ?? []);
   const [selectedCategories, setSelectedCategories] = useState<DesignationCategory[]>(
-    normalizeDesignationCategories(initial?.onboarding_categories)
+    initialCategories
   );
   const [designationName, setDesignationName] = useState(initial?.name ?? "");
   const [registrationCategory, setRegistrationCategory] = useState(() => {
-    const categories = normalizeDesignationCategories(initial?.onboarding_categories);
+    const categories = initialCategories;
     const configured = String(initial?.registration_category_code ?? "");
     return categories.includes(configured) ? configured : categories[0] ?? "";
   });
@@ -541,7 +544,7 @@ export function DesignationForm({
         <label>
           Engagement type
           <CategoryMultiSelect categories={categories} selected={selectedCategories} setSelected={setSelectedCategories} />
-          <small>Employee, contractor, vendor, worker, or another configured legal relationship.</small>
+          <small>Contractor, vendor, worker, or another Workforce legal relationship. HR employees are managed in People.</small>
         </label>
         <label>
           Registration policy

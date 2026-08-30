@@ -78,6 +78,8 @@ type WorkforceCategoryRow = {
   app_page_access?: string[] | null;
 };
 
+const peopleOnlyEngagementCodes = new Set(["employees", "field_executives"]);
+
 function loadFlash() {
   const raw = cookies().get("dropx_designation_flash")?.value;
   if (!raw) return { error: null as string | null, notice: null as string | null };
@@ -257,7 +259,8 @@ async function loadDesignations(
     providers: (providersResult.data ?? []) as ProviderRow[],
     locations: locations as LocationRow[],
     models: (modelsResult.data ?? []) as ModelRow[],
-    categories: categoriesResult.error ? fallbackCategories : (categoriesResult.data ?? []) as WorkforceCategoryRow[],
+    categories: (categoriesResult.error ? fallbackCategories : (categoriesResult.data ?? []) as WorkforceCategoryRow[])
+      .filter((category) => !peopleOnlyEngagementCodes.has(category.code)),
     businessCategories: (businessCategoriesResult.data ?? []) as DesignationBusinessCategory[],
     roles: rolesResult.error ? [] : (rolesResult.data ?? []) as UserRoleRow[],
     error: null
@@ -289,6 +292,7 @@ export async function DesignationMasterPageContent({
   const providerById = new Map(providers.map((provider) => [provider.id, provider]));
   const modelById = new Map(models.map((model) => [model.id, model]));
   const categoryNameByCode = new Map(categories.map((category) => [category.code, category.name]));
+  const visibleEngagementCodes = new Set(categories.map((category) => category.code));
   const scopedDesignations = designations;
   const scopedBusinessCategories = businessCategories;
   const filteredDesignations = scopedDesignations.filter((designation) => {
@@ -302,7 +306,10 @@ export async function DesignationMasterPageContent({
       .filter(Boolean)
       .map((model) => `${model?.code} ${model?.name}`)
       .join(" ");
-    const categoryText = normalizeDesignationCategories(designation.onboarding_categories).map((category) => categoryNameByCode.get(category) ?? designationCategoryLabel(category)).join(" ");
+    const categoryText = normalizeDesignationCategories(designation.onboarding_categories)
+      .filter((category) => visibleEngagementCodes.has(category))
+      .map((category) => categoryNameByCode.get(category) ?? designationCategoryLabel(category))
+      .join(" ");
     const businessCategory = firstDesignationBusinessCategory(designation.designation_category);
     return `${designation.code} ${designation.name} ${providerText} ${modelText} ${categoryText} ${businessCategory?.name ?? "unassigned"} ${designationProfileDestinationLabel(designation.profile_destination)}`.toLowerCase().includes(query);
   });
@@ -374,6 +381,8 @@ export async function DesignationMasterPageContent({
                   const designationModels = (designation.model_ids ?? [])
                     .map((modelId) => modelById.get(modelId))
                     .filter(Boolean) as ModelRow[];
+                  const designationEngagements = normalizeDesignationCategories(designation.onboarding_categories)
+                    .filter((category) => visibleEngagementCodes.has(category));
                   return (
                     <tr key={designation.id}>
                       <td>
@@ -389,12 +398,13 @@ export async function DesignationMasterPageContent({
                       </td>
                       <td>
                         <div className="mini-chip-list">
-                          {normalizeDesignationCategories(designation.onboarding_categories).slice(0, 1).map((category) => (
+                          {designationEngagements.slice(0, 1).map((category) => (
                             <span className="mini-tag" key={category}>{categoryNameByCode.get(category) ?? designationCategoryLabel(category)}</span>
                           ))}
-                          {normalizeDesignationCategories(designation.onboarding_categories).length > 1
-                            ? <span className="designation-more-count">+{normalizeDesignationCategories(designation.onboarding_categories).length - 1}</span>
+                          {designationEngagements.length > 1
+                            ? <span className="designation-more-count">+{designationEngagements.length - 1}</span>
                             : null}
+                          {!designationEngagements.length ? <span className="mini-tag">Policy review required</span> : null}
                         </div>
                       </td>
                       <td>

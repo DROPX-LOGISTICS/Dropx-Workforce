@@ -145,6 +145,44 @@ async function isLinkedLocationEmail(email: string | null | undefined, companyId
   return (count ?? 0) > 0;
 }
 
+function requireDropxPortalEmail(email: string) {
+  const [, domain, ...extra] = email.split("@");
+  if (!domain || extra.length || domain.toLowerCase() !== "dropxlogistics.com") {
+    throw new Error("Portal access requires a @dropxlogistics.com company email. Personal email is allowed only in Recruit.");
+  }
+}
+
+async function selectedPeopleEmployee(formData: FormData, companyId: string) {
+  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
+  const designationId = required(formData.get("designation_id"), "People designation");
+  const employeeRecordId = required(formData.get("people_employee_id"), "Person from People");
+  const [designationResult, employeeResult] = await Promise.all([
+    supabaseAdmin
+      .from("designations")
+      .select("id, designation_category:designation_categories!designations_designation_category_id_fkey!inner(people_module, is_active)")
+      .eq("id", designationId)
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .eq("designation_category.people_module", "people_hr")
+      .eq("designation_category.is_active", true)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("employees")
+      .select("id, employee_code, full_name, email, mobile_country_code, mobile, designation_id, is_active")
+      .eq("id", employeeRecordId)
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .maybeSingle()
+  ]);
+  if (designationResult.error) throw new Error(designationResult.error.message);
+  if (!designationResult.data) throw new Error("Select an active People designation.");
+  if (employeeResult.error) throw new Error(employeeResult.error.message);
+  if (!employeeResult.data || employeeResult.data.designation_id !== designationId) {
+    throw new Error("The selected person is not active under this People designation.");
+  }
+  return employeeResult.data;
+}
+
 async function managerAccessForSurface(userId: string, companyId: string, surface: AccessSurface) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
   const profileResult = await supabaseAdmin
@@ -224,7 +262,8 @@ async function validateLocationScope(
   reportsToUserId: string | null,
   locationScopeIds: string[],
   companyId: string,
-  surface: AccessSurface
+  surface: AccessSurface,
+  authorization: AuthorizationContext
 ) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
 
@@ -235,9 +274,31 @@ async function validateLocationScope(
     .eq("company_id", companyId)
     .single();
   if (roleError) throw new Error(roleError.message);
-  if (selectedRole.location_access_mode === "all_locations") return;
-  if (!locationScopeIds.length) throw new Error("Select at least one location.");
-  if (!reportsToUserId) throw new Error("Reporting manager is required before selecting locations.");
+  if (selectedRole.location_access_mode === "all_locations") {
+    if (!authorization.hasAllLocationAccess && !authorization.isMasterOwner) {
+      throw new Error("Only an administrator with all-location access can grant all locations.");
+    }
+    return;
+  }
+  if (!locationScopeIds.length) return;
+
+  const locationsResult = await supabaseAdmin
+    .from("stations")
+    .select("id")
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .in("id", locationScopeIds);
+  if (locationsResult.error) throw new Error(locationsResult.error.message);
+  if ((locationsResult.data ?? []).length !== new Set(locationScopeIds).size) {
+    throw new Error("One or more selected locations are not active for this company.");
+  }
+  if (!authorization.hasAllLocationAccess && !authorization.isMasterOwner) {
+    const actorScope = new Set(authorization.locationScopeIds);
+    if (locationScopeIds.some((locationId) => !actorScope.has(locationId))) {
+      throw new Error("One or more selected locations are outside your own scope.");
+    }
+  }
+  if (!reportsToUserId) return;
 
   const manager = await managerAccessForSurface(reportsToUserId, companyId, surface);
 
@@ -717,11 +778,16 @@ export async function createUser(formData: FormData) {
   let notice = "User saved successfully.";
 
   try {
-    const employeeId = required(formData.get("employee_id"), "Employee ID").toUpperCase();
-    const fullName = required(formData.get("full_name"), "Full name");
+    const peopleEmployee = await selectedPeopleEmployee(formData, companyId);
+    const employeeId = required(peopleEmployee.employee_code, "Employee ID").toUpperCase();
+    const fullName = required(peopleEmployee.full_name, "Full name");
     const email = required(formData.get("email"), "Email").toLowerCase();
-    const mobileCountryCode = cleanCountryCode(formData.get("mobile_country_code"));
-    const mobile = clean(formData.get("mobile"))?.replace(/\D/g, "") ?? null;
+    requireDropxPortalEmail(email);
+    if (await isLinkedLocationEmail(email, companyId)) {
+      throw new Error("Location accounts are managed from Location Master and cannot be assigned to a person.");
+    }
+    const mobileCountryCode = cleanCountryCode(peopleEmployee.mobile_country_code);
+    const mobile = clean(peopleEmployee.mobile)?.replace(/\D/g, "") ?? null;
     const roleId = required(formData.get("role_id"), "Role");
     const reportsToUserId = clean(formData.get("reports_to_user_id"));
     const sendInvitation = formData.get("send_invitation") === "yes";
@@ -731,14 +797,30 @@ export async function createUser(formData: FormData) {
     await assertRoleAvailableForSurface(roleId, companyId, surface);
     const { data: existingProfile, error: existingProfileError } = await admin
       .from("profiles")
-      .select("id")
+      .select("id, employee_id, email")
       .eq("company_id", companyId)
       .ilike("email", email)
       .maybeSingle();
     if (existingProfileError) throw new Error(existingProfileError.message);
+    const employeeProfile = existingProfile
+      ? { data: existingProfile, error: null }
+      : await admin
+        .from("profiles")
+        .select("id, employee_id, email")
+        .eq("company_id", companyId)
+        .ilike("employee_id", employeeId)
+        .maybeSingle();
+    if (employeeProfile.error) throw new Error(employeeProfile.error.message);
+    if (existingProfile?.employee_id && existingProfile.employee_id.toUpperCase() !== employeeId) {
+      throw new Error("This DropX email is already linked to another employee.");
+    }
+    if (employeeProfile.data && employeeProfile.data.email?.toLowerCase() !== email) {
+      throw new Error(`This employee already has a portal identity under ${employeeProfile.data.email ?? "another email"}. Update the central identity before assigning new access.`);
+    }
+    const resolvedExistingProfile = existingProfile ?? employeeProfile.data;
 
     await validateReportingManager(roleId, reportsToUserId, companyId, surface);
-    await validateLocationScope(roleId, reportsToUserId, locationScopeIds, companyId, surface);
+    await validateLocationScope(roleId, reportsToUserId, locationScopeIds, companyId, surface, authorization);
 
     const { data: role, error: roleError } = await admin
       .from("user_roles")
@@ -749,8 +831,8 @@ export async function createUser(formData: FormData) {
 
     if (roleError) throw new Error(roleError.message);
 
-    const authResult = existingProfile
-      ? { data: { user: { id: existingProfile.id } }, error: null }
+    const authResult = resolvedExistingProfile
+      ? { data: { user: { id: resolvedExistingProfile.id } }, error: null }
       : sendInvitation
         ? await admin.auth.admin.inviteUserByEmail(email, {
           data: { full_name: fullName, employee_id: employeeId },
@@ -775,7 +857,7 @@ export async function createUser(formData: FormData) {
       throw new Error("This email already exists in Supabase Auth, but the user ID could not be found.");
     }
 
-    const profileWrite = existingProfile
+    const profileWrite = resolvedExistingProfile
       ? { error: null }
       : await admin.from("profiles").upsert({
         id: userId,
@@ -810,7 +892,7 @@ export async function createUser(formData: FormData) {
       isActive: true,
       assignedBy: authorization.userId
     });
-    if (existingProfile) notice = "Existing DropX user added to Workforce without changing access in another portal.";
+    if (resolvedExistingProfile) notice = "Existing DropX user added to Workforce without changing access in another portal.";
 
     revalidatePath("/users");
   } catch (error) {
@@ -854,7 +936,7 @@ export async function updateUser(formData: FormData) {
   if (mobile && !/^\d{6,15}$/.test(mobile)) throw new Error("Mobile number must contain 6 to 15 digits.");
 
   await validateReportingManager(roleId, reportsToUserId, companyId, surface);
-  await validateLocationScope(roleId, reportsToUserId, locationScopeIds, companyId, surface);
+  await validateLocationScope(roleId, reportsToUserId, locationScopeIds, companyId, surface, authorization);
 
   const roleResult = await supabaseAdmin
     .from("user_roles")

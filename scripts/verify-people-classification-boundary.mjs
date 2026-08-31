@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 
 const migration = readFileSync(new URL("../supabase/migrations/20260831224000_people_worker_classification_reconciliation.sql", import.meta.url), "utf8");
 const blockerRepair = readFileSync(new URL("../supabase/migrations/20260831225000_resolve_people_classification_blockers.sql", import.meta.url), "utf8");
+const projectionSync = readFileSync(new URL("../supabase/migrations/20260831230000_sync_people_directory_projection.sql", import.meta.url), "utf8");
 
 const required = [
   "begin;",
@@ -45,7 +46,17 @@ const failures = [
     "public.people_worker_classification_audit",
     "exception when others"
   ].filter((token) => !blockerRepair.includes(token)).map((token) => `missing blocker repair ${token}`),
-  ...forbidden.filter((token) => blockerRepair.toLowerCase().includes(token)).map((token) => `forbidden blocker repair ${token}`)
+  ...forbidden.filter((token) => blockerRepair.toLowerCase().includes(token)).map((token) => `forbidden blocker repair ${token}`),
+  ...[
+    "sync_people_engagement_projection",
+    "people_lifecycle_status",
+    "legacy_source_type",
+    "zz_sync_people_projection_from_engagement",
+    "zz_sync_people_projection_from_assignment",
+    "hr_designation_mappings",
+    "commit;"
+  ].filter((token) => !projectionSync.includes(token)).map((token) => `missing projection sync ${token}`),
+  ...forbidden.filter((token) => projectionSync.toLowerCase().includes(token)).map((token) => `forbidden projection sync ${token}`)
 ];
 
 if (failures.length) {

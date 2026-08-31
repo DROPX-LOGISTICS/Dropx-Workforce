@@ -242,13 +242,104 @@ async function auditDesignationRouting() {
     `${Number(row.corrections ?? 0)}x ${String(row.error_message ?? "").replaceAll(/\s+/g, " ").slice(0, 220)}`
   )).join(" | ");
 
+  const projectionResult = await managementQuery(
+    `with current_people as (
+       select distinct on (engagement.company_id, engagement.id)
+              engagement.company_id,
+              engagement.id as engagement_id,
+              engagement.person_id,
+              engagement.worker_type,
+              engagement.employee_id,
+              engagement.contractor_id,
+              assignment.designation_id,
+              assignment.department_id,
+              assignment.location_id,
+              designation.name as designation_name,
+              designation.onboarding_categories,
+              person.status as person_status,
+              employee.designation_id as employee_designation_id,
+              employee.people_lifecycle_status as employee_lifecycle_status,
+              (employee.deleted_at is null and employee.is_active) as live_employee,
+              contractor.designation as contractor_designation,
+              contractor.people_lifecycle_status as contractor_lifecycle_status,
+              (contractor.deleted_at is null and contractor.is_active) as live_contractor
+       from public.hr_engagements engagement
+       join public.hr_work_assignments assignment
+         on assignment.company_id = engagement.company_id
+        and assignment.engagement_id = engagement.id
+        and assignment.is_primary
+        and assignment.effective_from <= current_date
+        and (assignment.effective_to is null or assignment.effective_to >= current_date)
+       join public.designations designation
+         on designation.company_id = assignment.company_id
+        and designation.id = assignment.designation_id
+        and designation.is_active
+       join public.designation_categories category
+         on category.company_id = designation.company_id
+        and category.id = designation.designation_category_id
+        and category.is_active
+        and category.people_module = 'people_hr'
+       join public.hr_people person
+         on person.company_id = engagement.company_id
+        and person.id = engagement.person_id
+       left join public.employees employee
+         on employee.company_id = engagement.company_id
+        and employee.id = engagement.employee_id
+       left join public.contractors contractor
+         on contractor.company_id = engagement.company_id
+        and contractor.id = engagement.contractor_id
+       where engagement.status = 'active'
+         and (
+           'people' = any(coalesce(designation.portal_scopes, '{}'::text[]))
+           or (
+             cardinality(coalesce(designation.portal_scopes, '{}'::text[])) = 0
+             and exists (
+               select 1 from public.hr_designation_mappings mapping
+               where mapping.company_id = designation.company_id
+                 and mapping.designation_id = designation.id
+                 and mapping.is_available
+             )
+           )
+         )
+       order by engagement.company_id, engagement.id,
+                assignment.effective_from desc, assignment.created_at desc
+     )
+     select count(*)::integer as active_people,
+            count(*) filter (
+              where person_status <> 'active'
+                 or case when worker_type = 'employee'
+                   then not coalesce(live_employee, false)
+                     or employee_designation_id is distinct from designation_id
+                     or nullif(btrim(coalesce(employee_lifecycle_status, '')), '') is null
+                     or not ('employees' = any(coalesce(onboarding_categories, '{}'::text[])))
+                   else not coalesce(live_contractor, false)
+                     or lower(btrim(coalesce(contractor_designation, ''))) is distinct from lower(btrim(coalesce(designation_name, '')))
+                     or nullif(btrim(coalesce(contractor_lifecycle_status, '')), '') is null
+                     or not ('contractors' = any(coalesce(onboarding_categories, '{}'::text[])))
+                 end
+            )::integer as projection_drift
+     from current_people;`,
+    { readOnly: true }
+  );
+  const projectionRows = rowsFromResponse(projectionResult);
+  const projectionDriftCount = Number(projectionRows[0]?.projection_drift ?? 0);
+  console.log("Canonical People source projection audit:");
+  console.log(JSON.stringify({
+    activePeople: Number(projectionRows[0]?.active_people ?? 0),
+    projectionDrift: projectionDriftCount
+  }));
+
   const sujanResult = await managementQuery(
      `with source as (
        select company_id, id, full_name, 'employee'::text as worker_type,
+              designation_id as source_designation_id,
+              null::text as source_designation_name,
+              people_lifecycle_status as source_lifecycle_status,
               (deleted_at is null and is_active) as live
        from public.employees where upper(employee_code) = 'D0785'
        union all
        select company_id, id, full_name, 'contractor'::text,
+              null::uuid, designation, people_lifecycle_status,
               (deleted_at is null and is_active)
        from public.contractors where upper(dropx_id) = 'D0785'
      )
@@ -257,6 +348,8 @@ async function auditDesignationRouting() {
             max(source.worker_type) filter (where source.live)::text as live_worker_type,
             count(distinct (source.worker_type, source.id))::integer as source_rows,
             count(distinct (source.worker_type, source.id)) filter (where source.live)::integer as live_source_rows,
+            max(person.status)::text as person_status,
+            max(source.source_lifecycle_status) filter (where source.live)::text as source_lifecycle_status,
             count(distinct engagement.id) filter (where engagement.status = 'active')::integer as active_engagements,
             count(distinct assignment.id) filter (
               where assignment.is_primary
@@ -288,6 +381,20 @@ async function auditDesignationRouting() {
                 and assignment.effective_from <= current_date
                 and (assignment.effective_to is null or assignment.effective_to >= current_date)
             ) as people_mapping_available,
+            bool_or(
+              case when source.worker_type = 'employee'
+                then source.source_designation_id = assignment.designation_id
+                  and 'employees' = any(coalesce(designation.onboarding_categories, '{}'::text[]))
+                else lower(btrim(coalesce(source.source_designation_name, ''))) = lower(btrim(coalesce(designation.name, '')))
+                  and 'contractors' = any(coalesce(designation.onboarding_categories, '{}'::text[]))
+              end
+            ) filter (
+              where source.live
+                and engagement.status = 'active'
+                and assignment.is_primary
+                and assignment.effective_from <= current_date
+                and (assignment.effective_to is null or assignment.effective_to >= current_date)
+            ) as source_projection_aligned,
             count(distinct reportee.subject_assignment_id) filter (
               where reportee.relationship_type = 'solid_line'
                 and reportee.is_primary
@@ -300,8 +407,11 @@ async function auditDesignationRouting() {
        on engagement.company_id = source.company_id
       and (engagement.employee_id = source.id or engagement.contractor_id = source.id)
      left join public.hr_work_assignments assignment
-       on assignment.company_id = engagement.company_id
-      and assignment.engagement_id = engagement.id
+      on assignment.company_id = engagement.company_id
+     and assignment.engagement_id = engagement.id
+     left join public.hr_people person
+       on person.company_id = engagement.company_id
+      and person.id = engagement.person_id
      left join public.designations designation
        on designation.company_id = assignment.company_id
       and designation.id = assignment.designation_id
@@ -333,10 +443,13 @@ async function auditDesignationRouting() {
       fullName: String(row.full_name ?? ""),
       liveSourceRows: Number(row.live_source_rows ?? 0),
       liveWorkerType: String(row.live_worker_type ?? ""),
+      personStatus: String(row.person_status ?? ""),
       peopleCategory: Boolean(row.people_category),
       peopleMappingAvailable: Boolean(row.people_mapping_available),
       peoplePortalScope: Boolean(row.people_portal_scope),
       positionTitle: String(row.position_title ?? ""),
+      sourceLifecycleStatus: String(row.source_lifecycle_status ?? ""),
+      sourceProjectionAligned: Boolean(row.source_projection_aligned),
       sourceRows: Number(row.source_rows ?? 0)
     };
     console.log(JSON.stringify(detail));
@@ -346,11 +459,18 @@ async function auditDesignationRouting() {
     Number(row.live_source_rows ?? 0) !== 1
     || Number(row.active_engagements ?? 0) !== 1
     || Number(row.current_assignments ?? 0) !== 1
+    || Number(row.active_reportees ?? 0) < 1
+    || String(row.person_status ?? "") !== "active"
+    || !Boolean(row.people_category)
+    || !Boolean(row.people_portal_scope)
+    || !Boolean(row.people_mapping_available)
+    || !Boolean(row.source_projection_aligned)
+    || !String(row.source_lifecycle_status ?? "").trim()
   ));
 
-  if (wrongSourceCount || blockedCount || invalidSujan) {
+  if (wrongSourceCount || blockedCount || projectionDriftCount || invalidSujan) {
     throw new Error(
-      `Production People audit failed: ${wrongSourceCount} wrong-source profile(s), ${blockedCount} blocked correction(s), D0785 canonical=${invalidSujan ? "invalid" : "valid"}.${blockedReasonSummary ? ` Blockers: ${blockedReasonSummary}` : ""}`
+      `Production People audit failed: ${wrongSourceCount} wrong-source profile(s), ${blockedCount} blocked correction(s), ${projectionDriftCount} source-projection drift(s), D0785 canonical=${invalidSujan ? "invalid" : "valid"}.${blockedReasonSummary ? ` Blockers: ${blockedReasonSummary}` : ""}`
     );
   }
 }

@@ -259,9 +259,11 @@ async function auditDesignationRouting() {
               person.status as person_status,
               employee.designation_id as employee_designation_id,
               employee.people_lifecycle_status as employee_lifecycle_status,
+              (employee.id is not null and employee.deleted_at is null) as employee_source_exists,
               (employee.deleted_at is null and employee.is_active) as live_employee,
               contractor.designation as contractor_designation,
               contractor.people_lifecycle_status as contractor_lifecycle_status,
+              (contractor.id is not null and contractor.deleted_at is null) as contractor_source_exists,
               (contractor.deleted_at is null and contractor.is_active) as live_contractor
        from public.hr_engagements engagement
        join public.hr_work_assignments assignment
@@ -308,11 +310,19 @@ async function auditDesignationRouting() {
             count(*) filter (
               where person_status <> 'active'
                  or case when worker_type = 'employee'
-                   then not coalesce(live_employee, false)
+                   then not coalesce(employee_source_exists, false)
+                     or (
+                       lower(btrim(coalesce(employee_lifecycle_status, ''))) = 'active'
+                       and not coalesce(live_employee, false)
+                     )
                      or employee_designation_id is distinct from designation_id
                      or nullif(btrim(coalesce(employee_lifecycle_status, '')), '') is null
                      or not ('employees' = any(coalesce(onboarding_categories, '{}'::text[])))
-                   else not coalesce(live_contractor, false)
+                   else not coalesce(contractor_source_exists, false)
+                     or (
+                       lower(btrim(coalesce(contractor_lifecycle_status, ''))) = 'active'
+                       and not coalesce(live_contractor, false)
+                     )
                      or lower(btrim(coalesce(contractor_designation, ''))) is distinct from lower(btrim(coalesce(designation_name, '')))
                      or nullif(btrim(coalesce(contractor_lifecycle_status, '')), '') is null
                      or not ('contractors' = any(coalesce(onboarding_categories, '{}'::text[])))
@@ -343,9 +353,11 @@ async function auditDesignationRouting() {
                 person.status as person_status,
                 employee.designation_id as employee_designation_id,
                 employee.people_lifecycle_status as employee_lifecycle_status,
+                (employee.id is not null and employee.deleted_at is null) as employee_source_exists,
                 (employee.deleted_at is null and employee.is_active) as live_employee,
                 contractor.designation as contractor_designation,
                 contractor.people_lifecycle_status as contractor_lifecycle_status,
+                (contractor.id is not null and contractor.deleted_at is null) as contractor_source_exists,
                 (contractor.deleted_at is null and contractor.is_active) as live_contractor
          from public.hr_engagements engagement
          join public.companies company
@@ -401,11 +413,13 @@ async function auditDesignationRouting() {
               coalesce(employee_designation_id::text, contractor_designation, '')::text as source_designation,
               array_to_string(array_remove(array[
                 case when person_status <> 'active' then 'person_not_active' end,
-                case when worker_type = 'employee' and not coalesce(live_employee, false) then 'employee_source_not_live' end,
+                case when worker_type = 'employee' and not coalesce(employee_source_exists, false) then 'employee_source_missing' end,
+                case when worker_type = 'employee' and lower(btrim(coalesce(employee_lifecycle_status, ''))) = 'active' and not coalesce(live_employee, false) then 'active_employee_source_not_live' end,
                 case when worker_type = 'employee' and employee_designation_id is distinct from designation_id then 'employee_designation_mismatch' end,
                 case when worker_type = 'employee' and nullif(btrim(coalesce(employee_lifecycle_status, '')), '') is null then 'employee_lifecycle_missing' end,
                 case when worker_type = 'employee' and not ('employees' = any(coalesce(onboarding_categories, '{}'::text[]))) then 'employee_category_missing' end,
-                case when worker_type = 'contractor' and not coalesce(live_contractor, false) then 'contractor_source_not_live' end,
+                case when worker_type = 'contractor' and not coalesce(contractor_source_exists, false) then 'contractor_source_missing' end,
+                case when worker_type = 'contractor' and lower(btrim(coalesce(contractor_lifecycle_status, ''))) = 'active' and not coalesce(live_contractor, false) then 'active_contractor_source_not_live' end,
                 case when worker_type = 'contractor' and lower(btrim(coalesce(contractor_designation, ''))) is distinct from lower(btrim(coalesce(designation_name, ''))) then 'contractor_designation_mismatch' end,
                 case when worker_type = 'contractor' and nullif(btrim(coalesce(contractor_lifecycle_status, '')), '') is null then 'contractor_lifecycle_missing' end,
                 case when worker_type = 'contractor' and not ('contractors' = any(coalesce(onboarding_categories, '{}'::text[]))) then 'contractor_category_missing' end
@@ -413,11 +427,19 @@ async function auditDesignationRouting() {
        from current_people
        where person_status <> 'active'
           or case when worker_type = 'employee'
-            then not coalesce(live_employee, false)
+            then not coalesce(employee_source_exists, false)
+              or (
+                lower(btrim(coalesce(employee_lifecycle_status, ''))) = 'active'
+                and not coalesce(live_employee, false)
+              )
               or employee_designation_id is distinct from designation_id
               or nullif(btrim(coalesce(employee_lifecycle_status, '')), '') is null
               or not ('employees' = any(coalesce(onboarding_categories, '{}'::text[])))
-            else not coalesce(live_contractor, false)
+            else not coalesce(contractor_source_exists, false)
+              or (
+                lower(btrim(coalesce(contractor_lifecycle_status, ''))) = 'active'
+                and not coalesce(live_contractor, false)
+              )
               or lower(btrim(coalesce(contractor_designation, ''))) is distinct from lower(btrim(coalesce(designation_name, '')))
               or nullif(btrim(coalesce(contractor_lifecycle_status, '')), '') is null
               or not ('contractors' = any(coalesce(onboarding_categories, '{}'::text[])))

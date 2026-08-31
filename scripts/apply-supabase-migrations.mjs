@@ -307,8 +307,14 @@ if (mode === "--check") {
 }
 
 if (mode === "--audit") {
-  await auditDesignationRouting();
-  process.exit(0);
+  try {
+    await auditDesignationRouting();
+    process.exit(0);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`::error title=Production People audit failed::${message}`);
+    process.exit(1);
+  }
 }
 
 if (mode !== "--preview" && mode !== "--apply") {

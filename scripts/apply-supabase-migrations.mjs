@@ -243,16 +243,18 @@ async function auditDesignationRouting() {
   )).join(" | ");
 
   const sujanResult = await managementQuery(
-    `with source as (
-       select company_id, id, 'employee'::text as worker_type,
+     `with source as (
+       select company_id, id, full_name, 'employee'::text as worker_type,
               (deleted_at is null and is_active) as live
        from public.employees where upper(employee_code) = 'D0785'
        union all
-       select company_id, id, 'contractor'::text,
+       select company_id, id, full_name, 'contractor'::text,
               (deleted_at is null and is_active)
        from public.contractors where upper(dropx_id) = 'D0785'
      )
      select company.code::text as company_code,
+            max(source.full_name)::text as full_name,
+            max(source.worker_type) filter (where source.live)::text as live_worker_type,
             count(source.id)::integer as source_rows,
             count(source.id) filter (where source.live)::integer as live_source_rows,
             count(distinct engagement.id) filter (where engagement.status = 'active')::integer as active_engagements,
@@ -260,7 +262,38 @@ async function auditDesignationRouting() {
               where assignment.is_primary
                 and assignment.effective_from <= current_date
                 and (assignment.effective_to is null or assignment.effective_to >= current_date)
-            )::integer as current_assignments
+            )::integer as current_assignments,
+            max(assignment.position_title) filter (
+              where assignment.is_primary
+                and assignment.effective_from <= current_date
+                and (assignment.effective_to is null or assignment.effective_to >= current_date)
+            )::text as position_title,
+            max(designation.name) filter (
+              where assignment.is_primary
+                and assignment.effective_from <= current_date
+                and (assignment.effective_to is null or assignment.effective_to >= current_date)
+            )::text as designation_name,
+            bool_or(category.people_module = 'people_hr') filter (
+              where assignment.is_primary
+                and assignment.effective_from <= current_date
+                and (assignment.effective_to is null or assignment.effective_to >= current_date)
+            ) as people_category,
+            bool_or('people' = any(coalesce(designation.portal_scopes, '{}'::text[]))) filter (
+              where assignment.is_primary
+                and assignment.effective_from <= current_date
+                and (assignment.effective_to is null or assignment.effective_to >= current_date)
+            ) as people_portal_scope,
+            bool_or(coalesce(mapping.is_available, false)) filter (
+              where assignment.is_primary
+                and assignment.effective_from <= current_date
+                and (assignment.effective_to is null or assignment.effective_to >= current_date)
+            ) as people_mapping_available,
+            count(distinct reportee.subject_assignment_id) filter (
+              where reportee.relationship_type = 'solid_line'
+                and reportee.is_primary
+                and reportee.effective_from <= current_date
+                and (reportee.effective_to is null or reportee.effective_to >= current_date)
+            )::integer as active_reportees
      from public.companies company
      left join source on source.company_id = company.id
      left join public.hr_engagements engagement
@@ -269,6 +302,18 @@ async function auditDesignationRouting() {
      left join public.hr_work_assignments assignment
        on assignment.company_id = engagement.company_id
       and assignment.engagement_id = engagement.id
+     left join public.designations designation
+       on designation.company_id = assignment.company_id
+      and designation.id = assignment.designation_id
+     left join public.designation_categories category
+       on category.company_id = designation.company_id
+      and category.id = designation.designation_category_id
+     left join public.hr_designation_mappings mapping
+       on mapping.company_id = designation.company_id
+      and mapping.designation_id = designation.id
+     left join public.hr_reporting_relationships reportee
+       on reportee.company_id = assignment.company_id
+      and reportee.manager_assignment_id = assignment.id
      where exists (
        select 1 from source candidate where candidate.company_id = company.id
      )
@@ -279,13 +324,23 @@ async function auditDesignationRouting() {
   const sujanRows = rowsFromResponse(sujanResult);
   console.log("D0785 canonical People recovery audit:");
   for (const row of sujanRows) {
-    console.log(JSON.stringify({
+    const detail = {
       activeEngagements: Number(row.active_engagements ?? 0),
+      activeReportees: Number(row.active_reportees ?? 0),
       companyCode: String(row.company_code ?? ""),
       currentAssignments: Number(row.current_assignments ?? 0),
+      designationName: String(row.designation_name ?? ""),
+      fullName: String(row.full_name ?? ""),
       liveSourceRows: Number(row.live_source_rows ?? 0),
+      liveWorkerType: String(row.live_worker_type ?? ""),
+      peopleCategory: Boolean(row.people_category),
+      peopleMappingAvailable: Boolean(row.people_mapping_available),
+      peoplePortalScope: Boolean(row.people_portal_scope),
+      positionTitle: String(row.position_title ?? ""),
       sourceRows: Number(row.source_rows ?? 0)
-    }));
+    };
+    console.log(JSON.stringify(detail));
+    console.log(`::notice title=D0785 canonical People audit::${Object.entries(detail).map(([key, value]) => `${key}=${value}`).join(", ")}`);
   }
   const invalidSujan = sujanRows.length !== 1 || sujanRows.some((row) => (
     Number(row.live_source_rows ?? 0) !== 1

@@ -60,6 +60,8 @@ async function upsertWorkforceMembership(input: {
   reportsToUserId: string | null;
   isActive: boolean;
   assignedBy: string;
+  designationId?: string;
+  designationPolicyId?: string;
 }) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
   const result = await supabaseAdmin
@@ -70,7 +72,9 @@ async function upsertWorkforceMembership(input: {
       user_id: input.userId,
       role_id: input.roleId,
       role_code_snapshot: input.roleCode,
-      source_system: "manual",
+      source_system: "person_override",
+      ...(input.designationId ? { designation_id: input.designationId } : {}),
+      ...(input.designationPolicyId ? { designation_policy_id: input.designationPolicyId } : {}),
       has_all_location_access: input.hasAllLocationAccess,
       location_scope_ids: input.locationScopeIds,
       reports_to_user_id: input.reportsToUserId,
@@ -152,14 +156,18 @@ function requireDropxPortalEmail(email: string) {
   }
 }
 
-async function selectedPeopleEmployee(formData: FormData, companyId: string) {
+async function selectedPeoplePerson(formData: FormData, companyId: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
   const designationId = required(formData.get("designation_id"), "People designation");
-  const employeeRecordId = required(formData.get("people_employee_id"), "Person from People");
-  const [designationResult, employeeResult] = await Promise.all([
+  const workerType = required(formData.get("people_worker_type"), "People worker type");
+  const workerId = required(formData.get("people_employee_id"), "Person from People");
+  if (!(["employee", "contractor"] as const).includes(workerType as "employee" | "contractor")) {
+    throw new Error("Select a valid person from People.");
+  }
+  const [designationResult, policyResult] = await Promise.all([
     supabaseAdmin
       .from("designations")
-      .select("id, designation_category:designation_categories!designations_designation_category_id_fkey!inner(people_module, is_active)")
+      .select("id, workspace_account_requirement, designation_category:designation_categories!designations_designation_category_id_fkey!inner(people_module, is_active)")
       .eq("id", designationId)
       .eq("company_id", companyId)
       .eq("is_active", true)
@@ -167,20 +175,82 @@ async function selectedPeopleEmployee(formData: FormData, companyId: string) {
       .eq("designation_category.is_active", true)
       .maybeSingle(),
     supabaseAdmin
-      .from("employees")
-      .select("id, employee_code, full_name, email, mobile_country_code, mobile, designation_id, is_active")
-      .eq("id", employeeRecordId)
+      .from("designation_product_access_policies")
+      .select("id, default_role_id")
       .eq("company_id", companyId)
-      .eq("is_active", true)
+      .eq("designation_id", designationId)
+      .eq("product_code", "workforce")
+      .eq("is_enabled", true)
       .maybeSingle()
   ]);
   if (designationResult.error) throw new Error(designationResult.error.message);
   if (!designationResult.data) throw new Error("Select an active People designation.");
-  if (employeeResult.error) throw new Error(employeeResult.error.message);
-  if (!employeeResult.data || employeeResult.data.designation_id !== designationId) {
-    throw new Error("The selected person is not active under this People designation.");
+  if (policyResult.error) throw new Error(policyResult.error.message);
+  if (!policyResult.data) throw new Error("This designation is not enabled for Workforce in People Designation Master.");
+
+  const engagementResult = await supabaseAdmin
+    .from("hr_engagements")
+    .select("id, person_id, employee_id, contractor_id")
+    .eq("company_id", companyId)
+    .eq("worker_type", workerType)
+    .eq(workerType === "employee" ? "employee_id" : "contractor_id", workerId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (engagementResult.error) throw new Error(engagementResult.error.message);
+  if (!engagementResult.data) throw new Error("The selected person has no active canonical People engagement.");
+
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const assignmentResult = await supabaseAdmin
+    .from("hr_work_assignments")
+    .select("designation_id")
+    .eq("company_id", companyId)
+    .eq("engagement_id", engagementResult.data.id)
+    .eq("is_primary", true)
+    .lte("effective_from", today)
+    .or(`effective_to.is.null,effective_to.gte.${today}`)
+    .maybeSingle();
+  if (assignmentResult.error) throw new Error(assignmentResult.error.message);
+  if (assignmentResult.data?.designation_id !== designationId) {
+    throw new Error("The selected person's current People assignment does not match this designation.");
   }
-  return employeeResult.data;
+
+  const personResult = workerType === "employee"
+    ? await supabaseAdmin
+      .from("employees")
+      .select("id, employee_code, full_name, email, mobile_country_code, mobile, is_active")
+      .eq("id", workerId).eq("company_id", companyId).eq("is_active", true).maybeSingle()
+    : await supabaseAdmin
+      .from("contractors")
+      .select("id, dropx_id, full_name, email, mobile_country_code, mobile, is_active")
+      .eq("id", workerId).eq("company_id", companyId).eq("is_active", true).maybeSingle();
+  if (personResult.error) throw new Error(personResult.error.message);
+  if (!personResult.data) throw new Error("The selected People record is not active.");
+
+  const scopeResult = await supabaseAdmin
+    .from("people_person_access_scopes")
+    .select("workspace_identity_override")
+    .eq("company_id", companyId)
+    .eq("person_id", engagementResult.data.person_id)
+    .maybeSingle();
+  if (scopeResult.error) throw new Error(scopeResult.error.message);
+  const requirement = scopeResult.data?.workspace_identity_override ?? designationResult.data.workspace_account_requirement;
+  if (requirement === "not_required") {
+    throw new Error("This person's People access profile does not require an individual Workspace login. Use a location account from Dashboard Location Master when applicable.");
+  }
+
+  const row = personResult.data as typeof personResult.data & { employee_code?: string | null; dropx_id?: string | null };
+  return {
+    id: row.id,
+    workerType: workerType as "employee" | "contractor",
+    workerCode: row.employee_code ?? row.dropx_id ?? null,
+    fullName: row.full_name,
+    email: row.email,
+    mobileCountryCode: row.mobile_country_code,
+    mobile: row.mobile,
+    personId: engagementResult.data.person_id as string,
+    designationId,
+    designationPolicyId: policyResult.data.id as string
+  };
 }
 
 async function managerAccessForSurface(userId: string, companyId: string, surface: AccessSurface) {
@@ -778,16 +848,30 @@ export async function createUser(formData: FormData) {
   let notice = "User saved successfully.";
 
   try {
-    const peopleEmployee = await selectedPeopleEmployee(formData, companyId);
-    const employeeId = required(peopleEmployee.employee_code, "Employee ID").toUpperCase();
-    const fullName = required(peopleEmployee.full_name, "Full name");
+    const peoplePerson = await selectedPeoplePerson(formData, companyId);
+    const employeeId = required(peoplePerson.workerCode, "DropX ID").toUpperCase();
+    const fullName = required(peoplePerson.fullName, "Full name");
     const email = required(formData.get("email"), "Email").toLowerCase();
     requireDropxPortalEmail(email);
     if (await isLinkedLocationEmail(email, companyId)) {
       throw new Error("Location accounts are managed from Location Master and cannot be assigned to a person.");
     }
-    const mobileCountryCode = cleanCountryCode(peopleEmployee.mobile_country_code);
-    const mobile = clean(peopleEmployee.mobile)?.replace(/\D/g, "") ?? null;
+    const workspaceAccount = await admin.from("google_workspace_accounts")
+      .select("id,person_id,source_type,source_record_id,account_state,suspended")
+      .eq("company_id", companyId)
+      .ilike("primary_email", email)
+      .eq("account_type", "person")
+      .limit(1)
+      .maybeSingle();
+    if (workspaceAccount.error) throw new Error(workspaceAccount.error.message);
+    const workspaceMatchesPerson = workspaceAccount.data
+      && (workspaceAccount.data.person_id === peoplePerson.personId
+        || (workspaceAccount.data.source_type === peoplePerson.workerType && workspaceAccount.data.source_record_id === peoplePerson.id));
+    if (!workspaceMatchesPerson || workspaceAccount.data?.suspended || workspaceAccount.data?.account_state !== "active") {
+      throw new Error("Provision and activate this person's DropX Google Workspace account from People before granting Workforce portal access.");
+    }
+    const mobileCountryCode = cleanCountryCode(peoplePerson.mobileCountryCode);
+    const mobile = clean(peoplePerson.mobile)?.replace(/\D/g, "") ?? null;
     const roleId = required(formData.get("role_id"), "Role");
     const reportsToUserId = clean(formData.get("reports_to_user_id"));
     const sendInvitation = formData.get("send_invitation") === "yes";
@@ -890,8 +974,20 @@ export async function createUser(formData: FormData) {
       locationScopeIds,
       reportsToUserId,
       isActive: true,
-      assignedBy: authorization.userId
+      assignedBy: authorization.userId,
+      designationId: peoplePerson.designationId,
+      designationPolicyId: peoplePerson.designationPolicyId
     });
+    const personLinkResult = await admin.from("hr_user_person_links").upsert({
+      company_id: companyId,
+      user_id: userId,
+      person_id: peoplePerson.personId,
+      status: "active",
+      verified_by: authorization.userId,
+      verified_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }, { onConflict: "company_id,user_id" });
+    if (personLinkResult.error) throw new Error(personLinkResult.error.message);
     if (resolvedExistingProfile) notice = "Existing DropX user added to Workforce without changing access in another portal.";
 
     revalidatePath("/users");

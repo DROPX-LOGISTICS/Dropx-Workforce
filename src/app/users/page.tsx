@@ -86,9 +86,10 @@ type PeopleDesignationRow = {
   name: string;
 };
 
-type PeopleEmployeeRow = {
+type PeoplePersonRow = {
   id: string;
-  employee_code: string | null;
+  worker_type: "employee" | "contractor";
+  worker_code: string | null;
   full_name: string | null;
   email: string | null;
   mobile_country_code: string | null;
@@ -228,7 +229,7 @@ async function loadPeopleAccessDirectory(companyId: string) {
   if (!supabaseAdmin) {
     return {
       designations: [] as PeopleDesignationRow[],
-      people: [] as PeopleEmployeeRow[],
+      people: [] as PeoplePersonRow[],
       error: "Supabase service role key is not configured."
     };
   }
@@ -240,11 +241,23 @@ async function loadPeopleAccessDirectory(companyId: string) {
     .eq("people_module", "people_hr")
     .eq("is_active", true);
   if (categoriesResult.error) {
-    return { designations: [] as PeopleDesignationRow[], people: [] as PeopleEmployeeRow[], error: categoriesResult.error.message };
+    return { designations: [] as PeopleDesignationRow[], people: [] as PeoplePersonRow[], error: categoriesResult.error.message };
   }
 
   const categoryIds = (categoriesResult.data ?? []).map((category) => category.id);
-  if (!categoryIds.length) return { designations: [] as PeopleDesignationRow[], people: [] as PeopleEmployeeRow[], error: null };
+  if (!categoryIds.length) return { designations: [] as PeopleDesignationRow[], people: [] as PeoplePersonRow[], error: null };
+
+  const policiesResult = await supabaseAdmin
+    .from("designation_product_access_policies")
+    .select("designation_id")
+    .eq("company_id", companyId)
+    .eq("product_code", "workforce")
+    .eq("is_enabled", true);
+  if (policiesResult.error) {
+    return { designations: [] as PeopleDesignationRow[], people: [] as PeoplePersonRow[], error: policiesResult.error.message };
+  }
+  const enabledDesignationIds = [...new Set((policiesResult.data ?? []).map((policy) => policy.designation_id))];
+  if (!enabledDesignationIds.length) return { designations: [] as PeopleDesignationRow[], people: [] as PeoplePersonRow[], error: null };
 
   const designationsResult = await supabaseAdmin
     .from("designations")
@@ -252,15 +265,16 @@ async function loadPeopleAccessDirectory(companyId: string) {
     .eq("company_id", companyId)
     .eq("is_active", true)
     .in("designation_category_id", categoryIds)
+    .in("id", enabledDesignationIds)
     .order("name");
   if (designationsResult.error) {
-    return { designations: [] as PeopleDesignationRow[], people: [] as PeopleEmployeeRow[], error: designationsResult.error.message };
+    return { designations: [] as PeopleDesignationRow[], people: [] as PeoplePersonRow[], error: designationsResult.error.message };
   }
 
   const designations = (designationsResult.data ?? []) as PeopleDesignationRow[];
-  if (!designations.length) return { designations, people: [] as PeopleEmployeeRow[], error: null };
+  if (!designations.length) return { designations, people: [] as PeoplePersonRow[], error: null };
 
-  const people: PeopleEmployeeRow[] = [];
+  const people: PeoplePersonRow[] = [];
   const pageSize = 1000;
   for (let offset = 0; ; offset += pageSize) {
     const peopleResult = await supabaseAdmin
@@ -271,13 +285,71 @@ async function loadPeopleAccessDirectory(companyId: string) {
       .in("designation_id", designations.map((designation) => designation.id))
       .order("full_name")
       .range(offset, offset + pageSize - 1);
-    if (peopleResult.error) return { designations, people: [] as PeopleEmployeeRow[], error: peopleResult.error.message };
-    const rows = (peopleResult.data ?? []) as PeopleEmployeeRow[];
-    people.push(...rows);
+    if (peopleResult.error) return { designations, people: [] as PeoplePersonRow[], error: peopleResult.error.message };
+    const rows = peopleResult.data ?? [];
+    people.push(...rows.map((row) => ({
+      id: row.id,
+      worker_type: "employee" as const,
+      worker_code: row.employee_code,
+      full_name: row.full_name,
+      email: row.email,
+      mobile_country_code: row.mobile_country_code,
+      mobile: row.mobile,
+      designation_id: row.designation_id
+    })));
     if (rows.length < pageSize) break;
   }
 
-  return { designations, people, error: null };
+  const today = new Date().toISOString().slice(0, 10);
+  const assignmentResult = await supabaseAdmin
+    .from("hr_work_assignments")
+    .select("engagement_id, designation_id")
+    .eq("company_id", companyId)
+    .eq("is_primary", true)
+    .in("designation_id", designations.map((designation) => designation.id))
+    .lte("effective_from", today)
+    .or(`effective_to.is.null,effective_to.gte.${today}`);
+  if (assignmentResult.error) return { designations, people, error: assignmentResult.error.message };
+
+  const designationByEngagement = new Map((assignmentResult.data ?? []).map((assignment) => [assignment.engagement_id, assignment.designation_id]));
+  const engagementIds = [...designationByEngagement.keys()];
+  if (engagementIds.length) {
+    const engagementResult = await supabaseAdmin
+      .from("hr_engagements")
+      .select("id, contractor_id")
+      .eq("company_id", companyId)
+      .eq("worker_type", "contractor")
+      .eq("status", "active")
+      .in("id", engagementIds);
+    if (engagementResult.error) return { designations, people, error: engagementResult.error.message };
+    const designationByContractor = new Map(
+      (engagementResult.data ?? [])
+        .filter((engagement) => engagement.contractor_id)
+        .map((engagement) => [engagement.contractor_id as string, designationByEngagement.get(engagement.id) ?? null])
+    );
+    const contractorIds = [...designationByContractor.keys()];
+    for (let offset = 0; contractorIds.length && offset < contractorIds.length; offset += pageSize) {
+      const contractorResult = await supabaseAdmin
+        .from("contractors")
+        .select("id, dropx_id, full_name, email, mobile_country_code, mobile")
+        .eq("company_id", companyId)
+        .eq("is_active", true)
+        .in("id", contractorIds.slice(offset, offset + pageSize));
+      if (contractorResult.error) return { designations, people, error: contractorResult.error.message };
+      people.push(...(contractorResult.data ?? []).map((row) => ({
+        id: row.id,
+        worker_type: "contractor" as const,
+        worker_code: row.dropx_id,
+        full_name: row.full_name,
+        email: row.email,
+        mobile_country_code: row.mobile_country_code,
+        mobile: row.mobile,
+        designation_id: designationByContractor.get(row.id) ?? null
+      })));
+    }
+  }
+
+  return { designations, people: people.sort((left, right) => (left.full_name ?? "").localeCompare(right.full_name ?? "")), error: null };
 }
 
 async function loadAccessData(
@@ -457,7 +529,7 @@ async function loadAccessData(
   const profileUsers = (usersResult.data ?? []) as UserRow[];
   const memberships = membershipsResult.error ? [] : membershipsResult.data ?? [];
   const membershipByUserId = new Map(memberships.map((membership) => [membership.user_id, membership]));
-  const users = memberships.length
+  const users = surface === "workforce"
     ? profileUsers.filter((user) => membershipByUserId.has(user.id)).map((user) => {
       const membership = membershipByUserId.get(user.id)!;
       return {
@@ -508,7 +580,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   const showAddRole = pagePermission.canAdd && searchParams?.addRole === "1";
   const peopleDirectory = showAddUser
     ? await loadPeopleAccessDirectory(companyId)
-    : { designations: [] as PeopleDesignationRow[], people: [] as PeopleEmployeeRow[], error: null };
+    : { designations: [] as PeopleDesignationRow[], people: [] as PeoplePersonRow[], error: null };
   const surfacePageIds = new Set(pages.map((page) => page.id));
   const surfacePermissions = permissions.filter((permission) => surfacePageIds.has(permission.page_id));
   const visibleRoles = isWorkforceSurface
@@ -694,8 +766,9 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                 designations={peopleDirectory.designations}
                 people={peopleDirectory.people.map((person) => ({
                   id: person.id,
+                  workerType: person.worker_type,
                   designationId: person.designation_id ?? "",
-                  employeeId: person.employee_code,
+                  employeeId: person.worker_code,
                   fullName: person.full_name,
                   email: person.email,
                   mobileCountryCode: person.mobile_country_code,

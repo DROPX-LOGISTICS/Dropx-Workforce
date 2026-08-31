@@ -217,7 +217,7 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
     const emailMatches = (profileRows ?? []).filter((item) => normalizeEmail(item.email) === signedInEmail);
     const activeEmailMatches = emailMatches.filter((item) => item.is_active);
     const masterOwnerMatch = activeEmailMatches.find((item) => item.is_master_owner);
-    profile = activeEmailMatches.length === 1 ? activeEmailMatches[0] : (masterOwnerMatch && signedInEmail === "nisar@dropxlogistics.com" ? masterOwnerMatch : null);
+    profile = activeEmailMatches.length === 1 ? activeEmailMatches[0] : masterOwnerMatch ?? null;
   }
 
   if (!profile?.is_active) return null;
@@ -227,8 +227,7 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
     ? await supabaseAdmin.from("user_roles").select("code,is_active").eq("id", viewerProfile.role_id).maybeSingle()
     : { data: null, error: null };
   const canPreviewUsers = Boolean(viewerProfile.is_master_owner)
-    || String(viewerRoleResult.data?.code ?? "").toUpperCase() === "OWNER"
-    || signedInEmail === "nisar@dropxlogistics.com";
+    || String(viewerRoleResult.data?.code ?? "").toUpperCase() === "OWNER";
   const requestedPreviewUserId = canPreviewUsers ? cookies().get(dashboardPreviewCookieName)?.value?.trim() : "";
   let isPreview = false;
   if (requestedPreviewUserId && requestedPreviewUserId !== viewerProfile.id && viewerProfile.company_id) {
@@ -255,8 +254,8 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
   let companyId: string | null = typeof profile.company_id === "string" ? profile.company_id : null;
   let companyCode: string | null = null;
   let companyName: string | null = null;
-  let isMasterCompany = signedInEmail === "nisar@dropxlogistics.com";
-  let isMasterOwner = Boolean(profile.is_master_owner) || (!isPreview && signedInEmail === "nisar@dropxlogistics.com");
+  let isMasterCompany = false;
+  let isMasterOwner = Boolean(profile.is_master_owner);
   let roleCode: string | null = null;
 
   if (!companyId) return null;
@@ -385,6 +384,17 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
     .eq("product_code", "workforce")
     .eq("is_active", true);
   if (productOwnerResult.error && !isOptionalProductOwnerSchemaError(productOwnerResult.error)) return null;
+  const hasWorkforceMembership = (membershipResult.data ?? []).length > 0;
+  const hasWorkforceOwnership = (productOwnerResult.data ?? []).length > 0;
+  if (!isMasterOwner && !hasWorkforceMembership && !hasWorkforceOwnership) return null;
+
+  if (!isMasterOwner) {
+    for (const code of Object.keys(permissions)) permissions[code] = { ...noPermission };
+    hasAllLocationAccess = (membershipResult.data ?? []).some((membership) => membership.has_all_location_access);
+    locationScopeIds = Array.from(new Set((membershipResult.data ?? []).flatMap((membership) => membership.location_scope_ids ?? [])));
+    roleCode = null;
+    roleName = null;
+  }
   const productOwnerRoleIds = [...membershipRoleIds, ...(productOwnerResult.data ?? [])
     .map((assignment) => assignment.role_id)
     .filter((roleId): roleId is string => Boolean(roleId))];
@@ -392,7 +402,7 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
     const [ownerRolesResult, ownerPagesResult, ownerGrantsResult] = await Promise.all([
       supabaseAdmin
         .from("user_roles")
-        .select("id, location_access_mode, is_active")
+        .select("id, code, name, location_access_mode, is_active")
         .eq("company_id", companyId)
         .in("id", productOwnerRoleIds),
       supabaseAdmin
@@ -408,6 +418,9 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
     ]);
     if (ownerRolesResult.error || ownerPagesResult.error || ownerGrantsResult.error) return null;
     const activeOwnerRoleIds = new Set((ownerRolesResult.data ?? []).filter((role) => role.is_active).map((role) => role.id));
+    const effectiveProductRole = (ownerRolesResult.data ?? []).find((role) => role.is_active);
+    roleCode = effectiveProductRole?.code ?? roleCode;
+    roleName = effectiveProductRole?.name ?? roleName;
     if ((ownerRolesResult.data ?? []).some((role) => role.is_active && role.location_access_mode === "all_locations")) {
       hasAllLocationAccess = true;
     }

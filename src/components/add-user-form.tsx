@@ -32,6 +32,7 @@ export type AddUserDesignationOption = {
 
 export type AddUserPersonOption = {
   id: string;
+  workerType: "employee" | "contractor";
   designationId: string;
   employeeId: string | null;
   fullName: string | null;
@@ -267,6 +268,7 @@ export function AddUserForm({
 
   return (
     <form action={createUser} onSubmit={(event) => saveDraft(new FormData(event.currentTarget))}>
+      <input name="people_worker_type" type="hidden" value={selectedPerson?.workerType ?? ""} />
       <div className="form-grid three">
         <label>People designation
           <select className="select" name="designation_id" onChange={(event) => handleDesignationChange(event.target.value)} required value={designationId}>
@@ -277,7 +279,7 @@ export function AddUserForm({
         <label>Person from People
           <select className="select" disabled={!designationId} name="people_employee_id" onChange={(event) => handlePersonChange(event.target.value)} required value={personId}>
             <option value="">{designationId ? "Select person" : "Select designation first"}</option>
-            {designationPeople.map((person) => <option key={person.id} value={person.id}>{person.fullName || "Unnamed employee"} · {person.employeeId || "No employee ID"}</option>)}
+            {designationPeople.map((person) => <option key={`${person.workerType}:${person.id}`} value={person.id}>{person.fullName || "Unnamed person"} · {person.employeeId || "No DropX ID"} · {person.workerType === "contractor" ? "Contractor" : "Employee"}</option>)}
           </select>
         </label>
         <label>DropX login email

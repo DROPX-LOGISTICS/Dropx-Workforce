@@ -20,7 +20,7 @@ import { assertWorkerDesignationMappedToIdSeries, generateConfiguredBiometricId,
 import { requireDesignationOnboardingAccess } from "@/lib/designation-onboarding-access";
 import { requireDesignationPortalAccess } from "@/lib/designation-portal-access";
 import { moveProfileDocumentToTrash, uploadProfileDocument } from "@/lib/profile-document-storage";
-import { saveProfileVerifications } from "@/lib/profile-verifications";
+import { isMissingVerificationTable, saveProfileVerifications } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createAppNotification } from "@/lib/app-notifications";
 import { loadWorkforceCategoryDirectActivate, loadWorkforceCategoryRules } from "@/lib/workforce-category-rules";
@@ -944,6 +944,23 @@ export async function reviewFieldExecutiveProfile(formData: FormData) {
       throw new Error("Only profiles under review can be approved or returned.");
     }
 
+    const profileType = nonEmployeeConfigForRoute(returnPath).profileType;
+    if (action === "approve") {
+      const unresolved = await supabaseAdmin
+        .from("connect_profile_verifications")
+        .select("kind, message")
+        .eq("company_id", companyId)
+        .eq("profile_type", profileType)
+        .eq("account_id", id)
+        .or("manual_review.eq.true,block_submit.eq.true")
+        .limit(10);
+      if (unresolved.error && !isMissingVerificationTable(unresolved.error)) throw new Error(unresolved.error.message);
+      if (unresolved.data?.length) {
+        const fields = unresolved.data.map((row) => String(row.kind).replaceAll("_", " ").toUpperCase());
+        throw new Error(`Resolve and re-verify ${fields.join(", ")} before approving this profile.`);
+      }
+    }
+
     const reviewedAt = new Date().toISOString();
     const update = action === "approve"
       ? {
@@ -964,7 +981,6 @@ export async function reviewFieldExecutiveProfile(formData: FormData) {
       .eq("id", id)
       .eq("company_id", companyId);
     if (result.error) throw new Error(result.error.message);
-    const profileType = nonEmployeeConfigForRoute(returnPath).profileType;
     await createAppNotification({
       accountId: id,
       companyId,

@@ -5277,6 +5277,148 @@ button.row-action-item {
   background: #ffffff;
 }
 
+.workforce-review-resolution {
+  display: grid;
+  gap: 12px;
+  margin: 14px 14px 0;
+  padding: 14px;
+  border: 1px solid #fdb022;
+  border-radius: 8px;
+  background: #fffaeb;
+}
+
+.workforce-review-resolution.ready {
+  border-color: #a6f4c5;
+  background: #f6fef9;
+}
+
+.workforce-review-resolution header span {
+  color: #b54708;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.workforce-review-resolution h3,
+.workforce-review-resolution p {
+  margin: 0;
+}
+
+.workforce-review-resolution h3 {
+  margin-top: 3px;
+  color: #101828;
+  font-size: 16px;
+}
+
+.workforce-review-resolution header p,
+.workforce-review-resolution.ready p {
+  margin-top: 4px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.workforce-review-resolution-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.workforce-review-resolution-grid article {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid #fedf89;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.workforce-review-resolution-grid article > span {
+  color: #b54708;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.workforce-review-resolution-grid article > strong {
+  overflow-wrap: anywhere;
+  color: #101828;
+  font-size: 13px;
+}
+
+.workforce-review-resolution-grid article > small,
+.workforce-review-resolution-grid article > p {
+  color: #667085;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.workforce-review-resolution-grid article > p {
+  padding-top: 5px;
+  border-top: 1px solid #fef0c7;
+}
+
+.row-action-item.review {
+  color: #b54708;
+  background: #fffaeb;
+}
+
+.workforce-lifecycle-issues {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid #fdb022;
+  border-radius: 8px;
+  background: #fffaeb;
+}
+
+.workforce-lifecycle-issues header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.workforce-lifecycle-issues header > span,
+.workforce-lifecycle-issues header > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #b54708;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.workforce-lifecycle-issues header > a {
+  text-decoration: underline;
+}
+
+.workforce-lifecycle-issues > div {
+  display: grid;
+  grid-template-columns: minmax(110px, .35fr) minmax(0, 1fr);
+  gap: 10px;
+  color: #667085;
+  font-size: 11px;
+}
+
+.workforce-lifecycle-issues > div strong {
+  color: #344054;
+}
+
+@media (max-width: 700px) {
+  .workforce-review-resolution-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workforce-lifecycle-issues header,
+  .workforce-lifecycle-issues > div {
+    align-items: flex-start;
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+}
+
 .profile-review-head {
   padding: 16px 18px 14px;
   border-bottom: 1px solid #e4e7ec;

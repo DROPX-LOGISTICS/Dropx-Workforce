@@ -140,6 +140,75 @@ type WorkforceProfileChangeRequest = {
   requestedByName?: string;
 };
 
+type WorkforceReviewIssue = {
+  account_id: string;
+  block_submit: boolean | null;
+  details?: Record<string, unknown> | null;
+  display_name: string | null;
+  kind: string;
+  manual_review: boolean | null;
+  message: string | null;
+  updated_at: string | null;
+  verified: boolean | null;
+};
+
+const reviewIssueLabels: Record<string, string> = {
+  pan: "PAN",
+  pan_aadhaar: "PAN / Aadhaar link",
+  dl: "Driving licence",
+  vehicle: "Vehicle registration",
+  bank: "Bank account",
+  pf_uan: "PF UAN"
+};
+
+const reviewIssueFieldKeys: Record<string, string[]> = {
+  pan: ["pan_number", "aadhaar_number"],
+  pan_aadhaar: ["pan_number", "aadhaar_number"],
+  dl: ["driving_license_no", "date_of_birth"],
+  vehicle: ["vehicle_reg_no", "vehicle_reg_exp_date", "vehicle_insurance_exp_date", "vehicle_pollution_exp_date"],
+  bank: ["bank_account_no", "ifsc"],
+  pf_uan: ["pf_uan"]
+};
+
+function reviewIssueValue(executive: ExecutiveRow, kind: string) {
+  const values: Record<string, Array<string | null | undefined>> = {
+    pan: [executive.pan_number],
+    pan_aadhaar: [executive.pan_number, executive.aadhaar_number],
+    dl: [executive.driving_license_no],
+    vehicle: [executive.vehicle_reg_no],
+    bank: [executive.bank_account_no, executive.ifsc_code],
+    pf_uan: [executive.pf_uan]
+  };
+  return (values[kind] ?? []).map((value) => String(value ?? "").trim()).filter(Boolean).join(" / ") || "Not provided";
+}
+
+function WorkforceReviewIssues({ executive, issues }: { executive: ExecutiveRow; issues: WorkforceReviewIssue[] }) {
+  if (!issues.length) {
+    return (
+      <section className="workforce-review-resolution ready">
+        <div><strong>No unresolved verification mismatch</strong><p>This legacy review has no open API exception. Check the profile below before making the decision.</p></div>
+      </section>
+    );
+  }
+  return (
+    <section className="workforce-review-resolution">
+      <header>
+        <div><span>Resolution required</span><h3>{issues.length} profile {issues.length === 1 ? "issue" : "issues"} must be corrected</h3><p>Update the corresponding field below, run Verify, then save. Approval remains locked while any issue is unresolved.</p></div>
+      </header>
+      <div className="workforce-review-resolution-grid">
+        {issues.map((issue) => (
+          <article key={`${issue.kind}:${issue.updated_at ?? ""}`}>
+            <span>{reviewIssueLabels[issue.kind] ?? issue.kind}</span>
+            <strong>{reviewIssueValue(executive, issue.kind)}</strong>
+            {issue.display_name ? <small>Verified source: {issue.display_name}</small> : null}
+            <p>{issue.message || "The submitted value requires manual review."}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 const invitationFieldLabels: Array<[string, string]> = [
   ["full_name", "Full name"],
   ["mobile_country_code", "Country code"],
@@ -601,7 +670,7 @@ function FieldExecutiveForm({
 
       <div className="form-actions span-3 align-right">
         <SubmitButton disabled={!locationOptions.length || !designationOptions.length} disabledText={!locationOptions.length ? "Add location first" : "Add designation first"}>
-          {mode === "edit" ? "Save changes" : submitLabel ?? "Add field executive"}
+          {submitLabel ?? (mode === "edit" ? "Save changes" : "Add field executive")}
         </SubmitButton>
       </div>
     </form>
@@ -740,6 +809,7 @@ async function loadFieldExecutiveData(
       locations: [] as LocationRow[],
       designations: [] as DesignationRow[],
       profileDesignations: [] as DesignationRow[],
+      reviewIssuesByExecutive: new Map<string, WorkforceReviewIssue[]>(),
       editExecutive: null as ExecutiveRow | null,
       viewExecutive: null as ExecutiveRow | null,
       error: "Supabase service role key is not configured."
@@ -871,6 +941,30 @@ async function loadFieldExecutiveData(
   const visibleExecutiveRows = ((executivesResult.data ?? []) as unknown as ExecutiveRow[])
     .filter((executive) => authorization.hasAllLocationAccess || allowedLocationIds.has(executive.location_id))
     .filter((executive) => allowedDesignationNames.has(String(executive.designation ?? "")));
+  const profileTypeByTable = {
+    workforce: "workforce",
+    field_executives: "field_executive",
+    contractors: "contractor",
+    vendors: "vendor",
+    workers: "worker"
+  } as const;
+  const reviewIssuesByExecutive = new Map<string, WorkforceReviewIssue[]>();
+  if (visibleExecutiveRows.length) {
+    const verificationResult = await supabaseAdmin
+      .from("connect_profile_verifications")
+      .select("account_id, kind, verified, manual_review, block_submit, display_name, message, details, updated_at")
+      .eq("company_id", companyId)
+      .eq("profile_type", profileTypeByTable[table])
+      .or("manual_review.eq.true,block_submit.eq.true");
+    if (verificationResult.error && !isMissingColumnError(verificationResult.error)) {
+      throw new Error(verificationResult.error.message);
+    }
+    const visibleExecutiveIds = new Set(visibleExecutiveRows.map((executive) => executive.id));
+    for (const issue of (verificationResult.data ?? []) as WorkforceReviewIssue[]) {
+      if (!visibleExecutiveIds.has(issue.account_id)) continue;
+      reviewIssuesByExecutive.set(issue.account_id, [...(reviewIssuesByExecutive.get(issue.account_id) ?? []), issue]);
+    }
+  }
   const executives = visibleExecutiveRows
     .map((executive) => {
     const location = firstRelation(executive.stations);
@@ -894,7 +988,9 @@ async function loadFieldExecutiveData(
           { isOwner: ownerAccess }
       ),
       isActive: executive.is_active,
-      status: fieldExecutiveStatus(executive)
+      status: fieldExecutiveStatus(executive),
+      needsReview: String(executive.onboarding_status ?? "").trim().toLowerCase() === "under_review",
+      reviewIssueCount: reviewIssuesByExecutive.get(executive.id)?.length ?? 0
     };
   });
   const uploadUrlRows = await Promise.all(visibleExecutiveRows.map(async (executive) => ({
@@ -923,6 +1019,7 @@ async function loadFieldExecutiveData(
     locations,
     designations,
     profileDesignations,
+    reviewIssuesByExecutive,
     editExecutive,
     viewExecutive,
     error: executivesResult.error?.message || locationsResult.error?.message || designationsResult.error?.message || null
@@ -981,7 +1078,7 @@ export async function FieldExecutivePageContent({
     canEdit: false
   };
   const workforceConfig = nonEmployeeConfigForRoute(returnPath);
-  const { executives, locations, designations, profileDesignations, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, designationCategoryFilter, designationPeopleModule, workforceConfig.table, accessSurface, editId, viewId);
+  const { executives, locations, designations, profileDesignations, reviewIssuesByExecutive, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, designationCategoryFilter, designationPeopleModule, workforceConfig.table, accessSurface, editId, viewId);
   const companyId = requireCompanyId(authorization);
   const isOpsWorkforce = accessSurface === "ops" && returnPath === "/field-executive";
   const profileCorrectionApprover = isOpsWorkforce && canApproveProfileCorrections(authorization);
@@ -1105,6 +1202,16 @@ export async function FieldExecutivePageContent({
     ?? categoryRules.dashboard;
   const editRules = profileRuleOptions.find((option) => option.value === editExecutive?.designation)?.dashboardRules
     ?? categoryRules.dashboard;
+  const editReviewIssues = editExecutive ? reviewIssuesByExecutive.get(editExecutive.id) ?? [] : [];
+  const resolutionEditRules = editReviewIssues.length
+    ? {
+        ...editRules,
+        enabled: Array.from(new Set([
+          ...editRules.enabled,
+          ...editReviewIssues.flatMap((issue) => reviewIssueFieldKeys[issue.kind] ?? [])
+        ]))
+      }
+    : editRules;
 
   return (
     <AppShell active={activeLabel} pageCode={pageCode}>
@@ -1178,8 +1285,8 @@ export async function FieldExecutivePageContent({
           <section className="modal-panel wide" aria-label="Edit field executive">
             <div className="panel-head">
               <div>
-                <h2>{editTitle}</h2>
-                <p className="subtle">{isOpsWorkforce ? "Correct invitation details and send them for Zonal Head or Owner approval." : "Maintain the full registration profile from the Team DropX sample."}</p>
+                <h2>{editExecutive.onboarding_status === "under_review" ? "Resolve profile review" : editTitle}</h2>
+                <p className="subtle">{isOpsWorkforce ? "Correct invitation details and send them for Zonal Head or Owner approval." : editExecutive.onboarding_status === "under_review" ? "Correct the flagged values, re-run verification, and save before approving the profile." : "Maintain the full registration profile from the Team DropX sample."}</p>
               </div>
               <PendingLink className="icon-button" href={returnPath} scroll={false} aria-label={`Close edit ${entityLabel.toLowerCase()}`}>x</PendingLink>
             </div>
@@ -1191,16 +1298,20 @@ export async function FieldExecutivePageContent({
                 returnPath={returnPath}
               />
             ) : (
-              <FieldExecutiveForm
-                action={updateFieldExecutive}
-                dashboardRules={editRules}
-                designationOptions={editDesignationOptions}
-                executive={editExecutive}
-                locationOptions={locationOptions}
-                mode="edit"
-                returnPath={returnPath}
-                statutoryEnabled={statutoryEnabled}
-              />
+              <>
+                {editExecutive.onboarding_status === "under_review" ? <WorkforceReviewIssues executive={editExecutive} issues={editReviewIssues} /> : null}
+                <FieldExecutiveForm
+                  action={updateFieldExecutive}
+                  dashboardRules={resolutionEditRules}
+                  designationOptions={editDesignationOptions}
+                  executive={editExecutive}
+                  locationOptions={locationOptions}
+                  mode="edit"
+                  returnPath={returnPath}
+                  statutoryEnabled={statutoryEnabled}
+                  submitLabel={editExecutive.onboarding_status === "under_review" ? "Save corrections and re-check" : undefined}
+                />
+              </>
             )}
             {!isOpsWorkforce && workforceConfig.profileType !== "field_executive" && editExecutive.onboarding_status === "under_review" ? (
               <section className="profile-review-panel">
@@ -1215,13 +1326,13 @@ export async function FieldExecutivePageContent({
                   <div className="profile-review-option profile-review-option-approve">
                     <div>
                       <h4>Approve profile</h4>
-                      <p>Confirm the information and activate this profile.</p>
+                        <p>{editReviewIssues.length ? `Resolve ${editReviewIssues.length} verification ${editReviewIssues.length === 1 ? "issue" : "issues"} before activation.` : "Confirm the information and activate this profile."}</p>
                     </div>
                     <form action={reviewFieldExecutiveProfile} className="profile-review-approve">
                       <input name="id" type="hidden" value={editExecutive.id} />
                       <input name="return_path" type="hidden" value={returnPath} />
                       <input name="review_action" type="hidden" value="approve" />
-                      <SubmitButton className="button profile-review-approve-button" pendingText="Approving...">Approve profile</SubmitButton>
+                      <SubmitButton className="button profile-review-approve-button" disabled={Boolean(editReviewIssues.length)} disabledText="Resolve issues first" pendingText="Approving...">Approve profile</SubmitButton>
                     </form>
                   </div>
                   <div className="profile-review-option profile-review-option-return">

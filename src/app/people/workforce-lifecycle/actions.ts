@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { syncBiometricEnrolment } from "@/lib/biometric/enrolments";
 import { requireCompanyId } from "@/lib/company-scope";
+import { isMissingVerificationTable } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { isNonEmployeeProfileType, workforceTable } from "@/lib/workforce-profiles";
 
@@ -109,6 +110,19 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
       if (event.error) throw new Error(event.error.message);
       revalidateLifecyclePages();
       lifecycleRedirect({ notice: action === "return" ? "Application returned for correction." : "Application rejected." });
+    }
+
+    const unresolved = await supabaseAdmin!.from("connect_profile_verifications")
+      .select("kind")
+      .eq("company_id", companyId)
+      .eq("profile_type", "workforce")
+      .eq("account_id", id)
+      .or("manual_review.eq.true,block_submit.eq.true")
+      .limit(10);
+    if (unresolved.error && !isMissingVerificationTable(unresolved.error)) throw new Error(unresolved.error.message);
+    if (unresolved.data?.length) {
+      const fields = unresolved.data.map((row) => String(row.kind).replaceAll("_", " ").toUpperCase());
+      throw new Error(`Resolve and re-verify ${fields.join(", ")} before approving this application.`);
     }
 
     const code = await designationCode(companyId, applicant.designation);

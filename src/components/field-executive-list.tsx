@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, EllipsisVertical, Eye, Pencil, SlidersHorizontal, UserRound, X } from "lucide-react";
+import { ChevronDown, EllipsisVertical, Eye, Pencil, ShieldAlert, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
 
@@ -19,6 +19,8 @@ export type FieldExecutiveListRow = {
   profilePhotoUrl?: string | null;
   isActive: boolean;
   status: string;
+  needsReview?: boolean;
+  reviewIssueCount?: number;
   canEdit?: boolean;
   createdBy?: string | null;
   editHref?: string;
@@ -309,7 +311,6 @@ export function FieldExecutiveList({
                 <td>{row.designation}</td>
                 <td><StatusPill status={row.status} /></td>
                 {showActions ? <td className="action-cell">
-                  {row.viewHref || row.editHref ? (
                   <div className="row-action-menu" ref={openMenuId === row.id ? menuRef : undefined}>
                     <button
                       aria-expanded={openMenuId === row.id}
@@ -323,10 +324,15 @@ export function FieldExecutiveList({
                     </button>
                     {openMenuId === row.id ? (
                       <div className="row-action-popover">
+                        {canEdit && row.canEdit !== false && row.needsReview ? (
+                          <PendingLink className="row-action-item review" href={row.editHref ?? `${basePath}?edit=${row.id}&review=1`} scroll={false}>
+                            <ShieldAlert size={15} aria-hidden="true" /> Resolve review{row.reviewIssueCount ? ` (${row.reviewIssueCount})` : ""}
+                          </PendingLink>
+                        ) : null}
                         <PendingLink className="row-action-item" href={row.viewHref ?? `${basePath}?view=${row.id}`} scroll={false}>
                           <Eye size={15} aria-hidden="true" /> View
                         </PendingLink>
-                        {canEdit && row.canEdit !== false ? (
+                        {canEdit && row.canEdit !== false && !row.needsReview ? (
                           <PendingLink className="row-action-item" href={row.editHref ?? `${basePath}?edit=${row.id}`} scroll={false}>
                             <Pencil size={15} aria-hidden="true" /> Edit
                           </PendingLink>
@@ -334,7 +340,6 @@ export function FieldExecutiveList({
                       </div>
                     ) : null}
                   </div>
-                  ) : <span className="subtle">-</span>}
                 </td> : null}
               </tr>
             )) : (
@@ -362,10 +367,11 @@ export function FieldExecutiveList({
               <div><dt>Mobile</dt><dd>{row.mobile}</dd></div>
               <div className="wide"><dt>Email</dt><dd>{row.email}</dd></div>
             </dl>
-            {showActions && (row.viewHref || row.editHref) ? (
+            {showActions ? (
               <footer>
-                {row.viewHref ? <PendingLink className="button secondary" href={row.viewHref} scroll={false}><Eye aria-hidden="true" size={15} /> View</PendingLink> : null}
-                {canEdit && row.canEdit !== false && row.editHref ? <PendingLink className="button" href={row.editHref} scroll={false}><Pencil aria-hidden="true" size={15} /> Edit</PendingLink> : null}
+                <PendingLink className="button secondary" href={row.viewHref ?? `${basePath}?view=${row.id}`} scroll={false}><Eye aria-hidden="true" size={15} /> View</PendingLink>
+                {canEdit && row.canEdit !== false && row.needsReview ? <PendingLink className="button" href={row.editHref ?? `${basePath}?edit=${row.id}&review=1`} scroll={false}><ShieldAlert aria-hidden="true" size={15} /> Resolve review{row.reviewIssueCount ? ` (${row.reviewIssueCount})` : ""}</PendingLink> : null}
+                {canEdit && row.canEdit !== false && !row.needsReview ? <PendingLink className="button" href={row.editHref ?? `${basePath}?edit=${row.id}`} scroll={false}><Pencil aria-hidden="true" size={15} /> Edit</PendingLink> : null}
               </footer>
             ) : null}
           </article>

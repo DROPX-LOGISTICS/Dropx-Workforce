@@ -183,6 +183,101 @@ async function auditDesignationRouting() {
   );
   const missingColumns = rowsFromResponse(columnResult).map((row) => String(row.column_name ?? "")).filter(Boolean);
   console.log(`Missing designation columns: ${missingColumns.length ? missingColumns.join(", ") : "none"}.`);
+
+  const classificationResult = await managementQuery(
+    `select classification_state::text, count(*)::integer as profiles
+     from public.people_worker_classification_audit
+     group by classification_state
+     order by classification_state;`,
+    { readOnly: true }
+  );
+  const classificationRows = rowsFromResponse(classificationResult);
+  console.log("People statutory classification audit:");
+  for (const row of classificationRows) {
+    console.log(JSON.stringify({
+      classificationState: String(row.classification_state ?? ""),
+      profiles: Number(row.profiles ?? 0)
+    }));
+  }
+  const wrongSourceCount = classificationRows
+    .filter((row) => String(row.classification_state ?? "") === "wrong_source")
+    .reduce((total, row) => total + Number(row.profiles ?? 0), 0);
+
+  const reconciliationResult = await managementQuery(
+    `select status::text, count(*)::integer as corrections
+     from public.hr_worker_classification_reconciliations
+     group by status
+     order by status;`,
+    { readOnly: true }
+  );
+  const reconciliationRows = rowsFromResponse(reconciliationResult);
+  console.log("People statutory reconciliation ledger:");
+  for (const row of reconciliationRows) {
+    console.log(JSON.stringify({
+      corrections: Number(row.corrections ?? 0),
+      status: String(row.status ?? "")
+    }));
+  }
+  const blockedCount = reconciliationRows
+    .filter((row) => String(row.status ?? "") === "blocked")
+    .reduce((total, row) => total + Number(row.corrections ?? 0), 0);
+
+  const sujanResult = await managementQuery(
+    `with source as (
+       select company_id, id, 'employee'::text as worker_type,
+              (deleted_at is null and is_active) as live
+       from public.employees where upper(employee_code) = 'D0785'
+       union all
+       select company_id, id, 'contractor'::text,
+              (deleted_at is null and is_active)
+       from public.contractors where upper(dropx_id) = 'D0785'
+     )
+     select company.code::text as company_code,
+            count(source.id)::integer as source_rows,
+            count(source.id) filter (where source.live)::integer as live_source_rows,
+            count(distinct engagement.id) filter (where engagement.status = 'active')::integer as active_engagements,
+            count(distinct assignment.id) filter (
+              where assignment.is_primary
+                and assignment.effective_from <= current_date
+                and (assignment.effective_to is null or assignment.effective_to >= current_date)
+            )::integer as current_assignments
+     from public.companies company
+     left join source on source.company_id = company.id
+     left join public.hr_engagements engagement
+       on engagement.company_id = source.company_id
+      and (engagement.employee_id = source.id or engagement.contractor_id = source.id)
+     left join public.hr_work_assignments assignment
+       on assignment.company_id = engagement.company_id
+      and assignment.engagement_id = engagement.id
+     where exists (
+       select 1 from source candidate where candidate.company_id = company.id
+     )
+     group by company.id, company.code
+     order by company.code;`,
+    { readOnly: true }
+  );
+  const sujanRows = rowsFromResponse(sujanResult);
+  console.log("D0785 canonical People recovery audit:");
+  for (const row of sujanRows) {
+    console.log(JSON.stringify({
+      activeEngagements: Number(row.active_engagements ?? 0),
+      companyCode: String(row.company_code ?? ""),
+      currentAssignments: Number(row.current_assignments ?? 0),
+      liveSourceRows: Number(row.live_source_rows ?? 0),
+      sourceRows: Number(row.source_rows ?? 0)
+    }));
+  }
+  const invalidSujan = sujanRows.length !== 1 || sujanRows.some((row) => (
+    Number(row.live_source_rows ?? 0) !== 1
+    || Number(row.active_engagements ?? 0) !== 1
+    || Number(row.current_assignments ?? 0) !== 1
+  ));
+
+  if (wrongSourceCount || blockedCount || invalidSujan) {
+    throw new Error(
+      `Production People audit failed: ${wrongSourceCount} wrong-source profile(s), ${blockedCount} blocked correction(s), D0785 canonical=${invalidSujan ? "invalid" : "valid"}.`
+    );
+  }
 }
 
 function migrationQuery(migration) {

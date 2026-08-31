@@ -255,8 +255,8 @@ async function auditDesignationRouting() {
      select company.code::text as company_code,
             max(source.full_name)::text as full_name,
             max(source.worker_type) filter (where source.live)::text as live_worker_type,
-            count(source.id)::integer as source_rows,
-            count(source.id) filter (where source.live)::integer as live_source_rows,
+            count(distinct (source.worker_type, source.id))::integer as source_rows,
+            count(distinct (source.worker_type, source.id)) filter (where source.live)::integer as live_source_rows,
             count(distinct engagement.id) filter (where engagement.status = 'active')::integer as active_engagements,
             count(distinct assignment.id) filter (
               where assignment.is_primary

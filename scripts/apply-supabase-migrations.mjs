@@ -270,8 +270,8 @@ async function auditDesignationRouting() {
          on assignment.company_id = engagement.company_id
         and assignment.engagement_id = engagement.id
         and assignment.is_primary
-        and assignment.effective_from <= current_date
-        and (assignment.effective_to is null or assignment.effective_to >= current_date)
+        and assignment.effective_from <= timezone('Asia/Kolkata', now())::date
+        and (assignment.effective_to is null or assignment.effective_to >= timezone('Asia/Kolkata', now())::date)
        join public.designations designation
          on designation.company_id = assignment.company_id
         and designation.id = assignment.designation_id
@@ -366,8 +366,8 @@ async function auditDesignationRouting() {
            on assignment.company_id = engagement.company_id
           and assignment.engagement_id = engagement.id
           and assignment.is_primary
-          and assignment.effective_from <= current_date
-          and (assignment.effective_to is null or assignment.effective_to >= current_date)
+          and assignment.effective_from <= timezone('Asia/Kolkata', now())::date
+          and (assignment.effective_to is null or assignment.effective_to >= timezone('Asia/Kolkata', now())::date)
          join public.designations designation
            on designation.company_id = assignment.company_id
           and designation.id = assignment.designation_id
@@ -488,33 +488,33 @@ async function auditDesignationRouting() {
             count(distinct engagement.id) filter (where engagement.status = 'active')::integer as active_engagements,
             count(distinct assignment.id) filter (
               where assignment.is_primary
-                and assignment.effective_from <= current_date
-                and (assignment.effective_to is null or assignment.effective_to >= current_date)
+                and assignment.effective_from <= timezone('Asia/Kolkata', now())::date
+                and (assignment.effective_to is null or assignment.effective_to >= timezone('Asia/Kolkata', now())::date)
             )::integer as current_assignments,
             max(assignment.position_title) filter (
               where assignment.is_primary
-                and assignment.effective_from <= current_date
-                and (assignment.effective_to is null or assignment.effective_to >= current_date)
+                and assignment.effective_from <= timezone('Asia/Kolkata', now())::date
+                and (assignment.effective_to is null or assignment.effective_to >= timezone('Asia/Kolkata', now())::date)
             )::text as position_title,
             max(designation.name) filter (
               where assignment.is_primary
-                and assignment.effective_from <= current_date
-                and (assignment.effective_to is null or assignment.effective_to >= current_date)
+                and assignment.effective_from <= timezone('Asia/Kolkata', now())::date
+                and (assignment.effective_to is null or assignment.effective_to >= timezone('Asia/Kolkata', now())::date)
             )::text as designation_name,
             bool_or(category.people_module = 'people_hr') filter (
               where assignment.is_primary
-                and assignment.effective_from <= current_date
-                and (assignment.effective_to is null or assignment.effective_to >= current_date)
+                and assignment.effective_from <= timezone('Asia/Kolkata', now())::date
+                and (assignment.effective_to is null or assignment.effective_to >= timezone('Asia/Kolkata', now())::date)
             ) as people_category,
             bool_or('people' = any(coalesce(designation.portal_scopes, '{}'::text[]))) filter (
               where assignment.is_primary
-                and assignment.effective_from <= current_date
-                and (assignment.effective_to is null or assignment.effective_to >= current_date)
+                and assignment.effective_from <= timezone('Asia/Kolkata', now())::date
+                and (assignment.effective_to is null or assignment.effective_to >= timezone('Asia/Kolkata', now())::date)
             ) as people_portal_scope,
             bool_or(coalesce(mapping.is_available, false)) filter (
               where assignment.is_primary
-                and assignment.effective_from <= current_date
-                and (assignment.effective_to is null or assignment.effective_to >= current_date)
+                and assignment.effective_from <= timezone('Asia/Kolkata', now())::date
+                and (assignment.effective_to is null or assignment.effective_to >= timezone('Asia/Kolkata', now())::date)
             ) as people_mapping_available,
             bool_or(
               case when source.worker_type = 'employee'
@@ -527,14 +527,14 @@ async function auditDesignationRouting() {
               where source.live
                 and engagement.status = 'active'
                 and assignment.is_primary
-                and assignment.effective_from <= current_date
-                and (assignment.effective_to is null or assignment.effective_to >= current_date)
+                and assignment.effective_from <= timezone('Asia/Kolkata', now())::date
+                and (assignment.effective_to is null or assignment.effective_to >= timezone('Asia/Kolkata', now())::date)
             ) as source_projection_aligned,
             count(distinct reportee.subject_assignment_id) filter (
               where reportee.relationship_type = 'solid_line'
                 and reportee.is_primary
-                and reportee.effective_from <= current_date
-                and (reportee.effective_to is null or reportee.effective_to >= current_date)
+                and reportee.effective_from <= timezone('Asia/Kolkata', now())::date
+                and (reportee.effective_to is null or reportee.effective_to >= timezone('Asia/Kolkata', now())::date)
             )::integer as active_reportees
      from public.companies company
      left join source on source.company_id = company.id

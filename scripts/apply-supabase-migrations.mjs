@@ -221,6 +221,26 @@ async function auditDesignationRouting() {
   const blockedCount = reconciliationRows
     .filter((row) => String(row.status ?? "") === "blocked")
     .reduce((total, row) => total + Number(row.corrections ?? 0), 0);
+  const blockedReasonResult = await managementQuery(
+    `select coalesce(error_message, 'No error recorded')::text as error_message,
+            count(*)::integer as corrections
+     from public.hr_worker_classification_reconciliations
+     where status = 'blocked'
+     group by coalesce(error_message, 'No error recorded')
+     order by count(*) desc, error_message
+     limit 10;`,
+    { readOnly: true }
+  );
+  const blockedReasonRows = rowsFromResponse(blockedReasonResult);
+  for (const row of blockedReasonRows) {
+    console.log(JSON.stringify({
+      blockedReason: String(row.error_message ?? ""),
+      corrections: Number(row.corrections ?? 0)
+    }));
+  }
+  const blockedReasonSummary = blockedReasonRows.map((row) => (
+    `${Number(row.corrections ?? 0)}x ${String(row.error_message ?? "").replaceAll(/\s+/g, " ").slice(0, 220)}`
+  )).join(" | ");
 
   const sujanResult = await managementQuery(
     `with source as (
@@ -275,7 +295,7 @@ async function auditDesignationRouting() {
 
   if (wrongSourceCount || blockedCount || invalidSujan) {
     throw new Error(
-      `Production People audit failed: ${wrongSourceCount} wrong-source profile(s), ${blockedCount} blocked correction(s), D0785 canonical=${invalidSujan ? "invalid" : "valid"}.`
+      `Production People audit failed: ${wrongSourceCount} wrong-source profile(s), ${blockedCount} blocked correction(s), D0785 canonical=${invalidSujan ? "invalid" : "valid"}.${blockedReasonSummary ? ` Blockers: ${blockedReasonSummary}` : ""}`
     );
   }
 }

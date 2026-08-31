@@ -540,7 +540,11 @@ async function auditDesignationRouting() {
      left join source on source.company_id = company.id
      left join public.hr_engagements engagement
        on engagement.company_id = source.company_id
-      and (engagement.employee_id = source.id or engagement.contractor_id = source.id)
+      and (
+        (source.worker_type = 'employee' and engagement.worker_type = 'employee' and engagement.employee_id = source.id)
+        or
+        (source.worker_type = 'contractor' and engagement.worker_type = 'contractor' and engagement.contractor_id = source.id)
+      )
      left join public.hr_work_assignments assignment
       on assignment.company_id = engagement.company_id
      and assignment.engagement_id = engagement.id

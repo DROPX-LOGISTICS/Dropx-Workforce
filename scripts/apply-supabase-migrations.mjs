@@ -328,6 +328,119 @@ async function auditDesignationRouting() {
     activePeople: Number(projectionRows[0]?.active_people ?? 0),
     projectionDrift: projectionDriftCount
   }));
+  if (projectionDriftCount) {
+    const projectionDetailResult = await managementQuery(
+      `with current_people as (
+         select distinct on (engagement.company_id, engagement.id)
+                company.code as company_code,
+                engagement.id as engagement_id,
+                engagement.worker_type,
+                coalesce(employee.employee_code, contractor.dropx_id) as worker_code,
+                coalesce(employee.full_name, contractor.full_name) as full_name,
+                assignment.designation_id,
+                designation.name as designation_name,
+                designation.onboarding_categories,
+                person.status as person_status,
+                employee.designation_id as employee_designation_id,
+                employee.people_lifecycle_status as employee_lifecycle_status,
+                (employee.deleted_at is null and employee.is_active) as live_employee,
+                contractor.designation as contractor_designation,
+                contractor.people_lifecycle_status as contractor_lifecycle_status,
+                (contractor.deleted_at is null and contractor.is_active) as live_contractor
+         from public.hr_engagements engagement
+         join public.companies company
+           on company.id = engagement.company_id
+         join public.hr_work_assignments assignment
+           on assignment.company_id = engagement.company_id
+          and assignment.engagement_id = engagement.id
+          and assignment.is_primary
+          and assignment.effective_from <= current_date
+          and (assignment.effective_to is null or assignment.effective_to >= current_date)
+         join public.designations designation
+           on designation.company_id = assignment.company_id
+          and designation.id = assignment.designation_id
+          and designation.is_active
+         join public.designation_categories category
+           on category.company_id = designation.company_id
+          and category.id = designation.designation_category_id
+          and category.is_active
+          and category.people_module = 'people_hr'
+         join public.hr_people person
+           on person.company_id = engagement.company_id
+          and person.id = engagement.person_id
+         left join public.employees employee
+           on employee.company_id = engagement.company_id
+          and employee.id = engagement.employee_id
+         left join public.contractors contractor
+           on contractor.company_id = engagement.company_id
+          and contractor.id = engagement.contractor_id
+         where engagement.status = 'active'
+           and (
+             'people' = any(coalesce(designation.portal_scopes, '{}'::text[]))
+             or (
+               cardinality(coalesce(designation.portal_scopes, '{}'::text[])) = 0
+               and exists (
+                 select 1 from public.hr_designation_mappings mapping
+                 where mapping.company_id = designation.company_id
+                   and mapping.designation_id = designation.id
+                   and mapping.is_available
+               )
+             )
+           )
+         order by engagement.company_id, engagement.id,
+                  assignment.effective_from desc, assignment.created_at desc
+       )
+       select company_code::text,
+              engagement_id::text,
+              worker_type::text,
+              coalesce(worker_code, '')::text as worker_code,
+              coalesce(full_name, '')::text as full_name,
+              coalesce(designation_name, '')::text as canonical_designation,
+              coalesce(person_status, '')::text as person_status,
+              coalesce(employee_lifecycle_status, contractor_lifecycle_status, '')::text as source_lifecycle_status,
+              coalesce(employee_designation_id::text, contractor_designation, '')::text as source_designation,
+              array_to_string(array_remove(array[
+                case when person_status <> 'active' then 'person_not_active' end,
+                case when worker_type = 'employee' and not coalesce(live_employee, false) then 'employee_source_not_live' end,
+                case when worker_type = 'employee' and employee_designation_id is distinct from designation_id then 'employee_designation_mismatch' end,
+                case when worker_type = 'employee' and nullif(btrim(coalesce(employee_lifecycle_status, '')), '') is null then 'employee_lifecycle_missing' end,
+                case when worker_type = 'employee' and not ('employees' = any(coalesce(onboarding_categories, '{}'::text[]))) then 'employee_category_missing' end,
+                case when worker_type = 'contractor' and not coalesce(live_contractor, false) then 'contractor_source_not_live' end,
+                case when worker_type = 'contractor' and lower(btrim(coalesce(contractor_designation, ''))) is distinct from lower(btrim(coalesce(designation_name, ''))) then 'contractor_designation_mismatch' end,
+                case when worker_type = 'contractor' and nullif(btrim(coalesce(contractor_lifecycle_status, '')), '') is null then 'contractor_lifecycle_missing' end,
+                case when worker_type = 'contractor' and not ('contractors' = any(coalesce(onboarding_categories, '{}'::text[]))) then 'contractor_category_missing' end
+              ], null), ', ')::text as drift_reasons
+       from current_people
+       where person_status <> 'active'
+          or case when worker_type = 'employee'
+            then not coalesce(live_employee, false)
+              or employee_designation_id is distinct from designation_id
+              or nullif(btrim(coalesce(employee_lifecycle_status, '')), '') is null
+              or not ('employees' = any(coalesce(onboarding_categories, '{}'::text[])))
+            else not coalesce(live_contractor, false)
+              or lower(btrim(coalesce(contractor_designation, ''))) is distinct from lower(btrim(coalesce(designation_name, '')))
+              or nullif(btrim(coalesce(contractor_lifecycle_status, '')), '') is null
+              or not ('contractors' = any(coalesce(onboarding_categories, '{}'::text[])))
+          end
+       order by company_code, worker_code, engagement_id;`,
+      { readOnly: true }
+    );
+    console.log("Canonical People projection drift details:");
+    for (const row of rowsFromResponse(projectionDetailResult)) {
+      console.log(JSON.stringify({
+        canonicalDesignation: String(row.canonical_designation ?? ""),
+        companyCode: String(row.company_code ?? ""),
+        driftReasons: String(row.drift_reasons ?? ""),
+        engagementId: String(row.engagement_id ?? ""),
+        fullName: String(row.full_name ?? ""),
+        personStatus: String(row.person_status ?? ""),
+        sourceDesignation: String(row.source_designation ?? ""),
+        sourceLifecycleStatus: String(row.source_lifecycle_status ?? ""),
+        workerCode: String(row.worker_code ?? ""),
+        workerType: String(row.worker_type ?? "")
+      }));
+    }
+  }
 
   const sujanResult = await managementQuery(
      `with source as (

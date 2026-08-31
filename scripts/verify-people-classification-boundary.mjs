@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 const migration = readFileSync(new URL("../supabase/migrations/20260831224000_people_worker_classification_reconciliation.sql", import.meta.url), "utf8");
+const blockerRepair = readFileSync(new URL("../supabase/migrations/20260831225000_resolve_people_classification_blockers.sql", import.meta.url), "utf8");
 
 const required = [
   "begin;",
@@ -36,7 +37,15 @@ const forbidden = [
 
 const failures = [
   ...required.filter((token) => !migration.includes(token)).map((token) => `missing ${token}`),
-  ...forbidden.filter((token) => migration.toLowerCase().includes(token)).map((token) => `forbidden ${token}`)
+  ...forbidden.filter((token) => migration.toLowerCase().includes(token)).map((token) => `forbidden ${token}`),
+  ...[
+    "reclassify_people_worker_core",
+    "mob_app_device_tokens",
+    "contractors_normalize_lifecycle_compat",
+    "public.people_worker_classification_audit",
+    "exception when others"
+  ].filter((token) => !blockerRepair.includes(token)).map((token) => `missing blocker repair ${token}`),
+  ...forbidden.filter((token) => blockerRepair.toLowerCase().includes(token)).map((token) => `forbidden blocker repair ${token}`)
 ];
 
 if (failures.length) {

@@ -13,7 +13,7 @@ import { accessPages, ensureAccessPages } from "@/lib/access-pages";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { configureWorkforceDesignationRole, createUserRole, deleteUser, deleteUserRole, updateUserRole } from "./actions";
+import { configureWorkforceDesignationRole, configureWorkforceLocationRole, createUserRole, deleteUser, deleteUserRole, updateUserRole } from "./actions";
 
 type AppPageRow = {
   id: string;
@@ -628,6 +628,8 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     ...workforceDesignationAccess.rows.map((designation) => designation.defaultRoleId).filter((id): id is string => Boolean(id)),
     ...users.map((user) => user.role_id).filter((id): id is string => Boolean(id))
   ]);
+  const workforceLocationRole = roles.find((role) => role.code === "WORKFORCE_LOCATION" && role.is_active) ?? null;
+  if (workforceLocationRole) workforceRoleIds.add(workforceLocationRole.id);
   const visibleRoles = isWorkforceSurface
     ? roles.filter((role) => !role.is_system && role.code !== "OWNER" && workforceRoleIds.has(role.id))
     : roles;
@@ -639,6 +641,10 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     ? visibleUsers.find((user) => user.id === searchParams?.editUser) ?? null
     : null;
   const editRole = pagePermission.canEdit ? visibleRoles.find((role) => role.id === searchParams?.editRole) ?? null : null;
+  const editDesignation = editRole
+    ? workforceDesignationAccess.rows.find((designation) => designation.enabled && designation.defaultRoleId === editRole.id) ?? null
+    : null;
+  const editLocationRole = Boolean(editRole && workforceLocationRole && editRole.id === workforceLocationRole.id);
   const roleModalError = showAddRole || editRole ? searchParams?.userError ?? null : null;
   const pageUserError = roleModalError ? null : searchParams?.userError ?? null;
   const userReturnHref = usersReturnHref(searchParams);
@@ -779,15 +785,16 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
 
       {showRolesSection && (pagePermission.canView || pagePermission.canEdit) ? (
       <section className="panel">
-        <div className="panel-head toolbar"><div><h2>Workforce designation access</h2><p className="subtle">Every active People designation is visible. People controls Workforce eligibility; Workforce controls its menus and actions.</p></div><a className="button secondary" href="https://people.dropxlogistics.com/settings/designations">People Designation Master</a></div>
-        <div className="table-wrap"><table style={{ minWidth: 860 }}><thead><tr><th>Designation code</th><th>Designation</th><th>Eligibility</th><th>Menu permissions</th><th>Action</th></tr></thead><tbody>
-          {workforceDesignationAccess.rows.map((designation) => {
+        <div className="panel-head toolbar"><div><h2>Workforce designation access</h2><p className="subtle">Only People designations enabled for Workforce appear here. Workforce controls their menus and actions.</p></div><a className="button secondary" href="https://people.dropxlogistics.com/settings/designations">People Designation Master</a></div>
+        <div className="table-wrap"><table style={{ minWidth: 760 }}><thead><tr><th>Designation</th><th>Portal status</th><th>Menu permissions</th><th>Action</th></tr></thead><tbody>
+          {workforceDesignationAccess.rows.filter((designation) => designation.enabled).map((designation) => {
             const role = designation.defaultRoleId ? roles.find((item) => item.id === designation.defaultRoleId) ?? null : null;
-            const state = !designation.enabled ? "Not enabled" : role ? "Configured" : "Setup required";
-            return <tr key={designation.id}><td><strong>{designation.code}</strong></td><td>{designation.name}</td><td><StatusPill status={state} /></td><td>{role ? permissionText(role, surfacePermissions) : "—"}</td><td>{!pagePermission.canEdit ? "—" : !designation.enabled ? <a className="button secondary" href={`https://people.dropxlogistics.com/settings/designations?search=${encodeURIComponent(designation.code)}`}>Enable in People</a> : role ? <a className="button secondary" href={`/users?section=roles&editRole=${role.id}`}>Manage</a> : <form action={configureWorkforceDesignationRole}><input name="designation_id" type="hidden" value={designation.id} /><SubmitButton className="button secondary" pendingText="Preparing…">Set up</SubmitButton></form>}</td></tr>;
+            return <tr key={designation.id}><td><strong>{designation.name}</strong><div className="subtle">{designation.code}</div></td><td><StatusPill status={role ? "Configured" : "Setup required"} /></td><td>{role ? permissionText(role, surfacePermissions) : "—"}</td><td>{!pagePermission.canEdit ? "—" : role ? <a className="button secondary" href={`/users?section=roles&editRole=${role.id}`}>Configure menus</a> : <form action={configureWorkforceDesignationRole}><input name="designation_id" type="hidden" value={designation.id} /><SubmitButton className="button secondary" pendingText="Preparing…">Set up menus</SubmitButton></form>}</td></tr>;
           })}
-          {!workforceDesignationAccess.rows.length ? <tr><td className="empty-cell" colSpan={5}>No active People designation is available.</td></tr> : null}
+          {!workforceDesignationAccess.rows.some((designation) => designation.enabled) ? <tr><td className="empty-cell" colSpan={4}>No People designation is enabled for Workforce. Enable one in People Designation Master.</td></tr> : null}
         </tbody></table></div>
+        <div className="panel-head" style={{ borderTop: "1px solid var(--border)" }}><div><h3>Location Account</h3><p className="subtle">Dashboard grants Workforce to station mailboxes. Configure only which Workforce menus those mailboxes can use.</p></div></div>
+        <div className="table-wrap"><table style={{ minWidth: 760 }}><thead><tr><th>Account type</th><th>Portal status</th><th>Menu permissions</th><th>Action</th></tr></thead><tbody><tr><td><strong>Location Account</strong><div className="subtle">Dashboard-managed station mailbox</div></td><td><StatusPill status={workforceLocationRole ? "Configured" : "Setup required"} /></td><td>{workforceLocationRole ? permissionText(workforceLocationRole, surfacePermissions) : "Portal owner setup required"}</td><td>{!pagePermission.canEdit ? "—" : workforceLocationRole ? <a className="button secondary" href={`/users?section=roles&editRole=${workforceLocationRole.id}`}>Configure menus</a> : <form action={configureWorkforceLocationRole}><SubmitButton className="button secondary" pendingText="Preparing…">Set up menus</SubmitButton></form>}</td></tr></tbody></table></div>
       </section>
       ) : null}
 
@@ -873,11 +880,11 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
 
       {editRole ? (
         <DismissibleModal closeHref={sectionHref("roles")}>
-          <section className="modal-panel wide" aria-label="Manage user role">
+          <section className="modal-panel wide" aria-label={editDesignation ? `Configure ${editDesignation.name} menus` : editLocationRole ? "Configure Location Account menus" : "Manage user role"}>
             <div className="panel-head">
               <div>
-                <h2>Manage user role</h2>
-                <p className="subtle">Edit role hierarchy, location access, permissions, and active status.</p>
+                <h2>{editDesignation ? `${editDesignation.name} menu access` : editLocationRole ? "Location Account menu access" : "Manage user role"}</h2>
+                <p className="subtle">{editDesignation ? `${editDesignation.name} comes from People. Configure only Workforce menus and actions.` : editLocationRole ? "Dashboard assigns station mailboxes; configure only Workforce menus and actions." : "Edit role hierarchy, location access, permissions, and active status."}</p>
               </div>
               <DismissModalButton className="icon-button" aria-label="Close manage user role">x</DismissModalButton>
             </div>
@@ -902,7 +909,13 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                 <form action={updateUserRole}>
                   <input type="hidden" name="id" value={editRole.id} />
                   <input name="surface" type="hidden" value={accessSurface} />
-                  <div className="form-grid">
+                  {editDesignation || editLocationRole ? <>
+                    <input name="name" type="hidden" value={editRole.name} />
+                    <input name="parent_role_id" type="hidden" value="" />
+                    <input name="location_access_mode" type="hidden" value={editRole.location_access_mode} />
+                    <input name="is_active" type="hidden" value="active" />
+                    <div className="panel-body" style={{ paddingBottom: 0 }}><strong>{editDesignation?.name ?? "Location Account"}</strong><div className="subtle">{editDesignation ? `People designation · ${editDesignation.code} · location scope comes from the person’s People profile` : "Station mailbox · eligibility and station scope are managed in Dashboard"}</div></div>
+                  </> : <div className="form-grid">
                     <label>Role code<input className="field" defaultValue={editRole.code} disabled /></label>
                     <label>Role name<input className="field" name="name" defaultValue={editRole.name} disabled={editRole.code === "LOCATION"} required /></label>
                     {editRole.code === "LOCATION" || editRole.product_code ? (
@@ -924,10 +937,10 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                         <option value="inactive">Inactive</option>
                       </select>
                     </label>
-                  </div>
+                  </div>}
                   <PermissionMatrix pages={pages} initialPermissions={editRolePermissions} surface={accessSurface} />
                   <div className="form-actions modal-actions">
-                    <SubmitButton>Save role</SubmitButton>
+                    <SubmitButton>{editDesignation || editLocationRole ? "Save menu access" : "Save role"}</SubmitButton>
                     <DismissModalButton className="button secondary">Cancel</DismissModalButton>
                   </div>
                 </form>

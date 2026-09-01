@@ -532,6 +532,37 @@ export async function configureWorkforceDesignationRole(formData: FormData) {
   usersRedirect({ section: "roles", userNotice: "Designation access is ready to configure." });
 }
 
+export async function configureWorkforceLocationRole() {
+  try {
+    const authorization = await requirePagePermission("users", "edit");
+    const companyId = requireCompanyId(authorization);
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
+    if (currentAccessSurface() !== "workforce") throw new Error("Configure this role inside Workforce.");
+
+    const existing = await supabaseAdmin.from("user_roles").select("id").eq("company_id", companyId).eq("code", "WORKFORCE_LOCATION").maybeSingle();
+    if (existing.error) throw new Error(existing.error.message);
+    let roleId = existing.data?.id ?? null;
+    if (!roleId) {
+      const created = await supabaseAdmin.from("user_roles").insert({
+        company_id: companyId,
+        product_code: "workforce",
+        code: "WORKFORCE_LOCATION",
+        name: "Location Account",
+        parent_role_id: null,
+        location_access_mode: "role_based",
+        is_system: false,
+        is_active: true
+      }).select("id").single();
+      if (created.error || !created.data) throw new Error(created.error?.message ?? "Location menu role could not be created.");
+      roleId = created.data.id;
+    }
+    revalidatePath("/users");
+    usersRedirect({ section: "roles", editRole: roleId });
+  } catch (error) {
+    usersRedirect({ section: "roles", userError: error instanceof Error ? error.message : "Location menu access could not be prepared." });
+  }
+}
+
 async function assertUserAvailableForSurface(userId: string, companyId: string, surface: AccessSurface) {
   if (surface !== "workforce") return;
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");

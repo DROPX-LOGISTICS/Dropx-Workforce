@@ -684,6 +684,26 @@ async function auditDesignationRouting() {
                     membership.has_all_location_access
                     or route.location_id = any(coalesce(membership.location_scope_ids, '{}'::uuid[]))
                   )
+              ) or exists (
+                select 1
+                from public.org_positions position
+                join public.position_assignments assignment
+                  on assignment.company_id = position.company_id
+                 and assignment.position_id = position.id
+                 and assignment.is_active
+                 and assignment.valid_from <= current_date
+                 and (assignment.valid_until is null or assignment.valid_until >= current_date)
+                join public.profiles profile
+                  on profile.company_id = assignment.company_id
+                 and profile.id = assignment.profile_id
+                 and profile.is_active
+                where position.company_id = route.company_id
+                  and position.is_active
+                  and position.role_id = any(route.role_ids)
+                  and (
+                    position.location_access_mode = 'all_locations'
+                    or route.location_id = any(coalesce(position.location_scope_ids, '{}'::uuid[]))
+                  )
               ) as has_active_approver
        from route_stages route
      )
@@ -750,6 +770,27 @@ async function auditDesignationRouting() {
            and (
              membership.has_all_location_access
              or route.location_id = any(coalesce(membership.location_scope_ids, '{}'::uuid[]))
+           )
+       )
+       and not exists (
+         select 1
+         from public.org_positions position
+         join public.position_assignments assignment
+           on assignment.company_id = position.company_id
+          and assignment.position_id = position.id
+          and assignment.is_active
+          and assignment.valid_from <= current_date
+          and (assignment.valid_until is null or assignment.valid_until >= current_date)
+         join public.profiles profile
+           on profile.company_id = assignment.company_id
+          and profile.id = assignment.profile_id
+          and profile.is_active
+         where position.company_id = route.company_id
+           and position.is_active
+           and position.role_id = any(route.role_ids)
+           and (
+             position.location_access_mode = 'all_locations'
+             or route.location_id = any(coalesce(position.location_scope_ids, '{}'::uuid[]))
            )
        )
        group by route.company_id, route.location_id, route.station_code,

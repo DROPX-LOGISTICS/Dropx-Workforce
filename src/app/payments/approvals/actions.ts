@@ -19,8 +19,40 @@ function required(value: FormDataEntryValue | null, field: string) {
   return text;
 }
 
-async function nextApprover(companyId: string, finalRoleIds: string[]) {
+async function nextApprover(companyId: string, finalRoleIds: string[], locationId?: string | null) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
+
+  const memberships = await supabaseAdmin
+    .from("company_product_memberships")
+    .select("user_id, role_id, has_all_location_access, location_scope_ids")
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .in("role_id", finalRoleIds);
+  if (memberships.error) throw new Error(memberships.error.message);
+  const scopedMemberships = (memberships.data ?? []).filter((membership) => (
+    !locationId ||
+    membership.has_all_location_access ||
+    (membership.location_scope_ids ?? []).includes(locationId)
+  ));
+  if (scopedMemberships.length) {
+    const membershipByUser = new Map(scopedMemberships.map((membership) => [membership.user_id, membership]));
+    const profiles = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .in("id", [...membershipByUser.keys()]);
+    if (profiles.error) throw new Error(profiles.error.message);
+    const selected = [...(profiles.data ?? [])].sort((left, right) => {
+      const leftRole = membershipByUser.get(left.id)?.role_id ?? "";
+      const rightRole = membershipByUser.get(right.id)?.role_id ?? "";
+      return finalRoleIds.indexOf(leftRole) - finalRoleIds.indexOf(rightRole)
+        || String(left.full_name ?? "").localeCompare(String(right.full_name ?? ""));
+    })[0];
+    const roleId = selected ? membershipByUser.get(selected.id)?.role_id : null;
+    if (selected && roleId) return { userId: selected.id, roleId };
+  }
+
   const { data: finalUser, error } = await supabaseAdmin
     .from("profiles")
     .select("id, role_id")
@@ -387,7 +419,7 @@ export async function approvePaymentRequest(formData: FormData) {
         updated_at: new Date().toISOString()
       });
   } else {
-    const target = await nextApprover(companyId, finalRoleIds);
+    const target = await nextApprover(companyId, finalRoleIds, request.location_id);
     await updatePaymentRequest(request.id, companyId, {
         status: `${roleCode}_APPROVED`,
         approval_status: `${roleCode}_APPROVED`,

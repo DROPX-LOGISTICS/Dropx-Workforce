@@ -5,15 +5,15 @@ import { ManageUserForm } from "@/components/manage-user-form";
 import { PageHead } from "@/components/page-head";
 import { PermissionMatrix } from "@/components/permission-matrix";
 import { SearchableSelect } from "@/components/searchable-select";
+import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
-import { UserRolesListPanel } from "@/components/user-roles-list-panel";
 import { UsersListPanel } from "@/components/users-list-panel";
 import { accessSurfaceLabel, currentAccessSurface, pageBelongsToSurface } from "@/lib/access-surface";
 import { accessPages, ensureAccessPages } from "@/lib/access-pages";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { createUserRole, deleteUser, deleteUserRole, updateUserRole } from "./actions";
+import { configureWorkforceDesignationRole, createUserRole, deleteUser, deleteUserRole, updateUserRole } from "./actions";
 
 type AppPageRow = {
   id: string;
@@ -27,6 +27,7 @@ type UserRoleRow = {
   id: string;
   code: string;
   name: string;
+  product_code: string | null;
   location_access_mode: "all_locations" | "role_based";
   parent_role_id: string | null;
   is_system: boolean;
@@ -84,6 +85,11 @@ type PeopleDesignationRow = {
   id: string;
   code: string;
   name: string;
+};
+
+type WorkforceDesignationAccessRow = PeopleDesignationRow & {
+  enabled: boolean;
+  defaultRoleId: string | null;
 };
 
 type PeoplePersonRow = {
@@ -352,6 +358,38 @@ async function loadPeopleAccessDirectory(companyId: string) {
   return { designations, people: people.sort((left, right) => (left.full_name ?? "").localeCompare(right.full_name ?? "")), error: null };
 }
 
+async function loadWorkforceDesignationAccess(companyId: string) {
+  if (!supabaseAdmin) return { rows: [] as WorkforceDesignationAccessRow[], error: "Supabase service role key is not configured." };
+  const [designations, policies] = await Promise.all([
+    supabaseAdmin.from("designations")
+      .select("id,code,name,designation_category:designation_categories!designations_designation_category_id_fkey!inner(people_module,is_active)")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .eq("designation_category.people_module", "people_hr")
+      .eq("designation_category.is_active", true)
+      .order("name"),
+    supabaseAdmin.from("designation_product_access_policies")
+      .select("designation_id,is_enabled,default_role_id")
+      .eq("company_id", companyId)
+      .eq("product_code", "workforce")
+  ]);
+  if (designations.error || policies.error) return { rows: [], error: designations.error?.message ?? policies.error?.message ?? "Designation access could not be loaded." };
+  const policyByDesignation = new Map((policies.data ?? []).map((policy) => [policy.designation_id, policy]));
+  return {
+    rows: (designations.data ?? []).map((designation) => {
+      const policy = policyByDesignation.get(designation.id);
+      return {
+        id: designation.id,
+        code: designation.code,
+        name: designation.name,
+        enabled: Boolean(policy?.is_enabled),
+        defaultRoleId: policy?.default_role_id ?? null
+      };
+    }),
+    error: null as string | null
+  };
+}
+
 async function loadAccessData(
   companyId: string,
   surface: ReturnType<typeof currentAccessSurface>,
@@ -402,19 +440,19 @@ async function loadAccessData(
   const rolesPromise = (async () => {
     let result = await client
       .from("user_roles")
-      .select("id, code, name, location_access_mode, parent_role_id, is_system, is_active")
+      .select("id, code, name, product_code, location_access_mode, parent_role_id, is_system, is_active")
       .eq("company_id", companyId)
       .order("code");
     if (isMissingCompanyColumn(result.error)) {
       result = await client
         .from("user_roles")
-        .select("id, code, name, location_access_mode, parent_role_id, is_system, is_active")
+        .select("id, code, name, product_code, location_access_mode, parent_role_id, is_system, is_active")
         .order("code");
     }
     if (!result.error && !(result.data ?? []).length) {
       result = await client
         .from("user_roles")
-        .select("id, code, name, location_access_mode, parent_role_id, is_system, is_active")
+        .select("id, code, name, product_code, location_access_mode, parent_role_id, is_system, is_active")
         .eq("is_active", true)
         .order("code");
     }
@@ -576,22 +614,22 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     includeUsers: needsUserData,
     includeRoleEditorData: needsRoleEditorData
   });
+  const workforceDesignationAccess = isWorkforceSurface
+    ? await loadWorkforceDesignationAccess(companyId)
+    : { rows: [] as WorkforceDesignationAccessRow[], error: null as string | null };
   const showAddUser = pagePermission.canAdd && searchParams?.addUser === "1";
-  const showAddRole = pagePermission.canAdd && searchParams?.addRole === "1";
+  const showAddRole = false;
   const peopleDirectory = showAddUser
     ? await loadPeopleAccessDirectory(companyId)
     : { designations: [] as PeopleDesignationRow[], people: [] as PeoplePersonRow[], error: null };
   const surfacePageIds = new Set(pages.map((page) => page.id));
   const surfacePermissions = permissions.filter((permission) => surfacePageIds.has(permission.page_id));
+  const workforceRoleIds = new Set([
+    ...workforceDesignationAccess.rows.map((designation) => designation.defaultRoleId).filter((id): id is string => Boolean(id)),
+    ...users.map((user) => user.role_id).filter((id): id is string => Boolean(id))
+  ]);
   const visibleRoles = isWorkforceSurface
-    ? roles.filter((role) => {
-      if (role.is_system || role.code === "OWNER") return false;
-      const grants = permissions.filter((permission) => (
-        permission.role_id === role.id &&
-        (permission.can_view || permission.can_add || permission.can_edit)
-      ));
-      return grants.length > 0 && grants.every((permission) => surfacePageIds.has(permission.page_id));
-    })
+    ? roles.filter((role) => !role.is_system && role.code !== "OWNER" && workforceRoleIds.has(role.id))
     : roles;
   const visibleRoleIds = new Set(visibleRoles.map((role) => role.id));
   const visibleUsers = isWorkforceSurface
@@ -679,20 +717,20 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     <AppShell active={activeLabel}>
       <PageHead
         eyebrow={`${accessSurfaceLabel(accessSurface)} admin setup`}
-        title={showRolesSection ? "User roles and permissions" : isWorkforceSurface ? "Workforce users and access" : "Users and station access"}
+        title={showRolesSection ? "Designation access and permissions" : isWorkforceSurface ? "Workforce users and access" : "Users and station access"}
         subtitle={showRolesSection
-          ? `Define role hierarchy and permissions for the ${accessSurfaceLabel(accessSurface).toLowerCase()} frontend only. Other frontend permissions are preserved.`
+          ? `Configure Workforce menus for People designations without creating duplicate company roles.`
           : isWorkforceSurface
             ? "Create and manage Workforce-only users, roles, reporting lines, and location scope without Dashboard access."
             : `Create users and manage access for the ${accessSurfaceLabel(accessSurface).toLowerCase()} frontend.`}
       />
 
-      {error ? (
+      {error || workforceDesignationAccess.error ? (
         <section className="panel">
           <div className="panel-body">
             <strong>Role database setup needed</strong>
             <p className="subtle" style={{ marginTop: 6 }}>
-              {error} Run `scripts/user_roles_company_scope_repair_v1.sql` in Supabase SQL editor, then refresh this page.
+              {error ?? workforceDesignationAccess.error} Run the current database migrations, then refresh this page.
             </p>
           </div>
         </section>
@@ -740,14 +778,17 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       ) : null}
 
       {showRolesSection && (pagePermission.canView || pagePermission.canEdit) ? (
-      <UserRolesListPanel
-        canAdd={pagePermission.canAdd}
-        canEdit={pagePermission.canEdit}
-        roles={visibleRoles.map((role) => ({
-          ...role,
-          permissionSummary: permissionText(role, surfacePermissions)
-        }))}
-      />
+      <section className="panel">
+        <div className="panel-head toolbar"><div><h2>Workforce designation access</h2><p className="subtle">Every active People designation is visible. People controls Workforce eligibility; Workforce controls its menus and actions.</p></div><a className="button secondary" href="https://people.dropxlogistics.com/settings/designations">People Designation Master</a></div>
+        <div className="table-wrap"><table style={{ minWidth: 860 }}><thead><tr><th>Designation code</th><th>Designation</th><th>Eligibility</th><th>Menu permissions</th><th>Action</th></tr></thead><tbody>
+          {workforceDesignationAccess.rows.map((designation) => {
+            const role = designation.defaultRoleId ? roles.find((item) => item.id === designation.defaultRoleId) ?? null : null;
+            const state = !designation.enabled ? "Not enabled" : role ? "Configured" : "Setup required";
+            return <tr key={designation.id}><td><strong>{designation.code}</strong></td><td>{designation.name}</td><td><StatusPill status={state} /></td><td>{role ? permissionText(role, surfacePermissions) : "—"}</td><td>{!pagePermission.canEdit ? "—" : !designation.enabled ? <a className="button secondary" href={`https://people.dropxlogistics.com/settings/designations?search=${encodeURIComponent(designation.code)}`}>Enable in People</a> : role ? <a className="button secondary" href={`/users?section=roles&editRole=${role.id}`}>Manage</a> : <form action={configureWorkforceDesignationRole}><input name="designation_id" type="hidden" value={designation.id} /><SubmitButton className="button secondary" pendingText="Preparing…">Set up</SubmitButton></form>}</td></tr>;
+          })}
+          {!workforceDesignationAccess.rows.length ? <tr><td className="empty-cell" colSpan={5}>No active People designation is available.</td></tr> : null}
+        </tbody></table></div>
+      </section>
       ) : null}
 
       {showAddUser ? (
@@ -864,8 +905,8 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                   <div className="form-grid">
                     <label>Role code<input className="field" defaultValue={editRole.code} disabled /></label>
                     <label>Role name<input className="field" name="name" defaultValue={editRole.name} disabled={editRole.code === "LOCATION"} required /></label>
-                    {editRole.code === "LOCATION" ? (
-                      <label>Reporting role<input className="field" value="No reporting role" disabled /></label>
+                    {editRole.code === "LOCATION" || editRole.product_code ? (
+                      <><input name="parent_role_id" type="hidden" value="" /><label>Reporting role<input className="field" value={editRole.product_code ? "Controlled by People reporting manager" : "No reporting role"} disabled /></label></>
                     ) : (
                       <label>Reporting role
                         <SearchableSelect name="parent_role_id" options={editRoleReportingOptions} defaultValue={editRole.parent_role_id ?? editRoleReportingOptions[0]?.value ?? ""} placeholder="Search reporting role" required />
@@ -890,7 +931,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                     <DismissModalButton className="button secondary">Cancel</DismissModalButton>
                   </div>
                 </form>
-                {editRole.code !== "LOCATION" ? (
+                {editRole.code !== "LOCATION" && !editRole.product_code ? (
                   <form action={deleteUserRole} className="danger-form">
                     <input type="hidden" name="id" value={editRole.id} />
                     <SubmitButton

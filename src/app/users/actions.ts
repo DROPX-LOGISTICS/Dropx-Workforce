@@ -415,7 +415,7 @@ async function assertRoleAvailableForSurface(roleId: string, companyId: string, 
 
   const roleResult = await supabaseAdmin
     .from("user_roles")
-    .select("id, code, is_system")
+    .select("id, code, product_code, is_system")
     .eq("company_id", companyId)
     .eq("id", roleId)
     .maybeSingle();
@@ -424,6 +424,18 @@ async function assertRoleAvailableForSurface(roleId: string, companyId: string, 
   }
   if (roleResult.data.is_system || roleResult.data.code === "OWNER") {
     throw new Error("System and Super Admin roles can only be managed centrally.");
+  }
+  if (roleResult.data.product_code === "workforce") {
+    const policy = await supabaseAdmin.from("designation_product_access_policies")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("product_code", "workforce")
+      .eq("default_role_id", roleId)
+      .eq("is_enabled", true)
+      .limit(1)
+      .maybeSingle();
+    if (policy.error) throw new Error(policy.error.message);
+    if (policy.data) return;
   }
 
   await ensureAccessPages(supabaseAdmin, companyId);
@@ -463,6 +475,61 @@ async function assertRoleAvailableForSurface(roleId: string, companyId: string, 
   if (!grantedCodes.length || grantedCodes.some((code) => !pageBelongsToSurface(code, surface))) {
     throw new Error("Select a role owned entirely by the Workforce portal.");
   }
+}
+
+export async function configureWorkforceDesignationRole(formData: FormData) {
+  const designationId = clean(formData.get("designation_id"));
+  try {
+    const authorization = await requirePagePermission("users", "edit");
+    const companyId = requireCompanyId(authorization);
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
+    if (currentAccessSurface() !== "workforce") throw new Error("Configure this role inside Workforce.");
+    if (!designationId || !/^[0-9a-f-]{36}$/i.test(designationId)) throw new Error("Select a valid People designation.");
+
+    const [designationResult, policyResult] = await Promise.all([
+      supabaseAdmin.from("designations").select("id,code,name,designation_category:designation_categories!designations_designation_category_id_fkey!inner(people_module,is_active)").eq("company_id", companyId).eq("id", designationId).eq("is_active", true).eq("designation_category.people_module", "people_hr").eq("designation_category.is_active", true).maybeSingle(),
+      supabaseAdmin.from("designation_product_access_policies").select("id,default_role_id,location_access_mode,is_enabled").eq("company_id", companyId).eq("designation_id", designationId).eq("product_code", "workforce").maybeSingle()
+    ]);
+    if (designationResult.error || !designationResult.data) throw new Error(designationResult.error?.message ?? "People designation was not found.");
+    if (policyResult.error || !policyResult.data?.is_enabled) throw new Error(policyResult.error?.message ?? "Enable Workforce in People Designation Master first.");
+
+    let roleId = policyResult.data.default_role_id as string | null;
+    if (!roleId) {
+      const normalized = String(designationResult.data.code ?? designationResult.data.name).toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 28);
+      const roleCode = `WORKFORCE_${normalized}`;
+      const existing = await supabaseAdmin.from("user_roles").select("id").eq("company_id", companyId).eq("code", roleCode).maybeSingle();
+      if (existing.error) throw new Error(existing.error.message);
+      roleId = existing.data?.id ?? null;
+      if (!roleId) {
+        const created = await supabaseAdmin.from("user_roles").insert({
+          company_id: companyId,
+          product_code: "workforce",
+          code: roleCode,
+          name: designationResult.data.name,
+          parent_role_id: null,
+          location_access_mode: policyResult.data.location_access_mode === "all_locations" ? "all_locations" : "role_based",
+          is_system: false,
+          is_active: true
+        }).select("id").single();
+        if (created.error || !created.data) throw new Error(created.error?.message ?? "Workforce role could not be created.");
+        roleId = created.data.id;
+      }
+      const updated = await supabaseAdmin.from("designation_product_access_policies")
+        .update({ default_role_id: roleId, updated_by: authorization.userId, updated_at: new Date().toISOString() })
+        .eq("id", policyResult.data.id);
+      if (updated.error) throw new Error(updated.error.message);
+    }
+    const reconciled = await supabaseAdmin.rpc("reconcile_designation_product_memberships", {
+      p_company_id: companyId,
+      p_designation_id: designationId,
+      p_actor_user_id: authorization.userId
+    });
+    if (reconciled.error) throw new Error(reconciled.error.message);
+    revalidatePath("/users");
+  } catch (error) {
+    usersRedirect({ section: "roles", userError: error instanceof Error ? error.message : "Designation access could not be prepared." });
+  }
+  usersRedirect({ section: "roles", userNotice: "Designation access is ready to configure." });
 }
 
 async function assertUserAvailableForSurface(userId: string, companyId: string, surface: AccessSurface) {
@@ -644,7 +711,7 @@ export async function updateUserRole(formData: FormData) {
 
     const { data: existingRole, error: existingRoleError } = await supabaseAdmin
       .from("user_roles")
-      .select("code, name, location_access_mode, is_active, is_system")
+      .select("code, name, product_code, location_access_mode, is_active, is_system")
       .eq("id", roleId)
       .eq("company_id", companyId)
       .single();
@@ -662,8 +729,8 @@ export async function updateUserRole(formData: FormData) {
     const isActive = isLocationRole
       ? existingRole.is_active
       : formData.get("is_active") !== "inactive";
-    const parentRoleId = existingRole?.code === "LOCATION"
-      ? null
+    const parentRoleId = existingRole?.code === "LOCATION" || existingRole?.product_code
+      ? clean(formData.get("parent_role_id"))
       : required(formData.get("parent_role_id"), "Reporting role");
 
     if (parentRoleId) await assertRoleAvailableForSurface(parentRoleId, companyId, surface);

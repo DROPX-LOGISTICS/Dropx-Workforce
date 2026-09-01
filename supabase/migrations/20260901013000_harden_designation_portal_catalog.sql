@@ -181,32 +181,42 @@ where seed.source_role_id is not null
 on conflict (company_id, role_id, page_id) do nothing;
 
 -- Recruit keeps its menu matrix in a dedicated table rather than the shared
--- app-page matrix. Clone the currently proven Recruit permissions as well.
-insert into public.recruitment_role_menu_permissions (
-  company_id, role_id, role_code, workspace, menu_id,
-  can_view, can_add, can_edit, updated_by, updated_at
-)
-select seed.company_id,
-       target.id,
-       target.code,
-       permission.workspace,
-       permission.menu_id,
-       permission.can_view,
-       permission.can_add,
-       permission.can_edit,
-       null,
-       now()
-from portal_role_seed seed
-join public.user_roles target
-  on target.company_id = seed.company_id
- and target.code = seed.target_code
-join public.recruitment_role_menu_permissions permission
-  on permission.company_id = seed.company_id
- and permission.role_id = seed.source_role_id
-where seed.product_code = 'recruit'
-  and seed.source_role_id is not null
-  and seed.source_role_id <> target.id
-on conflict (company_id, role_id, workspace, menu_id) do nothing;
+-- app-page matrix. Some shared production databases have not received that
+-- Recruit-owned table yet, so copy it only when it is present. The dynamic SQL
+-- avoids resolving the optional relation while the migration is parsed.
+do $copy_recruit_permissions$
+begin
+  if to_regclass('public.recruitment_role_menu_permissions') is not null then
+    execute $sql$
+      insert into public.recruitment_role_menu_permissions (
+        company_id, role_id, role_code, workspace, menu_id,
+        can_view, can_add, can_edit, updated_by, updated_at
+      )
+      select seed.company_id,
+             target.id,
+             target.code,
+             permission.workspace,
+             permission.menu_id,
+             permission.can_view,
+             permission.can_add,
+             permission.can_edit,
+             null,
+             now()
+      from portal_role_seed seed
+      join public.user_roles target
+        on target.company_id = seed.company_id
+       and target.code = seed.target_code
+      join public.recruitment_role_menu_permissions permission
+        on permission.company_id = seed.company_id
+       and permission.role_id = seed.source_role_id
+      where seed.product_code = 'recruit'
+        and seed.source_role_id is not null
+        and seed.source_role_id <> target.id
+      on conflict (company_id, role_id, workspace, menu_id) do nothing
+    $sql$;
+  end if;
+end
+$copy_recruit_permissions$;
 
 update public.designation_product_access_policies policy
 set default_role_id = target.id,

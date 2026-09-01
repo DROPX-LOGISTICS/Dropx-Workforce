@@ -2,6 +2,24 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
+function workflowFailure(error) {
+  const message = (error instanceof Error ? error.message : String(error))
+    .replaceAll(/\r?\n/g, " ")
+    .replaceAll("::", ":")
+    .slice(0, 1800);
+  console.error(`::error title=Supabase migration failed::${message}`);
+}
+
+process.on("uncaughtException", (error) => {
+  workflowFailure(error);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (error) => {
+  workflowFailure(error);
+  process.exit(1);
+});
+
 const migrationsDirectory = join(process.cwd(), "supabase", "migrations");
 const migrationPattern = /^(\d{14})_(.+)\.sql$/;
 const maximumPendingMigrations = Number(process.env.MAX_PENDING_MIGRATIONS ?? "12");

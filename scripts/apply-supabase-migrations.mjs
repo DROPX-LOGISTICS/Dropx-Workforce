@@ -761,12 +761,14 @@ async function auditDesignationRouting() {
     );
     console.log("Missing payment approval route details:");
     for (const row of rowsFromResponse(paymentRouteDetailResult)) {
-      console.log(JSON.stringify({
+      const detail = {
         configuredRoles: String(row.configured_roles ?? ""),
         paymentHead: String(row.payment_head_code ?? ""),
         stage: String(row.stage ?? ""),
         stationCode: String(row.station_code ?? "")
-      }));
+      };
+      console.log(JSON.stringify(detail));
+      console.log(`::notice title=Missing payment route::${Object.entries(detail).map(([key, value]) => `${key}=${value}`).join(", ")}`);
     }
   }
 

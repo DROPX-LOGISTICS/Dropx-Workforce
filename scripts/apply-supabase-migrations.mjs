@@ -639,6 +639,77 @@ async function auditDesignationRouting() {
   const membershipDrift = Number(rowsFromResponse(membershipDriftResult)[0]?.drift ?? 0);
   console.log(`Designation-managed membership drift: ${membershipDrift}.`);
 
+  const unresolvedLegacyIdentityResult = await managementQuery(
+    `select count(*)::integer as unresolved
+     from public.profiles profile
+     join public.user_roles role
+       on role.company_id = profile.company_id
+      and role.id = profile.role_id
+     where profile.is_active
+       and regexp_replace(upper(role.code), '^(OPERATIONS|FINANCE|WORKFORCE|PEOPLE|RECRUIT)_', '')
+         in ('CLUSTER_HEAD','REGIONAL_HEAD','ZONAL_HEAD')
+       and not exists (
+         select 1
+         from public.people_portal_access_candidates candidate
+         where candidate.company_id = profile.company_id
+           and candidate.user_id = profile.id
+       )
+       and not exists (
+         select 1
+         from public.stations station
+         where station.company_id = profile.company_id
+           and station.is_active
+           and lower(btrim(station.station_email)) = lower(btrim(profile.email))
+       );`,
+    { readOnly: true }
+  );
+  const unresolvedLegacyIdentities = Number(rowsFromResponse(unresolvedLegacyIdentityResult)[0]?.unresolved ?? 0);
+  console.log(`Unresolved active legacy hierarchy identities: ${unresolvedLegacyIdentities}.`);
+  if (unresolvedLegacyIdentities) {
+    const unresolvedLegacyDetailResult = await managementQuery(
+      `select coalesce(profile.employee_id, '')::text as employee_id,
+              coalesce(profile.full_name, '')::text as full_name,
+              coalesce(profile.email, '')::text as email,
+              role.code::text as legacy_role_code,
+              role.name::text as legacy_role_name,
+              cardinality(coalesce(profile.location_scope_ids, '{}'::uuid[]))::integer as scoped_locations
+       from public.profiles profile
+       join public.user_roles role
+         on role.company_id = profile.company_id
+        and role.id = profile.role_id
+       where profile.is_active
+         and regexp_replace(upper(role.code), '^(OPERATIONS|FINANCE|WORKFORCE|PEOPLE|RECRUIT)_', '')
+           in ('CLUSTER_HEAD','REGIONAL_HEAD','ZONAL_HEAD')
+         and not exists (
+           select 1
+           from public.people_portal_access_candidates candidate
+           where candidate.company_id = profile.company_id
+             and candidate.user_id = profile.id
+         )
+         and not exists (
+           select 1
+           from public.stations station
+           where station.company_id = profile.company_id
+             and station.is_active
+             and lower(btrim(station.station_email)) = lower(btrim(profile.email))
+         )
+       order by role.code, profile.full_name, profile.email
+       limit 100;`,
+      { readOnly: true }
+    );
+    for (const row of rowsFromResponse(unresolvedLegacyDetailResult)) {
+      const detail = {
+        email: String(row.email ?? ""),
+        employeeId: String(row.employee_id ?? ""),
+        fullName: String(row.full_name ?? ""),
+        legacyRole: String(row.legacy_role_name ?? row.legacy_role_code ?? ""),
+        scopedLocations: Number(row.scoped_locations ?? 0)
+      };
+      console.log(JSON.stringify(detail));
+      console.log(`::notice title=Unresolved legacy identity::${Object.entries(detail).map(([key, value]) => `${key}=${value}`).join(", ")}`);
+    }
+  }
+
   const paymentRouteResult = await managementQuery(
     `with route_stages as (
        select station.company_id,
@@ -813,9 +884,9 @@ async function auditDesignationRouting() {
     }
   }
 
-  if (wrongSourceCount || blockedCount || projectionDriftCount || invalidSujan || unhealthyAccessPolicies || membershipDrift || missingPaymentRoutes) {
+  if (wrongSourceCount || blockedCount || projectionDriftCount || invalidSujan || unhealthyAccessPolicies || membershipDrift || unresolvedLegacyIdentities || missingPaymentRoutes) {
     throw new Error(
-      `Production People audit failed: ${wrongSourceCount} wrong-source profile(s), ${blockedCount} blocked correction(s), ${projectionDriftCount} source-projection drift(s), ${unhealthyAccessPolicies} unhealthy designation policy/policies, ${membershipDrift} membership drift row(s), ${missingPaymentRoutes} missing payment approval route(s), D0785 canonical=${invalidSujan ? "invalid" : "valid"}.${blockedReasonSummary ? ` Blockers: ${blockedReasonSummary}` : ""}`
+      `Production People audit failed: ${wrongSourceCount} wrong-source profile(s), ${blockedCount} blocked correction(s), ${projectionDriftCount} source-projection drift(s), ${unhealthyAccessPolicies} unhealthy designation policy/policies, ${membershipDrift} membership drift row(s), ${unresolvedLegacyIdentities} unresolved legacy hierarchy identity/identities, ${missingPaymentRoutes} missing payment approval route(s), D0785 canonical=${invalidSujan ? "invalid" : "valid"}.${blockedReasonSummary ? ` Blockers: ${blockedReasonSummary}` : ""}`
     );
   }
 }

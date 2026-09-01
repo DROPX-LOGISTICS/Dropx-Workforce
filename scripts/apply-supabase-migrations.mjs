@@ -291,18 +291,6 @@ async function auditDesignationRouting() {
          on contractor.company_id = engagement.company_id
         and contractor.id = engagement.contractor_id
        where engagement.status = 'active'
-         and (
-           'people' = any(coalesce(designation.portal_scopes, '{}'::text[]))
-           or (
-             cardinality(coalesce(designation.portal_scopes, '{}'::text[])) = 0
-             and exists (
-               select 1 from public.hr_designation_mappings mapping
-               where mapping.company_id = designation.company_id
-                 and mapping.designation_id = designation.id
-                 and mapping.is_available
-             )
-           )
-         )
        order by engagement.company_id, engagement.id,
                 assignment.effective_from desc, assignment.created_at desc
      )
@@ -387,18 +375,6 @@ async function auditDesignationRouting() {
            on contractor.company_id = engagement.company_id
           and contractor.id = engagement.contractor_id
          where engagement.status = 'active'
-           and (
-             'people' = any(coalesce(designation.portal_scopes, '{}'::text[]))
-             or (
-               cardinality(coalesce(designation.portal_scopes, '{}'::text[])) = 0
-               and exists (
-                 select 1 from public.hr_designation_mappings mapping
-                 where mapping.company_id = designation.company_id
-                   and mapping.designation_id = designation.id
-                   and mapping.is_available
-               )
-             )
-           )
          order by engagement.company_id, engagement.id,
                   assignment.effective_from desc, assignment.created_at desc
        )
@@ -601,7 +577,6 @@ async function auditDesignationRouting() {
     || Number(row.active_reportees ?? 0) < 1
     || String(row.person_status ?? "") !== "active"
     || !Boolean(row.people_category)
-    || !Boolean(row.people_portal_scope)
     || !Boolean(row.people_mapping_available)
     || !Boolean(row.source_projection_aligned)
     || !String(row.source_lifecycle_status ?? "").trim()

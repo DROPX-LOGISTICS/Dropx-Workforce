@@ -112,7 +112,7 @@ insert into public.hr_roles (
   company_id, code, name, description, is_system, is_active,
   central_role_id, created_by, updated_by
 )
-select
+select distinct on (policy.company_id, policy.default_role_id)
   policy.company_id,
   'CENTRAL_' || upper(substr(replace(policy.default_role_id::text, '-', ''), 1, 24)),
   designation.name,
@@ -135,6 +135,7 @@ where policy.product_code = 'people'
     where people_role.company_id = policy.company_id
       and people_role.central_role_id = policy.default_role_id
   )
+order by policy.company_id, policy.default_role_id, designation.name, policy.designation_id
 on conflict (company_id, code) do update
 set name = excluded.name,
     description = excluded.description,
@@ -150,13 +151,13 @@ select
   change.company_id,
   target_role.id,
   permission.page_id,
-  permission.can_view,
-  permission.can_add,
-  permission.can_edit,
-  permission.can_approve,
-  permission.can_export,
-  permission.created_by,
-  permission.updated_by,
+  bool_or(permission.can_view),
+  bool_or(permission.can_add),
+  bool_or(permission.can_edit),
+  bool_or(permission.can_approve),
+  bool_or(permission.can_export),
+  null,
+  null,
   now()
 from _designation_role_changes change
 join public.hr_roles source_role
@@ -169,6 +170,7 @@ join public.hr_role_page_permissions permission
   on permission.company_id = source_role.company_id
  and permission.role_id = source_role.id
 where change.product_code = 'people'
+group by change.company_id, target_role.id, permission.page_id
 on conflict (company_id, role_id, page_id) do update
 set can_view = public.hr_role_page_permissions.can_view or excluded.can_view,
     can_add = public.hr_role_page_permissions.can_add or excluded.can_add,
@@ -254,11 +256,12 @@ insert into public.role_page_permissions (
   company_id, role_id, page_id, can_view, can_add, can_edit, updated_at
 )
 select permission.company_id, mapping.new_role_id, permission.page_id,
-       permission.can_view, permission.can_add, permission.can_edit, now()
+       bool_or(permission.can_view), bool_or(permission.can_add), bool_or(permission.can_edit), now()
 from _payment_role_map mapping
 join public.role_page_permissions permission
   on permission.company_id = mapping.company_id
  and permission.role_id = mapping.old_role_id
+group by permission.company_id, mapping.new_role_id, permission.page_id
 on conflict (company_id, role_id, page_id) do update
 set can_view = public.role_page_permissions.can_view or excluded.can_view,
     can_add = public.role_page_permissions.can_add or excluded.can_add,

@@ -600,9 +600,48 @@ async function auditDesignationRouting() {
     || !String(row.source_lifecycle_status ?? "").trim()
   ));
 
-  if (wrongSourceCount || blockedCount || projectionDriftCount || invalidSujan) {
+  const accessHealthResult = await managementQuery(
+    `select health_state::text, count(*)::integer as policies
+     from public.people_product_access_health
+     where is_enabled
+     group by health_state
+     order by health_state;`,
+    { readOnly: true }
+  );
+  const accessHealthRows = rowsFromResponse(accessHealthResult);
+  console.log("People designation product-access health:");
+  for (const row of accessHealthRows) {
+    console.log(JSON.stringify({
+      healthState: String(row.health_state ?? ""),
+      policies: Number(row.policies ?? 0)
+    }));
+  }
+  const unhealthyAccessPolicies = accessHealthRows
+    .filter((row) => String(row.health_state ?? "") !== "healthy")
+    .reduce((total, row) => total + Number(row.policies ?? 0), 0);
+
+  const membershipDriftResult = await managementQuery(
+    `select count(*)::integer as drift
+     from public.company_product_memberships membership
+     join public.designation_product_access_policies policy
+       on policy.company_id = membership.company_id
+      and policy.id = membership.designation_policy_id
+     where membership.is_active
+       and membership.source_system = 'designation_policy'
+       and (
+         not policy.is_enabled
+         or membership.designation_id <> policy.designation_id
+         or membership.product_code <> policy.product_code
+         or membership.role_id is distinct from policy.default_role_id
+       );`,
+    { readOnly: true }
+  );
+  const membershipDrift = Number(rowsFromResponse(membershipDriftResult)[0]?.drift ?? 0);
+  console.log(`Designation-managed membership drift: ${membershipDrift}.`);
+
+  if (wrongSourceCount || blockedCount || projectionDriftCount || invalidSujan || unhealthyAccessPolicies || membershipDrift) {
     throw new Error(
-      `Production People audit failed: ${wrongSourceCount} wrong-source profile(s), ${blockedCount} blocked correction(s), ${projectionDriftCount} source-projection drift(s), D0785 canonical=${invalidSujan ? "invalid" : "valid"}.${blockedReasonSummary ? ` Blockers: ${blockedReasonSummary}` : ""}`
+      `Production People audit failed: ${wrongSourceCount} wrong-source profile(s), ${blockedCount} blocked correction(s), ${projectionDriftCount} source-projection drift(s), ${unhealthyAccessPolicies} unhealthy designation policy/policies, ${membershipDrift} membership drift row(s), D0785 canonical=${invalidSujan ? "invalid" : "valid"}.${blockedReasonSummary ? ` Blockers: ${blockedReasonSummary}` : ""}`
     );
   }
 }

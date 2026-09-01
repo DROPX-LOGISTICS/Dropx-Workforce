@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const migration = read("supabase/migrations/20260830170000_company_product_owners.sql");
+const canonicalRoleMigration = read("supabase/migrations/20260901223000_finish_canonical_people_designation_roles.sql");
 const userActions = read("src/app/users/actions.ts");
+const opsAccessRegister = read("src/app/ops-pulse/access/page.tsx");
 const navigation = read("src/lib/app-navigation.ts");
 const middleware = read("src/middleware.ts");
 
@@ -19,6 +21,11 @@ const destructivePattern = new RegExp(
   "i"
 );
 const workforceNavigation = navigation.slice(navigation.indexOf("export const workforceNavItems"));
+const liveDataTables = ["employees", "contractors", "workforce", "vendors", "helpers", "attendance_records", "payment_request_approvals"];
+const canonicalDestructivePattern = new RegExp(
+  `\\b(?:alter\\s+table|drop\\s+table|truncate(?:\\s+table)?|delete\\s+from|update|insert\\s+into)\\s+(?:public\\.)?(?:${liveDataTables.join("|")})\\b`,
+  "i"
+);
 
 const checks = [
   [migration.trimStart().startsWith("begin;") && migration.trimEnd().endsWith("commit;"), "Migration must be transactional."],
@@ -30,7 +37,13 @@ const checks = [
   [workforceNavigation.includes("/delivery-network/engagement-types"), "Workforce must own its Engagement Types master."],
   [!workforceNavigation.includes("/master/payment-methods") && !workforceNavigation.includes("/master/payment-heads") && !workforceNavigation.includes("/master/payment-banks"), "Finance masters must not remain in Workforce navigation."],
   [middleware.includes("MOVED_FINANCE_PATHS") && middleware.includes("https://fin.dropxlogistics.com"), "Old Workforce finance-master links must redirect to Finance."],
-  [middleware.includes('"/users"') && middleware.includes('"/delivery-network"'), "Workforce user and operating routes must remain available on the Workforce host."]
+  [middleware.includes('"/users"') && middleware.includes('"/delivery-network"'), "Workforce user and operating routes must remain available on the Workforce host."],
+  [canonicalRoleMigration.trimStart().startsWith("begin;") && canonicalRoleMigration.trimEnd().endsWith("commit;"), "Canonical People-role cutover must be transactional."],
+  [!canonicalDestructivePattern.test(canonicalRoleMigration), "Canonical role cutover must not mutate People/Workforce identities, attendance, registration registers, or completed approval history."],
+  [canonicalRoleMigration.includes("update public.payment_heads") && canonicalRoleMigration.includes("update public.payment_requests"), "Current and future payment approval routes must move to canonical designation roles together."],
+  [canonicalRoleMigration.includes("people_product_access_health") && canonicalRoleMigration.includes("ensure_designation_product_access_defaults"), "Cutover must reconcile memberships and expose a deployment health check."],
+  [opsAccessRegister.includes('from("company_product_memberships")') && opsAccessRegister.includes('from("people_portal_access_candidates")'), "OpsPulse access register must use product memberships and current People designations."],
+  [!opsAccessRegister.includes('select("id,full_name,email,role_id'), "OpsPulse access register must not display the legacy profile role."]
 ];
 
 const failures = checks.filter(([ok]) => !ok).map(([, message]) => message);

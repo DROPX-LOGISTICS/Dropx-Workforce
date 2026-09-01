@@ -221,7 +221,7 @@ const invitationFieldLabels: Array<[string, string]> = [
 
 function canApproveProfileCorrections(authorization: AuthorizationContext) {
   const roleCode = String(authorization.roleCode ?? "").trim().toUpperCase();
-  return isCompanyOwner(authorization) || ["ZONAL_HEAD", "ZONE_HEAD", "ZH"].includes(roleCode);
+  return isCompanyOwner(authorization) || ["BH", "BUSINESS_HEAD", "ZONAL_HEAD", "ZONE_HEAD", "ZH"].includes(roleCode);
 }
 
 function InvitationProfileDetails({ executive }: { executive: ExecutiveRow }) {
@@ -261,7 +261,7 @@ function OpsWorkforceCorrectionForm({
       <label>Joining date<input className="field" defaultValue={executive.date_of_join} name="date_of_join" required type="date" /></label>
       <label>Station<select className="field" defaultValue={executive.location_id} name="location_id" required>{locationOptions.map((location) => <option key={location.value} value={location.value}>{location.label}{location.helper ? ` — ${location.helper}` : ""}</option>)}</select></label>
       <label>Designation<select className="field" defaultValue={executive.designation ?? ""} name="designation" required>{designationOptions.map((designation) => <option key={designation.value} value={designation.value}>{designation.label}</option>)}</select></label>
-      <div className="full-width message-panel"><p className="subtle">Only invitation details can be corrected here. Bank, KYC, statutory, vehicle and document information is excluded. The change is applied only after approval by a Zonal Head or Owner.</p></div>
+      <div className="full-width message-panel"><p className="subtle">Only invitation details can be corrected here. Bank, KYC, statutory, vehicle and document information is excluded. The change is applied only after approval by a Business Head or Owner.</p></div>
       <div className="full-width form-actions"><SubmitButton className="button" pendingText="Sending for approval...">Send for approval</SubmitButton></div>
     </form>
   );
@@ -271,7 +271,7 @@ function ProfileCorrectionApprovals({ requests, returnPath }: { requests: Workfo
   if (!requests.length) return null;
   return (
     <section className="panel">
-      <div className="panel-head"><div><h2>Profile change approvals</h2><p className="subtle">Invitation-detail corrections awaiting a Zonal Head or Owner decision.</p></div><StatusPill status={`${requests.length} pending`} /></div>
+      <div className="panel-head"><div><h2>Profile change approvals</h2><p className="subtle">Invitation-detail corrections awaiting a Business Head or Owner decision.</p></div><StatusPill status={`${requests.length} pending`} /></div>
       <div className="profile-correction-queue">
         {requests.map((request) => {
           const changedFields = invitationFieldLabels.filter(([key]) => String(request.current_values?.[key] ?? "") !== String(request.proposed_values?.[key] ?? ""));
@@ -1286,7 +1286,7 @@ export async function FieldExecutivePageContent({
             <div className="panel-head">
               <div>
                 <h2>{editExecutive.onboarding_status === "under_review" ? "Resolve profile review" : editTitle}</h2>
-                <p className="subtle">{isOpsWorkforce ? "Correct invitation details and send them for Zonal Head or Owner approval." : editExecutive.onboarding_status === "under_review" ? "Correct the flagged values, re-run verification, and save before approving the profile." : "Maintain the full registration profile from the Team DropX sample."}</p>
+                <p className="subtle">{isOpsWorkforce ? "Correct invitation details and send them for Business Head or Owner approval." : editExecutive.onboarding_status === "under_review" ? "Correct the flagged values, re-run verification, and save before approving the profile." : "Maintain the full registration profile from the Team DropX sample."}</p>
               </div>
               <PendingLink className="icon-button" href={returnPath} scroll={false} aria-label={`Close edit ${entityLabel.toLowerCase()}`}>x</PendingLink>
             </div>

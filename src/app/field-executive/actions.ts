@@ -509,7 +509,7 @@ export async function createFieldExecutive(formData: FormData) {
 
 function canApproveWorkforceProfileChanges(authorization: Awaited<ReturnType<typeof requirePagePermission>>) {
   const roleCode = String(authorization.roleCode ?? "").trim().toUpperCase();
-  return isCompanyOwner(authorization) || ["ZONAL_HEAD", "ZONE_HEAD", "ZH"].includes(roleCode);
+  return isCompanyOwner(authorization) || ["BH", "BUSINESS_HEAD", "ZONAL_HEAD", "ZONE_HEAD", "ZH"].includes(roleCode);
 }
 
 export async function requestFieldExecutiveProfileChange(formData: FormData) {
@@ -631,11 +631,11 @@ export async function requestFieldExecutiveProfileChange(formData: FormData) {
       remarks: `Invitation-detail correction requested by ${authorization.fullName || authorization.email || "Ops Pulse user"}.`,
       actor_user_id: authorization.userId,
       source_portal: "ops",
-      metadata: { change_request_id: inserted.data.id, approval_roles: ["ZONAL_HEAD", "OWNER"] }
+      metadata: { change_request_id: inserted.data.id, approval_roles: ["BH", "BUSINESS_HEAD", "OWNER"] }
     });
     if (event.error) console.warn("Unable to write profile correction event:", event.error.message);
     revalidatePath(returnPath);
-    fieldExecutiveRedirect({ notice: "Profile correction sent to the Zonal Head and Owner for approval." }, returnPath);
+    fieldExecutiveRedirect({ notice: "Profile correction sent to the Business Head and Owner for approval." }, returnPath);
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     fieldExecutiveRedirect({ error: error instanceof Error ? error.message : "Unable to request the profile correction." }, returnPath);
@@ -650,7 +650,7 @@ export async function reviewFieldExecutiveProfileChange(formData: FormData) {
     fieldExecutiveRedirect({ error: "Profile correction approvals are available from Ops Pulse." }, returnPath);
   }
   if (!canApproveWorkforceProfileChanges(authorization)) {
-    fieldExecutiveRedirect({ error: "Only a Zonal Head or Owner can approve profile corrections." }, returnPath);
+    fieldExecutiveRedirect({ error: "Only a Business Head or Owner can approve profile corrections." }, returnPath);
   }
   if (!supabaseAdmin) fieldExecutiveRedirect({ error: "Supabase service role key is not configured." }, returnPath);
 

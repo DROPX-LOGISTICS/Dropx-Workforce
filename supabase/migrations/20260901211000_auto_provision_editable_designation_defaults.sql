@@ -62,11 +62,11 @@ begin
         policy.default_role_id is null
         or not exists (
           select 1
-          from public.user_roles current_role
-          where current_role.company_id = policy.company_id
-            and current_role.id = policy.default_role_id
-            and current_role.product_code = policy.product_code
-            and current_role.is_active
+          from public.user_roles active_role
+          where active_role.company_id = policy.company_id
+            and active_role.id = policy.default_role_id
+            and active_role.product_code = policy.product_code
+            and active_role.is_active
         )
       )
     order by designation.name, policy.product_code

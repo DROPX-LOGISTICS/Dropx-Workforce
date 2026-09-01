@@ -639,9 +639,140 @@ async function auditDesignationRouting() {
   const membershipDrift = Number(rowsFromResponse(membershipDriftResult)[0]?.drift ?? 0);
   console.log(`Designation-managed membership drift: ${membershipDrift}.`);
 
-  if (wrongSourceCount || blockedCount || projectionDriftCount || invalidSujan || unhealthyAccessPolicies || membershipDrift) {
+  const paymentRouteResult = await managementQuery(
+    `with route_stages as (
+       select station.company_id,
+              station.id as location_id,
+              station.station_code,
+              head.id as payment_head_id,
+              head.code as payment_head_code,
+              stage.stage,
+              stage.role_ids
+       from public.stations station
+       join public.payment_heads head
+         on head.company_id = station.company_id
+        and head.is_active
+       cross join lateral (
+         values
+           ('initial'::text, case
+             when head.initial_approval_role_ids is null
+               then array_remove(array[head.initial_approval_role_id], null)
+             else head.initial_approval_role_ids
+           end),
+           ('final'::text, case
+             when head.final_approval_role_ids is null
+               then array_remove(array[head.final_approval_role_id], null)
+             else head.final_approval_role_ids
+           end),
+           ('payment'::text, coalesce(head.payment_process_role_ids, '{}'::uuid[]))
+       ) stage(stage, role_ids)
+       where station.is_active
+         and cardinality(stage.role_ids) > 0
+     ), route_health as (
+       select route.*,
+              exists (
+                select 1
+                from public.company_product_memberships membership
+                join public.profiles profile
+                  on profile.company_id = membership.company_id
+                 and profile.id = membership.user_id
+                 and profile.is_active
+                where membership.company_id = route.company_id
+                  and membership.is_active
+                  and membership.role_id = any(route.role_ids)
+                  and (
+                    membership.has_all_location_access
+                    or route.location_id = any(coalesce(membership.location_scope_ids, '{}'::uuid[]))
+                  )
+              ) as has_active_approver
+       from route_stages route
+     )
+     select count(*)::integer as configured_routes,
+            count(*) filter (where has_active_approver)::integer as healthy_routes,
+            count(*) filter (where not has_active_approver)::integer as missing_routes,
+            count(*) filter (where station_code = 'CHM')::integer as chm_routes,
+            count(*) filter (where station_code = 'CHM' and has_active_approver)::integer as healthy_chm_routes
+     from route_health;`,
+    { readOnly: true }
+  );
+  const paymentRouteRow = rowsFromResponse(paymentRouteResult)[0] ?? {};
+  const missingPaymentRoutes = Number(paymentRouteRow.missing_routes ?? 0);
+  console.log("Payment approval route health:");
+  console.log(JSON.stringify({
+    configuredRoutes: Number(paymentRouteRow.configured_routes ?? 0),
+    healthyChmRoutes: Number(paymentRouteRow.healthy_chm_routes ?? 0),
+    healthyRoutes: Number(paymentRouteRow.healthy_routes ?? 0),
+    missingRoutes: missingPaymentRoutes,
+    totalChmRoutes: Number(paymentRouteRow.chm_routes ?? 0)
+  }));
+
+  if (missingPaymentRoutes) {
+    const paymentRouteDetailResult = await managementQuery(
+      `with route_stages as (
+         select station.company_id,
+                station.id as location_id,
+                station.station_code,
+                head.code as payment_head_code,
+                stage.stage,
+                stage.role_ids
+         from public.stations station
+         join public.payment_heads head
+           on head.company_id = station.company_id
+          and head.is_active
+         cross join lateral (
+           values
+             ('initial'::text, case when head.initial_approval_role_ids is null then array_remove(array[head.initial_approval_role_id], null) else head.initial_approval_role_ids end),
+             ('final'::text, case when head.final_approval_role_ids is null then array_remove(array[head.final_approval_role_id], null) else head.final_approval_role_ids end),
+             ('payment'::text, coalesce(head.payment_process_role_ids, '{}'::uuid[]))
+         ) stage(stage, role_ids)
+         where station.is_active
+           and cardinality(stage.role_ids) > 0
+       )
+       select route.station_code::text,
+              route.payment_head_code::text,
+              route.stage::text,
+              array_to_string(array_agg(coalesce(role.name, role.code, route_id::text) order by role.name, role.code), ', ')::text as configured_roles
+       from route_stages route
+       cross join lateral unnest(route.role_ids) route_id
+       left join public.user_roles role
+         on role.company_id = route.company_id
+        and role.id = route_id
+       where not exists (
+         select 1
+         from public.company_product_memberships membership
+         join public.profiles profile
+           on profile.company_id = membership.company_id
+          and profile.id = membership.user_id
+          and profile.is_active
+         where membership.company_id = route.company_id
+           and membership.is_active
+           and membership.role_id = any(route.role_ids)
+           and (
+             membership.has_all_location_access
+             or route.location_id = any(coalesce(membership.location_scope_ids, '{}'::uuid[]))
+           )
+       )
+       group by route.company_id, route.location_id, route.station_code,
+                route.payment_head_code, route.stage
+       order by case when route.station_code = 'CHM' then 0 else 1 end,
+                route.station_code, route.payment_head_code, route.stage
+       limit 100;`,
+      { readOnly: true }
+    );
+    console.log("Missing payment approval route details:");
+    for (const row of rowsFromResponse(paymentRouteDetailResult)) {
+      console.log(JSON.stringify({
+        configuredRoles: String(row.configured_roles ?? ""),
+        paymentHead: String(row.payment_head_code ?? ""),
+        stage: String(row.stage ?? ""),
+        stationCode: String(row.station_code ?? "")
+      }));
+    }
+  }
+
+  if (wrongSourceCount || blockedCount || projectionDriftCount || invalidSujan || unhealthyAccessPolicies || membershipDrift || missingPaymentRoutes) {
     throw new Error(
-      `Production People audit failed: ${wrongSourceCount} wrong-source profile(s), ${blockedCount} blocked correction(s), ${projectionDriftCount} source-projection drift(s), ${unhealthyAccessPolicies} unhealthy designation policy/policies, ${membershipDrift} membership drift row(s), D0785 canonical=${invalidSujan ? "invalid" : "valid"}.${blockedReasonSummary ? ` Blockers: ${blockedReasonSummary}` : ""}`
+      `Production People audit failed: ${wrongSourceCount} wrong-source profile(s), ${blockedCount} blocked correction(s), ${projectionDriftCount} source-projection drift(s), ${unhealthyAccessPolicies} unhealthy designation policy/policies, ${membershipDrift} membership drift row(s), ${missingPaymentRoutes} missing payment approval route(s), D0785 canonical=${invalidSujan ? "invalid" : "valid"}.${blockedReasonSummary ? ` Blockers: ${blockedReasonSummary}` : ""}`
     );
   }
 }

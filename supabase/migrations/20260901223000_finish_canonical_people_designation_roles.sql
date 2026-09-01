@@ -33,17 +33,17 @@ update public.designation_product_access_policies policy
 set default_role_id = null,
     updated_at = now()
 from _designation_policy_sources source
-left join public.user_roles current_role
-  on current_role.company_id = source.company_id
- and current_role.id = source.old_role_id
+left join public.user_roles existing_role
+  on existing_role.company_id = source.company_id
+ and existing_role.id = source.old_role_id
 where policy.company_id = source.company_id
   and policy.designation_id = source.designation_id
   and policy.product_code = source.product_code
   and (
     source.old_role_id is null
-    or current_role.id is null
-    or upper(current_role.code) <> source.canonical_role_code
-    or upper(current_role.name) in ('CLUSTER HEAD','REGIONAL HEAD','ZONAL HEAD')
+    or existing_role.id is null
+    or upper(existing_role.code) <> source.canonical_role_code
+    or upper(existing_role.name) in ('CLUSTER HEAD','REGIONAL HEAD','ZONAL HEAD')
   );
 
 do $$

@@ -337,6 +337,19 @@ async function validateLocationScope(
 ) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
 
+  if (!isCompanyOwner(authorization)) {
+    const grants = await supabaseAdmin.from("role_page_permissions")
+      .select("can_view,can_add,can_edit,app_pages!inner(code)").eq("company_id", companyId).eq("role_id", roleId);
+    if (grants.error) throw new Error(grants.error.message);
+    for (const grant of grants.data ?? []) {
+      const page = Array.isArray(grant.app_pages) ? grant.app_pages[0] : grant.app_pages;
+      const own = authorization.permissions[page?.code ?? ""];
+      if ((grant.can_view && !own?.canView) || (grant.can_add && !own?.canAdd) || (grant.can_edit && !own?.canEdit)) {
+        throw new Error("An owner must assign roles with permissions beyond your own access.");
+      }
+    }
+  }
+
   const { data: selectedRole, error: roleError } = await supabaseAdmin
     .from("user_roles")
     .select("location_access_mode")
@@ -481,6 +494,7 @@ export async function configureWorkforceDesignationRole(formData: FormData) {
   const designationId = clean(formData.get("designation_id"));
   try {
     const authorization = await requirePagePermission("users", "edit");
+    if (!isCompanyOwner(authorization) && !authorization.isMasterOwner) throw new Error("Only an owner can configure roles and permission grants.");
     const companyId = requireCompanyId(authorization);
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
     if (currentAccessSurface() !== "workforce") throw new Error("Configure this role inside Workforce.");
@@ -535,6 +549,7 @@ export async function configureWorkforceDesignationRole(formData: FormData) {
 export async function configureWorkforceLocationRole() {
   try {
     const authorization = await requirePagePermission("users", "edit");
+    if (!isCompanyOwner(authorization) && !authorization.isMasterOwner) throw new Error("Only an owner can configure roles and permission grants.");
     const companyId = requireCompanyId(authorization);
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured");
     if (currentAccessSurface() !== "workforce") throw new Error("Configure this role inside Workforce.");
@@ -660,6 +675,7 @@ export async function createUserRole(formData: FormData) {
       throw new Error("Supabase service role key is not configured");
     }
 
+    if (!isCompanyOwner(authorization) && !authorization.isMasterOwner) throw new Error("Only a company owner can create roles and permission grants.");
     const code = required(formData.get("code"), "Role code").toUpperCase();
     const name = required(formData.get("name"), "Role name");
     const parentRoleId = required(formData.get("parent_role_id"), "Reporting role");
@@ -766,6 +782,9 @@ export async function updateUserRole(formData: FormData) {
 
     if (parentRoleId) await assertRoleAvailableForSurface(parentRoleId, companyId, surface);
 
+    if (!isCompanyOwner(authorization) && !authorization.isMasterOwner) {
+      throw new Error("Only a company owner can change roles and permission grants. Delegated administrators can manage users within their approved scope.");
+    }
     if (parentRoleId === roleId) {
       throw new Error("A role cannot report to itself.");
     }
@@ -919,6 +938,7 @@ async function performDeleteUserRole(formData: FormData, companyId: string) {
 
 export async function deleteUserRole(formData: FormData) {
   const authorization = await requirePagePermission("users", "edit");
+  if (!isCompanyOwner(authorization) && !authorization.isMasterOwner) throw new Error("Only an owner can delete or replace roles.");
   const companyId = requireCompanyId(authorization);
   try {
     const surface = currentAccessSurface();

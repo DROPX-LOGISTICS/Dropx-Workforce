@@ -1,3 +1,4 @@
+import { providerClearanceStatus } from "@/lib/workforce-controls";
 import { AppShell } from "@/components/app-shell";
 import { OnboardingScopeFilter } from "@/components/onboarding-scope-filter";
 import { PageHead } from "@/components/page-head";
@@ -58,7 +59,7 @@ export default async function ExecutiveIdOnboardingPage({ searchParams }: { sear
     const record = merged(row);
     const station = normalizeStation(row.station_code || find(record, ["station code", "station", "location code"]));
     const rawStatus = find(record, ["status", "onboarding status", "pending status"]);
-    const opsStatus = clean(row.normalized_data?.ops_clearance_status) || (/(clear|complete|done|active)/i.test(rawStatus) ? "cleared" : "pending");
+    const opsStatus = clean(row.normalized_data?.ops_clearance_status) || (providerClearanceStatus(rawStatus));
     const pendingSince = find(record, ["pending since", "pending from", "date", "report date"]) || row.work_date || latestBatch?.report_to || row.created_at.slice(0, 10);
     return {
       row,

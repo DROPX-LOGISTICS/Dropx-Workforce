@@ -3,7 +3,9 @@
 import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getAuthorization, hasPermission } from "@/lib/authorization";
+import { assertWorkforceLocationAccess } from "@/lib/workforce-controls";
+import { isWorkforceDate } from "@/lib/workforce-earnings";
+import { getAuthorization, hasPermission, type AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId, withCompany } from "@/lib/company-scope";
 import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -81,7 +83,7 @@ function previousDate(dateValue: string) {
   return date.toISOString().slice(0, 10);
 }
 
-async function saveExecutiveMappingRow(formData: FormData, index: number, createdBy: string, companyId: string) {
+async function saveExecutiveMappingRow(formData: FormData, index: number, createdBy: string, companyId: string, authorization: AuthorizationContext) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
 
   const id = rowRequired(formData, index, "id", "Workforce source profile");
@@ -91,6 +93,7 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
     throw new Error(`Row ${index + 1}: Worker source is invalid.`);
   }
   const mappingId = rowValue(formData, index, "mapping_id");
+  if (!hasPermission(authorization, "provider_mapping", mappingId ? "edit" : "add") || authorization.readOnly) throw new Error("You do not have permission for this mapping action.");
   const dropxId = rowRequired(formData, index, "dropx_id", "DropX ID").toUpperCase();
   const providerId = rowRequired(formData, index, "provider_id", "Provider");
   const providerMemberId = rowRequired(formData, index, "provider_member_id", "Provider Member ID");
@@ -112,7 +115,7 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
   const [{ data: worker, error: workerError }, { data: station }] = await Promise.all([
     supabaseAdmin
       .from("workforce")
-      .select("id, designation_id, source_profile_id, source_profile_type")
+      .select("id, location_id, designation_id, source_profile_id, source_profile_type")
       .eq("id", workforceId)
       .eq("company_id", companyId)
       .is("deleted_at", null)
@@ -128,6 +131,7 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
 
   if (workerError) throw new Error(workerError.message);
   if (!worker) throw new Error(`Row ${index + 1}: Delivery Network partner was not found for this company.`);
+  assertWorkforceLocationAccess(authorization, worker.location_id, stationId);
   const sourceMatches = sourceType === "workforce"
     ? worker.id === id && worker.id === workforceId
     : worker.source_profile_id === id && worker.source_profile_type === sourceType;
@@ -179,11 +183,11 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
     }
   }
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
+  if (!isWorkforceDate(effectiveFrom)) {
     throw new Error(`Row ${index + 1}: Effective from must be YYYY-MM-DD.`);
   }
 
-  if (effectiveTo && !/^\d{4}-\d{2}-\d{2}$/.test(effectiveTo)) {
+  if (effectiveTo && !isWorkforceDate(effectiveTo)) {
     throw new Error(`Row ${index + 1}: Effective to must be YYYY-MM-DD.`);
   }
 
@@ -216,82 +220,12 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
     updated_at: new Date().toISOString()
   }, companyId);
 
-  const now = new Date().toISOString();
-  const canonicalUpdate = await supabaseAdmin
-    .from("workforce")
-    .update({ dropx_id: dropxId, location_id: stationId, updated_at: now })
-    .eq("id", workforceId)
-    .eq("company_id", companyId);
-  if (canonicalUpdate.error) throw new Error(canonicalUpdate.error.message);
-
-  const workerUpdate = sourceType === "workforce"
-    ? Promise.resolve({ error: null })
-    : sourceType === "employee"
-    ? supabaseAdmin.from("employees").update({ employee_code: dropxId, location_id: stationId, updated_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId)
-    : sourceType === "contractor"
-      ? supabaseAdmin.from("contractors").update({ dropx_id: dropxId, location_id: stationId, updated_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId)
-      : supabaseAdmin.from("field_executives").update({ dropx_id: dropxId, location_id: stationId, updated_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId);
-  const { error: executiveError } = await workerUpdate;
-
-  if (executiveError) throw new Error(executiveError.message);
-
-  if (!mappingId) {
-    const { error } = await supabaseAdmin
-      .from("field_executive_provider_mappings")
-      .insert({
-        ...mappingPayload,
-        created_by: createdBy
-      });
-    if (error) throw new Error(error.message);
-    return;
-  }
-
-  const { data: existingMapping, error: existingError } = await supabaseAdmin
-    .from("field_executive_provider_mappings")
-    .select("id, effective_from, effective_to")
-    .eq("id", mappingId)
-    .eq("company_id", companyId)
-    .maybeSingle();
-
-  if (existingError) throw new Error(existingError.message);
-  if (!existingMapping) throw new Error(`Row ${index + 1}: Mapping history row was not found.`);
-
-  if (effectiveFrom > existingMapping.effective_from) {
-    const closingDate = previousDate(effectiveFrom);
-    if (closingDate < existingMapping.effective_from) {
-      throw new Error(`Row ${index + 1}: New effective date must be after the existing period start.`);
-    }
-
-    const { error: closeError } = await supabaseAdmin
-      .from("field_executive_provider_mappings")
-      .update({
-        effective_to: closingDate,
-        status: "closed",
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", mappingId)
-      .eq("company_id", companyId);
-
-    if (closeError) throw new Error(closeError.message);
-
-    const { error: insertError } = await supabaseAdmin
-      .from("field_executive_provider_mappings")
-      .insert({
-        ...mappingPayload,
-        created_by: createdBy
-      });
-
-    if (insertError) throw new Error(insertError.message);
-    return;
-  }
-
-  const { error } = await supabaseAdmin
-    .from("field_executive_provider_mappings")
-    .update(mappingPayload)
-    .eq("id", mappingId)
-    .eq("company_id", companyId);
-
-  if (error) throw new Error(error.message);
+  const result = await supabaseAdmin.rpc("workforce_save_mapping", {
+    p_company: companyId, p_actor: createdBy, p_workforce: workforceId, p_mapping: mappingId,
+    p_dropx: dropxId, p_payload: { ...mappingPayload, workforce_id: workforceId, employee_id: null, contractor_id: null, field_executive_id: null },
+    p_locations: authorization.hasAllLocationAccess ? null : authorization.locationScopeIds
+  });
+  if (result.error) throw new Error(result.error.message);
 }
 
 export async function saveProviderMappingWorksheet(formData: FormData) {
@@ -330,7 +264,7 @@ export async function saveProviderMappingWorksheet(formData: FormData) {
         throw new Error("Invalid row selected.");
       }
       if (!nonEmptyRow(formData, index)) continue;
-      await saveExecutiveMappingRow(formData, index, authorization.userId, companyId);
+      await saveExecutiveMappingRow(formData, index, authorization.userId, companyId, authorization);
       savedRows += 1;
     }
 
@@ -338,7 +272,7 @@ export async function saveProviderMappingWorksheet(formData: FormData) {
     revalidatePath("/delivery-network/rate-mapping");
     revalidatePath("/field-executive");
   } catch (error) {
-    mappingRedirect({ error: error instanceof Error ? error.message : "Unable to save mappings." });
+    mappingRedirect({ error: `${savedRows} row(s) saved. ${error instanceof Error ? error.message : "Unable to save remaining mappings."}` });
   }
 
   mappingRedirect({ notice: `${savedRows} row${savedRows === 1 ? "" : "s"} saved.` });

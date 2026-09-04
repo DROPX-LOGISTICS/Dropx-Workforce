@@ -12,7 +12,10 @@ globalThis.fetch = async (input) => {
   requests.push(url);
   const table = url.pathname.split("/").at(-1);
   assert.ok(Object.hasOwn(responses, table), `Unexpected table: ${table}`);
-  const response = responses[table];
+  const value = responses[table];
+  const start = Number(url.searchParams.get("offset") || 0);
+  const limit = Number(url.searchParams.get("limit") || (Array.isArray(value) ? value.length : 1));
+  const response = Array.isArray(value) ? value.slice(start, start + limit) : value;
   return new Response(JSON.stringify(response), {
     status: Array.isArray(response) ? 200 : 400,
     headers: { "Content-Type": "application/json" }
@@ -105,4 +108,19 @@ test("company and location restrictions still apply to all profile queries", asy
     assert.equal(canonical.searchParams.get("deleted_at"), "is.null");
     assert.equal(canonical.searchParams.get("migration_state"), "neq.reclassified");
   }
+});
+
+test("preserves compatibility while separating pending accounts from active field workers", async () => {
+  responses.workforce = [row("pending", { compatibility_mode: true }), row("active", { onboarding_status: "active", compatibility_mode: false })];
+  const result = await loadWorkforceCommunicationRecipients(authorization);
+  assert.equal(result.find(r => r.accountId === "pending").isActive, false);
+  assert.equal(result.find(r => r.accountId === "pending").compatibilityMode, true);
+  assert.equal(result.find(r => r.accountId === "active").isActive, true);
+});
+
+test("reads recipients beyond the first database page", async () => {
+  responses.workforce = Array.from({length: 1101}, (_, i) => row(`worker-${i}`));
+  const result = await loadWorkforceCommunicationRecipients(authorization);
+  assert.equal(result.length, 1101);
+  assert.ok(result.some(row => row.accountId === "worker-1100"));
 });

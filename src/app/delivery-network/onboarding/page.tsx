@@ -79,9 +79,9 @@ export default async function WorkforceOnboardingHubPage() {
     const categories = normalizeDesignationCategories(designation.onboarding_categories);
     return categories.includes("vendors") || categories.includes("workers");
   });
-  const associateRecords = records.filter((record) => record.profileType === "workforce");
-  const operationsRecords = records.filter((record) => record.profileType === "vendor" || record.profileType === "worker");
-  const protectedInvitations = records.filter((record) => record.profileType === "workforce" && record.compatibilityMode);
+  const associateRecords = records.filter((record) => record.engagementType === "associate");
+  const operationsRecords = records.filter((record) => record.engagementType === "operations");
+  const protectedInvitations = records.filter((record) => record.compatibilityMode);
 
   const lifecycle = [
     { label: "Role master", helper: `${designations.length} Workforce roles`, href: "/delivery-network/designations", icon: ClipboardCheck },

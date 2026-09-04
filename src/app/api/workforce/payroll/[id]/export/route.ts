@@ -1,3 +1,4 @@
+import { readAllRows } from "@/lib/supabase-pagination";
 import { getAuthorization, hasPermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -18,7 +19,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   const companyId = requireCompanyId(authorization);
   const [runResult, itemResult] = await Promise.all([
     supabaseAdmin.from("workforce_payroll_runs").select("id, run_number, period_start, period_end, status").eq("company_id", companyId).eq("id", params.id).maybeSingle(),
-    supabaseAdmin.from("workforce_payroll_items").select("dropx_id, worker_name, station_code, bank_account_no, ifsc_code, provider_member_ids, work_days, shipment_count, activity_count, base_amount, incentive_amount, adjustment_amount, deduction_amount, gross_amount, net_amount, status, hold_reasons").eq("company_id", companyId).eq("payroll_run_id", params.id).order("worker_name")
+    readAllRows(supabaseAdmin.from("workforce_payroll_items").select("dropx_id, worker_name, station_code, bank_account_no, ifsc_code, provider_member_ids, work_days, shipment_count, activity_count, base_amount, incentive_amount, adjustment_amount, deduction_amount, gross_amount, net_amount, status, hold_reasons").eq("company_id", companyId).eq("payroll_run_id", params.id).order("worker_name").order("id"))
   ]);
   if (runResult.error || !runResult.data) return Response.json({ error: "Payroll run was not found." }, { status: 404 });
   if (itemResult.error) return Response.json({ error: itemResult.error.message }, { status: 500 });

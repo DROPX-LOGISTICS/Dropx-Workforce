@@ -30,9 +30,15 @@ export async function updateOnboardingStatus(formData: FormData) {
     redirect(`${targetPath}?error=Invalid+update`);
   }
   if (!supabaseAdmin) redirect(`${targetPath}?error=Service+unavailable`);
-  const existing = await supabaseAdmin.from("report_import_rows").select("normalized_data").eq("company_id", companyId).eq("id", id).single();
+  const existing = await supabaseAdmin.from("report_import_rows").select("station_code,raw_data,normalized_data").eq("company_id", companyId).eq("id", id).single();
   if (existing.error) redirect(`${targetPath}?error=${encodeURIComponent(existing.error.message)}`);
   const normalized = existing.data?.normalized_data && typeof existing.data.normalized_data === "object" ? existing.data.normalized_data : {};
+  const stored = { ...(existing.data?.raw_data ?? {}), ...normalized };
+  const stationField = Object.entries(stored).find(([label]) => ["stationcode", "station", "locationcode"].includes(label.toLowerCase().replace(/[^a-z0-9]/g, "")));
+  const storedStation = String(existing.data?.station_code || stationField?.[1] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!storedStation || !locations.some((location) => location.station_code === storedStation)) {
+    redirect(`${targetPath}?error=Record+is+outside+your+station+access`);
+  }
   const { error } = await supabaseAdmin.from("report_import_rows").update({
     normalized_data: {
       ...normalized,

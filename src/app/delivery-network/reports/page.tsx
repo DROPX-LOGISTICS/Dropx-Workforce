@@ -33,7 +33,7 @@ export default async function WorkforceReportsPage({ searchParams = {} }: { sear
   const state = String(searchParams.state ?? "").toLowerCase();
   const sort = String(searchParams.sort ?? (report === "earnings" || report === "exceptions" ? "date-desc" : "name-asc"));
   const lines = snapshot.lines.filter((line) => (!station || line.stationCode === station) && (!state || line.status === state) && match([line.workerName, line.dropxId, line.providerMemberId, line.providerName], q));
-  const exceptions = lines.filter((line) => ["unmapped", "missing_rate"].includes(line.status));
+  const exceptions = lines.filter((line) => !line.workforceId || ["unmapped", "missing_rate"].includes(line.status));
   const payments = snapshot.summaries.filter((row) => (!station || row.stationCode === station) && (!state || row.status === state) && match([row.workerName, row.dropxId, ...row.providerIds], q));
   const people = associates.filter((row) => (!station || row.location === station) && (!state || row.status.toLowerCase() === state) && match([row.name, row.reference, row.mobile, row.email, row.designation], q));
   const compare = <T extends { workerName?: string; name?: string; stationCode?: string; location?: string; netAmount?: number; workDate?: string }>(left: T, right: T) => {

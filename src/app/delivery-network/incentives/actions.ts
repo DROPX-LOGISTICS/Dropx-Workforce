@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { requirePagePermission, type AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { isWorkforceDate } from "@/lib/workforce-earnings";
+import { workforceToday, isWorkforceDate } from "@/lib/workforce-earnings";
 
 const path = "/delivery-network/incentives";
 
@@ -93,13 +93,19 @@ export async function changeIncentiveStatus(formData: FormData) {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
     const id = required(formData.get("id"), "Campaign");
     if (!["active", "paused", "closed"].includes(status)) throw new Error("Choose a valid campaign action.");
-    const current = await supabaseAdmin.from("workforce_incentive_campaigns").select("id, status, effective_to, station_id").eq("company_id", companyId).eq("id", id).maybeSingle();
+    const current = await supabaseAdmin.from("workforce_incentive_campaigns").select("id, status, effective_from, effective_to, station_id").eq("company_id", companyId).eq("id", id).maybeSingle();
     if (current.error) throw new Error(current.error.message);
     if (!current.data) throw new Error("Campaign was not found.");
     requireCampaignLocationScope(authorization, current.data.station_id);
     if (current.data.status === "closed") throw new Error("Closed campaigns cannot be reopened.");
+    if (status === "active" && current.data.status !== "draft") throw new Error("Create a new draft campaign to resume incentives without rewriting history.");
     const now = new Date().toISOString();
     const payload: Record<string, unknown> = { status, updated_at: now };
+    if (["paused", "closed"].includes(status) && current.data.status !== "draft") {
+      const today = workforceToday();
+      payload.effective_to = current.data.effective_to && current.data.effective_to < today ? current.data.effective_to : today;
+      if (current.data.effective_from > today) throw new Error("This policy starts in the future. Contact the owner to replace it before activation.");
+    }
     if (status === "active") Object.assign(payload, { approved_by: authorization.userId, approved_at: now });
     const result = await supabaseAdmin.from("workforce_incentive_campaigns").update(payload)
       .eq("company_id", companyId).eq("id", id).eq("status", current.data.status).select("id").maybeSingle();

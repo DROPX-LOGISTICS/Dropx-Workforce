@@ -1,3 +1,4 @@
+import { scopeWorkforceCampaigns } from "@/lib/workforce-campaign-scope";
 import { AppShell } from "@/components/app-shell";
 import type { Campaign } from "@/components/campaign-report";
 import { NotificationHistoryPanel } from "@/components/notification-history-panel";
@@ -26,14 +27,15 @@ export default async function WorkforceCommunicationHistoryPage() {
     supabaseAdmin.from("whatsapp_profiles").select("id, profile_name").eq("company_id", companyId),
     supabaseAdmin
       .from("whatsapp_campaigns")
-      .select("id, campaign_code, whatsapp_profile_id, whatsapp_profile_name, created_at, total_count, sent_count, failed_count, pending_count, status, whatsapp_campaign_recipients (id, row_no, recipient_name, recipient_mobile, country_code, status, provider_message_id, error_message, sent_at, updated_at)")
+      .select("id, campaign_code, whatsapp_profile_id, whatsapp_profile_name, created_at, total_count, sent_count, failed_count, pending_count, status, whatsapp_campaign_recipients (id, source_id, row_no, recipient_name, recipient_mobile, country_code, status, provider_message_id, error_message, sent_at, updated_at)")
       .eq("company_id", companyId)
       .eq("source_mode", "workforce")
       .order("created_at", { ascending: false })
       .limit(100)
   ]) : [{ data: [], error: { message: "Supabase service role key is not configured." } }, { data: [], error: null }, { data: [], error: null }];
+  if (!authorization.hasAllLocationAccess) appNotifications.data = (appNotifications.data ?? []).filter((row) => recipientByKey.has(`${row.recipient_profile_type}:${row.recipient_account_id}`));
   const profileNameById = new Map((campaignProfiles.data ?? []).map((profile) => [profile.id, profile.profile_name]));
-  const campaigns = ((whatsAppCampaigns.data ?? []) as unknown as Campaign[]).map((campaign) => ({
+  const campaigns = scopeWorkforceCampaigns((whatsAppCampaigns.data ?? []) as unknown as Campaign[], recipients, authorization.hasAllLocationAccess).map((campaign) => ({
     ...campaign,
     channel: "WhatsApp",
     whatsapp_profile_name: campaign.whatsapp_profile_id

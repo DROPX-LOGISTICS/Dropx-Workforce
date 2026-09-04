@@ -1,3 +1,5 @@
+import { readAllRows } from "@/lib/supabase-pagination";
+import { isFieldActive, isRetiredWorkforceTable } from "@/lib/workforce-controls";
 import type { AuthorizationContext } from "@/lib/authorization";
 import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -22,6 +24,10 @@ export type WorkforceCommunicationRecipient = {
   status: string;
   isActive: boolean;
   compatibilityMode: boolean;
+  engagementType: string;
+  sourceProfileType: string;
+  sourceProfileId: string;
+  locationId: string;
 };
 
 type LocationRelation = {
@@ -32,6 +38,8 @@ type LocationRelation = {
 
 type LegacyProfileRow = {
   id: string;
+  location_id?: string | null;
+  lifecycle_status?: string | null;
   dropx_id?: string | null;
   biometric_id?: string | null;
   full_name?: string | null;
@@ -76,7 +84,7 @@ function recipientFromRow(
   const station = first(row.stations);
   const provider = first(station?.providers);
   const model = first(station?.location_models);
-  const isActive = Boolean(row.is_active);
+  const isActive = isFieldActive(row);
   return {
     accountId,
     profileType,
@@ -93,7 +101,11 @@ function recipientFromRow(
     model: String(model?.code || model?.name || ""),
     status: statusLabel(row.onboarding_status, isActive),
     isActive,
-    compatibilityMode
+    compatibilityMode,
+    engagementType: profileType === "vendor" || profileType === "worker" ? "operations" : "associate",
+    sourceProfileType: profileType,
+    sourceProfileId: accountId,
+    locationId: row.location_id ?? ""
   };
 }
 
@@ -121,20 +133,24 @@ export async function loadWorkforceCommunicationRecipients(authorization: Author
 
   const designationResult = await admin
     .from("designations")
-    .select("id, code, name, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active)")
+    .select("id, code, name, onboarding_categories, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active)")
     .eq("company_id", companyId)
     .eq("is_active", true);
   if (designationResult.error) throw new Error(designationResult.error.message);
 
   const workforceDesignationKeys = new Set<string>();
+  const engagementByDesignation = new Map<string, string>();
   for (const designation of designationResult.data ?? []) {
     if (firstDesignationBusinessCategory(designation.designation_category)?.people_module !== "delivery_network") continue;
     workforceDesignationKeys.add(normalized(designation.code));
     workforceDesignationKeys.add(normalized(designation.name));
+    const engagement = (designation.onboarding_categories ?? []).some((value: string) => ["vendors", "workers"].includes(value)) ? "operations" : "associate";
+    engagementByDesignation.set(normalized(designation.code), engagement);
+    engagementByDesignation.set(normalized(designation.name), engagement);
   }
   if (!workforceDesignationKeys.size) return [] as WorkforceCommunicationRecipient[];
 
-  const legacySelect = `id, dropx_id, biometric_id, full_name, mobile_country_code, mobile, email, designation, onboarding_status, is_active, ${locationSelect}`;
+  const legacySelect = `id, location_id, dropx_id, biometric_id, full_name, mobile_country_code, mobile, email, designation, onboarding_status, is_active, ${locationSelect}`;
   const canonicalQuery = applyLocationScope(
     admin
       .from("workforce")
@@ -145,32 +161,29 @@ export async function loadWorkforceCommunicationRecipients(authorization: Author
     authorization
   );
   const profileQuery = async (table: "field_executives" | "contractors" | "vendors" | "workers") => {
-    const result = await applyLocationScope(
+    const result = await readAllRows(applyLocationScope(
       admin
         .from(table)
         .select(legacySelect)
         .eq("company_id", companyId),
       authorization
-    );
+    ).order("id"));
     // These legacy sources can be retired after their profiles move to Workforce/People.
     // Keep reading them when present so unfinished registrations remain available.
-    const missingRetiredTable = (table === "field_executives" || table === "workers") && (
-      (result.error?.code === "PGRST205" && result.error.message.includes(`'public.${table}'`)) ||
-      (result.error?.code === "42P01" && result.error.message.includes(`relation "public.${table}" does not exist`))
-    );
+    const missingRetiredTable = isRetiredWorkforceTable(result.error, table);
     return missingRetiredTable ? { ...result, data: [], error: null } : result;
   };
   const [canonical, fieldExecutives, contractors, vendors, workers, identityLinks] = await Promise.all([
-    canonicalQuery,
+    readAllRows(canonicalQuery.order("id")),
     profileQuery("field_executives"),
     profileQuery("contractors"),
     profileQuery("vendors"),
     profileQuery("workers"),
-    admin
+    readAllRows(admin
       .from("workforce_identity_links")
       .select("legacy_profile_type, legacy_profile_id, target_profile_type")
       .eq("company_id", companyId)
-      .eq("compatibility_active", true)
+      .eq("compatibility_active", true).order("id"))
   ]);
   const error = canonical.error ?? fieldExecutives.error ?? contractors.error ?? vendors.error ?? workers.error ?? identityLinks.error;
   if (error) throw new Error(error.message);
@@ -185,7 +198,11 @@ export async function loadWorkforceCommunicationRecipients(authorization: Author
   };
 
   for (const row of (canonical.data ?? []) as unknown as CanonicalWorkforceRow[]) {
-    add(recipientFromRow(row, "workforce", row.id, false));
+    const recipient = recipientFromRow(row, "workforce", row.id, Boolean(row.compatibility_mode));
+    recipient.engagementType = engagementByDesignation.get(normalized(row.designation)) ?? "associate";
+    recipient.sourceProfileType = row.source_profile_type;
+    recipient.sourceProfileId = row.source_profile_id;
+    add(recipient);
   }
 
   const addLegacyRows = (rows: LegacyProfileRow[], profileType: WorkforceRecipientProfileType) => {

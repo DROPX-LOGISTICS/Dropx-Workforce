@@ -1,6 +1,6 @@
 "use server";
 
-import { randomUUID } from "crypto";
+import { workforceNotificationId } from "@/lib/workforce-notification-key";
 import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/authorization";
 import { deliverNotificationPush } from "@/lib/firebase-push";
@@ -80,7 +80,8 @@ export async function sendWorkforceAppNotification(formData: FormData) {
   if (openTarget === "custom_url" && !customUrlTemplate) fail("Enter a custom URL");
   if (openTarget !== "custom_url" && !internalRoutes.has(openTarget)) fail("The selected app page is invalid");
 
-  const batchId = randomUUID();
+  const batchId = String(formData.get("submissionKey") ?? "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(batchId)) fail("Reload the composer before sending.");
   const rows = resolved.map((recipient) => {
     const title = applyVariables(titleTemplate, recipient).trim();
     const body = applyVariables(bodyTemplate, recipient).trim();
@@ -90,6 +91,7 @@ export async function sendWorkforceAppNotification(formData: FormData) {
     if (title.length > 120 || body.length > 1000) fail(`The personalized notification for ${recipient.name} is too long`);
     if (openTarget === "custom_url" && !route) fail(`The custom URL for ${recipient.name} is invalid`);
     return {
+      id: workforceNotificationId(authorization.companyId!, authorization.userId, batchId, recipientKey(recipient.profileType, recipient.accountId)),
       body,
       company_id: authorization.companyId,
       created_by: authorization.userId,
@@ -105,7 +107,7 @@ export async function sendWorkforceAppNotification(formData: FormData) {
 
   const result = await supabaseAdmin
     .from("mob_app_notifications")
-    .insert(rows)
+    .upsert(rows, { onConflict: "id", ignoreDuplicates: true })
     .select("id, recipient_profile_type, recipient_account_id, title, body, route, data");
   if (result.error) fail(result.error.message);
 

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { requirePagePermission } from "@/lib/authorization";
+import { isCompanyOwner, requirePagePermission } from "@/lib/authorization";
 import { syncBiometricEnrolment } from "@/lib/biometric/enrolments";
 import { requireCompanyId } from "@/lib/company-scope";
 import { isMissingVerificationTable } from "@/lib/profile-verifications";
@@ -47,6 +47,7 @@ async function requireScopedApplicant(id: string) {
   const result = await supabaseAdmin
     .from("workforce")
     .select("id, full_name, location_id, designation, date_of_join, biometric_id, onboarding_status, lifecycle_status")
+    .is("deleted_at", null).neq("migration_state", "reclassified")
     .eq("company_id", companyId)
     .eq("id", id)
     .maybeSingle();
@@ -80,7 +81,7 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
     if (!["approve", "return", "reject"].includes(action)) throw new Error("Choose a valid review action.");
     if (["return", "reject"].includes(action) && !remarks) throw new Error("Review remarks are required.");
     const { authorization, companyId, applicant } = await requireScopedApplicant(id);
-    if (!["under_review", "returned"].includes(String(applicant.onboarding_status))) {
+    if (!["under_review", "returned", "approved"].includes(String(applicant.onboarding_status))) {
       throw new Error("Only submitted or returned onboarding requests can be reviewed.");
     }
     const reviewedAt = new Date().toISOString();
@@ -119,7 +120,7 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
       .eq("account_id", id)
       .or("manual_review.eq.true,block_submit.eq.true")
       .limit(10);
-    if (unresolved.error && !isMissingVerificationTable(unresolved.error)) throw new Error(unresolved.error.message);
+    if (unresolved.error) throw new Error(unresolved.error.message);
     if (unresolved.data?.length) {
       const fields = unresolved.data.map((row) => String(row.kind).replaceAll("_", " ").toUpperCase());
       throw new Error(`Resolve and re-verify ${fields.join(", ")} before approving this application.`);
@@ -134,8 +135,15 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
       const codes = Array.isArray(item.applicable_designation_codes) ? item.applicable_designation_codes : [];
       return !codes.length || codes.map((value) => String(value).toUpperCase()).includes(code);
     });
+    if (applicable.some((item) => item.code === "agreement_accepted" && item.is_required)) {
+      const acceptance = await supabaseAdmin!.from("workforce_agreement_acceptances").select("id").eq("company_id", companyId).eq("profile_type", "workforce").eq("profile_id", id).not("accepted_at", "is", null).limit(1);
+      if (acceptance.error) throw new Error(acceptance.error.message);
+      if (!acceptance.data?.length) throw new Error("The associate must accept the agreement in DropX One before activation.");
+    }
     const providerId = text(formData.get("provider_employee_id"));
     const providerNotRequired = formData.get("provider_not_required") === "true";
+    if (providerNotRequired && !isCompanyOwner(authorization)) throw new Error("Only an owner can waive the provider ID requirement.");
+    if (applicable.some((item) => item.code === "provider_id_created" && item.is_required) && !providerNotRequired && !providerId) throw new Error("Enter the verified provider ID before approval.");
     const results = applicable.map((item) => {
       const checked = formData.get(`checklist_${item.id}`) === "true";
       const status = item.code === "provider_id_created" && providerNotRequired
@@ -338,7 +346,7 @@ export async function completeWorkforceSettlement(formData: FormData) {
       .select("id, field_executive_id, profile_type, profile_id, profile_location_id, status, approved_effective_date, requested_effective_date")
       .eq("company_id", companyId).eq("id", caseId).maybeSingle();
     if (current.error) throw new Error(current.error.message);
-    if (!current.data || current.data.status !== "settlement_pending") throw new Error("Choose an exit awaiting settlement.");
+    if (!current.data || !["settlement_pending", "settled"].includes(current.data.status)) throw new Error("Choose an exit awaiting settlement.");
     if (!isNonEmployeeProfileType(current.data.profile_type)) throw new Error("This engagement type is not supported by this queue.");
     const locationId = String(current.data.profile_location_id ?? "");
     if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(locationId)) throw new Error("You do not have access to this location.");
@@ -357,59 +365,18 @@ export async function completeWorkforceSettlement(formData: FormData) {
     }));
     const incomplete = (masters.data ?? []).filter((item, index) => item.is_required && checklistRows[index]?.status !== "completed");
     if (incomplete.length) throw new Error(`Complete the exit checklist: ${incomplete.map((item) => item.label).join(", ")}.`);
-    if (checklistRows.length) {
-      const checklist = await supabaseAdmin.from("workforce_exit_checklist_results")
-        .upsert(checklistRows, { onConflict: "lifecycle_case_id,checklist_item_id" });
-      if (checklist.error) throw new Error(checklist.error.message);
-    }
-    const settlementStatus = text(formData.get("settlement_status"));
-    if (!["paid", "waived"].includes(settlementStatus)) throw new Error("Choose Paid or Waived settlement status.");
-    const settlement = await supabaseAdmin.from("workforce_final_settlements").upsert({
-      company_id: companyId,
-      lifecycle_case_id: caseId,
-      status: settlementStatus,
-      gross_amount: Number(text(formData.get("gross_amount")) || 0),
-      deduction_amount: Number(text(formData.get("deduction_amount")) || 0),
-      payment_reference: text(formData.get("payment_reference")) || null,
-      payment_date: text(formData.get("payment_date")) || null,
-      approved_by: authorization.userId,
-      approved_at: now,
-      paid_by: settlementStatus === "paid" ? authorization.userId : null,
-      paid_at: settlementStatus === "paid" ? now : null,
-      updated_at: now
-    }, { onConflict: "lifecycle_case_id" });
-    if (settlement.error) throw new Error(settlement.error.message);
-    const effectiveDate = current.data.approved_effective_date || current.data.requested_effective_date;
-    const closeCase = await supabaseAdmin.from("workforce_lifecycle_cases").update({ status: "settled", updated_at: now })
-      .eq("company_id", companyId).eq("id", caseId);
-    if (closeCase.error) throw new Error(closeCase.error.message);
-    const closeProfile = await supabaseAdmin.from(workforceTable(current.data.profile_type)).update({
-      onboarding_status: "cancelled",
-      lifecycle_status: "exited",
-      last_working_date: effectiveDate,
-      deactivated_at: now,
-      deactivated_by: authorization.userId,
-      is_active: false,
-      updated_at: now
-    }).eq("company_id", companyId).eq("id", current.data.profile_id);
-    if (closeProfile.error) throw new Error(closeProfile.error.message);
-    await supabaseAdmin.from("biometric_enrolments").update({ status: "Inactive", effective_to: effectiveDate, updated_at: now })
-      .eq("company_id", companyId).eq("profile_type", current.data.profile_type)
-      .eq("account_id", current.data.profile_id).is("effective_to", null);
-    const lifecycleEvent = await supabaseAdmin.from("workforce_lifecycle_events").insert({
-      company_id: companyId,
-      lifecycle_case_id: current.data.id,
-      field_executive_id: current.data.profile_type === "field_executive" ? current.data.profile_id : null,
-      profile_type: current.data.profile_type,
-      profile_id: current.data.profile_id,
-      event_code: "exit_settled_and_deactivated",
-      from_status: current.data.status,
-      to_status: "settled",
-      actor_user_id: authorization.userId,
-      source_portal: "workforce",
-      remarks: `Settlement ${settlementStatus}`
+    if (!isCompanyOwner(authorization)) throw new Error("Only an owner can complete or waive a settlement.");
+    const gross = Number(text(formData.get("gross_amount")) || 0);
+    const deductions = Number(text(formData.get("deduction_amount")) || 0);
+    if (!Number.isFinite(gross) || !Number.isFinite(deductions) || gross < 0 || deductions < 0) throw new Error("Settlement amounts must be finite and nonnegative.");
+    const completed = await supabaseAdmin.rpc("workforce_complete_settlement", {
+      p_company: companyId, p_case: caseId, p_actor: authorization.userId,
+      p_status: text(formData.get("settlement_status")), p_gross: gross, p_deductions: deductions,
+      p_reference: text(formData.get("payment_reference")) || null,
+      p_payment_date: text(formData.get("payment_date")) || null,
+      p_checklist: checklistRows, p_locations: authorization.hasAllLocationAccess ? null : authorization.locationScopeIds
     });
-    if (lifecycleEvent.error) throw new Error(lifecycleEvent.error.message);
+    if (completed.error) throw new Error(completed.error.message);
     revalidateLifecyclePages();
     lifecycleRedirect({ notice: "Final settlement recorded and workforce access deactivated.", tab: "exits" });
   } catch (error) {

@@ -14,6 +14,7 @@ export function WorkforceLiveRefresh({ seconds = 60 }: { seconds?: number }) {
     remainingRef.current = seconds;
     setRemaining(seconds);
     const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible" || document.activeElement?.closest("form")) return;
       remainingRef.current -= 1;
       if (remainingRef.current <= 0) {
         remainingRef.current = seconds;

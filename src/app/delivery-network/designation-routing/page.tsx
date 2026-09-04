@@ -159,6 +159,11 @@ export default async function WorkforceDesignationRoutingPage({
   const registers = ((registerResult.data ?? []) as RegisterRow[]).filter((register) =>
     workforceRegisterTables.has(register.table_name)
   );
+  const registerReadiness = await Promise.all(registers.map(async (register) => {
+    const result = await supabaseAdmin?.from(register.table_name).select("id", { head: true }).eq("company_id", companyId).limit(1);
+    return { id: register.id, ready: Boolean(result && !result.error) };
+  }));
+  const readyRegisterIds = new Set(registerReadiness.filter((row) => row.ready).map((row) => row.id));
   const categoryRows = (categoryResult.data ?? []) as DesignationCategoryRow[];
   const categories = new Map(categoryRows.map((row) => [row.id, row.name]));
   const workforceCategoryIds = new Set(
@@ -341,8 +346,8 @@ export default async function WorkforceDesignationRoutingPage({
                             <input name="designation_id" type="hidden" value={designation.id} />
                             <select aria-label={`Canonical destination for ${designation.name}`} className="select" defaultValue={route?.register_id ?? ""} disabled={!permission.canEdit} name="register_id">
                               <option value="">Unmapped — registration blocked</option>
-                              {registers.filter((item) => item.is_active || item.id === route?.register_id).map((item) => (
-                                <option key={item.id} value={item.id}>{item.name}</option>
+                              {registers.filter((item) => (item.is_active && readyRegisterIds.has(item.id)) || item.id === route?.register_id).map((item) => (
+                                <option key={item.id} value={item.id} disabled={!readyRegisterIds.has(item.id)}>{item.name}</option>
                               ))}
                             </select>
                             <label className="wf-switch"><input defaultChecked={Boolean(route?.registration_enabled)} disabled={!permission.canEdit} name="registration_enabled" type="checkbox" /><i /> Accept new registrations</label>

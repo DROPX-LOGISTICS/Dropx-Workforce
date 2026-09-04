@@ -178,6 +178,12 @@ async function loadMappingData(authorization: AuthorizationContext) {
       .order("code")
   ]);
 
+  if (!authorization.hasAllLocationAccess) {
+    locationsResult.data = (locationsResult.data ?? []).filter((row) => authorization.locationScopeIds.includes(row.id));
+    workforceResult.data = (workforceResult.data ?? []).filter((row) => authorization.locationScopeIds.includes(row.location_id));
+    const visibleWorkforce = new Set((workforceResult.data ?? []).map((row) => row.id));
+    mappingsResult.data = (mappingsResult.data ?? []).filter((row) => visibleWorkforce.has(row.workforce_id) && (!row.station_id || authorization.locationScopeIds.includes(row.station_id)));
+  }
   const paymentMethods = ((paymentMethodsResult.data ?? []) as PaymentMethodRow[]).map((method) => ({
     id: method.id,
     code: method.code,

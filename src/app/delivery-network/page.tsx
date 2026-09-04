@@ -6,7 +6,7 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { loadWorkforceCommunicationRecipients } from "@/lib/workforce-communication-recipients";
-import { loadWorkforceEarnings, workforceToday } from "@/lib/workforce-earnings";
+import { calculateWorkforceEarnings, loadWorkforceEarnings, workforceToday } from "@/lib/workforce-earnings";
 
 type NetworkProfile = {
   id: string;
@@ -32,7 +32,8 @@ export default async function DeliveryNetworkPage() {
   let error: string | null = null;
   const today = workforceToday();
   const monthStart = `${today.slice(0, 8)}01`;
-  const financeSnapshotPromise = loadWorkforceEarnings(authorization, monthStart, today);
+  const canReadEarnings = hasPermission(authorization, "workforce_earnings", "access");
+  const financeSnapshotPromise = canReadEarnings ? loadWorkforceEarnings(authorization, monthStart, today) : Promise.resolve(calculateWorkforceEarnings({ from: monthStart, to: today, shipments: [], mappings: [], workforce: [], providers: [], stations: [], rateCards: [], campaigns: [], adjustments: [] }));
 
   if (!supabaseAdmin) {
     error = "Supabase service role key is not configured.";
@@ -41,7 +42,7 @@ export default async function DeliveryNetworkPage() {
       .from("field_executive_provider_mappings")
       .select("id", { count: "exact", head: true })
       .eq("company_id", companyId)
-      .is("effective_to", null);
+      .neq("status", "cancelled").lte("effective_from", today).or(`effective_to.is.null,effective_to.gte.${today}`);
     if (!authorization.hasAllLocationAccess) {
       mappingQuery = mappingQuery.in("station_id", authorization.locationScopeIds.length
         ? authorization.locationScopeIds
@@ -49,17 +50,17 @@ export default async function DeliveryNetworkPage() {
     }
     try {
       const [workforceRecipients, designationResult, mappingResult, adjustmentCount, payrollCount] = await Promise.all([
-        loadWorkforceCommunicationRecipients(authorization),
+        loadWorkforceCommunicationRecipients(authorization).catch((cause) => { error = cause instanceof Error ? cause.message : "Workforce register is unavailable."; return []; }),
         supabaseAdmin
           .from("designations")
           .select("id, name, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active)")
           .eq("company_id", companyId)
           .eq("is_active", true),
         mappingQuery,
-        supabaseAdmin.from("workforce_adjustments").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "pending"),
-        supabaseAdmin.from("workforce_payroll_runs").select("id", { count: "exact", head: true }).eq("company_id", companyId).in("status", ["draft", "review"])
+        authorization.hasAllLocationAccess && hasPermission(authorization, "workforce_adjustments", "access") ? supabaseAdmin.from("workforce_adjustments").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "pending") : Promise.resolve({ count: null, error: null }),
+        authorization.hasAllLocationAccess && hasPermission(authorization, "workforce_payroll", "access") ? supabaseAdmin.from("workforce_payroll_runs").select("id", { count: "exact", head: true }).eq("company_id", companyId).in("status", ["draft", "review"]) : Promise.resolve({ count: null, error: null })
       ]);
-      error = designationResult.error?.message || mappingResult.error?.message || null;
+      error = error || designationResult.error?.message || mappingResult.error?.message || null;
       const deliveryDesignations = (designationResult.data ?? []).filter((designation) => (
         firstDesignationBusinessCategory(designation.designation_category)?.people_module === "delivery_network"
       ));
@@ -74,6 +75,7 @@ export default async function DeliveryNetworkPage() {
     }
   }
   const financeSnapshot = await financeSnapshotPromise;
+  error = [error, ...financeSnapshot.warnings, financeSnapshot.setupRequired ? "Finance setup is incomplete; earnings may be partial." : null].filter(Boolean).join(" ") || null;
 
   const pending = profiles.filter((profile) => !["active", "under_review", "returned", "rejected", "cancelled"].includes(status(profile.onboarding_status))).length;
   const underReview = profiles.filter((profile) => status(profile.onboarding_status) === "under_review").length;

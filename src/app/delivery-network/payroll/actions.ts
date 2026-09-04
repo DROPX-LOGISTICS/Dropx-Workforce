@@ -15,25 +15,10 @@ function requireNetworkPayrollScope(authorization: AuthorizationContext) {
   if (!authorization.hasAllLocationAccess) throw new Error("Payroll runs require all-location access. Station users can review live earnings for their own scope.");
 }
 
-async function insertChunks(table: string, rows: Array<Record<string, unknown>>, size = 400) {
+async function replacePayrollSnapshot(runId: string, companyId: string, snapshot: WorkforceEarningsSnapshot, actorId: string, run: Record<string, unknown>) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
-  for (let start = 0; start < rows.length; start += size) {
-    const result = await supabaseAdmin.from(table).insert(rows.slice(start, start + size));
-    if (result.error) throw new Error(result.error.message);
-  }
-}
-
-async function recordPayrollEvent(event: Record<string, unknown>) {
-  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
-  const result = await supabaseAdmin.from("workforce_payroll_events").insert(event);
-  if (result.error) throw new Error(`Payroll changed, but its audit event could not be recorded: ${result.error.message}`);
-}
-
-async function replacePayrollSnapshot(runId: string, companyId: string, snapshot: WorkforceEarningsSnapshot) {
-  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
-  const remove = await supabaseAdmin.from("workforce_payroll_items").delete().eq("company_id", companyId).eq("payroll_run_id", runId);
-  if (remove.error) throw new Error(remove.error.message);
-  const itemResult = await supabaseAdmin.from("workforce_payroll_items").insert(snapshot.summaries.map((summary) => ({
+  const itemRows = snapshot.summaries.map((summary) => ({
+    id: crypto.randomUUID(),
     company_id: companyId,
     payroll_run_id: runId,
     workforce_id: summary.workforceId,
@@ -54,9 +39,8 @@ async function replacePayrollSnapshot(runId: string, companyId: string, snapshot
     status: summary.status,
     hold_reasons: summary.holdReasons,
     provider_member_ids: summary.providerIds
-  }))).select("id, workforce_id");
-  if (itemResult.error) throw new Error(itemResult.error.message);
-  const itemByWorkforce = new Map((itemResult.data ?? []).map((item) => [item.workforce_id, item.id]));
+  }));
+  const itemByWorkforce = new Map(itemRows.map((item) => [item.workforce_id, item.id]));
   const lineRows = snapshot.lines.filter((line) => line.workforceId && itemByWorkforce.has(line.workforceId)).map((line) => ({
     company_id: companyId,
     payroll_run_id: runId,
@@ -76,53 +60,13 @@ async function replacePayrollSnapshot(runId: string, companyId: string, snapshot
     calculation_source: line.calculationSource,
     calculation_snapshot: line.trace
   }));
-  await insertChunks("workforce_payroll_lines", lineRows);
-
-  const adjustmentIds = snapshot.lines.filter((line) => line.sourceType === "adjustment").map((line) => line.sourceId);
-  if (adjustmentIds.length) {
-    const adjustmentUpdate = await supabaseAdmin.from("workforce_adjustments").update({ status: "posted", payroll_run_id: runId, updated_at: new Date().toISOString() }).eq("company_id", companyId).in("id", adjustmentIds);
-    if (adjustmentUpdate.error) throw new Error(adjustmentUpdate.error.message);
-  }
-
-  const readySummaries = snapshot.summaries.filter((summary) => summary.status === "ready");
-  const update = await supabaseAdmin.from("workforce_payroll_runs").update({
-    worker_count: snapshot.summaries.length,
-    shipment_count: snapshot.totalShipments,
-    base_amount: snapshot.totalBase,
-    incentive_amount: snapshot.totalIncentives,
-    adjustment_amount: snapshot.totalAdjustments,
-    deduction_amount: snapshot.totalDeductions,
-    net_amount: readySummaries.reduce((sum, summary) => sum + summary.netAmount, 0),
-    ready_count: snapshot.readyWorkers,
-    hold_count: snapshot.heldWorkers,
-    exception_count: snapshot.exceptions.length,
-    source_updated_at: snapshot.latestSourceUpdate,
-    calculated_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  }).eq("company_id", companyId).eq("id", runId);
-  if (update.error) throw new Error(update.error.message);
-}
-
-async function refreshPayrollTotals(runId: string, companyId: string) {
-  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
-  const result = await supabaseAdmin.from("workforce_payroll_items").select("status, shipment_count, base_amount, incentive_amount, adjustment_amount, deduction_amount, net_amount").eq("company_id", companyId).eq("payroll_run_id", runId);
+  const result = await supabaseAdmin.rpc("workforce_save_payroll_snapshot", {
+    p_company: companyId, p_actor: actorId,
+    p_run: { ...run, id: runId, exception_count: snapshot.exceptions.length, source_updated_at: snapshot.latestSourceUpdate },
+    p_items: itemRows, p_lines: lineRows,
+    p_adjustments: [...new Set(snapshot.lines.filter((line) => line.sourceType === "adjustment").map((line) => line.sourceId))]
+  });
   if (result.error) throw new Error(result.error.message);
-  const rows = result.data ?? [];
-  const included = rows.filter((row) => row.status !== "excluded");
-  const payable = included.filter((row) => row.status === "ready" || row.status === "paid");
-  const update = await supabaseAdmin.from("workforce_payroll_runs").update({
-    worker_count: included.length,
-    shipment_count: included.reduce((sum, row) => sum + Number(row.shipment_count ?? 0), 0),
-    base_amount: included.reduce((sum, row) => sum + Number(row.base_amount ?? 0), 0),
-    incentive_amount: included.reduce((sum, row) => sum + Number(row.incentive_amount ?? 0), 0),
-    adjustment_amount: included.reduce((sum, row) => sum + Number(row.adjustment_amount ?? 0), 0),
-    deduction_amount: included.reduce((sum, row) => sum + Number(row.deduction_amount ?? 0), 0),
-    net_amount: payable.reduce((sum, row) => sum + Number(row.net_amount ?? 0), 0),
-    ready_count: payable.length,
-    hold_count: included.filter((row) => row.status === "hold").length,
-    updated_at: new Date().toISOString()
-  }).eq("company_id", companyId).eq("id", runId);
-  if (update.error) throw new Error(update.error.message);
 }
 
 export async function createPayrollRun(formData: FormData) {
@@ -143,25 +87,11 @@ export async function createPayrollRun(formData: FormData) {
     if (snapshot.warnings.length) throw new Error(snapshot.warnings.join(" "));
     if (!snapshot.summaries.length) throw new Error("No mapped Workforce earnings were found for this period.");
     const runNumber = `WF-${range.from.replaceAll("-", "")}-${range.to.replaceAll("-", "")}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
-    const created = await supabaseAdmin.from("workforce_payroll_runs").insert({
-      company_id: companyId,
-      run_number: runNumber,
-      period_start: range.from,
-      period_end: range.to,
-      status: "draft",
-      created_by: authorization.userId
-    }).select("id").single();
-    if (created.error) throw new Error(created.error.message);
-    const runId = created.data.id;
+    const runId = crypto.randomUUID();
+    await replacePayrollSnapshot(runId, companyId, snapshot, authorization.userId, {
+      run_number: runNumber, period_start: range.from, period_end: range.to
+    });
     createdId = runId;
-    try {
-      await replacePayrollSnapshot(runId, companyId, snapshot);
-      await recordPayrollEvent({ company_id: companyId, payroll_run_id: runId, event_code: "run_created", to_status: "draft", actor_user_id: authorization.userId, metadata: { from: range.from, to: range.to } });
-    } catch (snapshotError) {
-      await supabaseAdmin.from("workforce_adjustments").update({ status: "approved", payroll_run_id: null, updated_at: new Date().toISOString() }).eq("company_id", companyId).eq("payroll_run_id", runId).eq("status", "posted");
-      await supabaseAdmin.from("workforce_payroll_runs").delete().eq("company_id", companyId).eq("id", runId);
-      throw snapshotError;
-    }
   } catch (error) {
     finish("error", error instanceof Error ? error.message : "Unable to create payroll run.");
   }
@@ -177,13 +107,13 @@ export async function recalculatePayrollRun(formData: FormData) {
   try {
     requireNetworkPayrollScope(authorization);
     if (!supabaseAdmin || !id) throw new Error("Payroll run is required.");
-    const current = await supabaseAdmin.from("workforce_payroll_runs").select("id, period_start, period_end, status").eq("company_id", companyId).eq("id", id).maybeSingle();
+    const current = await supabaseAdmin.from("workforce_payroll_runs").select("id, period_start, period_end, status, updated_at").eq("company_id", companyId).eq("id", id).maybeSingle();
     if (current.error) throw new Error(current.error.message);
     if (!current.data || current.data.status !== "draft") throw new Error("Only a draft payroll run can be recalculated.");
     const snapshot = await loadWorkforceEarnings(authorization, current.data.period_start, current.data.period_end, { payrollRunId: id });
     if (snapshot.warnings.length) throw new Error(snapshot.warnings.join(" "));
-    await replacePayrollSnapshot(id, companyId, snapshot);
-    await recordPayrollEvent({ company_id: companyId, payroll_run_id: id, event_code: "run_recalculated", from_status: "draft", to_status: "draft", actor_user_id: authorization.userId, metadata: { sourceUpdatedAt: snapshot.latestSourceUpdate } });
+    if (snapshot.setupRequired) throw new Error("Finance storage is not ready. Recalculation has been cancelled.");
+    await replacePayrollSnapshot(id, companyId, snapshot, authorization.userId, { expected_updated_at: current.data.updated_at });
     revalidatePath(`${path}/${id}`);
   } catch (error) {
     finish("error", error instanceof Error ? error.message : "Unable to recalculate payroll.", id);
@@ -201,20 +131,8 @@ export async function setPayrollItemDisposition(formData: FormData) {
     const itemId = text(formData.get("item_id"));
     const disposition = text(formData.get("disposition"));
     if (!itemId || !["exclude", "restore"].includes(disposition)) throw new Error("Choose a valid payroll item action.");
-    const run = await supabaseAdmin.from("workforce_payroll_runs").select("status").eq("company_id", companyId).eq("id", runId).maybeSingle();
-    if (run.error) throw new Error(run.error.message);
-    if (run.data?.status !== "draft") throw new Error("Items can be changed only while payroll is a draft.");
-    const item = await supabaseAdmin.from("workforce_payroll_items").select("id, status, hold_reasons").eq("company_id", companyId).eq("payroll_run_id", runId).eq("id", itemId).maybeSingle();
-    if (item.error) throw new Error(item.error.message);
-    if (!item.data) throw new Error("Payroll item was not found.");
-    const holds = Array.isArray(item.data.hold_reasons) ? item.data.hold_reasons : [];
-    const next = disposition === "exclude" ? "excluded" : holds.length ? "hold" : "ready";
-    const update = await supabaseAdmin.from("workforce_payroll_items").update({ status: next, updated_at: new Date().toISOString() })
-      .eq("company_id", companyId).eq("payroll_run_id", runId).eq("id", itemId).eq("status", item.data.status).select("id").maybeSingle();
-    if (update.error) throw new Error(update.error.message);
-    if (!update.data) throw new Error("The payroll item changed while you were reviewing it. Refresh and try again.");
-    await refreshPayrollTotals(runId, companyId);
-    await recordPayrollEvent({ company_id: companyId, payroll_run_id: runId, event_code: disposition === "exclude" ? "item_excluded" : "item_restored", actor_user_id: authorization.userId, metadata: { itemId } });
+    const result = await supabaseAdmin.rpc("workforce_set_payroll_item", { p_company: companyId, p_run: runId, p_item: itemId, p_actor: authorization.userId, p_disposition: disposition });
+    if (result.error) throw new Error(result.error.message);
     revalidatePath(`${path}/${runId}`);
   } catch (error) {
     finish("error", error instanceof Error ? error.message : "Unable to update payroll item.", runId);
@@ -230,47 +148,13 @@ export async function changePayrollRunStatus(formData: FormData) {
   try {
     requireNetworkPayrollScope(authorization);
     if (!supabaseAdmin || !id) throw new Error("Payroll run is required.");
-    const current = await supabaseAdmin.from("workforce_payroll_runs").select("id, status, hold_count, exception_count, submitted_by").eq("company_id", companyId).eq("id", id).maybeSingle();
-    if (current.error) throw new Error(current.error.message);
-    if (!current.data) throw new Error("Payroll run was not found.");
-    let nextStatus: string;
-    if (action === "submit") {
-      if (current.data.status !== "draft") throw new Error("Only a draft run can be submitted.");
-      if (Number(current.data.hold_count) > 0 || Number(current.data.exception_count) > 0) throw new Error("Resolve or exclude all holds and clear earning exceptions before review.");
-      nextStatus = "review";
-    } else if (action === "approve") {
-      if (!isCompanyOwner(authorization)) throw new Error("Only the company owner can approve payroll.");
-      if (current.data.status !== "review") throw new Error("Payroll must be in review before approval.");
-      if (current.data.submitted_by === authorization.userId) throw new Error("Maker-checker control does not allow you to approve payroll that you submitted.");
-      nextStatus = "approved";
-    } else if (action === "paid") {
-      if (!isCompanyOwner(authorization)) throw new Error("Only the company owner can mark payroll paid.");
-      if (current.data.status !== "approved") throw new Error("Only approved payroll can be marked paid.");
-      nextStatus = "paid";
-    } else if (action === "cancel") {
-      if (!isCompanyOwner(authorization)) throw new Error("Only the company owner can cancel payroll.");
-      if (!["draft", "review"].includes(current.data.status)) throw new Error("Approved or paid payroll cannot be cancelled.");
-      nextStatus = "cancelled";
-    } else throw new Error("Choose a valid payroll action.");
-
-    const now = new Date().toISOString();
-    const payload: Record<string, unknown> = { status: nextStatus, updated_at: now };
-    if (nextStatus === "review") Object.assign(payload, { submitted_by: authorization.userId, submitted_at: now });
-    if (nextStatus === "approved") Object.assign(payload, { approved_by: authorization.userId, approved_at: now, approval_remarks: text(formData.get("remarks")) || null });
-    if (nextStatus === "paid") Object.assign(payload, { paid_by: authorization.userId, paid_at: now });
-    const update = await supabaseAdmin.from("workforce_payroll_runs").update(payload)
-      .eq("company_id", companyId).eq("id", id).eq("status", current.data.status).select("id").maybeSingle();
-    if (update.error) throw new Error(update.error.message);
-    if (!update.data) throw new Error("The payroll status changed while you were reviewing it. Refresh and try again.");
-    if (nextStatus === "paid") {
-      const items = await supabaseAdmin.from("workforce_payroll_items").update({ status: "paid", updated_at: now }).eq("company_id", companyId).eq("payroll_run_id", id).eq("status", "ready");
-      if (items.error) throw new Error(items.error.message);
-    }
-    if (nextStatus === "cancelled") {
-      const release = await supabaseAdmin.from("workforce_adjustments").update({ status: "approved", payroll_run_id: null, updated_at: now }).eq("company_id", companyId).eq("payroll_run_id", id).eq("status", "posted");
-      if (release.error) throw new Error(release.error.message);
-    }
-    await recordPayrollEvent({ company_id: companyId, payroll_run_id: id, event_code: `run_${nextStatus}`, from_status: current.data.status, to_status: nextStatus, actor_user_id: authorization.userId, remarks: text(formData.get("remarks")) || null });
+    const result = await supabaseAdmin.rpc("workforce_change_payroll_state", {
+      p_company: companyId, p_run: id, p_actor: authorization.userId, p_action: action,
+      p_owner: isCompanyOwner(authorization), p_remarks: text(formData.get("remarks")) || null,
+      p_reference: text(formData.get("payment_reference")) || null,
+      p_payment_date: text(formData.get("payment_date")) || null
+    });
+    if (result.error) throw new Error(result.error.message);
     revalidatePath(path);
     revalidatePath(`${path}/${id}`);
   } catch (error) {

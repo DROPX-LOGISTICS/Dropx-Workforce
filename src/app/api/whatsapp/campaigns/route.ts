@@ -1,3 +1,4 @@
+import { campaignWorkerHeaders } from "@/lib/workforce-campaign-worker";
 import { NextResponse, type NextRequest } from "next/server";
 import { waitUntil } from "@vercel/functions";
 import { currentAccessSurface } from "@/lib/access-surface";
@@ -170,7 +171,7 @@ export async function POST(request: NextRequest) {
         total_count: recipients.length,
         sent_count: 0,
         failed_count: 0,
-        pending_count: recipients.length,
+        pending_count: 0,
         status: "queued",
         created_by: authorization.userId
       })
@@ -193,10 +194,17 @@ export async function POST(request: NextRequest) {
     for (let start = 0; start < recipientRows.length; start += recipientInsertBatchSize) {
       const batch = recipientRows.slice(start, start + recipientInsertBatchSize);
       const recipientInsert = await supabaseAdmin.from("whatsapp_campaign_recipients").insert(batch);
-      if (recipientInsert.error) throw new Error(recipientInsert.error.message);
+      if (recipientInsert.error) {
+        await supabaseAdmin.from("whatsapp_campaigns").update({ status: "failed", pending_count: 0 }).eq("id", campaignInsert.data.id);
+        throw new Error(`Campaign preparation failed; no messages were queued. ${recipientInsert.error.message}`);
+      }
     }
 
-    waitUntil(fetch(new URL("/api/whatsapp/process-campaigns", request.url), { method: "POST" }));
+    const ready = await supabaseAdmin.from("whatsapp_campaigns")
+      .update({ pending_count: recipients.length }).eq("id", campaignInsert.data.id);
+    if (ready.error) throw new Error("Campaign could not be queued. No messages were sent.");
+
+    waitUntil(fetch(new URL("/api/whatsapp/process-campaigns", request.url), { method: "POST", headers: campaignWorkerHeaders(campaignInsert.data.id) }));
 
     return NextResponse.json({
       campaignId: campaignInsert.data.id,

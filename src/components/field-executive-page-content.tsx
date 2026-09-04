@@ -1160,7 +1160,7 @@ export async function FieldExecutivePageContent({
     companyId,
     defaultRuleCategory
   );
-  const directActivate = workforceConfig.profileType !== "field_executive" && configuredDirectActivate;
+  const directActivate = !["workforce", "field_executive"].includes(workforceConfig.profileType) && configuredDirectActivate;
   const activeMessage = error ?? errorMessage ?? notice;
   const needsOperationModeMigration = Boolean(activeMessage?.toLowerCase().includes("operation_mode_id"));
   const locationOptions = locations.map((location) => ({
@@ -1313,7 +1313,7 @@ export async function FieldExecutivePageContent({
                 />
               </>
             )}
-            {!isOpsWorkforce && workforceConfig.profileType !== "field_executive" && editExecutive.onboarding_status === "under_review" ? (
+            {!isOpsWorkforce && !["workforce", "field_executive"].includes(workforceConfig.profileType) && editExecutive.onboarding_status === "under_review" ? (
               <section className="profile-review-panel">
                 <div className="profile-review-head">
                   <div>

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { requirePagePermission } from "@/lib/authorization";
+import { hasPermission, requirePagePermission } from "@/lib/authorization";
 import { loadWorkforceCommunicationRecipients } from "@/lib/workforce-communication-recipients";
 import { loadWorkforceEarnings, workforceEarningsDateRange } from "@/lib/workforce-earnings";
 
@@ -22,11 +22,13 @@ export async function GET(request: NextRequest) {
     const authorization = await requirePagePermission("workforce_earnings", "access");
     const params = request.nextUrl.searchParams;
     const report = ["payments", "associates", "exceptions"].includes(params.get("report") ?? "") ? params.get("report")! : "earnings";
+    if (report === "payments" && !hasPermission(authorization, "workforce_payroll", "view")) return Response.json({ error: "Payment exports require payroll view permission." }, { status: 403 });
     const { from, to } = workforceEarningsDateRange({ from: params.get("from") ?? undefined, to: params.get("to") ?? undefined });
     const station = params.get("station") ?? "";
     const state = (params.get("state") ?? "").toLowerCase();
     const q = (params.get("q") ?? "").trim().toLowerCase();
     const [snapshot, associates] = await Promise.all([loadWorkforceEarnings(authorization, from, to), loadWorkforceCommunicationRecipients(authorization)]);
+    if (report !== "associates" && (snapshot.setupRequired || snapshot.warnings.length)) return Response.json({ error: "Export cancelled because source data is incomplete.", details: snapshot.warnings }, { status: 409 });
     let rows: Array<Record<string, unknown>>;
     if (report === "payments") {
       rows = snapshot.summaries.filter((row) => (!station || row.stationCode === station) && (!state || row.status === state) && matches([row.workerName, row.dropxId, ...row.providerIds], q)).map((row) => ({
@@ -42,7 +44,7 @@ export async function GET(request: NextRequest) {
       }));
     } else {
       const lines = snapshot.lines.filter((line) => (!station || line.stationCode === station) && (!state || line.status === state) && matches([line.workerName, line.dropxId, line.providerMemberId, line.providerName], q));
-      rows = (report === "exceptions" ? lines.filter((line) => ["unmapped", "missing_rate"].includes(line.status)) : lines).map((line) => ({
+      rows = (report === "exceptions" ? lines.filter((line) => !line.workforceId || ["unmapped", "missing_rate"].includes(line.status)) : lines).map((line) => ({
         Date: line.workDate, "DropX ID": line.dropxId ?? "", Associate: line.workerName, Station: line.stationCode, Provider: line.providerName,
         "Provider ID": line.providerMemberId, Delivered: line.totalDelivery, Activity: line.totalActivity, "Base earnings": line.baseAmount,
         Incentive: line.incentiveAmount, Adjustment: line.adjustmentAmount, Net: line.netAmount, Source: line.calculationSource,

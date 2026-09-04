@@ -25,7 +25,7 @@ export function WorkforceDropxOneUserPreview({ users }: { users: WorkforceDropxO
       ? users.filter((user) => `${user.name} ${user.reference} ${user.designation} ${user.status} ${user.location}`.toLowerCase().includes(term))
       : users;
   }, [query, users]);
-  const selected = users.find((user) => user.id === selectedId) ?? filtered[0] ?? null;
+  const selected = filtered.find((user) => user.id === selectedId) ?? filtered[0] ?? null;
 
   return <div className="workforce-one-user-preview">
     <section className="panel workforce-one-user-list">

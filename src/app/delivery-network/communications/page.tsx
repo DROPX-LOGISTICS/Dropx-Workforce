@@ -1,3 +1,4 @@
+import { readAllRows } from "@/lib/supabase-pagination";
 import { ArrowRight, BellRing, History, MessageCircleMore } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
@@ -12,10 +13,17 @@ export default async function WorkforceCommunicationsPage() {
   const authorization = await requirePagePermission("workforce_communications", "access");
   const recipients = await loadWorkforceCommunicationRecipients(authorization);
   const companyId = authorization.companyId!;
-  const [appHistory, whatsAppHistory] = supabaseAdmin ? await Promise.all([
-    supabaseAdmin.from("mob_app_notifications").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("event_code", "workforce_manual"),
-    supabaseAdmin.from("whatsapp_campaigns").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("source_mode", "workforce")
-  ]) : [{ count: 0 }, { count: 0 }];
+  const canReadHistory = hasPermission(authorization, "workforce_communications_history", "access");
+  const [appHistory, whatsAppHistory, campaignRecipients] = supabaseAdmin && canReadHistory ? await Promise.all([
+    readAllRows(supabaseAdmin.from("mob_app_notifications").select("id,recipient_profile_type,recipient_account_id").eq("company_id", companyId).eq("event_code", "workforce_manual").order("id")),
+    readAllRows(supabaseAdmin.from("whatsapp_campaigns").select("id").eq("company_id", companyId).eq("source_mode", "workforce").order("id")),
+    authorization.hasAllLocationAccess ? Promise.resolve({ data: [], error: null }) : readAllRows(supabaseAdmin.from("whatsapp_campaign_recipients").select("id,campaign_id,source_id").eq("company_id", companyId).order("id"))
+  ]) : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
+  const allowed = new Set(recipients.map((recipient) => `${recipient.profileType}:${recipient.accountId}`));
+  const visibleCampaignIds = new Set((campaignRecipients.data ?? []).filter((row) => allowed.has(row.source_id)).map((row) => row.campaign_id));
+  const activityCount = (appHistory.data ?? []).filter((row) => authorization.hasAllLocationAccess || allowed.has(`${row.recipient_profile_type}:${row.recipient_account_id}`)).length
+    + (whatsAppHistory.data ?? []).filter((row) => authorization.hasAllLocationAccess || visibleCampaignIds.has(row.id)).length;
+  const activityError = appHistory.error || whatsAppHistory.error || campaignRecipients.error;
   const active = recipients.filter((recipient) => recipient.isActive).length;
   const reachable = recipients.filter((recipient) => recipient.mobile).length;
 
@@ -55,7 +63,7 @@ export default async function WorkforceCommunicationsPage() {
         <article><span>Total workforce</span><strong>{recipients.length}</strong><small>Defined by the designation master</small></article>
         <article><span>Active workforce</span><strong>{active}</strong><small>Currently active profiles</small></article>
         <article><span>WhatsApp ready</span><strong>{reachable}</strong><small>Profiles with a mobile number</small></article>
-        <article><span>Communication activity</span><strong>{(appHistory.count ?? 0) + (whatsAppHistory.count ?? 0)}</strong><small>Workforce-only records</small></article>
+        <article><span>Communication activity</span><strong>{!canReadHistory || activityError ? "—" : activityCount}</strong><small>{activityError ? "History is temporarily unavailable" : canReadHistory ? "Inbox records and campaigns in your scope" : "History access required"}</small></article>
       </section>
 
       <section className="wf-communication-links">

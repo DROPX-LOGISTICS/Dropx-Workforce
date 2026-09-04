@@ -366,3 +366,42 @@ test("validates real calendar dates before using them in finance queries", () =>
 test("uses the India business date at the UTC day boundary", () => {
   assert.equal(workforceToday(new Date("2026-08-28T20:00:00.000Z")), "2026-08-29");
 });
+
+function dailyInput(overrides = {}) {
+  const base = input();
+  return input({ ...base, rateCards: [{id: "daily", company_id: "company-1", name: "Daily", provider_id: "provider-1", station_id: "station-1", designation_id: null,
+    pay_type: "fixed_daily", effective_from: "2026-08-01", effective_to: "2026-08-31", fixed_amount: 700, guarantee_amount: 0,
+    delivery_rate: 0, return_rate: 0, mfn_rate: 0, mfn_return_rate: 0, fuel_rate: 0, status: "active", approved_at: "2026-08-01T00:00:00Z"}], ...overrides });
+}
+
+test("fixed daily and monthly pay do not multiply across one associate's provider IDs", () => {
+  const base = dailyInput();
+  const split = {mappings: [...base.mappings, {...base.mappings[0], id: "mapping-2", provider_member_id: "AMZ-200"}],
+    shipments: [...base.shipments, {...base.shipments[0], id: "shipment-2", provider_employee_id: "AMZ-200"}]};
+  const result = calculateWorkforceEarnings(dailyInput(split));
+  assert.equal(result.totalBase, 700);
+  assert.equal(result.lines.reduce((sum, line) => sum + line.baseAmount, 0), 700);
+  assert.equal(calculateWorkforceEarnings(dailyInput({...split, rateCards: [{...base.rateCards[0], pay_type: "fixed_monthly", fixed_amount: 31000}]})).totalBase, 1000);
+  assert.equal(calculateWorkforceEarnings(dailyInput({...split, shipments: [...split.shipments].reverse()})).totalBase, 700);
+});
+
+test("retired approved policy remains valid within its earned period, but not afterwards", () => {
+  const base = dailyInput();
+  for (const status of ["paused", "closed"]) {
+    assert.equal(calculateWorkforceEarnings(dailyInput({rateCards: [{...base.rateCards[0], status}]})).totalBase, 700);
+    assert.equal(calculateWorkforceEarnings(dailyInput({rateCards: [{...base.rateCards[0], status, approved_at: null}]})).totalBase, 300);
+    assert.equal(calculateWorkforceEarnings(dailyInput({rateCards: [{...base.rateCards[0], status, effective_to: "2026-08-19"}]})).totalBase, 300);
+  }
+});
+
+test("daily incentive thresholds and caps use combined eligible IDs and allocate exact cents", () => {
+  const base = dailyInput();
+  const split = {mappings: [...base.mappings, {...base.mappings[0], id: "m2", provider_member_id: "ID2"}], shipments: [
+    {...base.shipments[0], total_delivery: 20, total_activity: 20}, {...base.shipments[0], id: "s2", provider_employee_id: "ID2", total_delivery: 20, total_activity: 20}]};
+  const campaign = {id: "reward", name: "Daily", provider_id: null, station_id: null, designation_id: null,
+    metric: "total_delivery", calculation_type: "flat_threshold", threshold_value: 30, flat_amount: 100.01, rate_value: 0, maximum_amount: null,
+    effective_from: "2026-08-01", effective_to: "2026-08-31", status: "active"};
+  assert.equal(calculateWorkforceEarnings(dailyInput({...split, campaigns: [campaign]})).totalIncentives, 100.01);
+  assert.equal(calculateWorkforceEarnings(dailyInput({...split, campaigns: [{...campaign, calculation_type: "per_unit_above_threshold", rate_value: 10, threshold_value: 0, maximum_amount: 100}]})).totalIncentives, 100);
+  assert.equal(calculateWorkforceEarnings(dailyInput({...split, campaigns: [{...campaign, maximum_amount: 0}]})).totalIncentives, 0);
+});

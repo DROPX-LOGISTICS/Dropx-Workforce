@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { AppNotificationComposer, type AppNotificationRecipient } from "@/components/app-notification-composer";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
@@ -38,11 +39,11 @@ export default async function WorkforceDropXOnePage({
         title="DropX One Notifications"
         subtitle="Send inbox and push notifications only to profiles classified as Workforce in the designation master."
       />
-      {searchParams?.sent ? <div className="success-banner">{searchParams.sent} {searchParams.sent === "1" ? "notification" : "notifications"} sent.</div> : null}
+      {searchParams?.sent ? <div className="success-banner">{searchParams.sent} {searchParams.sent === "1" ? "notification" : "notifications"} added to the app inbox. Check History for push delivery status.</div> : null}
       {searchParams?.error ? <div className="error-banner">{searchParams.error}</div> : null}
       <section className="app-notification-composer">
         <div><h2>New Workforce notification</h2><p>The notification appears in the selected members&apos; DropX One inbox and supported devices.</p></div>
-        <AppNotificationComposer action={sendWorkforceAppNotification} recipients={composerRecipients} />
+        <AppNotificationComposer action={sendWorkforceAppNotification} recipients={composerRecipients} submissionKey={randomUUID()} />
       </section>
     </AppShell>
   );

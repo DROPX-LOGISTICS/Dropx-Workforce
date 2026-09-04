@@ -67,6 +67,8 @@ export async function saveDesignationRoute(formData: FormData) {
       if (!registerResult.data?.is_active || !workforceRegisterTables.has(registerResult.data.table_name)) {
         throw new Error("Workforce designations can route only to Workforce, Vendors, or Helpers.");
       }
+      const readiness = await supabaseAdmin.from(registerResult.data.table_name).select("id", { head: true }).eq("company_id", companyId).limit(1);
+      if (readiness.error) throw new Error("This register is not ready for routing. Complete its schema setup first.");
     }
     const registrationEnabled = Boolean(registerId && formData.has("registration_enabled"));
     const result = await supabaseAdmin.rpc("set_designation_register_route", {

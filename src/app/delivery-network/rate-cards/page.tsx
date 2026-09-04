@@ -72,7 +72,7 @@ export default async function WorkforceRateCardsPage({ searchParams }: { searchP
       <section className="wf-finance-kpis mini">
         <article><span><WalletCards size={18} /></span><small>All versions</small><strong>{cards.length}</strong><em>Draft and historical</em></article>
         <article><span><BadgeCheck size={18} /></span><small>Active</small><strong>{cards.filter((card) => card.status === "active").length}</strong><em>Used in live earnings</em></article>
-        <article><span><CirclePause size={18} /></span><small>Draft / paused</small><strong>{cards.filter((card) => ["draft", "paused"].includes(card.status)).length}</strong><em>Not used for accrual</em></article>
+        <article><span><CirclePause size={18} /></span><small>Draft / paused</small><strong>{cards.filter((card) => ["draft", "paused"].includes(card.status)).length}</strong><em>No future accrual</em></article>
       </section>
 
       <section className="wf-finance-panel">
@@ -86,8 +86,8 @@ export default async function WorkforceRateCardsPage({ searchParams }: { searchP
             <td><span className={`wf-pay-state ${card.status}`}>{card.status}</span></td>
             <td><div className="wf-row-actions">
               {card.status === "draft" && canManage ? <PendingLink href={`/delivery-network/rate-cards?edit=${card.id}`}>Edit</PendingLink> : null}
-              {canManage && card.status !== "closed" ? <form action={changeRateCardStatus}><input name="id" type="hidden" value={card.id} /><input name="status" type="hidden" value={card.status === "active" ? "paused" : "active"} /><SubmitButton pendingText="Saving">{card.status === "active" ? "Pause" : "Activate"}</SubmitButton></form> : null}
-              {canManage && card.status !== "closed" ? <form action={changeRateCardStatus}><input name="id" type="hidden" value={card.id} /><input name="status" type="hidden" value="closed" /><SubmitButton confirmationBlocked={false} confirmMessage="Close this rate-card version? Historical earnings remain unchanged." pendingText="Closing"><CircleStop size={13} /> Close</SubmitButton></form> : null}
+              {canManage && ["draft", "active"].includes(card.status) ? <form action={changeRateCardStatus}><input name="id" type="hidden" value={card.id} /><input name="status" type="hidden" value={card.status === "active" ? "paused" : "active"} /><SubmitButton pendingText="Saving">{card.status === "active" ? "Pause" : "Activate"}</SubmitButton></form> : null}
+              {canManage && card.status !== "closed" ? <form action={changeRateCardStatus}><input name="id" type="hidden" value={card.id} /><input name="status" type="hidden" value="closed" /><SubmitButton confirmationBlocked={false} confirmMessage="Close this rate-card version? Accrual ends after today; earned historical amounts are retained." pendingText="Closing"><CircleStop size={13} /> Close</SubmitButton></form> : null}
             </div></td>
           </tr>; })}
           {!cards.length && !error ? <tr><td className="empty-cell" colSpan={9}>No rate card versions yet. Existing mapped/imported rates continue to calculate live earnings.</td></tr> : null}

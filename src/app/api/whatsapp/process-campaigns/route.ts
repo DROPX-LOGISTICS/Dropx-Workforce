@@ -1,3 +1,5 @@
+import { authorizeCampaignWorker, campaignWorkerHeaders } from "@/lib/workforce-campaign-worker";
+import { readAllRows } from "@/lib/supabase-pagination";
 import { NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -210,15 +212,16 @@ async function syncCampaignMessageToInbox({
 
 async function updateCampaignCounts(campaignId: string) {
   if (!supabaseAdmin) return 0;
-  const { data } = await supabaseAdmin
+  const { data, error } = await readAllRows(supabaseAdmin
     .from("whatsapp_campaign_recipients")
     .select("status")
-    .eq("campaign_id", campaignId);
+    .eq("campaign_id", campaignId).order("id"));
+  if (error) throw new Error(error.message);
   const rows = data ?? [];
-  const sent = rows.filter((row) => row.status === "sent").length;
+  const sent = rows.filter((row) => ["sent", "delivered", "read"].includes(row.status)).length;
   const failed = rows.filter((row) => row.status === "failed").length;
   const pending = rows.filter((row) => row.status === "pending" || row.status === "processing").length;
-  await supabaseAdmin
+  const updated = await supabaseAdmin
     .from("whatsapp_campaigns")
     .update({
       sent_count: sent,
@@ -229,6 +232,7 @@ async function updateCampaignCounts(campaignId: string) {
       updated_at: new Date().toISOString()
     })
     .eq("id", campaignId);
+  if (updated.error) throw new Error(updated.error.message);
   return pending;
 }
 
@@ -237,26 +241,27 @@ async function reclaimStaleProcessingRecipients(campaignId: string) {
   const staleBefore = new Date(Date.now() - staleProcessingMs).toISOString();
   await supabaseAdmin
     .from("whatsapp_campaign_recipients")
-    .update({ status: "pending", updated_at: new Date().toISOString() })
+    .update({ status: "failed", error_message: "Delivery outcome unknown after worker timeout. Reconcile with the provider before resending.", updated_at: new Date().toISOString() })
     .eq("campaign_id", campaignId)
     .eq("status", "processing")
     .or(`updated_at.is.null,updated_at.lt.${staleBefore}`);
 }
 
-async function processBatch() {
+async function processBatch(campaignId: string | null) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
 
-  const campaignResult = await supabaseAdmin
+  let campaignQuery = supabaseAdmin
     .from("whatsapp_campaigns")
     .select("id, company_id, campaign_code, source_mode, whatsapp_profile_id, whatsapp_profile_name, template_id, template_name, template_language, variable_mappings, status, created_by")
     .in("status", ["queued", "processing"])
     .gt("pending_count", 0)
     .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+  if (campaignId) campaignQuery = campaignQuery.eq("id", campaignId);
+  const campaignResult = await campaignQuery.maybeSingle();
   if (campaignResult.error) throw new Error(campaignResult.error.message);
   const campaign = campaignResult.data as CampaignRow | null;
-  if (!campaign) return { processed: 0, sent: 0, failed: 0, pending: 0, campaignCode: null };
+  if (!campaign) return { processed: 0, sent: 0, failed: 0, pending: 0, campaignCode: null, campaignId: null };
 
   await supabaseAdmin
     .from("whatsapp_campaigns")
@@ -277,7 +282,7 @@ async function processBatch() {
   const recipients = (recipientsResult.data ?? []) as RecipientRow[];
   if (!recipients.length) {
     const pending = await updateCampaignCounts(campaign.id);
-    return { processed: 0, sent: 0, failed: 0, pending, campaignCode: campaign.campaign_code };
+    return { processed: 0, sent: 0, failed: 0, pending, campaignCode: campaign.campaign_code, campaignId: campaign.id };
   }
 
   if (!campaign.whatsapp_profile_id) throw new Error(`Campaign ${campaign.campaign_code} does not have a WhatsApp profile.`);
@@ -308,11 +313,13 @@ async function processBatch() {
   let failed = 0;
 
   for (const recipient of recipients) {
-    await supabaseAdmin
+    const claim = await supabaseAdmin
       .from("whatsapp_campaign_recipients")
       .update({ status: "processing", updated_at: new Date().toISOString() })
-      .eq("id", recipient.id)
-      .eq("status", "pending");
+      .eq("id", recipient.id).eq("company_id", campaign.company_id)
+      .eq("status", "pending").select("id").maybeSingle();
+    if (claim.error) throw new Error(claim.error.message);
+    if (!claim.data) continue;
 
     const values = recipientValues(recipient);
     const to = normalizeMobile(values.mobile, values.country_code || profile.default_country_code || "91");
@@ -424,18 +431,20 @@ async function processBatch() {
   }
 
   const pending = await updateCampaignCounts(campaign.id);
-  return { processed: recipients.length, sent, failed, pending, campaignCode: campaign.campaign_code };
+  return { processed: recipients.length, sent, failed, pending, campaignCode: campaign.campaign_code, campaignId: campaign.id };
 }
 
-function continueIfNeeded(origin: string, result: { pending: number; processed: number }) {
-  if (result.pending > 0 && result.processed > 0) {
-    waitUntil(fetch(new URL("/api/whatsapp/process-campaigns", origin), { method: "POST" }));
+function continueIfNeeded(origin: string, result: { pending: number; processed: number; campaignId: string | null }) {
+  if (result.pending > 0 && result.processed > 0 && result.campaignId) {
+    waitUntil(fetch(new URL("/api/whatsapp/process-campaigns", origin), { method: "POST", headers: campaignWorkerHeaders(result.campaignId!) }));
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const result = await processBatch();
+    const authorization = authorizeCampaignWorker(request);
+    if (!authorization) return NextResponse.json({ error: "Unauthorized campaign worker." }, { status: 401 });
+    const result = await processBatch(authorization.campaignId);
     continueIfNeeded(request.url, result);
     return NextResponse.json(result);
   } catch (error) {
@@ -445,7 +454,9 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    const result = await processBatch();
+    const authorization = authorizeCampaignWorker(request);
+    if (!authorization) return NextResponse.json({ error: "Unauthorized campaign worker." }, { status: 401 });
+    const result = await processBatch(authorization.campaignId);
     continueIfNeeded(request.url, result);
     return NextResponse.json(result);
   } catch (error) {

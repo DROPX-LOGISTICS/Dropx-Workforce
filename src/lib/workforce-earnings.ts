@@ -1,3 +1,4 @@
+import { readAllRows } from "@/lib/supabase-pagination";
 import type { AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -20,6 +21,7 @@ export type WorkforceRateCard = {
   fixed_amount: number | string;
   guarantee_amount: number | string;
   status: "draft" | "active" | "paused" | "closed";
+  approved_at?: string | null;
 };
 
 export type WorkforceIncentiveCampaign = {
@@ -37,6 +39,7 @@ export type WorkforceIncentiveCampaign = {
   effective_from: string;
   effective_to: string;
   status: "draft" | "active" | "paused" | "closed";
+  approved_at?: string | null;
 };
 
 export type WorkforceAdjustment = {
@@ -254,9 +257,13 @@ function cardScore(card: WorkforceRateCard, stationId: string, designationId: st
   return (card.station_id ? 2 : 0) + (card.designation_id ? 1 : 0);
 }
 
+function historicallyEligible(rule: { status: string; approved_at?: string | null; effective_to: string | null }) {
+  return rule.status === "active" || (["paused", "closed"].includes(rule.status) && Boolean(rule.approved_at) && Boolean(rule.effective_to));
+}
+
 function resolveRateCard(cards: WorkforceRateCard[], providerId: string, stationId: string, designationId: string, workDate: string) {
   return cards
-    .filter((card) => card.status === "active" && card.provider_id === providerId && isEffective(card.effective_from, card.effective_to, workDate))
+    .filter((card) => historicallyEligible(card) && card.provider_id === providerId && isEffective(card.effective_from, card.effective_to, workDate))
     .map((card) => ({ card, score: cardScore(card, stationId, designationId) }))
     .filter((entry) => entry.score >= 0)
     .sort((left, right) => right.score - left.score || right.card.effective_from.localeCompare(left.card.effective_from))[0]?.card ?? null;
@@ -316,7 +323,7 @@ function calculateIncentive(campaign: WorkforceIncentiveCampaign, shipment: CpsS
     ? metric >= threshold ? amount(campaign.flat_amount) : 0
     : Math.max(metric - threshold, 0) * amount(campaign.rate_value);
   const maximum = amount(campaign.maximum_amount);
-  return maximum > 0 ? Math.min(calculated, maximum) : calculated;
+  return campaign.maximum_amount !== null ? Math.min(calculated, maximum) : calculated;
 }
 
 function profileHolds(profile: WorkforceProfileRow) {
@@ -403,7 +410,7 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
     if (mapping && rateCard) {
       baseAmount = calculateCardBase(rateCard, shipment);
       calculationSource = "rate_card";
-      rateTrace = { rateCard: rateCard.name, payType: rateCard.pay_type };
+      rateTrace = { rateCard: rateCard.name, payType: rateCard.pay_type, policyVersion: { ...rateCard } };
     } else if (mapping && amount(shipment.da_total_pay) > 0) {
       baseAmount = amount(shipment.da_total_pay);
       calculationSource = "imported_payout";
@@ -420,7 +427,7 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
     if (mapping && !profile) holds.push("Provider ID is not linked to the canonical Workforce register");
 
     const matchingCampaigns = mapping && profile
-      ? input.campaigns.filter((campaign) => campaign.status === "active"
+      ? input.campaigns.filter((campaign) => historicallyEligible(campaign)
         && campaign.effective_from <= shipment.work_date
         && campaign.effective_to >= shipment.work_date
         && (!campaign.provider_id || campaign.provider_id === mapping.provider_id)
@@ -486,6 +493,67 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
       }
     });
   }
+
+  // Calculate daily entitlements over all source rows/IDs, then allocate cents back to their traces.
+  const shipmentById = new Map(input.shipments.map((row) => [row.id, row]));
+  function aggregate(group: WorkforceEarningLine[]): CpsShipmentRow {
+    const first = shipmentById.get(group[0].sourceId)!;
+    const combined = { ...first };
+    for (const field of ["amazon_delivery", "swa_delivery", "c_return", "mfn", "mfn_return", "total_delivery", "total_activity"] as const) {
+      combined[field] = group.reduce((sum, line) => sum + amount(shipmentById.get(line.sourceId)?.[field]), 0);
+    }
+    return combined;
+  }
+  function allocate(group: WorkforceEarningLine[], value: number, apply: (line: WorkforceEarningLine, allocated: number) => void) {
+    const sorted = [...group].sort((a, b) => a.key.localeCompare(b.key));
+    const weight = sorted.reduce((sum, line) => sum + line.totalActivity, 0);
+    const cents = Math.round(money(value) * 100);
+    let distributed = 0;
+    sorted.forEach((line, index) => {
+      const portion = index === sorted.length - 1 ? cents - distributed
+        : Math.floor(cents * (weight ? line.totalActivity / weight : 1 / sorted.length));
+      distributed += portion;
+      apply(line, portion / 100);
+    });
+  }
+  const dailyCards = new Map<string, WorkforceEarningLine[]>();
+  for (const line of lines) {
+    line.incentiveAmount = 0;
+    line.trace.campaigns = [];
+    if (line.workforceId && line.rateCardId) {
+      const groupKey = `${line.workforceId}:${line.workDate}:${line.rateCardId}`;
+      dailyCards.set(groupKey, [...(dailyCards.get(groupKey) ?? []), line]);
+    }
+  }
+  for (const group of dailyCards.values()) {
+    const card = input.rateCards.find((rule) => rule.id === group[0].rateCardId)!;
+    if (!["fixed_daily", "fixed_monthly", "hybrid"].includes(card.pay_type)) continue;
+    const dailyAmount = calculateCardBase(card, aggregate(group));
+    allocate(group, dailyAmount, (line, allocated) => {
+      line.baseAmount = allocated;
+      line.trace.dailyAllocation = { unit: "associate/day/rate-card", sourceRows: group.length, dailyAmount: money(dailyAmount) };
+    });
+  }
+  for (const campaign of input.campaigns.filter(historicallyEligible)) {
+    const groups = new Map<string, WorkforceEarningLine[]>();
+    for (const line of lines) {
+      if (!line.workforceId || !line.mappingId || line.workDate < campaign.effective_from || line.workDate > campaign.effective_to
+        || (campaign.provider_id && campaign.provider_id !== line.providerId)
+        || (campaign.station_id && campaign.station_id !== line.stationId)
+        || (campaign.designation_id && campaign.designation_id !== line.designationId)) continue;
+      const groupKey = `${line.workforceId}:${line.workDate}`;
+      groups.set(groupKey, [...(groups.get(groupKey) ?? []), line]);
+    }
+    for (const group of groups.values()) {
+      const dailyAmount = calculateIncentive(campaign, aggregate(group));
+      allocate(group, dailyAmount, (line, allocated) => {
+        line.incentiveAmount = money(line.incentiveAmount + allocated);
+        if (dailyAmount > 0) (line.trace.campaigns as unknown[]).push({ id: campaign.id, name: campaign.name, amount: allocated,
+          dailyAmount: money(dailyAmount), sourceRows: group.length, unit: "associate/day/campaign", policyVersion: { ...campaign } });
+      });
+    }
+  }
+  for (const line of lines) line.netAmount = money(line.baseAmount + line.incentiveAmount);
 
   input.adjustments.filter((adjustment) => adjustment.status === "approved" || adjustment.status === "posted").forEach((adjustment) => {
     const profile = workforceById.get(adjustment.workforce_id);
@@ -653,7 +721,7 @@ export async function loadWorkforceEarnings(
   if (!supabaseAdmin) {
     return { ...calculateWorkforceEarnings({ from, to, shipments: [], mappings: [], workforce: [], providers: [], stations: [], rateCards: [], campaigns: [], adjustments: [] }), warnings: ["Supabase service role key is not configured."] };
   }
-  const stationResult = await supabaseAdmin.from("stations").select("id, station_code, station_name").eq("company_id", companyId).eq("is_active", true).order("station_code");
+  const stationResult = await supabaseAdmin.from("stations").select("id, station_code, station_name").eq("company_id", companyId).order("station_code");
   const stations = (stationResult.data ?? []) as StationRow[];
   const scopedStationIds = authorization.hasAllLocationAccess ? null : new Set(authorization.locationScopeIds);
   const visibleStations = scopedStationIds ? stations.filter((station) => scopedStationIds.has(station.id)) : stations;
@@ -669,20 +737,19 @@ export async function loadWorkforceEarnings(
 
   const [shipmentResult, mappingResult, workforceResult, providerResult, rateCardResult, campaignResult, adjustmentResult] = await Promise.all([
     loadShipmentRows(companyId, from, to, stationCodes),
-    supabaseAdmin.from("field_executive_provider_mappings")
+    readAllRows(supabaseAdmin.from("field_executive_provider_mappings")
       .select("id, workforce_id, field_executive_id, contractor_id, employee_id, provider_id, station_id, provider_member_id, effective_from, effective_to, pay_type, payment_values, delivery_rate, pickup_rate, mfn_rate, mfn_return_rate, guarantee_amount, fuel_rate, status")
-      .eq("company_id", companyId).neq("status", "cancelled").lte("effective_from", to).or(`effective_to.is.null,effective_to.gte.${from}`),
-    supabaseAdmin.from("workforce")
+      .eq("company_id", companyId).neq("status", "cancelled").lte("effective_from", to).or(`effective_to.is.null,effective_to.gte.${from}`).order("id")),
+    readAllRows(supabaseAdmin.from("workforce")
       .select("id, full_name, dropx_id, designation_id, location_id, source_profile_type, source_profile_id, onboarding_status, lifecycle_status, is_active, bank_account_no, ifsc_code")
-      .eq("company_id", companyId).is("deleted_at", null).neq("migration_state", "reclassified"),
-    supabaseAdmin.from("providers").select("id, code, name").eq("company_id", companyId),
-    supabaseAdmin.from("workforce_rate_cards").select("id, company_id, name, provider_id, station_id, designation_id, pay_type, effective_from, effective_to, delivery_rate, return_rate, mfn_rate, mfn_return_rate, fuel_rate, fixed_amount, guarantee_amount, status")
-      .eq("company_id", companyId).neq("status", "closed").lte("effective_from", to).or(`effective_to.is.null,effective_to.gte.${from}`),
-    supabaseAdmin.from("workforce_incentive_campaigns").select("id, name, provider_id, station_id, designation_id, metric, calculation_type, threshold_value, rate_value, flat_amount, maximum_amount, effective_from, effective_to, status")
-      .eq("company_id", companyId).eq("status", "active").lte("effective_from", to).gte("effective_to", from),
-    adjustmentQuery
+      .eq("company_id", companyId).is("deleted_at", null).neq("migration_state", "reclassified").order("id")),
+    readAllRows(supabaseAdmin.from("providers").select("id, code, name").eq("company_id", companyId).order("id")),
+    readAllRows(supabaseAdmin.from("workforce_rate_cards").select("id, company_id, name, provider_id, station_id, designation_id, pay_type, effective_from, effective_to, delivery_rate, return_rate, mfn_rate, mfn_return_rate, fuel_rate, fixed_amount, guarantee_amount, status, approved_at")
+      .eq("company_id", companyId).neq("status", "draft").lte("effective_from", to).or(`effective_to.is.null,effective_to.gte.${from}`).order("id")),
+    readAllRows(supabaseAdmin.from("workforce_incentive_campaigns").select("id, name, provider_id, station_id, designation_id, metric, calculation_type, threshold_value, rate_value, flat_amount, maximum_amount, effective_from, effective_to, status, approved_at")
+      .eq("company_id", companyId).neq("status", "draft").lte("effective_from", to).gte("effective_to", from).order("id")),
+    readAllRows(adjustmentQuery.order("id"))
   ]);
-
   const requiredError = stationResult.error?.message || shipmentResult.error || mappingResult.error?.message || workforceResult.error?.message || providerResult.error?.message;
   const optionalErrors = [rateCardResult.error, campaignResult.error, adjustmentResult.error].filter(Boolean);
   const setupRequired = optionalErrors.some((error) => missingTable(error));

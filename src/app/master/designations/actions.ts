@@ -1,4 +1,5 @@
 "use server";
+import { isRetiredWorkforceTable } from "@/lib/workforce-controls";
 
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -316,7 +317,7 @@ async function deleteDesignationForScope(formData: FormData, scope: DesignationA
           .select("id", { count: "exact", head: true })
           .eq("company_id", companyId)
           .in("designation", [designation.code, designation.name]);
-        return { table, ...result };
+        return isRetiredWorkforceTable(result.error, table) ? { table, ...result, error: null, count: 0 } : { table, ...result };
       })
     );
     const dependencyError = [...directDependencies, ...textRegisterDependencies].find((result) => result.error)?.error;

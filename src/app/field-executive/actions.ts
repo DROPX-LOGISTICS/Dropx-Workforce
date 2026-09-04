@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { waitUntil } from "@vercel/functions";
 import * as XLSX from "xlsx";
+import { assertWorkforceLocationAccess } from "@/lib/workforce-controls";
 import { isCompanyOwner, requirePagePermission } from "@/lib/authorization";
 import { currentAccessSurface } from "@/lib/access-surface";
 import { syncBiometricEnrolment } from "@/lib/biometric/enrolments";
@@ -449,7 +450,7 @@ export async function createFieldExecutive(formData: FormData) {
         effectiveFrom: dateOfJoin,
         enrolmentId: biometricId,
         accountId: executive.id,
-        isActive: true,
+        isActive: !canonicalOnboarding && directActivate,
         locationId,
         profileType: config.profileType,
         workerType: "individual_contract"
@@ -726,11 +727,13 @@ export async function updateFieldExecutive(formData: FormData) {
     const executiveId = id;
     const existingResult = await supabaseAdmin
       .from(table)
-      .select("biometric_id, designation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path")
+      .select("location_id, onboarding_status, lifecycle_status, biometric_id, designation, aadhaar_front_path, aadhaar_back_path, pan_upload_path, dl_front_path, dl_back_path, profile_photo_path")
       .eq("id", executiveId)
       .eq("company_id", companyId)
       .maybeSingle();
     if (existingResult.error) throw new Error(existingResult.error.message);
+    if (!existingResult.data) throw new Error("Workforce profile was not found.");
+    assertWorkforceLocationAccess(authorization, existingResult.data.location_id, payload.location_id);
     payload.biometric_id = String((existingResult.data as { biometric_id?: string | null } | null)?.biometric_id ?? "").replace(/\D/g, "") || null;
 
     if (!authorization.hasAllLocationAccess && !authorization.locationScopeIds.includes(payload.location_id)) {
@@ -884,7 +887,7 @@ export async function updateFieldExecutive(formData: FormData) {
       effectiveFrom: payload.date_of_join,
       enrolmentId: payload.biometric_id,
       accountId: executiveId,
-      isActive: Boolean(payload.is_active),
+      isActive: Boolean(payload.is_active) && (config.profileType !== "workforce" || existingResult.data.onboarding_status === "active"),
       locationId: payload.location_id,
       profileType: config.profileType,
       workerType: "individual_contract"
@@ -907,9 +910,9 @@ export async function reviewFieldExecutiveProfile(formData: FormData) {
   const companyId = requireCompanyId(authorization);
   if (!supabaseAdmin) fieldExecutiveRedirect({ error: "Supabase service role key is not configured." }, returnPath);
 
-  if (nonEmployeeConfigForRoute(returnPath).profileType === "field_executive") {
+  if (["workforce", "field_executive"].includes(nonEmployeeConfigForRoute(returnPath).profileType)) {
     fieldExecutiveRedirect({
-      error: "Delivery Associate activation is controlled in People → Workforce Lifecycle so the agreement, provider ID and HO checklist cannot be bypassed."
+      error: "Associate activation is controlled in Workforce → Activation & Lifecycle so the agreement, provider ID and HO checklist cannot be bypassed."
     }, returnPath);
   }
 

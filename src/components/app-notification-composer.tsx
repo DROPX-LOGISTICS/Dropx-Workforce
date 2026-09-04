@@ -129,10 +129,12 @@ function SendButton({ count }: { count: number }) {
 
 export function AppNotificationComposer({
   action,
-  recipients
+  recipients,
+  submissionKey
 }: {
   action: (formData: FormData) => void | Promise<void>;
   recipients: AppNotificationRecipient[];
+  submissionKey?: string;
 }) {
   const [query, setQuery] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
@@ -222,6 +224,7 @@ export function AppNotificationComposer({
 
   return (
     <form action={action}>
+      {submissionKey ? <input type="hidden" name="submissionKey" value={submissionKey} /> : null}
       <input name="selectedRecipients" type="hidden" value={JSON.stringify(sendListKeys)} />
       <section className="wide app-notification-recipient-workbench">
         <div className="app-notification-recipient-head">

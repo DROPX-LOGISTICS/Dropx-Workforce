@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { requirePagePermission, type AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { isWorkforceDate } from "@/lib/workforce-earnings";
+import { workforceToday, isWorkforceDate } from "@/lib/workforce-earnings";
 
 const path = "/delivery-network/rate-cards";
 
@@ -96,7 +96,8 @@ export async function saveRateCard(formData: FormData) {
       if (!existing.data) throw new Error("Rate card was not found.");
       if (existing.data.status !== "draft") throw new Error("Active or historical rate cards are immutable. Close it and create a new version.");
       requireRateCardLocationScope(authorization, existing.data.station_id);
-      const result = await supabaseAdmin.from("workforce_rate_cards").update(payload).eq("company_id", companyId).eq("id", id);
+      const result = await supabaseAdmin.from("workforce_rate_cards").update(payload).eq("company_id", companyId).eq("id", id).eq("status", "draft").select("id").maybeSingle();
+      if (!result.error && !result.data) throw new Error("This version changed during editing. Refresh before saving.");
       if (result.error) throw new Error(result.error.message);
     } else {
       const result = await supabaseAdmin.from("workforce_rate_cards").insert({ ...payload, status: "draft", created_by: authorization.userId });
@@ -122,17 +123,23 @@ export async function changeRateCardStatus(formData: FormData) {
     if (!current.data) throw new Error("Rate card was not found.");
     requireRateCardLocationScope(authorization, current.data.station_id);
     if (current.data.status === "closed") throw new Error("A closed rate card cannot be reopened.");
+    if (status === "active" && current.data.status !== "draft") throw new Error("Create a new draft version to resume this policy. Historical periods remain preserved.");
     if (status === "active") {
-      let overlapQuery = supabaseAdmin.from("workforce_rate_cards").select("id, name").eq("company_id", companyId).eq("provider_id", current.data.provider_id).eq("status", "active").neq("id", id)
+      let overlapQuery = supabaseAdmin.from("workforce_rate_cards").select("id, name").eq("company_id", companyId).eq("provider_id", current.data.provider_id).not("approved_at", "is", null).neq("id", id)
         .lte("effective_from", current.data.effective_to ?? "9999-12-31").or(`effective_to.is.null,effective_to.gte.${current.data.effective_from}`).limit(1);
       overlapQuery = current.data.station_id ? overlapQuery.eq("station_id", current.data.station_id) : overlapQuery.is("station_id", null);
       overlapQuery = current.data.designation_id ? overlapQuery.eq("designation_id", current.data.designation_id) : overlapQuery.is("designation_id", null);
       const overlap = await overlapQuery;
       if (overlap.error) throw new Error(overlap.error.message);
-      if (overlap.data?.length) throw new Error(`This scope overlaps active rate card ${overlap.data[0].name}. Close or end-date it first.`);
+      if (overlap.data?.length) throw new Error(`This scope overlaps active rate card ${overlap.data[0].name}. Choose a period after that version ends to preserve its history.`);
     }
     const now = new Date().toISOString();
     const payload: Record<string, unknown> = { status, updated_at: now };
+    if (["paused", "closed"].includes(status) && current.data.status !== "draft") {
+      const today = workforceToday();
+      payload.effective_to = current.data.effective_to && current.data.effective_to < today ? current.data.effective_to : today;
+      if (current.data.effective_from > today) throw new Error("This policy starts in the future. Contact the owner to replace it before activation.");
+    }
     if (status === "active") Object.assign(payload, { approved_by: authorization.userId, approved_at: now });
     const result = await supabaseAdmin.from("workforce_rate_cards").update(payload)
       .eq("company_id", companyId).eq("id", id).eq("status", current.data.status).select("id").maybeSingle();

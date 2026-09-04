@@ -1,3 +1,4 @@
+import { scopeWorkforceCampaigns } from "@/lib/workforce-campaign-scope";
 import { AppShell } from "@/components/app-shell";
 import { BulkWhatsAppPanel } from "@/components/bulk-whatsapp-panel";
 import type { Campaign } from "@/components/campaign-report";
@@ -50,7 +51,7 @@ export default async function WorkforceWhatsAppPage() {
     supabaseAdmin.from("whatsapp_profiles").select("id, profile_name").eq("company_id", companyId),
     supabaseAdmin
       .from("whatsapp_campaigns")
-      .select("id, campaign_code, whatsapp_profile_id, whatsapp_profile_name, created_at, total_count, sent_count, failed_count, pending_count, status, whatsapp_campaign_recipients (id, row_no, recipient_name, recipient_mobile, country_code, status, provider_message_id, error_message, sent_at, updated_at)")
+      .select("id, campaign_code, whatsapp_profile_id, whatsapp_profile_name, created_at, total_count, sent_count, failed_count, pending_count, status, whatsapp_campaign_recipients (id, source_id, row_no, recipient_name, recipient_mobile, country_code, status, provider_message_id, error_message, sent_at, updated_at)")
       .eq("company_id", companyId)
       .eq("source_mode", "workforce")
       .order("created_at", { ascending: false })
@@ -59,7 +60,7 @@ export default async function WorkforceWhatsAppPage() {
   const error = settings.error ?? templates.error ?? profiles.error ?? campaignProfiles.error;
   const profileNameById = new Map((campaignProfiles.data ?? []).map((profile) => [profile.id, profile.profile_name]));
   const campaignRows = (campaigns.data ?? []) as unknown as Campaign[];
-  const workforceCampaigns = campaignRows.map((campaign) => ({
+  const workforceCampaigns = scopeWorkforceCampaigns(campaignRows, recipients, authorization.hasAllLocationAccess).map((campaign) => ({
     ...campaign,
     whatsapp_profile_name: campaign.whatsapp_profile_id
       ? profileNameById.get(campaign.whatsapp_profile_id) ?? campaign.whatsapp_profile_name
@@ -95,7 +96,7 @@ export default async function WorkforceWhatsAppPage() {
       ) : (
         <BulkWhatsAppPanel
           allowExcelUpload={false}
-          canSend={permission.canAdd || permission.canEdit}
+          canSend={permission.canAdd && !authorization.readOnly}
           campaignError={campaigns.error?.message ?? null}
           campaigns={workforceCampaigns}
           contacts={contacts}

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:connect": "next dev apps/connect",
-    "prebuild": "node scripts/verify-contractor-schema-boundary.mjs && node scripts/verify-designation-profile-destination.mjs && node scripts/verify-workforce-registration-policy.mjs && node scripts/verify-workforce-designation-isolation.mjs && node scripts/verify-product-access-cutover.mjs && node scripts/verify-people-classification-boundary.mjs",
+    "prebuild": "node scripts/verify-contractor-schema-boundary.mjs && node scripts/verify-designation-profile-destination.mjs && node scripts/verify-workforce-registration-policy.mjs && node scripts/verify-workforce-designation-isolation.mjs && node scripts/verify-product-access-cutover.mjs && node scripts/verify-people-classification-boundary.mjs && node scripts/verify-portal-preview.mjs",
     "test:workforce-finance": "tsx --test src/lib/workforce-earnings.test.mjs",
     "test:workforce-recipients": "tsx --test src/lib/workforce-communication-recipients.test.mjs",
     "build": "next build",

@@ -55,7 +55,7 @@ export async function AppShell({ children, active, pageCode }: { children: React
       children: item.children.filter((child) => !child.code || hasPermission(authorization, child.code, "access"))
     } : item)
     .filter((item) => item.children?.length ? item.children.length > 0 : hasPermission(authorization, item.code, "access"));
-  const inboxNotificationsEnabled = !isWorkforceHost && hasPermission(authorization, "inbox", "access");
+  const inboxNotificationsEnabled = !authorization.isPreview && !isWorkforceHost && hasPermission(authorization, "inbox", "access");
   const paymentNotifications = isWorkforceHost
     ? emptyPaymentNotificationSnapshot()
     : await loadPaymentNotificationSnapshot(authorization);
@@ -63,11 +63,11 @@ export async function AppShell({ children, active, pageCode }: { children: React
     action: signOut,
     email: authorization.email,
     name: authorization.fullName ?? authorization.email ?? "DropX user",
-    role: authorization.roleName
+    role: authorization.designationName ?? authorization.roleName
   };
   const topActions = (
     <>
-      {!isWorkforceHost && authorization.canPreviewUsers ? <OwnerPreviewSwitcher active={Boolean(authorization.isPreview)} name={authorization.fullName ?? "user"} /> : null}
+      {authorization.canPreviewUsers ? <OwnerPreviewSwitcher active={Boolean(authorization.isPreview)} name={authorization.fullName ?? "user"} /> : null}
       {isOpsHost && opsContext.location ? (
         <OpsContextSwitcher
           availableModes={opsContext.availableModes}
@@ -123,7 +123,7 @@ export async function AppShell({ children, active, pageCode }: { children: React
           <div className="sidebar-footer">
             <strong>{authorization.fullName ?? authorization.email ?? "DropX user"}</strong>
             <br />
-            {authorization.roleName ?? "Dashboard user"}
+            {authorization.designationName ?? authorization.roleName ?? "Portal user"}
           </div>
         </aside>
       )}

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
+import { loadPeopleDesignations } from "@/lib/people-designation";
+import { getPreviewViewer, hasPreviewProductAccess, selectedPreviewUserId } from "@/lib/portal-preview";
 import { cache } from "react";
 import { accessPages, ensureAccessPages } from "@/lib/access-pages";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -27,6 +28,7 @@ export type AuthorizationContext = {
   roleCode: string | null;
   roleId: string | null;
   roleName: string | null;
+  designationName?: string | null;
   userId: string;
   viewerUserId?: string;
   viewerFullName?: string | null;
@@ -36,7 +38,6 @@ export type AuthorizationContext = {
   previewUserId?: string | null;
 };
 
-export const dashboardPreviewCookieName = "dropx_dashboard_preview_user";
 
 const noPermission: PagePermission = { canView: false, canAdd: false, canEdit: false };
 
@@ -223,12 +224,10 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
   if (!profile?.is_active) return null;
 
   const viewerProfile = profile;
-  const viewerRoleResult = viewerProfile.role_id
-    ? await supabaseAdmin.from("user_roles").select("code,is_active").eq("id", viewerProfile.role_id).maybeSingle()
-    : { data: null, error: null };
-  const canPreviewUsers = Boolean(viewerProfile.is_master_owner)
-    || String(viewerRoleResult.data?.code ?? "").toUpperCase() === "OWNER";
-  const requestedPreviewUserId = canPreviewUsers ? cookies().get(dashboardPreviewCookieName)?.value?.trim() : "";
+  const previewViewer = await getPreviewViewer();
+  const canPreviewUsers = Boolean(previewViewer);
+  const requestedPreviewUserId = selectedPreviewUserId(viewerProfile.id);
+  if (requestedPreviewUserId && !previewViewer) redirect("/unauthorized?reason=preview-unavailable");
   let isPreview = false;
   if (requestedPreviewUserId && requestedPreviewUserId !== viewerProfile.id && viewerProfile.company_id) {
     const previewResult = await supabaseAdmin
@@ -238,12 +237,11 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
       .eq("company_id", viewerProfile.company_id)
       .eq("is_active", true)
       .maybeSingle();
-    if (!previewResult.error && previewResult.data) {
-      profile = previewResult.data;
-      isPreview = true;
-    }
+    if (previewResult.error || !previewResult.data || !await hasPreviewProductAccess(viewerProfile.company_id, previewResult.data.id, Boolean(previewResult.data.is_master_owner))) redirect("/unauthorized?reason=preview-unavailable");
+    profile = previewResult.data;
+    isPreview = true;
   }
-  const effectiveEmail = normalizeEmail(profile.email) || signedInEmail;
+  const effectiveEmail = isPreview ? normalizeEmail(profile.email) : normalizeEmail(profile.email) || signedInEmail;
 
   const permissions: Record<string, PagePermission> = Object.fromEntries(
     initializedPermissionCodes.map((code) => [code, { ...noPermission }])
@@ -273,7 +271,7 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
       companyName = company.name;
       isMasterCompany = Boolean(company.is_master);
     }
-    await ensureMissingCurrentAccessPages(companyId as string);
+    if (!isPreview) await ensureMissingCurrentAccessPages(companyId as string);
   }
 
   if (profile.role_id) {
@@ -448,7 +446,9 @@ export const getAuthorization = cache(async (): Promise<AuthorizationContext | n
     permissions.company_master = { ...noPermission };
   }
 
+  const designation = companyId ? (await loadPeopleDesignations(companyId, [profile.id])).get(profile.id) : undefined;
   return {
+    designationName: designation?.name ?? null,
     companyCode,
     companyId,
     companyName,
@@ -481,6 +481,7 @@ export function hasPermission(
   pageCode: string,
   action: PermissionAction
 ) {
+  if (authorization.readOnly && (action === "add" || action === "edit")) return false;
   if (isCompanyOwner(authorization)) return true;
   const permission = authorization.permissions[pageCode] ?? noPermission;
   if (action === "access") return permission.canView || permission.canAdd || permission.canEdit;

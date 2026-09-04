@@ -144,13 +144,22 @@ export async function loadWorkforceCommunicationRecipients(authorization: Author
       .neq("migration_state", "reclassified"),
     authorization
   );
-  const profileQuery = (table: "field_executives" | "contractors" | "vendors" | "workers") => applyLocationScope(
-    admin
-      .from(table)
-      .select(legacySelect)
-      .eq("company_id", companyId),
-    authorization
-  );
+  const profileQuery = async (table: "field_executives" | "contractors" | "vendors" | "workers") => {
+    const result = await applyLocationScope(
+      admin
+        .from(table)
+        .select(legacySelect)
+        .eq("company_id", companyId),
+      authorization
+    );
+    // These legacy sources can be retired after their profiles move to Workforce/People.
+    // Keep reading them when present so unfinished registrations remain available.
+    const missingRetiredTable = (table === "field_executives" || table === "workers") && (
+      (result.error?.code === "PGRST205" && result.error.message.includes(`'public.${table}'`)) ||
+      (result.error?.code === "42P01" && result.error.message.includes(`relation "public.${table}" does not exist`))
+    );
+    return missingRetiredTable ? { ...result, data: [], error: null } : result;
+  };
   const [canonical, fieldExecutives, contractors, vendors, workers, identityLinks] = await Promise.all([
     canonicalQuery,
     profileQuery("field_executives"),

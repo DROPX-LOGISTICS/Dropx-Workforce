@@ -7,6 +7,7 @@
     "dev:connect": "next dev apps/connect",
     "prebuild": "node scripts/verify-contractor-schema-boundary.mjs && node scripts/verify-designation-profile-destination.mjs && node scripts/verify-workforce-registration-policy.mjs && node scripts/verify-workforce-designation-isolation.mjs && node scripts/verify-product-access-cutover.mjs && node scripts/verify-people-classification-boundary.mjs",
     "test:workforce-finance": "tsx --test src/lib/workforce-earnings.test.mjs",
+    "test:workforce-recipients": "tsx --test src/lib/workforce-communication-recipients.test.mjs",
     "build": "next build",
     "build:connect": "next build apps/connect",
     "start": "next start",

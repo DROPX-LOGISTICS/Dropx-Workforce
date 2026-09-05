@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 const migration = readFileSync(new URL("../supabase/migrations/20260831224000_people_worker_classification_reconciliation.sql", import.meta.url), "utf8");
 const blockerRepair = readFileSync(new URL("../supabase/migrations/20260831225000_resolve_people_classification_blockers.sql", import.meta.url), "utf8");
 const projectionSync = readFileSync(new URL("../supabase/migrations/20260831230000_sync_people_directory_projection.sql", import.meta.url), "utf8");
+const activeProjectionSync = readFileSync(new URL("../supabase/migrations/20260905132500_keep_people_source_projection_live.sql", import.meta.url), "utf8");
 
 const required = [
   "begin;",
@@ -56,7 +57,18 @@ const failures = [
     "hr_designation_mappings",
     "commit;"
   ].filter((token) => !projectionSync.includes(token)).map((token) => `missing projection sync ${token}`),
-  ...forbidden.filter((token) => projectionSync.toLowerCase().includes(token)).map((token) => `forbidden projection sync ${token}`)
+  ...forbidden.filter((token) => projectionSync.toLowerCase().includes(token)).map((token) => `forbidden projection sync ${token}`),
+  ...[
+    "create or replace function public.sync_people_engagement_projection",
+    "timezone('Asia/Kolkata', now())::date",
+    "lower(btrim(coalesce(employee.people_lifecycle_status, ''))) = 'active'",
+    "lower(btrim(coalesce(contractor.people_lifecycle_status, ''))) = 'active'",
+    "and not employee.is_active",
+    "and not contractor.is_active",
+    "to service_role",
+    "commit;"
+  ].filter((token) => !activeProjectionSync.includes(token)).map((token) => `missing active projection sync ${token}`),
+  ...forbidden.filter((token) => activeProjectionSync.toLowerCase().includes(token)).map((token) => `forbidden active projection sync ${token}`)
 ];
 
 if (failures.length) {

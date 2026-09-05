@@ -5,6 +5,7 @@ import { PGlite } from "@electric-sql/pglite";
 const db = new PGlite();
 const repo = new URL("../", import.meta.url).pathname;
 const migration = readFileSync(`${repo}supabase/migrations/20260905123000_mobile_identity_onboarding_guard.sql`, "utf8");
+const schemaGuardMigration = readFileSync(`${repo}supabase/migrations/20260905131500_schema_safe_onboarding_identity_conflicts.sql`, "utf8");
 
 await db.exec(`
   create role anon;
@@ -15,7 +16,7 @@ await db.exec(`
   create table employees (id uuid primary key, company_id uuid not null, full_name text, mobile text, designation_id uuid, is_active boolean default true, deleted_at timestamptz);
   create table contractors (id uuid primary key, company_id uuid not null, full_name text, mobile text, designation text, onboarding_status text, is_active boolean default true, deleted_at timestamptz);
   create table workforce (id uuid primary key, company_id uuid not null, full_name text, mobile text, designation text, designation_id uuid, onboarding_status text, approval_required boolean default true, is_active boolean default false, deleted_at timestamptz);
-  create table vendors (id uuid primary key, company_id uuid not null, full_name text, mobile text, designation text, onboarding_status text, is_active boolean default true, deleted_at timestamptz);
+  create table vendors (id uuid primary key, company_id uuid not null, full_name text, mobile text, designation text, onboarding_status text, is_active boolean default true);
   create table workers (id uuid primary key, company_id uuid not null, full_name text, mobile text, designation text, onboarding_status text, is_active boolean default true, deleted_at timestamptz);
   create table workforce_helpers (id uuid primary key, company_id uuid not null, full_name text, mobile text, designation text, onboarding_status text, is_active boolean default true, deleted_at timestamptz);
   create table recruitment_leads (id uuid primary key, company_id uuid not null, normalized_phone text);
@@ -25,6 +26,7 @@ await db.exec(`
 `);
 
 await db.exec(migration);
+await db.exec(schemaGuardMigration);
 
 const uuid = (value) => `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
 const company = uuid(1);

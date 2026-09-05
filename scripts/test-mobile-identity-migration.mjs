@@ -15,7 +15,6 @@ await db.exec(`
   create table employees (id uuid primary key, company_id uuid not null, full_name text, mobile text, designation_id uuid, is_active boolean default true, deleted_at timestamptz);
   create table contractors (id uuid primary key, company_id uuid not null, full_name text, mobile text, designation text, onboarding_status text, is_active boolean default true, deleted_at timestamptz);
   create table workforce (id uuid primary key, company_id uuid not null, full_name text, mobile text, designation text, designation_id uuid, onboarding_status text, approval_required boolean default true, is_active boolean default false, deleted_at timestamptz);
-  create table field_executives (id uuid primary key, company_id uuid not null, full_name text, mobile text, designation text, onboarding_status text, is_active boolean default true, deleted_at timestamptz);
   create table vendors (id uuid primary key, company_id uuid not null, full_name text, mobile text, designation text, onboarding_status text, is_active boolean default true, deleted_at timestamptz);
   create table workers (id uuid primary key, company_id uuid not null, full_name text, mobile text, designation text, onboarding_status text, is_active boolean default true, deleted_at timestamptz);
   create table workforce_helpers (id uuid primary key, company_id uuid not null, full_name text, mobile text, designation text, onboarding_status text, is_active boolean default true, deleted_at timestamptz);

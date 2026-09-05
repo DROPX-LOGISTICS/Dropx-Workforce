@@ -46,7 +46,7 @@ async function requireScopedApplicant(id: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const result = await supabaseAdmin
     .from("workforce")
-    .select("id, full_name, location_id, designation, date_of_join, biometric_id, onboarding_status, lifecycle_status")
+    .select("id, full_name, location_id, designation, date_of_join, biometric_id, onboarding_status, lifecycle_status, identity_exception_required, identity_exception_context")
     .is("deleted_at", null).neq("migration_state", "reclassified")
     .eq("company_id", companyId)
     .eq("id", id)
@@ -126,6 +126,11 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
       throw new Error(`Resolve and re-verify ${fields.join(", ")} before approving this application.`);
     }
 
+    const identityExceptionApproved = formData.get("identity_exception_approved") === "true";
+    if (applicant.identity_exception_required && !identityExceptionApproved) {
+      throw new Error("Confirm that you reviewed the existing employment and approve this different Workforce engagement.");
+    }
+
     const code = await designationCode(companyId, applicant.designation);
     const master = await supabaseAdmin!.from("workforce_onboarding_checklist_master")
       .select("id, code, label, is_required, applicable_designation_codes")
@@ -179,6 +184,8 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
       onboarding_approved_by: authorization.userId,
       provider_id_status: providerId ? "created" : "not_required",
       provider_employee_id: providerId || null,
+      identity_exception_approved_at: applicant.identity_exception_required ? reviewedAt : null,
+      identity_exception_approved_by: applicant.identity_exception_required ? authorization.userId : null,
       is_active: true,
       lifecycle_status: "active",
       updated_at: reviewedAt
@@ -214,7 +221,11 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
       to_status: "active",
       actor_user_id: authorization.userId,
       source_portal: "workforce",
-      remarks: remarks || "HO checklist completed and workforce ID activated."
+      remarks: remarks || "HO checklist completed and workforce ID activated.",
+      metadata: applicant.identity_exception_required ? {
+        identity_exception_approved: true,
+        identity_exception_context: applicant.identity_exception_context
+      } : {}
     });
     if (event.error) throw new Error(event.error.message);
     revalidateLifecyclePages();

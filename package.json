@@ -14,7 +14,7 @@
     "lint": "next lint",
     "test:workforce-controls": "tsx --test src/lib/workforce-controls.test.mjs",
     "test:workforce-operations": "node scripts/test-workforce-operations.mjs",
-    "test:workforce": "tsx --test src/lib/workforce-earnings.test.mjs src/lib/workforce-communication-recipients.test.mjs src/lib/workforce-controls.test.mjs && node scripts/test-workforce-operations.mjs"
+    "test:workforce": "tsx --test src/lib/workforce-earnings.test.mjs src/lib/workforce-communication-recipients.test.mjs src/lib/workforce-controls.test.mjs src/lib/onboarding-identity.test.mjs && node scripts/test-workforce-operations.mjs && node scripts/test-mobile-identity-migration.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

@@ -17,6 +17,7 @@ type Applicant = {
   location_id: string | null; date_of_join: string | null; onboarding_status: string; lifecycle_status: string;
   onboarding_application_source: string | null; onboarding_submitted_at: string | null; provider_id_status: string | null;
   provider_employee_id: string | null; onboarding_review_remarks: string | null; updated_at: string;
+  identity_exception_required: boolean; identity_exception_context: Record<string, unknown> | null;
   stations: { station_code: string | null; station_name: string | null } | Array<{ station_code: string | null; station_name: string | null }> | null;
 };
 
@@ -49,7 +50,7 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
     error = "Supabase service role key is not configured.";
   } else {
     let applicantQuery = supabaseAdmin.from("workforce")
-      .select("id, full_name, dropx_id, biometric_id, mobile_country_code, mobile, email, designation, location_id, date_of_join, onboarding_status, lifecycle_status, onboarding_application_source, onboarding_submitted_at, provider_id_status, provider_employee_id, onboarding_review_remarks, updated_at, stations(station_code, station_name)")
+      .select("id, full_name, dropx_id, biometric_id, mobile_country_code, mobile, email, designation, location_id, date_of_join, onboarding_status, lifecycle_status, onboarding_application_source, onboarding_submitted_at, provider_id_status, provider_employee_id, onboarding_review_remarks, identity_exception_required, identity_exception_context, updated_at, stations(station_code, station_name)")
       .eq("company_id", companyId).is("deleted_at", null).neq("migration_state", "reclassified").order("updated_at", { ascending: false });
     if (!authorization.hasAllLocationAccess) applicantQuery = applicantQuery.in("location_id", authorization.locationScopeIds.length ? authorization.locationScopeIds : ["00000000-0000-0000-0000-000000000000"]);
     const [applicantResult, checklistResult, resultResult, acceptanceResult, exitResult, exitMasterResult, designationResult, reviewIssueResult] = await Promise.all([
@@ -116,13 +117,18 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
         const applicantDesignationCode = designationCodes.get(String(item.designation ?? "").toLowerCase()) ?? "";
         const applicable = checklist.filter((check) => !check.applicable_designation_codes?.length || check.applicable_designation_codes.map((code) => code.toUpperCase()).includes(applicantDesignationCode));
         const reviewIssues = reviewIssuesByApplicant.get(item.id) ?? [];
+        const existingProfiles = Array.isArray(item.identity_exception_context?.existing_profiles)
+          ? item.identity_exception_context.existing_profiles as Array<Record<string, unknown>>
+          : [];
         return <article className="card workforce-lifecycle-card" key={item.id}>
           <header><div><small>{title(item.onboarding_application_source)} request</small><h2>{item.full_name}</h2><p>{item.dropx_id || "ID reserved"} · {station?.station_code || "No station"} · {item.designation || "No designation"}</p></div><span className={`status ${item.onboarding_status}`}>{title(item.onboarding_status)}</span></header>
           <div className="workforce-lifecycle-facts"><span>Mobile<strong>+{item.mobile_country_code || "91"} {item.mobile}</strong></span><span>Submitted<strong>{when(item.onboarding_submitted_at || item.updated_at)}</strong></span><span>Agreement<strong>{acceptedIds.has(item.id) ? "Accepted" : "Pending"}</strong></span><span>Provider ID<strong>{item.provider_employee_id || title(item.provider_id_status)}</strong></span></div>
+          {item.identity_exception_required ? <section className="workforce-lifecycle-issues"><header><span><AlertTriangle size={15} /> Existing employee · approval exception</span></header>{existingProfiles.map((profile, index) => <div key={`${String(profile.source_type ?? "profile")}:${String(profile.source_id ?? index)}`}><strong>{String(profile.display_name ?? "Existing person")}</strong><span>{String(profile.designation_name ?? profile.designation_code ?? "Existing designation")} · {title(String(profile.profile_status ?? "existing"))}</span></div>)}</section> : null}
           {reviewIssues.length ? <section className="workforce-lifecycle-issues"><header><span><AlertTriangle size={15} /> Profile correction required</span><PendingLink href={`/delivery-network/onboarding/associates?edit=${encodeURIComponent(item.id)}&review=1`}>Resolve {reviewIssues.length} {reviewIssues.length === 1 ? "issue" : "issues"}</PendingLink></header>{reviewIssues.map((issue) => <div key={`${issue.kind}:${issue.updated_at ?? ""}`}><strong>{title(issue.kind)}</strong><span>{issue.message || "Verification requires manual review."}{issue.display_name ? ` · Verified source: ${issue.display_name}` : ""}</span></div>)}</section> : null}
           {canEdit && ["under_review", "returned", "approved"].includes(item.onboarding_status) ? <form action={reviewWorkforceOnboarding} className="workforce-review-form">
             <input name="id" type="hidden" value={item.id} />
             <h3>HO activation checklist</h3>
+            {item.identity_exception_required ? <label><input name="identity_exception_approved" type="checkbox" value="true" /><span><strong>Approve secondary Workforce engagement *</strong><small>I verified the existing designation above and approve this different role without creating a duplicate person.</small></span></label> : null}
             {applicable.map((check) => {
               const existing = resultMap.get(`${item.id}:${check.id}`);
               return <label key={check.id}><input defaultChecked={["completed", "not_required"].includes(existing?.status ?? "")} name={`checklist_${check.id}`} type="checkbox" value="true" /><span><strong>{check.label}{check.is_required ? " *" : ""}</strong><small>{check.description}</small></span></label>;

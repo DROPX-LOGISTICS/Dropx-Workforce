@@ -435,12 +435,11 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
           ? pageAccessByDesignationKey.get(designationKey)
           : undefined;
 
-      const pageAccess = account.profile_type === "employee" || account.profile_type === "user"
-        ? normalizeAppPageAccess(account.profile_type, intersectPageAccess(categoryPages, designationPages))
-        : normalizeAppPageAccess(account.profile_type, [
-          ...defaultPageAccess(account.profile_type),
-          ...(designationPages ?? [])
-        ]);
+      // A designation's DropX One access configuration is authoritative when
+      // it exists. Category defaults remain the safe fallback for older
+      // designations which have not yet been configured.
+      const configuredPages = designationPages ?? categoryPages;
+      const pageAccess = normalizeAppPageAccess(account.profile_type, configuredPages);
 
       return {
       id: account.id,

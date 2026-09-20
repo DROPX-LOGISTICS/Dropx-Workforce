@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   BadgeIndianRupee,
+  CalendarDays,
   CalendarClock,
   ChevronRight,
   Clock3,
@@ -119,7 +120,8 @@ export function ConnectDashboard({
   onProfile,
   onPayments,
   onRoster,
-  onConnect
+  onConnect,
+  onLeave
 }: {
   account: AppAccount;
   onAttendance: () => void;
@@ -127,6 +129,7 @@ export function ConnectDashboard({
   onPayments: () => void;
   onRoster: () => void;
   onConnect: () => void;
+  onLeave: () => void;
 }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [attendance, setAttendance] = useState<Attendance | null>(null);
@@ -233,7 +236,9 @@ export function ConnectDashboard({
 
   return <section className="dx-dashboard">
     <header className="dx-dashboard-greeting">
+      <small className={`dx-workspace-kicker ${workforceAccount ? "workforce" : "people"}`}>{workforceAccount ? "WORKFORCE WORKSPACE" : "PEOPLE WORKSPACE"}</small>
       <h1>{greeting}, {firstName}</h1>
+      <p>{workforceAccount ? "Your delivery work, earnings and shift essentials." : "Your employee workday, attendance and leave essentials."}</p>
     </header>
 
     <section className="dx-dashboard-card today">
@@ -292,6 +297,15 @@ export function ConnectDashboard({
         {workforcePages.has("payments") ? <button onClick={onPayments}><i><BadgeIndianRupee /></i><span><strong>My earnings</strong><small>Payments, advances and published amounts</small></span><ChevronRight /></button> : null}
         {workforcePages.has("roster") ? <button onClick={onRoster}><i><CalendarClock /></i><span><strong>Work &amp; roster</strong><small>Assigned shifts and upcoming work</small></span><ChevronRight /></button> : null}
         {workforcePages.has("connect") ? <button onClick={onConnect}><i><CircleHelp /></i><span><strong>Need support?</strong><small>Raise a payment, ID, route or document request</small></span><ChevronRight /></button> : null}
+      </div>
+    </section> : null}
+
+    {!workforceAccount ? <section className="dx-dashboard-card dx-people-home-actions">
+      <header><div><small>PEOPLE HOME</small><h2>My workday</h2></div></header>
+      <div>
+        {attendanceAllowed ? <button onClick={onAttendance}><i><Fingerprint /></i><span><strong>Attendance</strong><small>View punches, hours and regularization</small></span><ChevronRight /></button> : null}
+        {workforcePages.has("leave") ? <button onClick={onLeave}><i><CalendarDays /></i><span><strong>Leave</strong><small>Apply for leave and check requests</small></span><ChevronRight /></button> : null}
+        <button onClick={onProfile}><i><UserRound /></i><span><strong>My People profile</strong><small>Employment and personal details</small></span><ChevronRight /></button>
       </div>
     </section> : null}
 

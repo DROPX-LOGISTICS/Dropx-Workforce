@@ -139,6 +139,7 @@ export const workforceNavItems: NavItem[] = [
       { code: "workforce_rate_cards", label: "Rate Cards", href: "/delivery-network/rate-cards" }
     ]
   },
+  { code: "delivery_associates", label: "Need Attention", href: "/delivery-network/attention", icon: "!" },
   {
     code: "workforce_earnings",
     label: "3. Earnings & Payment Runs",

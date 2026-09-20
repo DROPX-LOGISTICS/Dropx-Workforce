@@ -459,7 +459,7 @@ export function ConnectLoginFlow() {
       {notice ? <div className="dx-alert success">{notice}<button onClick={() => setNotice("")}><X /></button></div> : null}
       {error ? <div className="dx-alert error">{error}<button onClick={() => setError("")}><X /></button></div> : null}
       {step === "accounts" ? <section className="dx-accounts"><h1>Choose account</h1>{accounts.map((row) => <button key={accountKey(row)} onClick={() => choose(row)}><i>{row.profilePhotoUrl ? <img alt="" src={row.profilePhotoUrl} /> : <UsersRound />}</i><span><strong>{row.companyName}</strong><em>{row.name || row.reference}</em><small>{row.reference} {row.biometricId ? ` | ${row.biometricId}` : ""}</small></span><ChevronRight /></button>)}</section> : null}
-      {step === "dashboard" && account ? <ConnectDashboard account={account} onAttendance={() => open("attendance")} onProfile={() => open("profile")} /> : null}
+      {step === "dashboard" && account ? <ConnectDashboard account={account} onAttendance={() => open("attendance")} onConnect={() => open("connect")} onPayments={() => open("payments")} onProfile={() => open("profile")} onRoster={() => open("roster")} /> : null}
       {step === "payments" && account ? <ConnectWorkforceSelfService account={account} view="payments" /> : null}
       {step === "advances" && account ? <ConnectWorkforceSelfService account={account} view="advances" /> : null}
       {step === "profile" && account ? <ConnectProfileApp account={account} onExit={() => open("exit")} onPhoto={(url) => setAvatar(url)} onSubmitted={profileSubmitted} /> : null}

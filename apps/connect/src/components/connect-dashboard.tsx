@@ -2,10 +2,12 @@
 
 import {
   AlertTriangle,
+  BadgeIndianRupee,
   CalendarClock,
   ChevronRight,
   Clock3,
   Fingerprint,
+  CircleHelp,
   LogIn,
   LogOut,
   PersonStanding,
@@ -114,11 +116,17 @@ function Metric({
 export function ConnectDashboard({
   account,
   onAttendance,
-  onProfile
+  onProfile,
+  onPayments,
+  onRoster,
+  onConnect
 }: {
   account: AppAccount;
   onAttendance: () => void;
   onProfile: () => void;
+  onPayments: () => void;
+  onRoster: () => void;
+  onConnect: () => void;
 }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [attendance, setAttendance] = useState<Attendance | null>(null);
@@ -220,6 +228,8 @@ export function ConnectDashboard({
   const firstName = (account.name || account.reference || "there").trim().split(/\s+/)[0];
   const profileStatus = profile.status || account.status || "active";
   const attendanceAllowed = (account.pageAccess ?? ["dashboard", "attendance", "settings"]).includes("attendance");
+  const workforcePages = new Set(account.pageAccess ?? ["dashboard", "payments", "advances"]);
+  const workforceAccount = account.profileType !== "employee" && account.profileType !== "user";
 
   return <section className="dx-dashboard">
     <header className="dx-dashboard-greeting">
@@ -274,6 +284,15 @@ export function ConnectDashboard({
         />
         <ChevronRight />
       </button>
+    </section> : null}
+
+    {workforceAccount ? <section className="dx-dashboard-card dx-workforce-home-actions">
+      <header><div><small>WORKFORCE HOME</small><h2>Today&apos;s essentials</h2></div></header>
+      <div>
+        {workforcePages.has("payments") ? <button onClick={onPayments}><i><BadgeIndianRupee /></i><span><strong>My earnings</strong><small>Payments, advances and published amounts</small></span><ChevronRight /></button> : null}
+        {workforcePages.has("roster") ? <button onClick={onRoster}><i><CalendarClock /></i><span><strong>Work &amp; roster</strong><small>Assigned shifts and upcoming work</small></span><ChevronRight /></button> : null}
+        {workforcePages.has("connect") ? <button onClick={onConnect}><i><CircleHelp /></i><span><strong>Need support?</strong><small>Raise a payment, ID, route or document request</small></span><ChevronRight /></button> : null}
+      </div>
     </section> : null}
 
     <button className="dx-dashboard-profile" onClick={onProfile}>

@@ -119,19 +119,19 @@ export const workforceNavItems: NavItem[] = [
   { code: "delivery_associates", label: "Workforce Dashboard", href: "/delivery-network", icon: "WR" },
   {
     code: "delivery_associates",
-    label: "Workforce Operations",
+    label: "1. Setup & Workforce",
     icon: "DA",
     children: [
       { code: "delivery_associates", label: "Workforce Register", href: "/delivery-network/associates" },
       { code: "delivery_associates", label: "Onboard Workforce", href: "/delivery-network/onboarding" },
       { code: "people_review", label: "Activation & Lifecycle", href: "/delivery-network/lifecycle" },
       { code: "workforce_activity", label: "Attendance & Activity", href: "/delivery-network/activity" },
-      { code: "workforce_activity", label: "Associate Rostering", href: "/delivery-network/associate-rostering" }
+      { code: "workforce_activity", label: "Roster & Route Planning", href: "/delivery-network/associate-rostering" }
     ]
   },
   {
     code: "provider_mapping",
-    label: "IDs & Pay Setup",
+    label: "2. IDs, Mapping & Rates",
     icon: "ID",
     children: [
       { code: "executive_id_onboarding", label: "Provider ID Onboarding", href: "/delivery-network/id-onboarding" },
@@ -141,14 +141,24 @@ export const workforceNavItems: NavItem[] = [
   },
   {
     code: "workforce_earnings",
-    label: "Earnings & Payroll",
+    label: "3. Earnings & Payment Runs",
     icon: "₹",
     children: [
       { code: "workforce_earnings", label: "Live Earnings", href: "/delivery-network/earnings" },
       { code: "workforce_incentives", label: "Incentives", href: "/delivery-network/incentives" },
       { code: "workforce_adjustments", label: "Ad hoc Adjustments", href: "/delivery-network/adjustments" },
-      { code: "workforce_payroll", label: "Payroll Runs", href: "/delivery-network/payroll" },
-      { code: "workforce_earnings", label: "Reports", href: "/delivery-network/reports" }
+      { code: "workforce_payroll", label: "Payroll Runs", href: "/delivery-network/payroll" }
+    ]
+  },
+  {
+    code: "workforce_earnings",
+    label: "4. Reports",
+    icon: "RP",
+    children: [
+      { code: "workforce_earnings", label: "Workforce Reports", href: "/delivery-network/reports" },
+      { code: "workforce_earnings", label: "Daily Earnings", href: "/delivery-network/reports?report=earnings" },
+      { code: "workforce_earnings", label: "Payment Register", href: "/delivery-network/reports?report=payments" },
+      { code: "workforce_earnings", label: "Mapping & Rate Exceptions", href: "/delivery-network/reports?report=exceptions" }
     ]
   },
   {
@@ -173,7 +183,7 @@ export const workforceNavItems: NavItem[] = [
   },
   {
     code: "designations",
-    label: "Workforce Master",
+    label: "5. Workforce Controls",
     icon: "WM",
     children: [
       { code: "workforce_categories", label: "Registration Policies", href: "/delivery-network/engagement-types" },

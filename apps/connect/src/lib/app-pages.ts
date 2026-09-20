@@ -4,7 +4,7 @@ export const employeeDefaultPageAccess = ["dashboard", "attendance", "leave"];
 export const workforceDefaultPageAccess = ["dashboard", "payments", "advances"];
 
 const employeePages = new Set(["dashboard", "attendance", "leave"]);
-const workforcePages = new Set(["dashboard", "payments", "advances", "attendance", "roster", "performance"]);
+const workforcePages = new Set(["dashboard", "payments", "advances", "attendance", "roster", "performance", "rate_card", "connect", "documents", "leave"]);
 
 export function defaultPageAccess(profileType: WorkforceProfileType | "user") {
   return profileType === "employee" ? employeeDefaultPageAccess : workforceDefaultPageAccess;

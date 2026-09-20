@@ -111,6 +111,56 @@ async function performance(companyId: string, workforceId: string) {
   }));
 }
 
+async function rateCard(companyId: string, workforceId: string) {
+  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+  const workforceResult = await supabaseAdmin.from("workforce")
+    .select("designation_id,location_id")
+    .eq("company_id", companyId)
+    .eq("id", workforceId)
+    .maybeSingle();
+  if (workforceResult.error || !workforceResult.data) throw new Error(workforceResult.error?.message ?? "Workforce profile is unavailable.");
+  const workforce = workforceResult.data;
+  const mappingResult = await supabaseAdmin.from("field_executive_provider_mappings")
+    .select("provider_id,station_id,effective_from,effective_to,status")
+    .eq("company_id", companyId)
+    .eq("workforce_id", workforceId)
+    .neq("status", "cancelled")
+    .order("effective_from", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (mappingResult.error) throw new Error(mappingResult.error.message);
+  const mapping = mappingResult.data;
+  if (!mapping?.provider_id) return [];
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+  const cardsResult = await supabaseAdmin.from("workforce_rate_cards")
+    .select("id,name,station_id,designation_id,pay_type,effective_from,effective_to,delivery_rate,return_rate,mfn_rate,mfn_return_rate,fuel_rate,fixed_amount,guarantee_amount,status,notes,provider:providers(name,code)")
+    .eq("company_id", companyId)
+    .eq("provider_id", mapping.provider_id)
+    .eq("status", "active")
+    .lte("effective_from", today)
+    .or(`effective_to.is.null,effective_to.gte.${today}`)
+    .order("effective_from", { ascending: false });
+  if (cardsResult.error) throw new Error(cardsResult.error.message);
+  const exact = (cardsResult.data ?? []).filter((card) => {
+    const row = card as Record<string, unknown>;
+    return (!row.station_id || row.station_id === mapping.station_id || row.station_id === workforce.location_id)
+      && (!row.designation_id || row.designation_id === workforce.designation_id);
+  });
+  return exact.map((card) => ({ ...card, stationId: mapping.station_id }));
+}
+
+async function connectRequests(companyId: string, workforceId: string) {
+  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+  const result = await supabaseAdmin.from("workforce_connect_requests")
+    .select("id,category,subject,detail,status,responder_note,resolved_at,created_at,updated_at")
+    .eq("company_id", companyId)
+    .eq("workforce_id", workforceId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (result.error) throw new Error(result.error.message);
+  return result.data ?? [];
+}
+
 export async function GET(request: NextRequest) {
   try {
     const worker = await resolveConnectWorkforceAccount({
@@ -119,17 +169,44 @@ export async function GET(request: NextRequest) {
     });
     if (worker.profileType !== "workforce") throw new Error("This page is available for Workforce accounts only.");
     const requestedView = request.nextUrl.searchParams.get("view") ?? "payments";
-    const view = ["payments", "advances", "roster", "performance"].includes(requestedView) ? requestedView : "payments";
+    const view = ["payments", "advances", "roster", "performance", "rate_card", "connect"].includes(requestedView) ? requestedView : "payments";
     const records = view === "advances"
       ? await advances(worker.companyId, worker.profileId)
       : view === "roster"
         ? await roster(worker.companyId, worker.profileId)
         : view === "performance"
           ? await performance(worker.companyId, worker.profileId)
+          : view === "rate_card"
+            ? await rateCard(worker.companyId, worker.profileId)
+            : view === "connect"
+              ? await connectRequests(worker.companyId, worker.profileId)
           : await payments(worker.companyId, worker.profileId);
     return NextResponse.json({ records, view });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load Workforce self service.";
+    return NextResponse.json({ error: message }, { status: message.includes("Login") ? 401 : 400 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    const body = await request.json();
+    const worker = await resolveConnectWorkforceAccount({ accountId: String(body.accountId ?? ""), profileType: String(body.profileType ?? "") });
+    if (worker.profileType !== "workforce") throw new Error("Connect is available for Workforce accounts only.");
+    const category = String(body.category ?? "").trim();
+    const subject = String(body.subject ?? "").trim();
+    const detail = String(body.detail ?? "").trim();
+    if (!["payment", "provider_id", "route_roster", "document", "other"].includes(category)) throw new Error("Choose a valid support category.");
+    if (subject.length < 3 || subject.length > 160) throw new Error("Enter a subject between 3 and 160 characters.");
+    if (detail.length < 10 || detail.length > 2000) throw new Error("Describe the issue in at least 10 characters.");
+    const result = await supabaseAdmin.from("workforce_connect_requests").insert({
+      company_id: worker.companyId, workforce_id: worker.profileId, category, subject, detail
+    }).select("id,category,subject,detail,status,responder_note,resolved_at,created_at,updated_at").single();
+    if (result.error) throw new Error(result.error.message);
+    return NextResponse.json({ ok: true, request: result.data });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to submit Connect request.";
     return NextResponse.json({ error: message }, { status: message.includes("Login") ? 401 : 400 });
   }
 }

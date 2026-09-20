@@ -1,17 +1,19 @@
 "use client";
 
-import { BadgeIndianRupee, BarChart3, CalendarDays, HandCoins } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { BadgeIndianRupee, BarChart3, CalendarDays, CircleHelp, HandCoins, BookOpenCheck } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { AppAccount } from "./connect-profile-app";
 
-type View = "payments" | "advances" | "roster" | "performance";
+type View = "payments" | "advances" | "roster" | "performance" | "rate_card" | "connect";
 type Payload = { records: Array<Record<string, any>>; error?: string };
 
 const labels: Record<View, { eyebrow: string; title: string }> = {
   payments: { eyebrow: "WORKFORCE PAY", title: "Payments" },
   advances: { eyebrow: "FINANCIAL SUPPORT", title: "Advances" },
   roster: { eyebrow: "WORK SCHEDULE", title: "Associate Rostering" },
-  performance: { eyebrow: "WORK SUMMARY", title: "Performance" }
+  performance: { eyebrow: "WORK SUMMARY", title: "Performance" },
+  rate_card: { eyebrow: "COMMERCIAL POLICY", title: "My Rate Card" },
+  connect: { eyebrow: "WORKFORCE CONNECT", title: "Get support" }
 };
 
 function money(value: unknown) {
@@ -32,6 +34,8 @@ function relation(value: unknown) {
 export function ConnectWorkforceSelfService({ account, view }: { account: AppAccount; view: View }) {
   const [payload, setPayload] = useState<Payload | null>(null);
   const [error, setError] = useState("");
+  const [sending, setSending] = useState(false);
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     setPayload(null);
@@ -52,7 +56,25 @@ export function ConnectWorkforceSelfService({ account, view }: { account: AppAcc
     net: sum.net + Number(row.net_amount ?? row.netAmount ?? 0)
   }), { shipments: 0, activities: 0, net: 0 }), [payload]);
 
-  const Icon = view === "payments" ? BadgeIndianRupee : view === "advances" ? HandCoins : view === "roster" ? CalendarDays : BarChart3;
+  const Icon = view === "payments" ? BadgeIndianRupee : view === "advances" ? HandCoins : view === "roster" ? CalendarDays : view === "performance" ? BarChart3 : view === "rate_card" ? BookOpenCheck : CircleHelp;
+
+  async function submitConnect(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSending(true); setError(""); setNotice("");
+    const form = new FormData(event.currentTarget);
+    try {
+      const response = await fetch("/api/connect/workforce-self-service", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ accountId: account.id, profileType: account.profileType, category: form.get("category"), subject: form.get("subject"), detail: form.get("detail") })
+      });
+      const next = await response.json();
+      if (!response.ok) throw new Error(next.error || "Unable to submit Connect request.");
+      event.currentTarget.reset();
+      setPayload((current) => current ? { ...current, records: [next.request, ...current.records] } : current);
+      setNotice("Request submitted. Operations will respond in this thread.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to submit Connect request."); }
+    finally { setSending(false); }
+  }
 
   return <section className="dx-workforce-self-service">
     <header className="dx-workforce-page-hero"><i><Icon /></i><div><small>{labels[view].eyebrow}</small><h1>{labels[view].title}</h1><p>{account.reference || account.name}</p></div></header>
@@ -73,6 +95,10 @@ export function ConnectWorkforceSelfService({ account, view }: { account: AppAcc
       <div className="dx-workforce-records">{payload.records.map((row) => <article key={row.id}><header><span><strong>{row.provider_name || "Work activity"}</strong><small>{date(row.work_date)}</small></span><em>{row.calculation_source?.replaceAll("_", " ")}</em></header><dl><div><dt>Shipments</dt><dd>{row.shipment_count}</dd></div><div><dt>Activities</dt><dd>{row.activity_count}</dd></div><div><dt>Published value</dt><dd>{money(row.net_amount)}</dd></div></dl></article>)}</div>
     </> : null}
 
-    {payload && !payload.records.length ? <div className="dx-workforce-empty"><Icon /><strong>No published {labels[view].title.toLowerCase()} yet</strong><small>This page will update when the responsible team publishes data for your account.</small></div> : null}
+    {payload && view === "rate_card" ? <div className="dx-workforce-records">{payload.records.map((row) => <article key={row.id}><header><span><strong>{row.name}</strong><small>{date(row.effective_from)} – {row.effective_to ? date(row.effective_to) : "Current"}</small></span><em>{String(row.pay_type).replaceAll("_", " ")}</em></header><dl><div><dt>Delivery / activity</dt><dd>{money(row.delivery_rate)}</dd></div><div><dt>Return</dt><dd>{money(row.return_rate)}</dd></div><div><dt>Fuel</dt><dd>{money(row.fuel_rate)}</dd></div><div><dt>Guarantee</dt><dd>{money(row.guarantee_amount || row.fixed_amount)}</dd></div></dl>{row.notes ? <p>{row.notes}</p> : null}</article>)}</div> : null}
+
+    {payload && view === "connect" ? <><form className="dx-workforce-connect-form" onSubmit={submitConnect}><label>What do you need help with?<select name="category" defaultValue="payment"><option value="payment">Payment or advance</option><option value="provider_id">Provider ID or mapping</option><option value="route_roster">Route or roster</option><option value="document">Document or profile</option><option value="other">Other</option></select></label><label>Subject<input name="subject" minLength={3} maxLength={160} placeholder="Briefly describe the issue" required /></label><label>Details<textarea name="detail" minLength={10} maxLength={2000} placeholder="Add the relevant date, provider ID, route or document details" required rows={4} /></label><button disabled={sending} type="submit">{sending ? "Submitting…" : "Submit request"}</button></form>{notice ? <div className="dx-alert success">{notice}</div> : null}<div className="dx-workforce-records">{payload.records.map((row) => <article key={row.id}><header><span><strong>{row.subject}</strong><small>{date(row.created_at)} · {String(row.category).replaceAll("_", " ")}</small></span><em className={row.status === "resolved" ? "paid" : ""}>{String(row.status).replaceAll("_", " ")}</em></header><p>{row.detail}</p>{row.responder_note ? <p><strong>Operations:</strong> {row.responder_note}</p> : null}</article>)}</div></> : null}
+
+    {payload && !payload.records.length && view !== "connect" ? <div className="dx-workforce-empty"><Icon /><strong>No published {labels[view].title.toLowerCase()} yet</strong><small>This page will update when the responsible team publishes data for your account.</small></div> : null}
   </section>;
 }

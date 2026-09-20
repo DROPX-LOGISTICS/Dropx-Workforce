@@ -5,7 +5,9 @@ import {
   ArrowLeft,
   BarChart3,
   Bell,
+  BookOpenCheck,
   CalendarDays,
+  CircleHelp,
   ChevronRight,
   Fingerprint,
   Gauge,
@@ -27,6 +29,10 @@ function PageIcon({ page }: { page: string }) {
   if (page === "attendance") return <Fingerprint />;
   if (page === "roster") return <CalendarDays />;
   if (page === "performance") return <BarChart3 />;
+  if (page === "rate_card") return <BookOpenCheck />;
+  if (page === "connect") return <CircleHelp />;
+  if (page === "documents") return <UserRound />;
+  if (page === "leave") return <CalendarDays />;
   return <Gauge />;
 }
 
@@ -43,6 +49,10 @@ function AppPagePreview({ accountName, accountStatus, page, scopeLabel }: { acco
     {page === "attendance" ? <article className="feature"><Fingerprint /><div><strong>Attendance</strong><span>Today’s attendance and verified punch information appear here.</span></div></article> : null}
     {page === "roster" ? <article className="feature"><CalendarDays /><div><strong>Associate Rostering</strong><span>Current shift assignment is sourced from the Workforce roster.</span></div></article> : null}
     {page === "performance" ? <article className="feature"><BarChart3 /><div><strong>Performance</strong><span>Designation-relevant performance cards appear here when data is available.</span></div></article> : null}
+    {page === "rate_card" ? <article className="feature"><BookOpenCheck /><div><strong>My Rate Card</strong><span>See the currently assigned rate card, earning components and effective date for this designation.</span></div></article> : null}
+    {page === "connect" ? <article className="feature"><CircleHelp /><div><strong>Connect</strong><span>Raise an operations, payment, route or document issue and follow its response in one place.</span></div></article> : null}
+    {page === "documents" ? <article className="feature"><UserRound /><div><strong>Documents</strong><span>Keep insurance, vehicle records, bank proof and tax documents such as Form 16 together.</span></div></article> : null}
+    {page === "leave" ? <article className="feature"><CalendarDays /><div><strong>Leave</strong><span>Request leave and see its approval status. Shift swaps remain policy-controlled and can be enabled later.</span></div></article> : null}
     {page === "profile" ? <div className="profile-actions"><article><UserRound /><div><strong>Profile details</strong><span>View registered identity and documents</span></div><ChevronRight /></article><article><BadgeIndianRupee /><div><strong>Workforce self-guide</strong><span>Understand enabled menus and account actions</span></div><ChevronRight /></article><article><CalendarDays /><div><strong>Resignation &amp; exit</strong><span>Reason, message and 14-day default last working day</span></div><ChevronRight /></article></div> : null}
     {page === "settings" ? <div className="profile-actions"><article><Bell /><div><strong>Notifications</strong><span>Manage DropX One alerts</span></div><ChevronRight /></article><article><Settings /><div><strong>Account settings</strong><span>Personal app preferences</span></div><ChevronRight /></article></div> : null}
     <p>This is a read-only experience preview. No request or transaction can be submitted here.</p>

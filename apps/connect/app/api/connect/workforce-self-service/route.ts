@@ -14,3 +14,17 @@ export async function GET(request: NextRequest) {
     headers: { "content-type": response.headers.get("content-type") ?? "application/json" }
   });
 }
+
+export async function POST(request: NextRequest) {
+  const target = new URL("/api/connect/workforce-self-service", workforceUrl);
+  const response = await fetch(target, {
+    method: "POST",
+    cache: "no-store",
+    headers: { cookie: request.headers.get("cookie") ?? "", "content-type": "application/json" },
+    body: await request.text()
+  });
+  return new NextResponse(await response.text(), {
+    status: response.status,
+    headers: { "content-type": response.headers.get("content-type") ?? "application/json" }
+  });
+}

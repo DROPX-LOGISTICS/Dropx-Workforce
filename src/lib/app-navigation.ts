@@ -168,6 +168,7 @@ export const workforceNavItems: NavItem[] = [
     icon: "CM",
     children: [
       { code: "workforce_communications", label: "Communication Center", href: "/delivery-network/communications" },
+      { code: "workforce_communications", label: "Connect Requests", href: "/delivery-network/connect" },
       { code: "workforce_communications_app", label: "DropX One Notifications", href: "/delivery-network/communications/dropx-one" },
       { code: "workforce_communications_whatsapp", label: "WhatsApp", href: "/delivery-network/communications/whatsapp" },
       { code: "workforce_communications_history", label: "Communication History", href: "/delivery-network/communications/history" }

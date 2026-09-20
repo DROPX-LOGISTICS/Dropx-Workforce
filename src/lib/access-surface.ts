@@ -84,6 +84,7 @@ const sharedPageCodes = new Set([
 ]);
 
 export const workforceAccessPageCodes = [
+  "amazon_connector",
   "delivery_associates",
   "vendors",
   "workers",

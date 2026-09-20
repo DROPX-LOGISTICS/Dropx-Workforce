@@ -28,6 +28,7 @@ const canonicalDestructivePattern = new RegExp(
 );
 
 const checks = [
+  [middleware.includes('"/settings/amazon-onboarding"') && workforceNavigation.includes('"/settings/amazon-onboarding"'), "Workforce Amazon Connection must be reachable from both navigation and the host route allowlist."],
   [migration.trimStart().startsWith("begin;") && migration.trimEnd().endsWith("commit;"), "Migration must be transactional."],
   [!destructivePattern.test(migration), "Migration must not mutate employee, contractor, Workforce, registration-link, or payment workflow tables."],
   [!/@[a-z0-9.-]+\.[a-z]{2,}/i.test(migration) && !migration.includes("configured_owners"), "Product owners must be assigned from the Super Admin Dashboard, never hardcoded in SQL."],

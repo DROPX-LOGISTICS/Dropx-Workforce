@@ -3,6 +3,7 @@ import { ArrowRight, Fingerprint, History, ShieldCheck, UserRoundPlus } from "lu
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import { SubmitButton } from "@/components/submit-button";
+import { WorkforceAmazonObservation } from "@/components/workforce-amazon-observation";
 import { hasPermission, requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -90,6 +91,7 @@ export default async function JoiningPage({searchParams:params={}}:{searchParams
           <footer>{page>1 ? <Link href={url(params,{page:String(page-1),person:undefined})}>← Previous</Link>:<span/>}{page<pages ? <Link href={url(params,{page:String(page+1),person:undefined})}>Next →</Link>:null}</footer>
         </section>
         {selected ? <div className={styles.detail} key={selected.person.id}>
+          <WorkforceAmazonObservation company={requireCompanyId(auth)} person={selected.person.id} profileId={plan?.provider_profile_id ?? null}/>
           <section className={styles.card}><header><div><small>{selected.person.designation} · {stations.get(selected.person.location_id)}</small><h2>{selected.person.full_name}</h2><p>{selected.person.dropx_id || "ID reserved"} · Biometric {selected.person.biometric_id || "not enrolled"}</p></div><span className={styles.badge}>{joiningStages[selected.state.stage]}</span></header>
             <div className={styles.facts}><div>First training arrival<strong>{plan?.mode==="training" ? selected.state.firstPunch || "Awaiting valid punch" : "No training plan"}</strong></div><div>Regular-pay boundary<strong>{selected.state.mapping?.effective_from || "Provider mapping pending"}</strong></div><div>Eligible training days<strong>{entitlements.filter(row=>!row.holds.length).length}</strong></div><div>Training estimate<strong>{money(entitlements.filter(row=>!row.holds.length).reduce((sum,row)=>sum+row.amount,0))}</strong></div></div>
             <div className={styles.links}>{hasPermission(auth,"people_review","access") ? <Link href="/delivery-network/lifecycle">Registration approval / exit</Link>:null}{hasPermission(auth,"provider_mapping","access") ? <Link href="/delivery-network/rate-mapping">Map provider ID & rate</Link>:null}{hasPermission(auth,"workforce_earnings","access") ? <Link href={`/delivery-network/earnings?q=${encodeURIComponent(selected.person.dropx_id || selected.person.full_name)}`}>Earnings & holds</Link>:null}</div>

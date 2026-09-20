@@ -10,6 +10,7 @@ test("single legal name is retained; invitation can repeat it without inventing 
 test("canonical attendance identity overrides a conflicting legacy alias",()=>assert.equal(belongsToPerson({workforce_id:"other",field_executive_id:"legacy"},person),false));
 const entitlement=(changes={},attendance=[day()],maps=[])=>trainingEntitlements({...person,...changes.person},{...plan,...changes.plan},maps,attendance,"2026-08-01","2026-08-31");
 test("approved first biometric arrival starts training without an extra Ops click",()=>assert.equal(joiningState(person,plan,[],[day()],"2026-08-01").stage,"training"));
+test("existing active associates are not relabelled as awaiting arrival when mapping is missing",()=>assert.equal(joiningState({...person,is_active:true,onboarding_status:"active",lifecycle_status:"active"},null,[],[],"2026-08-01").stage,"active"));
 test("unapproved profiles remain applicants and never earn training",()=>{assert.equal(joiningState({...person,onboarding_status:"under_review"},plan,[],[day()],"2026-08-01").stage,"applicant");assert.equal(entitlement({person:{onboarding_status:"under_review",onboarding_approved_at:null}}).length,0);});
 test("two complete distinct days unlock an invitation task, not two punches",()=>{
   assert.equal(providerInvitationEligibility(person,plan,[],[day()],"2026-08-01").eligible,false);

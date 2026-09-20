@@ -94,6 +94,9 @@ export function joiningState(person: JoiningPerson, plan: JoiningPlan | null, ma
   if (["inactive", "offboarded", "exited", "terminated", "resigned", "settled"].includes(person.lifecycle_status || "") || person.last_working_date && person.last_working_date < today) stage = "offboarded";
   else if (["rejected", "cancelled"].includes(person.onboarding_status || "") || plan?.closed_on) stage = "closed";
   else if (!isJoiningApproved(person)) stage = "applicant";
+  // Existing approved active profiles retain their operational state; missing
+  // provider mapping is a separate readiness issue, not a new arrival.
+  else if (person.is_active) stage = "active";
   else if (mapping && mapping.effective_from <= today) {
     const currentMapping = mappings.some(row => belongsToPerson(row, person) && row.status !== "cancelled" && row.effective_from <= today && (!row.effective_to || row.effective_to >= today));
     stage = currentMapping ? (firstRegularDay || person.is_active ? "active" : "ready") : "awaiting_activation";

@@ -78,7 +78,7 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
   }, [mobileOpen]);
 
   return (
-    <div className="workforce-product">
+    <div className="workforce-product workforce-people-inspired">
       <EventLogTracker />
 
       {mobileOpen ? (

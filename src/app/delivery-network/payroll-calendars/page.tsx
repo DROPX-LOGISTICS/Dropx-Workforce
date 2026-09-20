@@ -9,7 +9,7 @@ import {readAllRows} from '@/lib/supabase-pagination';
 import {savePayrollCalendar} from './actions';
 import styles from '../joining/page.module.css';
 export const dynamic='force-dynamic';
-export default async function PayrollCalendars({searchParams:params={}}:{searchParams?:{notice?:string;error?:string}}){
+export default async function PayrollCalendars({searchParams:params={}}:{searchParams?:{station?:string;notice?:string;error?:string}}){
   const auth=await requirePagePermission('workforce_payroll','access'),company=requireCompanyId(auth);
   if(!supabaseAdmin) return <AppShell active="Payroll Calendars" pageCode="workforce_payroll"><p role="alert">Database is unavailable.</p></AppShell>;
   let query=supabaseAdmin.from('stations').select('id,station_code').eq('company_id',company).order('station_code');
@@ -20,7 +20,7 @@ export default async function PayrollCalendars({searchParams:params={}}:{searchP
   return <AppShell active="Payroll Calendars" pageCode="workforce_payroll"><div className={styles.desk}><PageHead eyebrow="Station configuration" title="Payroll calendars" subtitle="Daily, weekly, rolling 15-day, monthly or custom periods. This controls the pay period—not the earning rate, attendance or Finance approval." action={<Link href="/delivery-network/payroll" className="button secondary">Payroll runs →</Link>}/>
     {error || params.notice ? <p role="status" className={`${styles.message} ${error ? styles.error:''}`}>{error || params.notice}</p>:null}
     {canEdit ? <section className={styles.card}><header><h3>Create an approved calendar</h3></header><form action={savePayrollCalendar} className={styles.plan}><div className={styles.fields}>
-      <label>Station<select name="station_id" required defaultValue=""><option value="">Choose station</option>{(stations.data ?? []).map(row=><option key={row.id} value={row.id}>{row.station_code}</option>)}</select></label>
+      <label>Station<select name="station_id" required defaultValue={names.has(params.station??'')?params.station:''}><option value="">Choose station</option>{(stations.data ?? []).map(row=><option key={row.id} value={row.id}>{row.station_code}</option>)}</select></label>
       <label>Name / version<input name="name" required minLength={3} maxLength={120}/></label>
       <label>Frequency<select name="cadence" required defaultValue="weekly"><option value="daily">Daily</option><option value="weekly">Weekly · 7 days</option><option value="fifteen_days">Every 15 days</option><option value="monthly">Calendar month</option><option value="custom">Custom number of days</option></select></label>
       <label>First period starts<input name="anchor_date" required type="date"/><small>For monthly, select the first day of the month.</small></label>

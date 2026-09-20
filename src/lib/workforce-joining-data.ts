@@ -19,7 +19,7 @@ export async function loadWorkforceJoining(authorization: AuthorizationContext, 
     readAllRows(db.from("workforce_joining_plans").select("*").eq("company_id",company).order("workforce_id")),
     readAllRows(db.from("field_executive_provider_mappings").select("id,workforce_id,field_executive_id,contractor_id,employee_id,provider_id,provider_member_id,station_id,effective_from,effective_to,status")
       .eq("company_id",company).neq("status","cancelled").order("effective_from").order("id")),
-    readAllRows(db.from("stations").select("id,station_code").eq("company_id",company).order("id")),
+    readAllRows(db.from("stations").select("id,station_code").eq("company_id",company).order("station_code").order("id")),
     workforceClassification(company),
     readAllRows(db.from("workforce_training_policies").select("id,station_id,name,daily_rate,minimum_minutes,policy_reference,effective_from,effective_to,is_active").eq("company_id",company).order("id"))
   ]);

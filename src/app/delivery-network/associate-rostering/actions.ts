@@ -46,7 +46,7 @@ export async function saveWorkforceOperatingSchedule(form: FormData) {
       p_actor: authorization.userId,
       p_workforce: String(form.get("workforce_id") ?? ""),
       p_replaces: String(form.get("replaces") ?? "").trim() || null,
-      p_pincode: String(form.get("operating_pincode") ?? "").replace(/\D/g, ""),
+      p_pincode: String(form.get("operating_pincode") ?? "").trim(),
       p_weekly_off_day: Number(form.get("weekly_off_day")),
       p_from: from,
       p_to: String(form.get("effective_to") ?? "") || null,

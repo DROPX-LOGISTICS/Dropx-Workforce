@@ -13,7 +13,7 @@ import { SidebarNav } from "@/components/sidebar-nav";
 import { UserMenu } from "@/components/user-menu";
 import { WorkforceProductFrame } from "@/components/workforce-product-frame";
 import { redirect } from "next/navigation";
-import { getAuthorization, hasPermission } from "@/lib/authorization";
+import { getAuthorization, hasPermission, isCompanyOwner } from "@/lib/authorization";
 import { navItems, workforceNavItems } from "@/lib/app-navigation";
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadCodLocations } from "@/lib/ops-pulse/cod";
@@ -52,7 +52,8 @@ export async function AppShell({ children, active, pageCode }: { children: React
   const visibleNavItems = shellNavItems
     .map((item) => item.children?.length ? {
       ...item,
-      children: item.children.filter((child) => !child.code || hasPermission(authorization, child.code, "access"))
+      children: item.children.filter((child) => (!child.code || hasPermission(authorization, child.code, "access"))
+        && (!['/delivery-network/setup','/settings/amazon-onboarding'].includes(child.href??'') || isCompanyOwner(authorization)))
     } : item)
     .filter((item) => item.children?.length ? item.children.length > 0 : hasPermission(authorization, item.code, "access"));
   const inboxNotificationsEnabled = !authorization.isPreview && !isWorkforceHost && hasPermission(authorization, "inbox", "access");

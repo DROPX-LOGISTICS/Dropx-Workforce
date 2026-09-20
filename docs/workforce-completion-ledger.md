@@ -25,9 +25,9 @@
 | Approved station losses | Live Workforce d3f6133 + Ops 5836d06b; migration 20260920212000 applied through GitHub. Browser checked Ops menu, form, empty history and pending filter. SQL tests cover duplicate references, independent approval, immutable claim terms, posting dates, single payroll deduction and stale-snapshot gates. No real claim submitted |
 | Exit settlement reconciliation | Live 6fee9ec; migration 20260920211000 applied. Paid individual Finance evidence and frozen payroll totals gate canonical exits; no manual paid/waived bypass. Isolated SQL and calculation tests pass. Live exit queue has no cases, so no real exit was completed as a test |
 | Unified unpaid ledger / zero-value exit | Pending: all-history coverage, no-payroll exits and arrears after an already-paid final snapshot are not fully implemented |
-| Recruit Workforce Plan | Live 8476d2f; navigation, actual applicant separation and Training filter browser checked. Latest blank-alias hardening 0da8b19 tested locally (456 tests + build) and pushed; deployment still requires confirmation |
+| Recruit Workforce Plan | Live 8476d2f and 0da8b19; navigation, actual applicant separation and Training filter browser checked. Blank-alias hardening passed 456 tests + typecheck/build; production alias and SHA verified |
 | DropX One operating schedule | Live 609095d5. Work navigation no longer redirects to login; per-day pincode, non-shift next operating day and timezone-safe week boundaries have isolated tests. Live account has no assigned schedule; no pincode or week-off invented for testing |
-| Owner station setup checklist / versioned schedules | This release: owner checklist, canonical designation precedence, searchable roster, explicit dated replacement and actor/time history. 69 unit tests, SQL schedule suite, typecheck and 183-route build passed. Verify deployment and migration 20260920213500 before calling live |
+| Owner station setup checklist / versioned schedules | Live bb729fe/67ebfcb: owner checklist, canonical designation precedence, searchable roster, explicit dated replacement and actor/time history. 69 unit tests, SQL schedule suite, typecheck and 183-route build passed; two migration-read retry tests passed. Migration 20260920213500 applied through GitHub after a transient network failure. Production SHA/alias, checklist search, schedule controls/history and active-person search verified. No real schedule submitted |
 | Entire Workforce UI and role/mobile acceptance matrix | Pending full pass |
 
 Prior production audit has existing People projection drift and unassigned payment-approval routes. Do not invent approvers, silently repair unrelated records, or suppress this audit.
@@ -40,6 +40,9 @@ Prior production audit has existing People projection drift and unassigned payme
 - End-to-end associate refer-and-earn, unified referral intake and approved retention rewards are not shipped.
 - Provider-authorised daily cover / buffer-ID allocation and double-pay prevention are not shipped.
 - Full mobile and scoped-role acceptance remains incomplete; destructive/payment paths are tested with isolated synthetic fixtures, not real payments or account changes.
+- Automated onboarding follow-up delivery still needs live acceptance; a tracked task is not proof that WhatsApp/email was delivered.
 - The production designation audit currently reports five People source-projection drifts and 53 missing payment-approval routes. Schema apply succeeded even when that separate audit made the workflow red.
 
 Completion means code tested, source committed, production deployment SHA matched, database migration verified and authenticated UI/API/data boundary checked. A build or health endpoint alone does not prove the full business flow.
+
+Latest usability follow-up: station masters sorted by code, station context carried into training/calendar forms, owner-only setup/connection links hidden from other roles, and pincode validation no longer silently strips invalid characters. Local typecheck, full prebuild and application build passed before release; verify the follow-up deployment and selected-station defaults separately.

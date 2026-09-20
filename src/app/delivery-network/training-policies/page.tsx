@@ -11,7 +11,7 @@ import { saveTrainingPolicy } from "./actions";
 import styles from "../joining/page.module.css";
 
 export const dynamic="force-dynamic";
-export default async function TrainingPolicies({searchParams:params={}}:{searchParams?:{notice?:string;error?:string}}) {
+export default async function TrainingPolicies({searchParams:params={}}:{searchParams?:{station?:string;notice?:string;error?:string}}) {
   const auth=await requirePagePermission("people_review","access");
   const company=requireCompanyId(auth);
   if(!supabaseAdmin) return <AppShell active="Training Policies" pageCode="people_review"><p>Database is unavailable.</p></AppShell>;
@@ -27,7 +27,7 @@ export default async function TrainingPolicies({searchParams:params={}}:{searchP
     <PageHead eyebrow="Workforce configuration" title="Training policy master" subtitle="Configure approved rates and attendance requirements by station. No default pay or duration is assumed." action={<Link className="button secondary compact" href="/delivery-network/joining">Select associate & policy →</Link>}/>
     {error || params.notice ? <div role="status" className={`${styles.message} ${error ? styles.error:""}`}>{error || params.notice}</div>:null}
     {canEdit ? <section className={styles.card}><header><div><h3>Create an approved policy</h3><p>Policies are immutable. Create a new version and retire the old one when terms change; existing joining agreements retain their saved terms.</p></div></header><form action={saveTrainingPolicy} className={styles.plan}><div className={styles.fields}>
-      <label>Station<select name="station_id" required defaultValue=""><option value="">Choose station</option>{stations.map(row=><option value={row.id} key={row.id}>{row.station_code}</option>)}</select></label>
+      <label>Station<select name="station_id" required defaultValue={stations.some(row=>row.id===params.station)?params.station:''}><option value="">Choose station</option>{stations.map(row=><option value={row.id} key={row.id}>{row.station_code}</option>)}</select></label>
       <label>Policy name / version<input name="name" required minLength={3} maxLength={120} placeholder="e.g. Associate training · v1"/></label>
       <label>Agreed daily amount (₹)<input name="daily_rate" required type="number" min="0.01" step="0.01"/></label>
       <label>Minimum eligible attendance (minutes)<input name="minimum_minutes" required type="number" min="1" max="1440" step="1"/></label>

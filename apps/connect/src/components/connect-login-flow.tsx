@@ -90,15 +90,15 @@ export function ConnectLoginFlow() {
 
   function route(rows: AppAccount[]) {
     // A selector is only useful to the small group that genuinely has more
-    // than one operational role. Everyone else lands directly in their app.
-    const operationalAccounts = rows.filter((row) => row.profileType !== "user");
-    const filtered = operationalAccounts.length ? operationalAccounts : rows;
-    const serverDefault = filtered.find((row) => row.isDefault);
+    // than one role. Keep People records alongside Workforce records: a
+    // dual-role user must be able to open either workspace after sign-in.
+    const selectableAccounts = rows;
+    const serverDefault = selectableAccounts.find((row) => row.isDefault);
     const saved = serverDefault ? accountKey(serverDefault) : "";
     if (saved) localStorage.setItem(defaultKeyName, saved);
     else localStorage.removeItem(defaultKeyName);
-    const selected = serverDefault ?? (filtered.length === 1 ? filtered[0] : null);
-    setAccounts(filtered); setDefaultKey(saved); setAccount(selected); setAvatar(selected?.profilePhotoUrl || "");
+    const selected = serverDefault ?? (selectableAccounts.length === 1 ? selectableAccounts[0] : null);
+    setAccounts(selectableAccounts); setDefaultKey(saved); setAccount(selected); setAvatar(selected?.profilePhotoUrl || "");
     setStep(selected ? landingPage(selected) : "accounts");
   }
   useEffect(() => {
@@ -407,9 +407,7 @@ export function ConnectLoginFlow() {
     const response = await fetch("/api/connect/auth/session", { cache: "no-store" });
     const payload = await response.json();
     if (!response.ok || !payload.authenticated) return;
-    const allRows = payload.accounts ?? [];
-    const operationalRows = allRows.filter((row: AppAccount) => row.profileType !== "user");
-    const rows = operationalRows.length ? operationalRows : allRows;
+    const rows = payload.accounts ?? [];
     const refreshed = rows.find((row: AppAccount) => account && accountKey(row) === accountKey(account)) ?? null;
     setAccounts(rows);
     setAccount(refreshed);

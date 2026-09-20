@@ -21889,6 +21889,20 @@ td strong,
 .workforce-product.workforce-people-inspired .page-head h1 { font-size:clamp(30px,2.4vw,38px); font-weight:720; }
 .workforce-product.workforce-people-inspired .page-head .subtle { font-size:13.5px; }
 
+/* Keep financial task headers readable and compact in the light Workforce shell. */
+.workforce-product.workforce-people-inspired .wf-finance-hero { align-items:center; padding:22px 24px; gap:20px; border-color:#e1e7ef; border-radius:14px; background:#fff; color:#223149; box-shadow:0 1px 2px rgba(26,38,61,.035); }
+.workforce-product.workforce-people-inspired .wf-finance-hero::after { display:none; }
+.workforce-product.workforce-people-inspired .wf-finance-hero h1 { color:#223149; font-size:clamp(24px,2.3vw,32px); line-height:1.15; letter-spacing:-.035em; }
+.workforce-product.workforce-people-inspired .wf-finance-hero p { color:#5b6d83; }
+.workforce-product.workforce-people-inspired .wf-finance-hero > div:first-child > span { color:#a54323; }
+.workforce-product.workforce-people-inspired .wf-finance-hero :is(.wf-command-primary,.wf-command-secondary) { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:42px; padding:10px 14px; border:1px solid #dbe2eb; border-radius:9px; font-size:12px; font-weight:650; line-height:1.4; text-align:center; }
+.workforce-product.workforce-people-inspired .wf-finance-hero .wf-command-primary { background:#dd502a; color:#fff; border-color:#dd502a; }
+.workforce-product.workforce-people-inspired .wf-finance-hero .wf-command-secondary { background:#fff; color:#34465e; }
+.workforce-product.workforce-people-inspired .wf-finance-hero .wf-live-refresh { background:#f6f8fb; border-color:#dbe2eb; color:#34465e; }
+.workforce-product.workforce-people-inspired .wf-finance-hero .wf-source-freshness { color:#27634c; }
+.workforce-product.workforce-people-inspired .wf-finance-hero :is(a,button):focus-visible { outline:3px solid #e4a477; outline-offset:3px; }
+@media(max-width:760px) { .workforce-product.workforce-people-inspired .wf-finance-hero { align-items:stretch; padding:20px; } .workforce-product.workforce-people-inspired .wf-finance-hero .wf-finance-actions { justify-content:flex-start; } }
+
 .workforce-product.workforce-people-inspired .panel,
 .workforce-product.workforce-people-inspired .card,
 .workforce-product.workforce-people-inspired .wf-command-panel,

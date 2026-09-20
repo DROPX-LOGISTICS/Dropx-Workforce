@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { AppAccount } from "./connect-profile-app";
+import { isWorkforceWorkspace } from "../lib/connect-workspace";
 
 type Profile = {
   editable: Record<string, string>;
@@ -141,7 +142,7 @@ export function ConnectDashboard({
     setProfile(null);
     setAttendance(null);
     setError("");
-    const executive = account.profileType !== "employee" && account.profileType !== "user";
+    const executive = isWorkforceWorkspace(account);
     const profileUrl = executive
       ? `/api/connect/field-executive-profile?executiveId=${encodeURIComponent(account.id)}&profileType=${encodeURIComponent(account.profileType)}`
       : `/api/connect/profile?employeeId=${encodeURIComponent(account.id)}${account.profileType === "user" ? "&profileType=user" : ""}`;
@@ -240,7 +241,7 @@ export function ConnectDashboard({
   const profileStatus = profile.status || account.status || "active";
   const attendanceAllowed = (account.pageAccess ?? ["dashboard", "attendance", "settings"]).includes("attendance");
   const workforcePages = new Set(account.pageAccess ?? ["dashboard", "payments", "advances"]);
-  const workforceAccount = account.profileType !== "employee" && account.profileType !== "user";
+  const workforceAccount = isWorkforceWorkspace(account);
 
   return <section className="dx-dashboard">
     <header className="dx-dashboard-greeting">

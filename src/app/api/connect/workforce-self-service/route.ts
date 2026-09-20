@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { loadWorkforceEarnings, workforceToday } from "@/lib/workforce-earnings";
+import type { AuthorizationContext } from "@/lib/authorization";
 import { resolveConnectWorkforceAccount } from "@/lib/connect-workforce-account";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
@@ -100,7 +102,7 @@ async function performance(companyId: string, workforceId: string) {
     .order("work_date", { ascending: false })
     .limit(90);
   if (result.error) throw new Error(result.error.message);
-  return (result.data ?? []).map((item) => ({
+  const published = (result.data ?? []).map((item) => ({
     ...item,
     shipment_count: amount(item.shipment_count),
     activity_count: amount(item.activity_count),
@@ -108,6 +110,29 @@ async function performance(companyId: string, workforceId: string) {
     incentive_amount: amount(item.incentive_amount),
     adjustment_amount: amount(item.adjustment_amount),
     net_amount: amount(item.net_amount)
+  }));
+  if (published.some((item) => item.net_amount !== 0)) return published;
+
+  const to = workforceToday();
+  const snapshot = await loadWorkforceEarnings({
+    companyId,
+    hasAllLocationAccess: true,
+    locationScopeIds: []
+  } as AuthorizationContext, `${to.slice(0, 8)}01`, to);
+  if (snapshot.warnings.length) throw new Error(snapshot.warnings[0]);
+  return snapshot.lines.filter((line) => line.workforceId === workforceId).map((line) => ({
+    id: line.key,
+    work_date: line.workDate,
+    provider_name: line.providerName,
+    shipment_count: line.totalDelivery,
+    activity_count: line.totalActivity,
+    base_amount: line.baseAmount,
+    incentive_amount: line.incentiveAmount,
+    adjustment_amount: line.adjustmentAmount,
+    net_amount: line.netAmount,
+    calculation_source: line.calculationSource,
+    status: line.status,
+    hold_reasons: line.holdReasons
   }));
 }
 
@@ -197,7 +222,7 @@ export async function POST(request: NextRequest) {
     const category = String(body.category ?? "").trim();
     const subject = String(body.subject ?? "").trim();
     const detail = String(body.detail ?? "").trim();
-    if (!["payment", "provider_id", "route_roster", "document", "other"].includes(category)) throw new Error("Choose a valid support category.");
+    if (!["payment", "provider_id", "route_roster", "document", "other", "speak_up"].includes(category)) throw new Error("Choose a valid support category.");
     if (subject.length < 3 || subject.length > 160) throw new Error("Enter a subject between 3 and 160 characters.");
     if (detail.length < 10 || detail.length > 2000) throw new Error("Describe the issue in at least 10 characters.");
     const result = await supabaseAdmin.from("workforce_connect_requests").insert({

@@ -11,6 +11,8 @@ import { AppAccount, ConnectProfileApp } from "./connect-profile-app";
 import { countryCodeOptions } from "@/lib/country-codes";
 import { ConnectOwnerPreviewSwitcher } from "./connect-owner-preview-switcher";
 import { ConnectWorkforceSelfService } from "./connect-workforce-self-service";
+import { ConnectWorkforceHome } from "./connect-workforce-home";
+import { isPeopleWorkspace, isWorkforceWorkspace } from "../lib/connect-workspace";
 
 type AppPage = "dashboard" | "payments" | "advances" | "attendance" | "roster" | "performance" | "reports" | "rate_card" | "connect" | "documents" | "leave";
 type Step = "mobile" | "pin" | "otp" | "createPin" | "unlock" | "accounts" | AppPage | "profile" | "exit" | "settings";
@@ -34,7 +36,8 @@ const accountProfileLabel = (account?: AppAccount | null) => {
   return "Workforce-linked profile";
 };
 const active = (account?: AppAccount | null) => account?.status?.toLowerCase() === "active";
-const isPeopleAccount = (account?: AppAccount | null) => account?.profileType === "employee" || account?.profileType === "user";
+const isPeopleAccount = (account?: AppAccount | null) => isPeopleWorkspace(account);
+const isWorkforceAccount = (account?: AppAccount | null) => isWorkforceWorkspace(account);
 const defaultPages = (account: AppAccount | null) => isPeopleAccount(account)
   ? ["dashboard", "attendance", "leave"]
   : ["dashboard", "payments", "advances"];
@@ -395,12 +398,25 @@ export function ConnectLoginFlow() {
       setStep("accounts");
       return;
     }
-    if (!active(account) && next !== "profile" && next !== "exit" && next !== "settings") {
+    const destination = isWorkforceAccount(account) && ["advances", "rate_card"].includes(next)
+      ? "payments"
+      : isWorkforceAccount(account) && next === "leave"
+        ? "roster"
+        : isWorkforceAccount(account) && next === "documents"
+          ? "profile"
+          : next;
+    if (!active(account) && destination !== "profile" && destination !== "exit" && destination !== "settings") {
       setStep("profile");
       return;
     }
-    if (["dashboard", "payments", "advances", "attendance", "roster", "performance", "reports", "rate_card", "connect", "documents", "leave"].includes(next) && !allowed(account, next as AppPage)) return;
-    setStep(next);
+    if (["dashboard", "payments", "advances", "attendance", "roster", "performance", "reports", "rate_card", "connect", "documents", "leave"].includes(destination) && !allowed(account, destination as AppPage)) {
+      const groupedAccess = isWorkforceAccount(account) && (
+        (destination === "payments" && (allowed(account, "advances") || allowed(account, "rate_card"))) ||
+        (destination === "roster" && (allowed(account, "attendance") || allowed(account, "leave")))
+      );
+      if (!groupedAccess) return;
+    }
+    setStep(destination);
   }
 
   async function profileSubmitted() {
@@ -440,18 +456,19 @@ export function ConnectLoginFlow() {
     {drawer && account ? <><button aria-label="Close menu" className="dx-scrim" onClick={() => setDrawer(false)} /><aside className="dx-drawer">
       <div><Image alt="DropX" height={44} src="/dropx-logo.png" width={126} /><button aria-label="Switch accounts" onClick={() => open("accounts")}><SwitchCamera /></button><button aria-label="Close" onClick={() => setDrawer(false)}><X /></button></div>
       <nav>
-        {allowed(account, "dashboard") ? <button onClick={() => open("dashboard")}><Gauge />Home<ChevronRight /></button> : null}
-        {!isPeopleAccount(account) && allowed(account, "payments") ? <button onClick={() => open("payments")}><BadgeIndianRupee />Payments<ChevronRight /></button> : null}
-        {!isPeopleAccount(account) && allowed(account, "advances") ? <button onClick={() => open("advances")}><HandCoins />Advances<ChevronRight /></button> : null}
-        {allowed(account, "attendance") ? <button onClick={() => open("attendance")}><Fingerprint />Attendance<ChevronRight /></button> : null}
-        {!isPeopleAccount(account) && allowed(account, "roster") ? <button onClick={() => open("roster")}><CalendarDays />Associate Rostering<ChevronRight /></button> : null}
-        {!isPeopleAccount(account) && allowed(account, "performance") ? <button onClick={() => open("performance")}><BarChart3 />Performance<ChevronRight /></button> : null}
-        {!isPeopleAccount(account) && allowed(account, "reports") ? <button onClick={() => open("reports")}><FileText />Reports<ChevronRight /></button> : null}
-        {!isPeopleAccount(account) && allowed(account, "rate_card") ? <button onClick={() => open("rate_card")}><BookOpenCheck />My Rate Card<ChevronRight /></button> : null}
-        {!isPeopleAccount(account) && allowed(account, "connect") ? <button onClick={() => open("connect")}><CircleHelp />Connect<ChevronRight /></button> : null}
-        {allowed(account, "documents") ? <button onClick={() => open("documents")}><FileText />Documents<ChevronRight /></button> : null}
-        <button onClick={() => open("profile")}><UserRound />My Profile<ChevronRight /></button>
-        {allowed(account, "leave") ? <button onClick={() => open("leave")}><CalendarDays />Leave<ChevronRight /></button> : null}
+        {isPeopleAccount(account) ? <>
+          {allowed(account, "dashboard") ? <button onClick={() => open("dashboard")}><Gauge />Home<ChevronRight /></button> : null}
+          {allowed(account, "attendance") ? <button onClick={() => open("attendance")}><Fingerprint />Attendance<ChevronRight /></button> : null}
+          {allowed(account, "leave") ? <button onClick={() => open("leave")}><CalendarDays />Leave<ChevronRight /></button> : null}
+          <button onClick={() => open("profile")}><UserRound />My Profile<ChevronRight /></button>
+        </> : <>
+          {allowed(account, "dashboard") ? <button onClick={() => open("dashboard")}><Gauge />Home<ChevronRight /></button> : null}
+          {(allowed(account, "payments") || allowed(account, "advances") || allowed(account, "rate_card")) ? <button onClick={() => open("payments")}><BadgeIndianRupee />Payments<ChevronRight /></button> : null}
+          {(allowed(account, "attendance") || allowed(account, "roster") || allowed(account, "leave")) ? <button onClick={() => open("roster")}><CalendarDays />Work<ChevronRight /></button> : null}
+          {allowed(account, "performance") ? <button onClick={() => open("performance")}><BarChart3 />Performance<ChevronRight /></button> : null}
+          {allowed(account, "connect") ? <button onClick={() => open("connect")}><CircleHelp />Connect<ChevronRight /></button> : null}
+          <button onClick={() => open("profile")}><UserRound />My Profile<ChevronRight /></button>
+        </>}
         <button onClick={() => open("settings")}><Settings />Settings<ChevronRight /></button>
       </nav>
       <button className="signout" onClick={logout}><LogOut />Sign out</button>
@@ -470,7 +487,8 @@ export function ConnectLoginFlow() {
       {notice ? <div className="dx-alert success">{notice}<button onClick={() => setNotice("")}><X /></button></div> : null}
       {error ? <div className="dx-alert error">{error}<button onClick={() => setError("")}><X /></button></div> : null}
       {step === "accounts" ? <section className="dx-accounts"><h1>Choose account</h1><p className="subtle">Switch between your People and Workforce roles without signing out.</p>{accounts.map((row) => <button key={accountKey(row)} onClick={() => choose(row)}><i>{row.profilePhotoUrl ? <img alt="" src={row.profilePhotoUrl} /> : <UsersRound />}</i><span><strong>{row.companyName}</strong><em>{row.name || row.reference}</em><small>{accountProfileLabel(row)}{row.role ? ` · ${row.role}` : ""}</small><small>{row.reference} {row.biometricId ? ` | ${row.biometricId}` : ""}</small></span><ChevronRight /></button>)}</section> : null}
-      {step === "dashboard" && account ? <ConnectDashboard account={account} onAttendance={() => open("attendance")} onConnect={() => open("connect")} onLeave={() => open("leave")} onPayments={() => open("payments")} onProfile={() => open("profile")} onRoster={() => open("roster")} /> : null}
+      {step === "dashboard" && account && isPeopleAccount(account) ? <ConnectDashboard account={account} onAttendance={() => open("attendance")} onConnect={() => open("connect")} onLeave={() => open("leave")} onPayments={() => open("payments")} onProfile={() => open("profile")} onRoster={() => open("roster")} /> : null}
+      {step === "dashboard" && account && isWorkforceAccount(account) ? <ConnectWorkforceHome account={account} onConnect={() => open("connect")} onPayments={() => open("payments")} onPerformance={() => open("performance")} onWork={() => open("roster")} /> : null}
       {step === "payments" && account ? <ConnectWorkforceSelfService account={account} view="payments" /> : null}
       {step === "advances" && account ? <ConnectWorkforceSelfService account={account} view="advances" /> : null}
       {step === "profile" && account ? <ConnectProfileApp account={account} onExit={() => open("exit")} onPhoto={(url) => setAvatar(url)} onSubmitted={profileSubmitted} /> : null}

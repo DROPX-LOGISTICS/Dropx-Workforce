@@ -48,10 +48,10 @@ export async function listConnectPreviewAccounts(companyId: string): Promise<Con
   if (error) throw new Error(error.message);
   const companyName = company.data?.name ?? "DropX";
   return [
-    ...(employees.data ?? []).map((row): ConnectAccount => ({ id: row.id, companyId, profileType: "employee", name: row.full_name, email: row.email, reference: row.employee_code, role: first(row.designations)?.name ?? "Employee", status: row.profile_completion_status === "active" ? "Active" : "Active", biometricId: row.biometric_id, profilePhotoUrl: "", pageAccess: ["dashboard", "attendance", "leave", "settings"], isDefault: false, companyName, label: `${row.full_name} - ${row.employee_code ?? "Employee"}` })),
+    ...(employees.data ?? []).map((row): ConnectAccount => ({ id: row.id, companyId, profileType: "employee", workspace: "people", name: row.full_name, email: row.email, reference: row.employee_code, role: first(row.designations)?.name ?? "Employee", status: row.profile_completion_status === "active" ? "Active" : "Active", biometricId: row.biometric_id, profilePhotoUrl: "", pageAccess: ["dashboard", "attendance", "leave", "settings"], isDefault: false, companyName, label: `${row.full_name} - ${row.employee_code ?? "Employee"}` })),
     ...(workforce.data ?? [])
       .filter((row) => !["rejected", "cancelled"].includes(String(row.onboarding_status ?? "pending").toLowerCase()))
-      .map((row): ConnectAccount => ({ id: row.id, companyId, profileType: "workforce", name: row.full_name, email: row.email, reference: row.dropx_id, role: row.designation ?? "Workforce associate", status: row.onboarding_status === "active" ? "Active" : "Registration in progress", biometricId: row.biometric_id, profilePhotoUrl: "", pageAccess: ["dashboard", "payments", "advances"], isDefault: false, companyName, label: `${row.full_name} - ${row.dropx_id ?? "Workforce"}` }))
+      .map((row): ConnectAccount => ({ id: row.id, companyId, profileType: "workforce", workspace: "workforce", name: row.full_name, email: row.email, reference: row.dropx_id, role: row.designation ?? "Workforce associate", status: row.onboarding_status === "active" ? "Active" : "Registration in progress", biometricId: row.biometric_id, profilePhotoUrl: "", pageAccess: ["dashboard", "payments", "advances"], isDefault: false, companyName, label: `${row.full_name} - ${row.dropx_id ?? "Workforce"}` }))
   ];
 }
 

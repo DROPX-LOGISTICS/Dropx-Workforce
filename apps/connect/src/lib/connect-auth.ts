@@ -14,6 +14,10 @@ export type ConnectAccount = {
   id: string;
   companyId: string;
   profileType: "user" | WorkforceProfileType;
+  // The product workspace is explicit. Legacy profile types (especially
+  // contractor) are not a safe proxy for whether someone belongs to People
+  // or Workforce.
+  workspace: "people" | "workforce";
   name: string | null;
   email: string | null;
   reference: string | null;
@@ -445,6 +449,7 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       id: account.id,
       companyId: account.company_id,
       profileType: account.profile_type,
+      workspace: account.profile_type === "workforce" ? "workforce" : "people",
       name: account.full_name,
       email: account.email ?? null,
       reference: account.employee_id || account.dropx_id || null,

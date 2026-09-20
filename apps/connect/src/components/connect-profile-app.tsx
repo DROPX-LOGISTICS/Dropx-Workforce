@@ -6,11 +6,13 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { minimumAgeError } from "../lib/profile-age";
+import { isWorkforceWorkspace } from "../lib/connect-workspace";
 
 export type AppAccount = {
   id: string;
   companyId: string;
   profileType: string;
+  workspace?: "people" | "workforce";
   companyName: string;
   name: string | null;
   email: string | null;
@@ -331,7 +333,7 @@ function ReadTile({ label, value, verified, url, full }: { label: string; value?
 }
 
 export function ConnectProfileApp({ account, onExit, onPhoto, onSubmitted }: { account: AppAccount; onExit?: () => void; onPhoto?: (url: string) => void; onSubmitted?: () => Promise<void> | void }) {
-  const executive = account.profileType !== "employee" && account.profileType !== "user";
+  const executive = isWorkforceWorkspace(account);
   const peopleProfile = account.profileType === "user";
   const endpoint = executive ? "/api/connect/field-executive-profile" : "/api/connect/profile";
   const query = executive
@@ -712,14 +714,14 @@ export function ConnectProfileApp({ account, onExit, onPhoto, onSubmitted }: { a
           url={section.name === "Uploads" ? profile.uploadUrls[label.replace(/\s(.)/g, (_, character) => character.toUpperCase()).replace(/^./, (character) => character.toLowerCase())] : undefined}
         />)}</div>
       </section>)}
-      {executive ? <section className="dx-profile-guide">
-        <h2>My DropX One guide</h2>
-        <p><BookOpenCheck />These are the Workforce features enabled for your designation.</p>
+      {executive && visibleWorkforceFeatures.length ? <section className="dx-profile-guide">
+        <h2>My access</h2>
+        <p><BookOpenCheck />Your enabled Workforce services.</p>
         <div>{visibleWorkforceFeatures.map((feature) => <article key={feature.code}><strong>{feature.label}</strong><small>{feature.detail}</small></article>)}</div>
       </section> : null}
-      {onExit ? <section className="dx-profile-exit">
-        <h2>Resignation &amp; exit</h2>
-        <button onClick={onExit} type="button"><LogOut /><span><strong>Start or track resignation</strong><small>Select a reason, requested last working date and add your message.</small></span><ChevronRight /></button>
+      {executive && onExit ? <section className="dx-profile-exit">
+        <h2>My engagement</h2>
+        <button onClick={onExit} type="button"><LogOut /><span><strong>Request exit from engagement</strong><small>Choose a reason and requested last working date. Final settlement follows the applicable policy.</small></span><ChevronRight /></button>
       </section> : null}
     </div>;
   }

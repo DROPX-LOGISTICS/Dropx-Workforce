@@ -9,11 +9,11 @@ const employeePages = new Set(["dashboard", "attendance", "leave"]);
 const workforcePages = new Set(["dashboard", "payments", "advances", "attendance", "roster", "performance", "reports", "rate_card", "connect", "documents", "leave"]);
 
 export function defaultPageAccess(profileType: WorkforceProfileType | "user") {
-  return profileType === "employee" ? employeeDefaultPageAccess : workforceDefaultPageAccess;
+  return profileType === "employee" || profileType === "user" ? employeeDefaultPageAccess : workforceDefaultPageAccess;
 }
 
 export function normalizeAppPageAccess(profileType: WorkforceProfileType | "user", pages: Iterable<unknown>) {
-  const allowed = profileType === "employee" ? employeePages : workforcePages;
+  const allowed = profileType === "employee" || profileType === "user" ? employeePages : workforcePages;
   return Array.from(new Set(
     Array.from(pages)
       .map((page) => String(page ?? "").trim().toLowerCase())

@@ -262,6 +262,7 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       email: profile.email,
       employee_id: profile.employee_id,
       role: profile.role,
+      status: "Active",
       profile_type: "user" as const
     }))),
     ...nonEmployeeResults.flatMap((result, index) => {
@@ -434,7 +435,7 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
           ? pageAccessByDesignationKey.get(designationKey)
           : undefined;
 
-      const pageAccess = account.profile_type === "employee"
+      const pageAccess = account.profile_type === "employee" || account.profile_type === "user"
         ? normalizeAppPageAccess(account.profile_type, intersectPageAccess(categoryPages, designationPages))
         : normalizeAppPageAccess(account.profile_type, [
           ...defaultPageAccess(account.profile_type),

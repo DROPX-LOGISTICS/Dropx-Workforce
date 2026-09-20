@@ -29,12 +29,13 @@ const accountKey = (account: AppAccount) => `${account.profileType}:${account.co
 const accountIdentity = (account?: AppAccount | null) =>
   [account?.reference, account?.biometricId].filter(Boolean).join(" | ");
 const accountProfileLabel = (account?: AppAccount | null) => {
-  if (account?.profileType === "employee") return "People profile";
+  if (account?.profileType === "employee" || account?.profileType === "user") return "People profile";
   if (account?.profileType === "workforce") return "Workforce profile";
   return "Workforce-linked profile";
 };
 const active = (account?: AppAccount | null) => account?.status?.toLowerCase() === "active";
-const defaultPages = (account: AppAccount | null) => account?.profileType === "employee"
+const isPeopleAccount = (account?: AppAccount | null) => account?.profileType === "employee" || account?.profileType === "user";
+const defaultPages = (account: AppAccount | null) => isPeopleAccount(account)
   ? ["dashboard", "attendance", "leave"]
   : ["dashboard", "payments", "advances"];
 const allowed = (account: AppAccount | null, page: AppPage) =>
@@ -406,7 +407,9 @@ export function ConnectLoginFlow() {
     const response = await fetch("/api/connect/auth/session", { cache: "no-store" });
     const payload = await response.json();
     if (!response.ok || !payload.authenticated) return;
-    const rows = (payload.accounts ?? []).filter((row: AppAccount) => row.profileType !== "user");
+    const allRows = payload.accounts ?? [];
+    const operationalRows = allRows.filter((row: AppAccount) => row.profileType !== "user");
+    const rows = operationalRows.length ? operationalRows : allRows;
     const refreshed = rows.find((row: AppAccount) => account && accountKey(row) === accountKey(account)) ?? null;
     setAccounts(rows);
     setAccount(refreshed);
@@ -440,14 +443,14 @@ export function ConnectLoginFlow() {
       <div><Image alt="DropX" height={44} src="/dropx-logo.png" width={126} /><button aria-label="Switch accounts" onClick={() => open("accounts")}><SwitchCamera /></button><button aria-label="Close" onClick={() => setDrawer(false)}><X /></button></div>
       <nav>
         {allowed(account, "dashboard") ? <button onClick={() => open("dashboard")}><Gauge />Home<ChevronRight /></button> : null}
-        {account.profileType !== "employee" && allowed(account, "payments") ? <button onClick={() => open("payments")}><BadgeIndianRupee />Payments<ChevronRight /></button> : null}
-        {account.profileType !== "employee" && allowed(account, "advances") ? <button onClick={() => open("advances")}><HandCoins />Advances<ChevronRight /></button> : null}
+        {!isPeopleAccount(account) && allowed(account, "payments") ? <button onClick={() => open("payments")}><BadgeIndianRupee />Payments<ChevronRight /></button> : null}
+        {!isPeopleAccount(account) && allowed(account, "advances") ? <button onClick={() => open("advances")}><HandCoins />Advances<ChevronRight /></button> : null}
         {allowed(account, "attendance") ? <button onClick={() => open("attendance")}><Fingerprint />Attendance<ChevronRight /></button> : null}
-        {account.profileType !== "employee" && allowed(account, "roster") ? <button onClick={() => open("roster")}><CalendarDays />Associate Rostering<ChevronRight /></button> : null}
-        {account.profileType !== "employee" && allowed(account, "performance") ? <button onClick={() => open("performance")}><BarChart3 />Performance<ChevronRight /></button> : null}
-        {account.profileType !== "employee" && allowed(account, "reports") ? <button onClick={() => open("reports")}><FileText />Reports<ChevronRight /></button> : null}
-        {account.profileType !== "employee" && allowed(account, "rate_card") ? <button onClick={() => open("rate_card")}><BookOpenCheck />My Rate Card<ChevronRight /></button> : null}
-        {account.profileType !== "employee" && allowed(account, "connect") ? <button onClick={() => open("connect")}><CircleHelp />Connect<ChevronRight /></button> : null}
+        {!isPeopleAccount(account) && allowed(account, "roster") ? <button onClick={() => open("roster")}><CalendarDays />Associate Rostering<ChevronRight /></button> : null}
+        {!isPeopleAccount(account) && allowed(account, "performance") ? <button onClick={() => open("performance")}><BarChart3 />Performance<ChevronRight /></button> : null}
+        {!isPeopleAccount(account) && allowed(account, "reports") ? <button onClick={() => open("reports")}><FileText />Reports<ChevronRight /></button> : null}
+        {!isPeopleAccount(account) && allowed(account, "rate_card") ? <button onClick={() => open("rate_card")}><BookOpenCheck />My Rate Card<ChevronRight /></button> : null}
+        {!isPeopleAccount(account) && allowed(account, "connect") ? <button onClick={() => open("connect")}><CircleHelp />Connect<ChevronRight /></button> : null}
         {allowed(account, "documents") ? <button onClick={() => open("documents")}><FileText />Documents<ChevronRight /></button> : null}
         <button onClick={() => open("profile")}><UserRound />My Profile<ChevronRight /></button>
         {allowed(account, "leave") ? <button onClick={() => open("leave")}><CalendarDays />Leave<ChevronRight /></button> : null}

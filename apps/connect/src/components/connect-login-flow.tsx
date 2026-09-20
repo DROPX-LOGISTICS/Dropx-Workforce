@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { BadgeIndianRupee, BarChart3, Bell, BookOpenCheck, CalendarDays, CheckCheck, ChevronRight, CircleHelp, FileText, Fingerprint, Gauge, HandCoins, LogOut, Menu, Settings, SwitchCamera, UserRound, UsersRound, X } from "lucide-react";
+import { BadgeIndianRupee, BarChart3, Bell, BookOpenCheck, CalendarDays, CheckCheck, ChevronRight, CircleHelp, FileText, Fingerprint, Gauge, HandCoins, LogOut, Menu, Settings, ShieldCheck, SwitchCamera, UserRound, UsersRound, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ConnectAttendance } from "./connect-attendance";
 import { ConnectDashboard } from "./connect-dashboard";
@@ -88,7 +88,10 @@ export function ConnectLoginFlow() {
   const lastLoggedScreen = useRef("");
 
   function route(rows: AppAccount[]) {
-    const filtered = rows.filter((row) => row.profileType !== "user");
+    // A selector is only useful to the small group that genuinely has more
+    // than one operational role. Everyone else lands directly in their app.
+    const operationalAccounts = rows.filter((row) => row.profileType !== "user");
+    const filtered = operationalAccounts.length ? operationalAccounts : rows;
     const serverDefault = filtered.find((row) => row.isDefault);
     const saved = serverDefault ? accountKey(serverDefault) : "";
     if (saved) localStorage.setItem(defaultKeyName, saved);
@@ -454,13 +457,14 @@ export function ConnectLoginFlow() {
     </aside></> : null}
 
     {!loggedIn ? <div className="dx-auth">
-      <div className="dx-auth-brand"><Image alt="DropX" height={82} priority src="/dropx-logo.png" width={232} /><h1>Sign in with your mobile number</h1></div>
-      {error ? <div className="dx-alert error">{error}</div> : null}{notice ? <div className="dx-alert success">{notice}</div> : null}
+      <div className="dx-auth-brand"><Image alt="DropX" height={82} priority src="/dropx-logo.png" width={232} /><span>DROPX ONE</span><h1>Your workday, all in one place.</h1><p>Securely access your shifts, earnings, documents and support.</p></div>
+      {error ? <div aria-live="assertive" className="dx-alert error" role="alert">{error}</div> : null}{notice ? <div aria-live="polite" className="dx-alert success">{notice}</div> : null}
       {step === "mobile" ? <form autoComplete="off" onSubmit={start}><label>Country code<select value={countryCode} onChange={(e) => setCountryCode(e.target.value)}>{countryCodeOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}</select></label><label>Mobile number<input autoComplete="off" inputMode="tel" name="dropx-mobile-login" onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 15))} placeholder="Enter registered mobile number" value={mobile} /></label><button disabled={pending || mobile.length < 6}>{pending ? "Checking..." : "Continue"}</button></form> : null}
       {step === "pin" ? <form autoComplete="off" onSubmit={verifyPin}><label>App PIN<input autoComplete="new-password" inputMode="numeric" maxLength={6} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" value={pin} /></label><button disabled={pending || pin.length !== 6}>{pending ? "Signing in..." : "Sign in"}</button><button className="text" onClick={resetPin} type="button">Reset PIN</button><button className="text" onClick={() => setStep("mobile")} type="button">Change mobile number</button></form> : null}
       {step === "otp" ? <form onSubmit={(e) => { e.preventDefault(); if (otp.length === 6) setStep("createPin"); }}><label>WhatsApp OTP<input inputMode="numeric" maxLength={6} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} value={otp} /></label><button disabled={otp.length !== 6}>Continue</button></form> : null}
       {step === "createPin" ? <form onSubmit={savePin}><label>Create app PIN<input inputMode="numeric" maxLength={6} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" value={pin} /></label><label>Re-enter app PIN<input inputMode="numeric" maxLength={6} onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))} type="password" value={confirmPin} /></label><button disabled={pending || pin.length !== 6}>Save PIN</button></form> : null}
       {step === "unlock" ? <form onSubmit={(e) => { e.preventDefault(); unlock(); }}><div className="dx-unlock"><Fingerprint /><strong>Unlock DropX One</strong><small>Use Face ID or your device security to continue.</small></div><button disabled={pending}>{pending ? "Unlocking..." : "Unlock"}</button><button className="text" onClick={() => { setPin(""); setStep("pin"); }} type="button">Use PIN</button></form> : null}
+      <p className="dx-auth-security"><ShieldCheck /> Your profile and payment information stay protected.</p>
     </div> : <main className="dx-content">
       {previewActive ? <div className="dx-preview-banner"><strong>Read-only preview</strong><span>You are viewing DropX One as {account?.name || "this user"}. Changes are blocked.</span></div> : null}
       {notice ? <div className="dx-alert success">{notice}<button onClick={() => setNotice("")}><X /></button></div> : null}

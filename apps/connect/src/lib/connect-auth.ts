@@ -147,7 +147,10 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
     .or(`mobile_country_code.eq.${countryCode},mobile_country_code.is.null`)
     .or(`mobile.eq.${mobile},mobile.eq.${localMobile}`);
 
-  const nonEmployeeTypes: NonEmployeeProfileType[] = ["workforce", "field_executive", "contractor", "vendor", "worker"];
+  // `workforce` is the canonical associate register. The retired per-category
+  // tables are retained only as compatibility data behind a Workforce profile,
+  // never as independent login sources.
+  const nonEmployeeTypes: NonEmployeeProfileType[] = ["workforce"];
   async function loadNonEmployee(profileType: NonEmployeeProfileType): Promise<MatchResult<NonEmployeeMatch>> {
     const table = workforceTable(profileType);
     const columns = profileType === "workforce"

@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import { findConnectAccounts, normalizeConnectMobile } from "@/lib/connect-auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
+function loginErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("schema cache") || message.includes("does not exist") || message.includes("relation")) {
+    return "We’re updating the account service. Please try again in a moment.";
+  }
+  return "We couldn’t check this mobile number right now. Please try again shortly.";
+}
+
 export async function POST(request: Request) {
   try {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
@@ -30,6 +38,7 @@ export async function POST(request: Request) {
       accounts
     });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to check mobile number." }, { status: 500 });
+    console.error("DropX One login lookup failed", error);
+    return NextResponse.json({ error: loginErrorMessage(error) }, { status: 503 });
   }
 }

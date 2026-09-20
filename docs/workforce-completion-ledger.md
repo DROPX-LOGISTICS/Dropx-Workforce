@@ -13,14 +13,16 @@
 | Boundary | State |
 |---|---|
 | Joining/training, station masters, attendance calculation, provider effective date | Prior foundation deployed and read-only production verified |
-| Amazon connection UI, encrypted storage, sync lease and observation history | Current release; isolated tests pass; deployment/production verification pending |
+| Amazon connection UI, encrypted storage, sync lease and observation history | Deployed (088909a); authenticated settings checked; dedicated Cloudflare scheduler deployed, read-only scan requires credentials |
 | Amazon full live account scan | Requires owner-entered connection credentials and linked profile; not yet verified |
-| DropX One joining/training visibility | Pending, actual source is partner-dashboard/apps/connect |
-| Confirmed payroll → Finance approval/process | Pending integration; existing Workforce manual mark-paid must not be represented as this handoff |
-| Flexible station payroll calendars / pooled MG / verified km | Pending |
+| DropX One joining/training visibility | Live; existing mapped account verified; statements use individual Finance outcomes; effective identity/date earnings fix 7f16ea42 verified |
+| Confirmed payroll → Finance approval/process | Live Workforce a0bbb45 + Finance e411777. Atomic isolated SQL tests passed; authenticated Finance queue checked. No live payroll created or payment sent. Approved payroll payment-head configuration still required |
+| Flexible station payroll calendars | Live e93fff5; station and cross-station duplicate guards tested; authenticated calendar and payroll pages checked. No real calendars or pay terms assigned |
+| Pooled MG / verified km | Pending |
 | Refer-and-earn attribution / approved retention reward | Pending |
 | Provider-authorised daily cover attribution | Pending |
-| Ops holds and approved station losses | Pending |
+| Ops payment holds | Current release: 64 unit tests plus isolated SQL suite and full Workforce build passed. Ops and One surfaces in partner-dashboard require their release. No production hold placed |
+| Approved station losses | Pending; existing reviewed Workforce adjustments remain available |
 | Unified unpaid ledger and exit settlement reconciliation | Pending |
 | Entire Workforce UI and role/mobile acceptance matrix | Pending full pass |
 

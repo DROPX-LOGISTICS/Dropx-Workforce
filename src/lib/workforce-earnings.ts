@@ -206,6 +206,7 @@ export type WorkforceEarningsInput = {
   joiningPlans?: JoiningPlan[];
   trainingAttendance?: JoiningAttendance[];
   trainingMappings?: JoiningMapping[];
+  paymentHolds?: {id:string;workforce_id:string;period_start:string;period_end:string;status:string;reference:string}[];
 };
 
 function amount(value: unknown) {
@@ -627,6 +628,8 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
   for (const line of lines) {
     const plan = line.workforceId ? planByWorker.get(line.workforceId) : null;
     if (plan) line.trace.joining_plan_version = plan.version;
+    const holds=(input.paymentHolds ?? []).filter(hold=>hold.workforce_id===line.workforceId && hold.status!=='released' && hold.period_start<=input.to && hold.period_end>=input.from);
+    if(holds.length){line.status='hold';line.holdReasons.push(...holds.map(hold=>`Ops payment hold: ${hold.reference} (${hold.period_start} to ${hold.period_end})`));line.trace.payment_hold_ids=holds.map(hold=>hold.id);}
   }
   const summariesByWorker = new Map<string, WorkforceEarningSummary>();
   lines.filter((line) => line.workforceId).forEach((line) => {
@@ -785,6 +788,8 @@ export async function loadWorkforceEarnings(
   ]);
   const requiredError = stationResult.error?.message || shipmentResult.error || mappingResult.error?.message || workforceResult.error?.message || providerResult.error?.message;
   const optionalErrors = [rateCardResult.error, campaignResult.error, adjustmentResult.error].filter(Boolean);
+  const paymentHolds=await readAllRows(supabaseAdmin.from('workforce_payment_holds').select('id,workforce_id,period_start,period_end,status,reference').eq('company_id',companyId).neq('status','released').lte('period_start',to).gte('period_end',from).order('id'));
+  if(paymentHolds.error)optionalErrors.push(paymentHolds.error);
   const setupRequired = optionalErrors.some((error) => missingTable(error));
   const { loadWorkforceJoining } = await import("./workforce-joining-data");
   let joining: Awaited<ReturnType<typeof loadWorkforceJoining>> | null = null;
@@ -799,6 +804,7 @@ export async function loadWorkforceEarnings(
     mappings: (mappingResult.data ?? []) as ProviderMappingRow[],
     workforce: ((workforceResult.data ?? []) as WorkforceProfileRow[]).filter((profile) => (!eligibleIds || eligibleIds.has(profile.id)) && (authorization.hasAllLocationAccess || authorization.locationScopeIds.includes(profile.location_id))),
     joiningPlans: joining?.plans, trainingAttendance: joining?.attendance, trainingMappings: joining?.mappings,
+    paymentHolds:paymentHolds.data ?? [],
     providers: (providerResult.data ?? []) as ProviderRow[],
     stations: visibleStations,
     rateCards: rateCardResult.error ? [] : (rateCardResult.data ?? []) as WorkforceRateCard[],

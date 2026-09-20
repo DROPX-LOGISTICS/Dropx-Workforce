@@ -73,6 +73,20 @@ function input(overrides = {}) {
   };
 }
 
+test("payment holds preserve earnings while blocking payout until release", () => {
+  const hold={id:'hold-1',workforce_id:'workforce-1',period_start:'2026-08-01',period_end:'2026-08-31',status:'active',reference:'CASE-1'};
+  for (const status of ['active','release_requested']) {
+    const result=calculateWorkforceEarnings(input({paymentHolds:[{...hold,status}]}));
+    assert.equal(result.totalNet,300);
+    assert.equal(result.summaries[0].status,'hold');
+    assert.equal(result.readyWorkers,0);
+  }
+  for(const override of [{status:'released'},{workforce_id:'another-worker'},{period_start:'2026-09-01',period_end:'2026-09-30'}]) {
+    const result=calculateWorkforceEarnings(input({paymentHolds:[{...hold,...override}]}));
+    assert.equal(result.totalNet,300);assert.equal(result.readyWorkers,1);
+  }
+});
+
 test("calculates live mapped earnings from shipment count and configured rate", () => {
   const result = calculateWorkforceEarnings(input());
   assert.equal(result.totalShipments, 30);

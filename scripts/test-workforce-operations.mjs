@@ -84,4 +84,6 @@ await (await import('./test-amazon-onboarding-sql.mjs')).testAmazonOnboardingSql
 await (await import('./test-workforce-finance-sql.mjs')).testFinanceSql(db);
 const {testCalendarSql}=await import('./test-workforce-calendar-sql.mjs');
 await testCalendarSql(db);
+const {testHoldSql}=await import('./test-workforce-holds-sql.mjs');
+await testHoldSql(db);
 await db.close();

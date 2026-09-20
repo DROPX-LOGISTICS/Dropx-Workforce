@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+export async function testLossSql(db){
+ await db.exec(`alter table workforce add column designation_id uuid,add column designation text;
+ alter table designations add column company_id uuid,add column code text,add column name text,add column designation_category_id uuid;
+ create table designation_categories(id uuid primary key,company_id uuid,people_module text);`);
+ await db.exec(readFileSync(new URL('../supabase/migrations/20260920212000_workforce_station_loss_claims.sql',import.meta.url),'utf8'));
+ const u=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ const company=u(1),maker=u(2),owner=u(3),station=u(5),worker=u(900),category=u(901),designation=u(902),run=u(903),item=u(904);
+ await db.query("insert into designation_categories values($1,$2,'delivery_network')",[category,company]);
+ await db.query("insert into designations(id,company_id,code,name,designation_category_id) values($1,$2,'TESTDA','Synthetic DA',$3)",[designation,company,category]);
+ await db.query("insert into workforce(id,company_id,location_id,is_active,onboarding_status,migration_state,designation_id) values($1,$2,$3,true,'active','canonical',$4)",[worker,company,station,designation]);
+ const submit=(options={})=>db.query('select workforce_submit_station_loss($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) id',[options.company??company,maker,options.worker??worker,options.station??station,options.amount??100,'2026-05-01',options.posting??'2026-05-02',options.reference??'CASE-LOSS-1','Synthetic evidence and review basis',options.category??'cash_recovery',options.scope??[station]]);
+ await assert.rejects(submit({scope:[u(999)]}),/scope/);await assert.rejects(submit({worker:u(4)}),/designation master/);await assert.rejects(submit({company:u(999)}),/company station/);await assert.rejects(submit({amount:1.001}),/two decimals/);await assert.rejects(submit({category:'referral_bonus'}),/category/);await assert.rejects(submit({posting:'2026-04-01'}),/precede/);
+ const claim=(await submit()).rows[0].id;assert.equal((await submit({reference:'case-loss-1'})).rows[0].id,claim);
+ await assert.rejects(submit({amount:101}),/different details/);
+ const adjustment=(await db.query('select adjustment_id id from workforce_station_loss_claims where id=$1',[claim])).rows[0].id;
+ assert.equal((await db.query('select status from workforce_adjustments where id=$1',[adjustment])).rows[0].status,'pending');
+ await assert.rejects(db.query('update workforce_adjustments set amount=999 where id=$1',[adjustment]),/immutable/);
+ await assert.rejects(db.query("update workforce_adjustments set status='approved',reviewed_by=$2,reviewed_at=now() where id=$1",[adjustment,maker]),/maker_checker/);
+ const runPayload={id:run,run_number:'LOSS-TEST',period_start:'2026-05-01',period_end:'2026-05-03',exception_count:0};
+ const rows=[{id:item,company_id:company,payroll_run_id:run,workforce_id:worker,dropx_id:'LOSS-TEST',worker_name:'Synthetic',station_code:'TEST',bank_account_no:'12345',ifsc_code:'TEST000001',shipment_count:10,activity_count:10,work_days:1,base_amount:1000,incentive_amount:0,adjustment_amount:0,deduction_amount:0,gross_amount:1000,net_amount:1000,status:'ready',hold_reasons:[],provider_member_ids:['TEST']}];
+ const line={company_id:company,payroll_run_id:run,payroll_item_id:item,workforce_id:worker,source_type:'shipment',source_id:u(905),work_date:'2026-05-02',shipment_count:10,activity_count:10,base_amount:1000,incentive_amount:0,adjustment_amount:0,net_amount:1000,calculation_source:'rate_card',calculation_snapshot:{test:true}};
+ await db.query('select workforce_save_payroll_snapshot($1,$2,$3,$4,$5,$6)',[company,maker,runPayload,rows,[line],[]]);
+ await db.query("update workforce_adjustments set status='approved',reviewed_by=$2,reviewed_at=now(),review_remarks='Synthetic approved recovery' where id=$1",[adjustment,owner]);
+ await assert.rejects(db.query("select workforce_change_payroll_state($1,$2,$3,'submit',false,null,null,null)",[company,run,maker]),/missing from this snapshot/);
+ const expected=(await db.query('select updated_at::text stamp from workforce_payroll_runs where id=$1',[run])).rows[0].stamp;
+ await db.query('select workforce_save_payroll_snapshot($1,$2,$3,$4,$5,$6)',[company,maker,{id:run,expected_updated_at:expected,exception_count:0},[{...rows[0],deduction_amount:100,net_amount:900}],[line,{...line,source_type:'adjustment',source_id:adjustment,shipment_count:0,activity_count:0,base_amount:0,adjustment_amount:-100,net_amount:-100,calculation_source:'adjustment'}],[adjustment]]);
+ assert.equal((await db.query('select status from workforce_adjustments where id=$1',[adjustment])).rows[0].status,'posted');
+ await db.query("select workforce_change_payroll_state($1,$2,$3,'submit',false,null,null,null)",[company,run,maker]);
+ await db.query('select workforce_confirm_payroll($1,$2,$3,$4,true,null)',[company,run,owner,u(401)]);
+ await assert.rejects(submit({reference:'LATE-LOSS'}),/already confirmed/);
+ await submit({reference:'LATE-LOSS',posting:'2026-06-01'});
+ assert.equal((await db.query('select count(*)::int n from workforce_station_loss_claims where workforce_id=$1',[worker])).rows[0].n,2);
+ for(const role of ['anon','authenticated'])assert.equal((await db.query("select has_function_privilege($1,'workforce_submit_station_loss(uuid,uuid,uuid,uuid,numeric,date,date,text,text,text,uuid[])','EXECUTE') allowed",[role])).rows[0].allowed,false);
+ console.log('PASS: station loss scope/classification, validation, case dedupe, immutable claims, independent approval, missing-snapshot block, single payroll deduction, late loss posting and server-only access.');
+}

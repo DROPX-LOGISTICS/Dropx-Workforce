@@ -59,16 +59,23 @@ export async function reviewWorkforceAdjustment(formData: FormData) {
   const companyId = requireCompanyId(authorization);
   try {
     if (!isCompanyOwner(authorization)) throw new Error("Only the company owner can approve or reject payroll adjustments.");
+    if (authorization.readOnly) throw new Error('Preview mode cannot review an adjustment.');
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
     const id = text(formData.get("id"));
     const remarks = text(formData.get("review_remarks"));
     if (!id || !["approved", "rejected"].includes(decision)) throw new Error("Choose a valid review decision.");
     if (decision === "rejected" && !remarks) throw new Error("Rejection remarks are required.");
-    const current = await supabaseAdmin.from("workforce_adjustments").select("id, status, requested_by").eq("company_id", companyId).eq("id", id).maybeSingle();
+    const current = await supabaseAdmin.from("workforce_adjustments").select("id, workforce_id, external_reference, status, requested_by").eq("company_id", companyId).eq("id", id).maybeSingle();
     if (current.error) throw new Error(current.error.message);
     if (!current.data || !["draft", "pending"].includes(current.data.status)) throw new Error("This adjustment has already been reviewed.");
     if (current.data.requested_by === authorization.userId) throw new Error("Maker-checker control does not allow you to review your own adjustment request.");
+    const person=await supabaseAdmin.from('workforce').select('location_id').eq('company_id',companyId).eq('id',current.data.workforce_id).maybeSingle();
+    if(person.error||!person.data||(!authorization.hasAllLocationAccess&&!authorization.locationScopeIds.includes(person.data.location_id)))throw new Error('Associate is outside your review scope.');
+    const loss=current.data.external_reference?.startsWith('OPS-LOSS:');
+    const postingDate=text(formData.get('review_posting_date'));
+    if(loss&&decision==='approved'&&!isWorkforceDate(postingDate))throw new Error('Choose a valid payroll posting date for the loss.');
     const result = await supabaseAdmin.from("workforce_adjustments").update({
+      ...(loss&&decision==='approved'?{effective_date:postingDate}:{}),
       status: decision,
       reviewed_by: authorization.userId,
       reviewed_at: new Date().toISOString(),

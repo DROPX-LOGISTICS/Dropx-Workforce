@@ -23,6 +23,15 @@ export type AppNotificationRecipient = {
 };
 
 type FilterOption = { value: string; label: string };
+export type AppNotificationPage = { value: string; label: string };
+
+const defaultPageOptions: AppNotificationPage[] = [
+  { value: "dashboard", label: "Dashboard" },
+  { value: "profile", label: "My Profile" },
+  { value: "attendance", label: "Attendance" },
+  { value: "leave", label: "Leave" },
+  { value: "settings", label: "Settings" }
+];
 
 const variables = [
   { token: "{full_name}", label: "Full name" },
@@ -130,11 +139,13 @@ function SendButton({ count }: { count: number }) {
 export function AppNotificationComposer({
   action,
   recipients,
-  submissionKey
+  submissionKey,
+  pageOptions = defaultPageOptions
 }: {
   action: (formData: FormData) => void | Promise<void>;
   recipients: AppNotificationRecipient[];
   submissionKey?: string;
+  pageOptions?: AppNotificationPage[];
 }) {
   const [query, setQuery] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
@@ -269,7 +280,7 @@ export function AppNotificationComposer({
       </section>
 
       <label>Title<input maxLength={120} name="title" onFocus={() => setActiveField("title")} placeholder="Notification title" ref={titleRef} required /></label>
-      <label>Open page<select name="openTarget" onChange={(event) => setOpenTarget(event.target.value)} value={openTarget}><option value="">No linked page</option><option value="dashboard">Dashboard</option><option value="profile">My Profile</option><option value="attendance">Attendance</option><option value="leave">Leave</option><option value="settings">Settings</option><option value="custom_url">Custom URL</option></select></label>
+      <label>Open page<select name="openTarget" onChange={(event) => setOpenTarget(event.target.value)} value={openTarget}><option value="">No linked page</option>{pageOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}<option value="custom_url">Custom URL</option></select></label>
       {openTarget === "custom_url" ? <label className="wide app-notification-custom-url">Custom URL<span><Link2 aria-hidden="true" size={17} /><input maxLength={2048} name="customUrl" placeholder="https://example.com/page" required type="url" /></span></label> : null}
       <label className="wide">Message<textarea maxLength={1000} name="body" onFocus={() => setActiveField("body")} placeholder="Write the notification message" ref={bodyRef} required rows={4} /></label>
       <div className="wide app-notification-variables"><span>Insert into {activeField === "title" ? "title" : "message"}</span><div>{variables.map((variable) => <button key={variable.token} onClick={() => insertVariable(variable.token)} type="button">{variable.label}</button>)}</div><small>Each variable is replaced separately for every selected person.</small></div>

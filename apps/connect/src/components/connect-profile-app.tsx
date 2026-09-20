@@ -84,7 +84,11 @@ const workforceFeatureGuide = [
   { code: "advances", label: "Advances", detail: "Track advance requests and recovery." },
   { code: "attendance", label: "Attendance", detail: "View attendance and activity records." },
   { code: "roster", label: "Associate Rostering", detail: "See assigned shifts and route rostering." },
-  { code: "performance", label: "Performance", detail: "Review available performance measures." }
+  { code: "performance", label: "Performance", detail: "Review available performance measures." },
+  { code: "rate_card", label: "My Rate Card", detail: "See the active rate rules used for your earnings." },
+  { code: "connect", label: "Connect", detail: "Raise a payment, ID, roster or document request and track the response." },
+  { code: "documents", label: "Documents", detail: "Keep identity, vehicle and payment documents available in one place." },
+  { code: "leave", label: "Leave", detail: "Request time off where your People approval identity is active." }
 ] as const;
 const fieldValueKeys: Record<string, string> = {
   date_of_birth: "dateOfBirth",

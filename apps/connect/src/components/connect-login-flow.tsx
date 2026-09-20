@@ -28,6 +28,11 @@ const credentialKey = "dropx_connect_passkey_id";
 const accountKey = (account: AppAccount) => `${account.profileType}:${account.companyId}:${account.id}`;
 const accountIdentity = (account?: AppAccount | null) =>
   [account?.reference, account?.biometricId].filter(Boolean).join(" | ");
+const accountProfileLabel = (account?: AppAccount | null) => {
+  if (account?.profileType === "employee") return "People profile";
+  if (account?.profileType === "workforce") return "Workforce profile";
+  return "Workforce-linked profile";
+};
 const active = (account?: AppAccount | null) => account?.status?.toLowerCase() === "active";
 const defaultPages = (account: AppAccount | null) => account?.profileType === "employee"
   ? ["dashboard", "attendance", "leave"]
@@ -425,7 +430,7 @@ export function ConnectLoginFlow() {
           </button>)}
         </div> : <div className="dx-notification-empty"><Bell /><span>No notifications</span></div>}
       </aside> : null}
-      {profileMenu ? <aside className="dx-profile-pop"><strong>{account?.name || account?.reference}</strong>{accountIdentity(account) ? <small>{accountIdentity(account)}</small> : null}<button onClick={() => open("profile")}><UserRound />My Profile</button><button onClick={logout}><LogOut />Sign out</button></aside> : null}
+      {profileMenu ? <aside className="dx-profile-pop"><strong>{account?.name || account?.reference}</strong><small>{accountProfileLabel(account)}{account?.role ? ` · ${account.role}` : ""}</small>{accountIdentity(account) ? <small>{accountIdentity(account)}</small> : null}<button onClick={() => open("profile")}><UserRound />My Profile</button><button onClick={logout}><LogOut />Sign out</button></aside> : null}
     </header> : null}
     {drawer && account ? <><button aria-label="Close menu" className="dx-scrim" onClick={() => setDrawer(false)} /><aside className="dx-drawer">
       <div><Image alt="DropX" height={44} src="/dropx-logo.png" width={126} /><button aria-label="Switch accounts" onClick={() => open("accounts")}><SwitchCamera /></button><button aria-label="Close" onClick={() => setDrawer(false)}><X /></button></div>
@@ -458,7 +463,7 @@ export function ConnectLoginFlow() {
       {previewActive ? <div className="dx-preview-banner"><strong>Read-only preview</strong><span>You are viewing DropX One as {account?.name || "this user"}. Changes are blocked.</span></div> : null}
       {notice ? <div className="dx-alert success">{notice}<button onClick={() => setNotice("")}><X /></button></div> : null}
       {error ? <div className="dx-alert error">{error}<button onClick={() => setError("")}><X /></button></div> : null}
-      {step === "accounts" ? <section className="dx-accounts"><h1>Choose account</h1>{accounts.map((row) => <button key={accountKey(row)} onClick={() => choose(row)}><i>{row.profilePhotoUrl ? <img alt="" src={row.profilePhotoUrl} /> : <UsersRound />}</i><span><strong>{row.companyName}</strong><em>{row.name || row.reference}</em><small>{row.reference} {row.biometricId ? ` | ${row.biometricId}` : ""}</small></span><ChevronRight /></button>)}</section> : null}
+      {step === "accounts" ? <section className="dx-accounts"><h1>Choose account</h1><p className="subtle">Switch between your People and Workforce roles without signing out.</p>{accounts.map((row) => <button key={accountKey(row)} onClick={() => choose(row)}><i>{row.profilePhotoUrl ? <img alt="" src={row.profilePhotoUrl} /> : <UsersRound />}</i><span><strong>{row.companyName}</strong><em>{row.name || row.reference}</em><small>{accountProfileLabel(row)}{row.role ? ` · ${row.role}` : ""}</small><small>{row.reference} {row.biometricId ? ` | ${row.biometricId}` : ""}</small></span><ChevronRight /></button>)}</section> : null}
       {step === "dashboard" && account ? <ConnectDashboard account={account} onAttendance={() => open("attendance")} onConnect={() => open("connect")} onPayments={() => open("payments")} onProfile={() => open("profile")} onRoster={() => open("roster")} /> : null}
       {step === "payments" && account ? <ConnectWorkforceSelfService account={account} view="payments" /> : null}
       {step === "advances" && account ? <ConnectWorkforceSelfService account={account} view="advances" /> : null}
@@ -471,7 +476,7 @@ export function ConnectLoginFlow() {
       {step === "documents" && account ? <ConnectProfileApp account={account} onExit={() => open("exit")} onPhoto={(url) => setAvatar(url)} onSubmitted={profileSubmitted} /> : null}
       {step === "leave" && account ? <ConnectLeave account={account} /> : null}
       {step === "exit" && account ? <ConnectExitManagement account={account} onBack={() => open("profile")} /> : null}
-      {step === "settings" ? <section className="dx-settings"><h1>Settings</h1><label>Default account<select disabled={pending} value={defaultKey} onChange={(e) => saveDefaultAccount(e.target.value)}><option value="">Select default account</option>{accounts.map((row) => <option key={accountKey(row)} value={accountKey(row)}>{row.companyName} - {row.reference || row.name}</option>)}</select></label><label className="toggle"><span><strong>Enable biometric login</strong><small>Use Face ID or device authentication when available.</small></span><input defaultChecked={localStorage.getItem(biometricKey) === "true"} onChange={(e) => enrollBiometric(e.target.checked)} type="checkbox" /></label><button onClick={resetPin}>Change PIN</button></section> : null}
+      {step === "settings" ? <section className="dx-settings"><h1>Settings</h1><label>Default account<select disabled={pending} value={defaultKey} onChange={(e) => saveDefaultAccount(e.target.value)}><option value="">Select default account</option>{accounts.map((row) => <option key={accountKey(row)} value={accountKey(row)}>{accountProfileLabel(row)} · {row.companyName} - {row.reference || row.name}</option>)}</select></label><label className="toggle"><span><strong>Enable biometric login</strong><small>Use Face ID or device authentication when available.</small></span><input defaultChecked={localStorage.getItem(biometricKey) === "true"} onChange={(e) => enrollBiometric(e.target.checked)} type="checkbox" /></label><button onClick={resetPin}>Change PIN</button></section> : null}
     </main>}
   </div>;
 }

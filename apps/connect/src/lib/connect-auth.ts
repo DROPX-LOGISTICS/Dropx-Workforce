@@ -394,6 +394,25 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
   }
   const defaultPreference = preferenceResult.error ? null : preferenceResult.data;
 
+  // Leave continues to use the established People approval workflow.  Do not
+  // expose it to a canonical Workforce account until it has a compatible
+  // People contractor identity; this avoids a dead-end screen while keeping
+  // existing People leave data and approvals authoritative.
+  const workforceAccountIds = accounts
+    .filter((account) => account.profile_type === "workforce")
+    .map((account) => account.id);
+  const workforceLeaveIdentityResult = workforceAccountIds.length
+    ? await supabaseAdmin.from("workforce_identity_links")
+      .select("target_profile_id")
+      .in("target_profile_id", workforceAccountIds)
+      .eq("target_profile_type", "workforce")
+      .eq("legacy_profile_type", "contractor")
+      .eq("compatibility_active", true)
+    : { data: [], error: null };
+  if (workforceLeaveIdentityResult.error) throw new Error(workforceLeaveIdentityResult.error.message);
+  const workforceAccountsWithLeave = new Set((workforceLeaveIdentityResult.data ?? [])
+    .map((identity) => String(identity.target_profile_id)));
+
   return Promise.all(accounts
     .filter((account) => companyNameById.has(account.company_id))
     .map(async (account): Promise<ConnectAccount> => {
@@ -412,6 +431,10 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
           ? pageAccessByDesignationKey.get(designationKey)
           : undefined;
 
+      const pageAccess = account.profile_type === "employee"
+        ? normalizeAppPageAccess(account.profile_type, intersectPageAccess(categoryPages, designationPages))
+        : normalizeAppPageAccess(account.profile_type, designationPages ?? defaultPageAccess(account.profile_type));
+
       return {
       id: account.id,
       companyId: account.company_id,
@@ -423,9 +446,9 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       status: account.status ?? null,
       biometricId: account.biometric_id ?? null,
       profilePhotoUrl: await signedProfilePhotoUrl(account.profile_photo_path),
-      pageAccess: account.profile_type === "employee"
-        ? normalizeAppPageAccess(account.profile_type, intersectPageAccess(categoryPages, designationPages))
-        : normalizeAppPageAccess(account.profile_type, designationPages ?? defaultPageAccess(account.profile_type)),
+      pageAccess: account.profile_type === "workforce" && !workforceAccountsWithLeave.has(account.id)
+        ? pageAccess.filter((page) => page !== "leave")
+        : pageAccess,
       isDefault: account.profile_type !== "user" &&
         defaultPreference?.default_company_id === account.company_id &&
         defaultPreference?.default_profile_type === account.profile_type &&

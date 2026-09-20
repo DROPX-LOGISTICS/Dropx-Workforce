@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AppNotificationComposer, type AppNotificationRecipient } from "@/components/app-notification-composer";
+import { AppNotificationComposer, type AppNotificationPage, type AppNotificationRecipient } from "@/components/app-notification-composer";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import { requirePagePermission } from "@/lib/authorization";
@@ -7,6 +7,21 @@ import { loadWorkforceCommunicationRecipients } from "@/lib/workforce-communicat
 import { sendWorkforceAppNotification } from "./actions";
 
 export const dynamic = "force-dynamic";
+
+const workforcePageOptions: AppNotificationPage[] = [
+  { value: "dashboard", label: "Home" },
+  { value: "payments", label: "Payments & earnings" },
+  { value: "advances", label: "Advances" },
+  { value: "attendance", label: "Attendance" },
+  { value: "roster", label: "Work & roster" },
+  { value: "performance", label: "Performance" },
+  { value: "rate_card", label: "My rate card" },
+  { value: "connect", label: "Connect" },
+  { value: "documents", label: "Documents" },
+  { value: "leave", label: "Leave" },
+  { value: "profile", label: "My profile" },
+  { value: "settings", label: "Settings" }
+];
 
 export default async function WorkforceDropXOnePage({
   searchParams
@@ -43,7 +58,7 @@ export default async function WorkforceDropXOnePage({
       {searchParams?.error ? <div className="error-banner">{searchParams.error}</div> : null}
       <section className="app-notification-composer">
         <div><h2>New Workforce notification</h2><p>The notification appears in the selected members&apos; DropX One inbox and supported devices.</p></div>
-        <AppNotificationComposer action={sendWorkforceAppNotification} recipients={composerRecipients} submissionKey={randomUUID()} />
+        <AppNotificationComposer action={sendWorkforceAppNotification} pageOptions={workforcePageOptions} recipients={composerRecipients} submissionKey={randomUUID()} />
       </section>
     </AppShell>
   );

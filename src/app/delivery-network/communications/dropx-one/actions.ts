@@ -12,7 +12,7 @@ import {
 } from "@/lib/workforce-communication-recipients";
 
 const returnPath = "/delivery-network/communications/dropx-one";
-const internalRoutes = new Set(["", "dashboard", "profile", "attendance", "leave", "settings"]);
+const internalRoutes = new Set(["", "dashboard", "profile", "attendance", "leave", "settings", "payments", "advances", "roster", "performance", "rate_card", "connect", "documents"]);
 const variablePattern = /\{(full_name|dropx_id|biometric_id|category|location|designation)\}/g;
 
 function fail(message: string): never {

@@ -118,7 +118,7 @@ async function performance(companyId: string, workforceId: string) {
     companyId,
     hasAllLocationAccess: true,
     locationScopeIds: []
-  } as AuthorizationContext, `${to.slice(0, 8)}01`, to);
+  } as unknown as AuthorizationContext, `${to.slice(0, 8)}01`, to);
   if (snapshot.warnings.length) throw new Error(snapshot.warnings[0]);
   return snapshot.lines.filter((line) => line.workforceId === workforceId).map((line) => ({
     id: line.key,

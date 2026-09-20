@@ -164,11 +164,12 @@ export const workforceNavItems: NavItem[] = [
   },
   {
     code: "workforce_communications",
-    label: "Messaging",
+    label: "Connect",
     icon: "CM",
     children: [
-      { code: "workforce_communications", label: "Communication Center", href: "/delivery-network/communications" },
-      { code: "workforce_communications", label: "Connect Requests", href: "/delivery-network/connect" },
+      { code: "workforce_communications", label: "Workforce Connect Centre", href: "/delivery-network/communications" },
+      { code: "workforce_communications", label: "Workforce support desk", href: "/delivery-network/connect" },
+      { code: "workforce_speak_up", label: "Confidential Speak Up", href: "/delivery-network/speak-up" },
       { code: "workforce_communications_app", label: "DropX One Notifications", href: "/delivery-network/communications/dropx-one" },
       { code: "workforce_communications_whatsapp", label: "WhatsApp", href: "/delivery-network/communications/whatsapp" },
       { code: "workforce_communications_history", label: "Communication History", href: "/delivery-network/communications/history" }

@@ -20642,6 +20642,48 @@ td strong,
 }
 .workforce-product .wf-command-header p { max-width: 760px; color: var(--wf-muted); font-size: 13.5px; line-height: 1.55; }
 
+/* Workforce Connect Centre and command hero: explicit foreground colors avoid
+   broad dashboard header rules turning text unreadable on a dark surface. */
+.workforce-product .wf-command-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.1);
+  background:
+    radial-gradient(circle at 88% 5%, rgba(255, 183, 103, .26), transparent 23%),
+    radial-gradient(circle at 54% 104%, rgba(214, 74, 124, .30), transparent 38%),
+    linear-gradient(118deg, #17213c 0%, #263760 58%, #492d60 100%);
+}
+.workforce-product .wf-command-hero .wf-live-status { color: #ffc08b; }
+.workforce-product .wf-command-hero .wf-live-status i { background: #55dc9a; box-shadow: 0 0 0 4px rgba(85,220,154,.14); }
+.workforce-product .wf-command-hero h1 { color: #ffffff; text-wrap: balance; }
+.workforce-product .wf-command-hero h1 em { color: #ffb170; }
+.workforce-product .wf-command-hero p { color: #d9e2f3; }
+.workforce-product .wf-command-hero .wf-command-brief { background: rgba(255,255,255,.12); }
+.workforce-product .wf-command-hero .wf-command-secondary { color: #fff; background: rgba(255,255,255,.12); }
+.workforce-product .wf-command-hero .wf-command-primary { color: #fff; background: #ff6237; }
+
+.workforce-product .wf-connect-metrics { margin-bottom: 16px; }
+.workforce-product .wf-connect-workstreams { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; margin: 0 0 18px; }
+.workforce-product .wf-connect-workstreams > a { display: grid; grid-template-columns: 42px minmax(0,1fr) 18px; gap: 13px; align-items: center; min-height: 124px; padding: 19px; border: 1px solid var(--wf-line); border-radius: 16px; color: inherit; background: #fff; box-shadow: var(--wf-shadow-sm); text-decoration: none; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.workforce-product .wf-connect-workstreams > a:hover { border-color: #f2a488; box-shadow: 0 15px 28px rgba(31, 45, 77, .10); transform: translateY(-2px); }
+.workforce-product .wf-connect-workstreams > a > span { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; color: #c34d27; background: #fff0e7; }
+.workforce-product .wf-connect-workstreams > a:nth-child(2) > span { color: #5a4bd8; background: #eeedff; }
+.workforce-product .wf-connect-workstreams > a:nth-child(3) > span { color: #c02e5f; background: #fff0f5; }
+.workforce-product .wf-connect-workstreams > a > div { display: grid; gap: 5px; min-width: 0; }
+.workforce-product .wf-connect-workstreams strong { color: var(--wf-ink); font-size: 14px; font-weight: 720; letter-spacing: -.02em; }
+.workforce-product .wf-connect-workstreams small { color: var(--wf-muted); font-size: 11px; line-height: 1.45; }
+.workforce-product .wf-connect-workstreams > a > svg { color: #9aa5b8; }
+.workforce-product .wf-connect-boundary { border-left: 3px solid #e76339; }
+.workforce-product .wf-speakup-notice { display: flex; gap: 11px; align-items: flex-start; margin: 0 0 16px; padding: 13px 15px; border: 1px solid #f1c5d2; border-radius: 13px; color: #742542; background: #fff4f7; }
+.workforce-product .wf-speakup-notice svg { flex: 0 0 auto; margin-top: 1px; }
+.workforce-product .wf-speakup-notice div { display: grid; gap: 2px; }
+.workforce-product .wf-speakup-notice strong { font-size: 12px; }
+.workforce-product .wf-speakup-notice span { font-size: 11px; line-height: 1.4; }
+.workforce-product .wf-speakup-desk > article > header > span { color: #bd2c5c; background: #fff0f5; }
+.workforce-product .wf-speakup-desk .wf-connect-detail { border-left: 3px solid #e78da9; background: #fff7f9; }
+
+@media (max-width: 900px) { .workforce-product .wf-connect-workstreams { grid-template-columns: 1fr; } }
+
 /* Universal controls and CTAs */
 .workforce-product .button,
 .workforce-product .wf-command-actions a,

@@ -27,6 +27,7 @@ export default async function WorkforceConnectDesk({ searchParams }: { searchPar
     const result = await supabaseAdmin.from("workforce_connect_requests")
       .select("id,workforce_id,category,subject,detail,status,responder_note,created_at,updated_at")
       .eq("company_id", companyId)
+      .neq("category", "speak_up")
       .order("updated_at", { ascending: false })
       .limit(250);
     if (result.error) error = result.error.message;
@@ -43,8 +44,8 @@ export default async function WorkforceConnectDesk({ searchParams }: { searchPar
   const visible = status === "all" ? requests : requests.filter((request) => request.status === status);
   const counts = new Map(["open", "in_review", "resolved", "closed"].map((value) => [value, requests.filter((request) => request.status === value).length]));
 
-  return <AppShell active="Connect Requests" pageCode="workforce_communications">
-    <PageHead eyebrow="Workforce support" title="Connect requests" subtitle="Respond to associate payment, provider ID, route, document and roster questions from one accountable queue." />
+  return <AppShell active="Workforce support desk" pageCode="workforce_communications">
+    <PageHead eyebrow="Workforce Connect Centre" title="Workforce support desk" subtitle="Respond to payment, provider ID, route, document and roster questions. Confidential Speak Up reports are deliberately kept in a restricted queue." />
     {searchParams?.notice || searchParams?.error || error ? <section className={`panel message-panel ${searchParams?.error || error ? "error" : "success"}`}><div className="panel-body">{searchParams?.error || error || searchParams?.notice}</div></section> : null}
     <nav className="wf-finance-tabs" aria-label="Connect request status">{["open", "in_review", "resolved", "closed", "all"].map((value) => <a className={status === value ? "active" : ""} href={`${pathFor(value)}`} key={value}>{label(value)} <strong>{value === "all" ? requests.length : counts.get(value) ?? 0}</strong></a>)}</nav>
     <section className="wf-connect-desk">{visible.map((request) => { const worker = workerById.get(request.workforce_id); return <article key={request.id}><header><span><CircleHelp size={17} /></span><div><small>{label(request.category)} · {date(request.created_at)}</small><h2>{request.subject}</h2><p>{worker?.full_name ?? "Workforce associate"} · {worker?.dropx_id ?? "DropX ID pending"} · {worker?.stations?.station_code ?? "No station"}</p></div><em className={`wf-pay-state ${request.status}`}>{label(request.status)}</em></header><p className="wf-connect-detail">{request.detail}</p><form action={updateWorkforceConnectRequest}><input name="id" type="hidden" value={request.id} /><label>Status<select defaultValue={request.status} name="status"><option value="open">Open</option><option value="in_review">In review</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></label><label>Response to associate<textarea defaultValue={request.responder_note ?? ""} name="responder_note" placeholder="State the action, owner, timeline, or resolution" rows={3} /></label><SubmitButton pendingText="Updating"><MessageSquareText size={14} /> Update request</SubmitButton></form></article>; })}{!visible.length ? <div className="empty-state">No {status === "all" ? "Connect" : label(status).toLowerCase()} requests are waiting in your scope.</div> : null}</section>

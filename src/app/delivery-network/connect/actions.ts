@@ -26,6 +26,7 @@ export async function updateWorkforceConnectRequest(formData: FormData) {
       .select("id,workforce_id")
       .eq("company_id", companyId)
       .eq("id", id)
+      .neq("category", "speak_up")
       .maybeSingle();
     if (current.error || !current.data) throw new Error(current.error?.message ?? "Connect request was not found.");
     if (!authorization.hasAllLocationAccess) {
@@ -37,7 +38,7 @@ export async function updateWorkforceConnectRequest(formData: FormData) {
       responder_note: responderNote || null,
       resolved_at: ["resolved", "closed"].includes(status) ? new Date().toISOString() : null,
       updated_at: new Date().toISOString()
-    }).eq("company_id", companyId).eq("id", id).select("id").maybeSingle();
+    }).eq("company_id", companyId).eq("id", id).neq("category", "speak_up").select("id").maybeSingle();
     if (result.error || !result.data) throw new Error(result.error?.message ?? "This request changed before it could be updated.");
     revalidatePath(path);
   } catch (error) {

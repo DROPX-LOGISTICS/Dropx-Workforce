@@ -69,7 +69,7 @@ const opsGroups: PermissionGroup[] = [
 const workforceGroups: PermissionGroup[] = [
   { key: "workforce_operations", label: "Workforce Operations", codes: ["delivery_associates", "people_review"] },
   { key: "id_rate_cards", label: "IDs & Rate Cards", codes: ["executive_id_onboarding", "provider_mapping"] },
-  { key: "communications", label: "Communications", codes: ["workforce_communications", "workforce_communications_app", "workforce_communications_whatsapp", "workforce_communications_history"] },
+  { key: "communications", label: "Workforce Connect Centre", codes: ["workforce_communications", "workforce_communications_app", "workforce_communications_whatsapp", "workforce_communications_history", "workforce_speak_up"] },
   { key: "users", label: "Workforce Access", codes: ["users"] },
   { key: "master_data", label: "Workforce Master", codes: ["designations", "workforce_categories", "workforce_whatsapp"] }
 ];

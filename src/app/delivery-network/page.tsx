@@ -118,9 +118,9 @@ export default async function DeliveryNetworkPage() {
     {
       code: "workforce_communications",
       href: "/delivery-network/communications",
-      title: "Communication center",
-      description: "Send Workforce-only DropX One and WhatsApp communication from a validated recipient directory.",
-      metric: "2 channels",
+      title: "Workforce Connect Centre",
+      description: "Target workforce updates, resolve associate support and protect confidential Speak Up reviews.",
+      metric: "3 workstreams",
       icon: MessageSquareMore
     },
     {

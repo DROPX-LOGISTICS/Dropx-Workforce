@@ -29,3 +29,29 @@ export async function assignWorkforceShift(form: FormData) {
   const params = new URLSearchParams({ date: isWorkforceDate(from) ? from : "", [error ? "error" : "notice"]: error ?? "Shift assignment saved." });
   redirect(`${path}?${params}`);
 }
+
+export async function saveWorkforceOperatingSchedule(form: FormData) {
+  const authorization = await requirePagePermission("workforce_activity", "edit");
+  const companyId = requireCompanyId(authorization);
+  const from = String(form.get("effective_from") ?? "");
+  const path = "/delivery-network/associate-rostering";
+  let error: string | null = null;
+  try {
+    if (!supabaseAdmin) throw new Error("Schedule storage is unavailable.");
+    const result = await supabaseAdmin.rpc("workforce_save_operating_schedule", {
+      p_company: companyId,
+      p_actor: authorization.userId,
+      p_workforce: String(form.get("workforce_id") ?? ""),
+      p_pincode: String(form.get("operating_pincode") ?? "").replace(/\D/g, ""),
+      p_weekly_off_day: Number(form.get("weekly_off_day")),
+      p_from: from,
+      p_to: String(form.get("effective_to") ?? "") || null,
+      p_notes: String(form.get("notes") ?? "").trim().slice(0, 500) || null,
+      p_locations: authorization.hasAllLocationAccess ? null : authorization.locationScopeIds
+    });
+    if (result.error) throw new Error(result.error.message);
+    revalidatePath(path);
+  } catch (cause) { error = cause instanceof Error ? cause.message : "Unable to save operating schedule."; }
+  const params = new URLSearchParams({ [error ? "error" : "notice"]: error ?? "Operating schedule saved." });
+  redirect(`${path}?${params}`);
+}

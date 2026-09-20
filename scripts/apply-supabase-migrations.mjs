@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { managementRequest } from "./management-query-retry.mjs";
 
 function workflowFailure(error) {
   const message = (error instanceof Error ? error.message : String(error))
@@ -88,7 +89,7 @@ async function managementQuery(query, { readOnly = false } = {}) {
     throw new Error("SUPABASE_ACCESS_TOKEN and SUPABASE_PROJECT_ID are required.");
   }
 
-  const response = await fetch(
+  const response = await managementRequest(() => fetch(
     `https://api.supabase.com/v1/projects/${encodeURIComponent(projectId)}/database/query`,
     {
       method: "POST",
@@ -98,7 +99,7 @@ async function managementQuery(query, { readOnly = false } = {}) {
       },
       body: JSON.stringify({ query, read_only: readOnly })
     }
-  );
+  ), { readOnly });
   const body = await response.text();
   if (!response.ok) {
     let detail = body;

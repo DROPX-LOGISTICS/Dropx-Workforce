@@ -159,7 +159,7 @@
 .workforce-product .wf-review-stack button { min-height:31px; padding-inline:8px; font-size:8.5px; }
 
 .workforce-product .wf-payroll-create { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-bottom:16px; padding:17px 19px; border:1px solid #f1ccb9; border-radius:15px; background:linear-gradient(90deg,#fff8f4,#fff); box-shadow:var(--wf-shadow-sm); }
-.workforce-product .wf-payroll-create form { display:flex; align-items:end; gap:9px; }
+.workforce-product .wf-payroll-create form { display:flex; align-items:end; gap:9px; flex-wrap:wrap; }
 .workforce-product .wf-payroll-create label { display:grid; gap:4px; color:#737d8d; font-size:9px; font-weight:800; text-transform:uppercase; }
 .workforce-product .wf-payroll-create input { min-height:38px; padding:0 10px; border:1px solid #d8dde6; border-radius:8px; font:inherit; font-size:10.5px; }
 .workforce-product .wf-back-link { display:inline-flex; align-items:center; gap:6px; margin:0 0 11px; color:#616d80; font-size:10.5px; font-weight:800; }

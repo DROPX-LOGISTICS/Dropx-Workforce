@@ -151,7 +151,8 @@ export const workforceNavItems: NavItem[] = [
       { code: "workforce_earnings", label: "Live Earnings", href: "/delivery-network/earnings" },
       { code: "workforce_incentives", label: "Incentives", href: "/delivery-network/incentives" },
       { code: "workforce_adjustments", label: "Ad hoc Adjustments", href: "/delivery-network/adjustments" },
-      { code: "workforce_payroll", label: "Payroll Runs", href: "/delivery-network/payroll" }
+      { code: "workforce_payroll", label: "Payroll Runs", href: "/delivery-network/payroll" },
+      { code: "workforce_payroll", label: "Payroll Calendars", href: "/delivery-network/payroll-calendars" }
     ]
   },
   {

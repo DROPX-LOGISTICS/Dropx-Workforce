@@ -82,4 +82,6 @@ console.log('PASS: migration compiles; snapshot rollback; totals; maker-checker;
 await (await import('./test-workforce-joining-sql.mjs')).testJoiningSql(db);
 await (await import('./test-amazon-onboarding-sql.mjs')).testAmazonOnboardingSql(db);
 await (await import('./test-workforce-finance-sql.mjs')).testFinanceSql(db);
+const {testCalendarSql}=await import('./test-workforce-calendar-sql.mjs');
+await testCalendarSql(db);
 await db.close();

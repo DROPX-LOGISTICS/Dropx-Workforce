@@ -6,6 +6,7 @@ import { isCompanyOwner, requirePagePermission, type AuthorizationContext } from
 import { requireCompanyId } from "@/lib/company-scope";
 import { loadWorkforceEarnings, workforceEarningsDateRange, type WorkforceEarningsSnapshot } from "@/lib/workforce-earnings";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import {payrollCalendarPeriod,type PayrollCalendar} from '@/lib/workforce-payroll-calendar';
 
 const path = "/delivery-network/payroll";
 function text(value: FormDataEntryValue | null) { return String(value ?? "").trim(); }
@@ -78,18 +79,23 @@ export async function createPayrollRun(formData: FormData) {
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
     const range = workforceEarningsDateRange({ from: text(formData.get("from")), to: text(formData.get("to")) });
     if (range.from !== text(formData.get("from")) || range.to !== text(formData.get("to"))) throw new Error("Payroll period must be valid and no longer than 93 days.");
-    const overlapping = await supabaseAdmin.from("workforce_payroll_runs").select("id, run_number, period_start, period_end, status")
-      .eq("company_id", companyId).neq("status", "cancelled").lte("period_start", range.to).gte("period_end", range.from).limit(1);
+    const stationId=text(formData.get('station_id')) || null,calendarId=text(formData.get('calendar_id')) || null;
+    if(stationId){const station=await supabaseAdmin.from('stations').select('id').eq('company_id',companyId).eq('id',stationId).maybeSingle();if(station.error||!station.data)throw new Error('Choose a valid company station.');}
+    if(calendarId){const calendar=await supabaseAdmin.from('workforce_payroll_calendars').select('*').eq('company_id',companyId).eq('station_id',stationId ?? '').eq('id',calendarId).eq('is_active',true).maybeSingle();if(calendar.error||!calendar.data)throw new Error('Select an active calendar for this station.');const expected=payrollCalendarPeriod(calendar.data as PayrollCalendar,range.from);if(expected.from!==range.from||expected.to!==range.to)throw new Error('Payroll dates must match the selected calendar period.');}
+    let overlapQuery = supabaseAdmin.from("workforce_payroll_runs").select("id, run_number, period_start, period_end, status")
+      .eq("company_id", companyId).neq("status", "cancelled").lte("period_start", range.to).gte("period_end", range.from);
+    if(stationId)overlapQuery=overlapQuery.or(`station_id.is.null,station_id.eq.${stationId}`);
+    const overlapping=await overlapQuery.limit(1);
     if (overlapping.error) throw new Error(overlapping.error.message);
     if (overlapping.data?.length) throw new Error(`Payroll period overlaps ${overlapping.data[0].run_number} (${overlapping.data[0].period_start} to ${overlapping.data[0].period_end}). Cancel the existing run or choose a non-overlapping period.`);
-    const snapshot = await loadWorkforceEarnings(authorization, range.from, range.to, { payrollRunId: null });
+    const snapshot = await loadWorkforceEarnings(stationId ? {...authorization,hasAllLocationAccess:false,locationScopeIds:[stationId]}:authorization, range.from, range.to, { payrollRunId: null });
     if (snapshot.setupRequired) throw new Error("Workforce finance migration must complete before payroll can be created.");
     if (snapshot.warnings.length) throw new Error(snapshot.warnings.join(" "));
     if (!snapshot.summaries.length) throw new Error("No mapped Workforce earnings were found for this period.");
     const runNumber = `WF-${range.from.replaceAll("-", "")}-${range.to.replaceAll("-", "")}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
     const runId = crypto.randomUUID();
     await replacePayrollSnapshot(runId, companyId, snapshot, authorization.userId, {
-      run_number: runNumber, period_start: range.from, period_end: range.to
+      run_number: runNumber, period_start: range.from, period_end: range.to,station_id:stationId,calendar_id:calendarId
     });
     createdId = runId;
   } catch (error) {
@@ -107,10 +113,10 @@ export async function recalculatePayrollRun(formData: FormData) {
   try {
     requireNetworkPayrollScope(authorization);
     if (!supabaseAdmin || !id) throw new Error("Payroll run is required.");
-    const current = await supabaseAdmin.from("workforce_payroll_runs").select("id, period_start, period_end, status, updated_at").eq("company_id", companyId).eq("id", id).maybeSingle();
+    const current = await supabaseAdmin.from("workforce_payroll_runs").select("id, station_id, period_start, period_end, status, updated_at").eq("company_id", companyId).eq("id", id).maybeSingle();
     if (current.error) throw new Error(current.error.message);
     if (!current.data || current.data.status !== "draft") throw new Error("Only a draft payroll run can be recalculated.");
-    const snapshot = await loadWorkforceEarnings(authorization, current.data.period_start, current.data.period_end, { payrollRunId: id });
+    const snapshot = await loadWorkforceEarnings(current.data.station_id ? {...authorization,hasAllLocationAccess:false,locationScopeIds:[current.data.station_id]}:authorization, current.data.period_start, current.data.period_end, { payrollRunId: id });
     if (snapshot.warnings.length) throw new Error(snapshot.warnings.join(" "));
     if (snapshot.setupRequired) throw new Error("Finance storage is not ready. Recalculation has been cancelled.");
     await replacePayrollSnapshot(id, companyId, snapshot, authorization.userId, { expected_updated_at: current.data.updated_at });

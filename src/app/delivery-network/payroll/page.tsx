@@ -1,15 +1,17 @@
 import { ArrowRight, BadgeCheck, Banknote, Clock3, FileCheck2, LockKeyhole } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PendingLink } from "@/components/pending-link";
-import { SubmitButton } from "@/components/submit-button";
+import { WorkforcePayrollCreate } from "@/components/workforce-payroll-create";
+import {readAllRows} from "@/lib/supabase-pagination";
+import type {PayrollCalendar} from "@/lib/workforce-payroll-calendar";
 import { hasPermission, requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { workforceEarningsDateRange } from "@/lib/workforce-earnings";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { createPayrollRun } from "./actions";
+
 
 export const dynamic = "force-dynamic";
-type PayrollRun = { id: string; run_number: string; period_start: string; period_end: string; status: string; worker_count: number; shipment_count: number; net_amount: number; ready_count: number; hold_count: number; exception_count: number; source_updated_at: string | null; calculated_at: string | null; created_at: string };
+type PayrollRun = { id: string; station_id: string | null; run_number: string; period_start: string; period_end: string; status: string; worker_count: number; shipment_count: number; net_amount: number; ready_count: number; hold_count: number; exception_count: number; source_updated_at: string | null; calculated_at: string | null; created_at: string };
 function money(value: unknown) { return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(value ?? 0)); }
 function number(value: unknown) { return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Number(value ?? 0)); }
 
@@ -19,8 +21,14 @@ export default async function PayrollPage({ searchParams }: { searchParams?: { f
   const canCreate = authorization.permissions.workforce_payroll.canAdd && !authorization.readOnly;
   const { from, to } = workforceEarningsDateRange(searchParams);
   const result = supabaseAdmin && authorization.hasAllLocationAccess
-    ? await supabaseAdmin.from("workforce_payroll_runs").select("id, run_number, period_start, period_end, status, worker_count, shipment_count, net_amount, ready_count, hold_count, exception_count, source_updated_at, calculated_at, created_at").eq("company_id", companyId).order("created_at", { ascending: false }).limit(100)
+    ? await supabaseAdmin.from("workforce_payroll_runs").select("id, station_id, run_number, period_start, period_end, status, worker_count, shipment_count, net_amount, ready_count, hold_count, exception_count, source_updated_at, calculated_at, created_at").eq("company_id", companyId).order("created_at", { ascending: false }).limit(100)
     : { data: [], error: authorization.hasAllLocationAccess ? { message: "Supabase service role key is not configured." } : null };
+  const [stations,calendars]=supabaseAdmin && authorization.hasAllLocationAccess ? await Promise.all([
+    readAllRows(supabaseAdmin.from("stations").select("id,station_code").eq("company_id",companyId).order("station_code")),
+    readAllRows(supabaseAdmin.from("workforce_payroll_calendars").select("*").eq("company_id",companyId).eq("is_active",true).order("name").order("id"))
+  ]):[{data:[],error:null},{data:[],error:null}];
+  const stationNames=new Map((stations.data ?? []).map(row=>[row.id,row.station_code]));
+  const configurationError=stations.error?.message || calendars.error?.message;
   const runs = (result.data ?? []) as PayrollRun[];
   const openRuns = runs.filter((run) => ["draft", "review"].includes(run.status));
   const approvedValue = runs.filter((run) => ["approved", "paid"].includes(run.status)).reduce((sum, run) => sum + Number(run.net_amount), 0);
@@ -31,9 +39,11 @@ export default async function PayrollPage({ searchParams }: { searchParams?: { f
     {!authorization.hasAllLocationAccess ? <section className="panel message-panel"><div className="panel-body"><strong>Network payroll is centrally controlled</strong><p>Station-scoped users can review live earnings, but payroll creation and payout totals require all-location access.</p><PendingLink className="button secondary compact" href="/delivery-network/earnings">Open scoped earnings</PendingLink></div></section> : null}
     {result.error ? <section className="panel message-panel error"><div className="panel-body"><strong>Payroll storage is not ready</strong><p>{result.error.message}</p></div></section> : null}
     <section className="wf-finance-kpis mini"><article><span><Clock3 size={18} /></span><small>Open runs</small><strong>{openRuns.length}</strong><em>Draft or under review</em></article><article><span><BadgeCheck size={18} /></span><small>Approved / paid</small><strong>{runs.filter((run) => ["approved", "paid"].includes(run.status)).length}</strong><em>{money(approvedValue)} recorded</em></article><article><span><LockKeyhole size={18} /></span><small>Current blockers</small><strong>{openRuns.reduce((sum, run) => sum + Number(run.hold_count) + Number(run.exception_count), 0)}</strong><em>Holds and earning gaps</em></article></section>
-    {authorization.hasAllLocationAccess && canCreate && !result.error ? <section className="wf-payroll-create"><div><span>New close</span><h2>Create payroll snapshot</h2><p>The draft can be recalculated until it is submitted for review.</p></div><form action={createPayrollRun}><label>Period start<input defaultValue={from} name="from" required type="date" /></label><label>Period end<input defaultValue={to} name="to" required type="date" /></label><SubmitButton pendingText="Calculating payroll"><FileCheck2 size={15} /> Create draft payroll</SubmitButton></form></section> : null}
+    <p><PendingLink href="/delivery-network/payroll-calendars">Configure station payroll calendars →</PendingLink></p>
+    {configurationError ? <p role="alert">Payroll calendars could not be loaded: {configurationError}</p>:null}
+    {authorization.hasAllLocationAccess && canCreate && !result.error && !configurationError ? <WorkforcePayrollCreate stations={stations.data ?? []} calendars={(calendars.data ?? []) as PayrollCalendar[]} from={from} to={to}/>:null}
     <section className="wf-finance-panel"><header><div><span>Payroll register</span><h2>All payroll runs</h2><p>Payable value excludes held or manually excluded associates.</p></div></header><div className="table-wrap"><table className="wf-finance-table"><thead><tr><th>Run</th><th>Period</th><th>Workers</th><th>Shipments</th><th>Ready</th><th>Holds</th><th>Exceptions</th><th>Payable</th><th>Status</th><th>Open</th></tr></thead><tbody>
-      {runs.map((run) => <tr key={run.id}><td><strong>{run.run_number}</strong><small>Calculated {run.calculated_at ? new Date(run.calculated_at).toLocaleString("en-IN") : "pending"}</small></td><td>{run.period_start}<small>to {run.period_end}</small></td><td>{number(run.worker_count)}</td><td>{number(run.shipment_count)}</td><td>{run.ready_count}</td><td>{run.hold_count}</td><td>{run.exception_count}</td><td><strong>{money(run.net_amount)}</strong></td><td><span className={`wf-pay-state ${run.status}`}>{run.status}</span></td><td><PendingLink href={`/delivery-network/payroll/${run.id}`}>Review <ArrowRight size={13} /></PendingLink></td></tr>)}
+      {runs.map((run) => <tr key={run.id}><td><strong>{run.run_number}</strong><small>{run.station_id ? stationNames.get(run.station_id) ?? "Station" : "Whole network"}</small><small>Calculated {run.calculated_at ? new Date(run.calculated_at).toLocaleString("en-IN") : "pending"}</small></td><td>{run.period_start}<small>to {run.period_end}</small></td><td>{number(run.worker_count)}</td><td>{number(run.shipment_count)}</td><td>{run.ready_count}</td><td>{run.hold_count}</td><td>{run.exception_count}</td><td><strong>{money(run.net_amount)}</strong></td><td><span className={`wf-pay-state ${run.status}`}>{run.status}</span></td><td><PendingLink href={`/delivery-network/payroll/${run.id}`}>Review <ArrowRight size={13} /></PendingLink></td></tr>)}
       {!runs.length && !result.error ? <tr><td className="empty-cell" colSpan={10}><Banknote size={17} /> No payroll runs have been created.</td></tr> : null}
     </tbody></table></div></section>
   </AppShell>;

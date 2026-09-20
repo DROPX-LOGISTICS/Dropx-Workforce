@@ -16,6 +16,7 @@ export async function createWorkforceAdjustment(formData: FormData) {
   const authorization = await requirePagePermission("workforce_adjustments", "add");
   const companyId = requireCompanyId(authorization);
   try {
+    if (authorization.readOnly) throw new Error('Preview mode is read-only.');
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
     const workforceId = text(formData.get("workforce_id"));
     const adjustmentType = text(formData.get("adjustment_type"));
@@ -23,6 +24,7 @@ export async function createWorkforceAdjustment(formData: FormData) {
     const amount = Number(text(formData.get("amount")));
     const effectiveDate = text(formData.get("effective_date"));
     const reason = text(formData.get("reason"));
+    if (/^(MILEAGE|OPS-LOSS):/i.test(text(formData.get('external_reference')))) throw new Error('Use the dedicated mileage or station loss desk for controlled claim references.');
     if (!workforceId || !category || !reason || !isWorkforceDate(effectiveDate)) throw new Error("Associate, category, effective date and reason are required.");
     if (!["earning", "deduction"].includes(adjustmentType)) throw new Error("Choose earning or deduction.");
     if (!adjustmentCategories.has(category)) throw new Error("Choose a valid adjustment category.");
@@ -69,6 +71,7 @@ export async function reviewWorkforceAdjustment(formData: FormData) {
     if (current.error) throw new Error(current.error.message);
     if (!current.data || !["draft", "pending"].includes(current.data.status)) throw new Error("This adjustment has already been reviewed.");
     if (current.data.requested_by === authorization.userId) throw new Error("Maker-checker control does not allow you to review your own adjustment request.");
+    if (current.data.external_reference?.startsWith('MILEAGE:')) throw new Error('Open Mileage Claims to inspect distance evidence and record the decision.');
     const person=await supabaseAdmin.from('workforce').select('location_id').eq('company_id',companyId).eq('id',current.data.workforce_id).maybeSingle();
     if(person.error||!person.data||(!authorization.hasAllLocationAccess&&!authorization.locationScopeIds.includes(person.data.location_id)))throw new Error('Associate is outside your review scope.');
     const loss=current.data.external_reference?.startsWith('OPS-LOSS:');

@@ -88,4 +88,5 @@ const {testHoldSql}=await import('./test-workforce-holds-sql.mjs');
 await testHoldSql(db);
 await (await import('./test-workforce-exit-finance-sql.mjs')).testExitFinanceSql(db);
 await (await import('./test-workforce-loss-sql.mjs')).testLossSql(db);
+await (await import('./test-workforce-mileage-sql.mjs')).testMileageSql(db);
 await db.close();

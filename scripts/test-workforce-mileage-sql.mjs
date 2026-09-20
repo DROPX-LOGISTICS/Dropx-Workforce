@@ -1,0 +1,55 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+export async function testMileageSql(db){
+ await db.exec(readFileSync(new URL('../supabase/migrations/20260920222958_workforce_mileage_claims.sql',import.meta.url),'utf8'));
+ const u=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ const company=u(1),maker=u(2),owner=u(3),station=u(5),provider=u(6),worker=u(1000),designation=u(902),card=u(1001),mapping=u(1002),run=u(1003),item=u(1004);
+ await db.query("insert into workforce(id,company_id,location_id,is_active,onboarding_status,migration_state,designation_id) values($1,$2,$3,true,'active','canonical',$4)",[worker,company,station,designation]);
+ const policy=(o={})=>db.query('select workforce_create_mileage_policy($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) id',[company,owner,station,'Synthetic mileage',o.rate??2.5,100,'2026-04-01','2026-04-30','TEST POLICY',o.scope??[station]]);
+ await assert.rejects(policy({scope:[u(999)]}),/scope/);await assert.rejects(policy({rate:1.001}),/two decimals/);await assert.rejects(policy({rate:'NaN'}),/positive/);
+ const policyId=(await policy()).rows[0].id;await assert.rejects(policy(),/exclusion/);
+ await assert.rejects(db.query('update workforce_mileage_policies set rate_per_km=99 where id=$1',[policyId]),/immutable/);
+ const submit=(o={})=>db.query('select workforce_submit_mileage($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) id',[o.company??company,maker,o.worker??worker,policyId,o.km??35.5,o.date??'2026-04-02',o.posting??'2026-04-03',o.reference??'TEST-KM-1','TEST-ODOMETER-LOG','Synthetic verified journey details',o.scope??[station]]);
+ await assert.rejects(submit({company:u(999)}),/company/);await assert.rejects(submit({scope:[]}),/scope/);await assert.rejects(submit({worker:u(4)}),/approved canonical/);
+ await db.query('update workforce set designation_id=null,designation=null where id=$1',[worker]);await assert.rejects(submit(),/designation master/);await db.query('update workforce set designation_id=$2 where id=$1',[worker,designation]);
+ await assert.rejects(submit(),/provider ID mapping/);
+ await db.query("insert into field_executive_provider_mappings(id,company_id,workforce_id,provider_id,station_id,provider_member_id,effective_from,effective_to,status) values($1,$2,$3,$4,$5,'SYNTHETIC-KM','2026-04-01','2026-04-30','active')",[mapping,company,worker,provider,station]);
+ await assert.rejects(submit(),/explicit effective zero-fuel/);
+ await db.query("insert into workforce_rate_cards(id,company_id,provider_id,station_id,name,pay_type,effective_from,effective_to,delivery_rate,fuel_rate,status,approved_by,approved_at) values($1,$2,$3,$4,'Synthetic mileage basis','per_shipment','2026-04-01','2026-04-30',12,1,'active',$5,now())",[card,company,provider,station,owner]);
+ await assert.rejects(submit(),/already includes fuel/);await db.query('update workforce_rate_cards set fuel_rate=0 where id=$1',[card]);
+ await assert.rejects(submit({km:101}),/daily limit/);await assert.rejects(submit({km:1.001}),/two decimals/);await assert.rejects(submit({km:'Infinity'}),/daily limit/);await assert.rejects(submit({date:'2026-05-01'}),/policy period/);await assert.rejects(submit({posting:'2026-03-01'}),/precede/);
+ const claim=(await submit()).rows[0].id;assert.equal((await submit({reference:'test-km-1'})).rows[0].id,claim);
+ await assert.rejects(submit({km:36}),/different evidence/);await assert.rejects(submit({reference:'DUPLICATE-DAY'}),/already has a mileage/);
+ const adjustment=(await db.query('select adjustment_id id from workforce_mileage_claims where id=$1',[claim])).rows[0].id;
+ assert.equal((await db.query('select amount from workforce_adjustments where id=$1',[adjustment])).rows[0].amount,'88.75');
+ await assert.rejects(db.query('delete from workforce_mileage_claims where id=$1',[claim]),/immutable/);await assert.rejects(db.query('delete from workforce_adjustments where id=$1',[adjustment]),/cannot be deleted/);
+ await assert.rejects(db.query("update workforce_adjustments set status='posted',reviewed_by=$2,reviewed_at=now() where id=$1",[adjustment,owner]),/independent approval/);
+ const review=(by=owner,note='Synthetic reviewer checked distance evidence')=>db.query("update workforce_adjustments set status='approved',reviewed_by=$2,reviewed_at=now(),review_remarks=$3 where id=$1",[adjustment,by,note]);
+ await assert.rejects(review(maker),/different reviewer/);await assert.rejects(review(owner,'ok'),/documented/);
+ await db.query('update workforce_rate_cards set fuel_rate=1 where id=$1',[card]);await assert.rejects(review(),/already includes fuel/);await db.query('update workforce_rate_cards set fuel_rate=0 where id=$1',[card]);
+ const runPayload={id:run,run_number:'MILEAGE-TEST',period_start:'2026-04-01',period_end:'2026-04-03',exception_count:0};
+ const rows=[{id:item,company_id:company,payroll_run_id:run,workforce_id:worker,dropx_id:'MILEAGE-TEST',worker_name:'Synthetic',station_code:'TEST',bank_account_no:'12345',ifsc_code:'TEST000001',shipment_count:10,activity_count:10,work_days:1,base_amount:1000,incentive_amount:0,adjustment_amount:0,deduction_amount:0,gross_amount:1000,net_amount:1000,status:'ready',hold_reasons:[],provider_member_ids:['SYNTHETIC-KM']}];
+ const line={company_id:company,payroll_run_id:run,payroll_item_id:item,workforce_id:worker,source_type:'shipment',source_id:u(1005),work_date:'2026-04-02',shipment_count:10,activity_count:10,base_amount:1000,incentive_amount:0,adjustment_amount:0,net_amount:1000,calculation_source:'rate_card',calculation_snapshot:{test:true}};
+ await db.query('select workforce_save_payroll_snapshot($1,$2,$3,$4,$5,$6)',[company,maker,runPayload,rows,[line],[]]);await review();
+ await assert.rejects(db.query('update workforce_rate_cards set fuel_rate=1 where id=$1',[card]),/historical rate window/);
+ await assert.rejects(db.query('delete from workforce_rate_cards where id=$1',[card]),/historical rate window/);
+ await assert.rejects(db.query('update field_executive_provider_mappings set provider_member_id=\'CHANGED\' where id=$1',[mapping]),/historical provider mapping/);
+ await db.query("update workforce_rate_cards set effective_to='2026-04-15',status='closed' where id=$1",[card]);
+ await db.query("update field_executive_provider_mappings set effective_to='2026-04-15' where id=$1",[mapping]);
+ await assert.rejects(db.query("update field_executive_provider_mappings set effective_to='2026-04-01' where id=$1",[mapping]),/historical provider mapping/);
+ await assert.rejects(db.query("select workforce_change_payroll_state($1,$2,$3,'submit',false,null,null,null)",[company,run,maker]),/missing from this snapshot/);
+ const save=async()=>{const stamp=(await db.query('select updated_at::text stamp from workforce_payroll_runs where id=$1',[run])).rows[0].stamp;return db.query('select workforce_save_payroll_snapshot($1,$2,$3,$4,$5,$6)',[company,maker,{id:run,expected_updated_at:stamp,exception_count:0},[{...rows[0],adjustment_amount:88.75,gross_amount:1088.75,net_amount:1088.75}],[line,{...line,source_type:'adjustment',source_id:adjustment,shipment_count:0,activity_count:0,base_amount:0,adjustment_amount:88.75,net_amount:88.75,calculation_source:'adjustment'}],[adjustment]]);};
+ await save();await save();assert.equal((await db.query('select count(*)::int n from workforce_payroll_lines where source_id=$1',[adjustment])).rows[0].n,1);
+ await db.query("select workforce_change_payroll_state($1,$2,$3,'submit',false,null,null,null)",[company,run,maker]);await db.query('select workforce_confirm_payroll($1,$2,$3,$4,true,null)',[company,run,owner,u(401)]);
+ await assert.rejects(submit({reference:'LATE-KM',date:'2026-04-03'}),/already confirmed/);
+ await submit({reference:'LATE-KM',date:'2026-04-03',posting:'2026-05-01'});assert.equal((await submit()).rows[0].id,claim);
+ const late=(await db.query("select adjustment_id id from workforce_mileage_claims where reference='LATE-KM'")).rows[0].id;
+ await db.query("update workforce_adjustments set status='rejected',reviewed_by=$2,reviewed_at=now(),review_remarks='Synthetic evidence was incorrect' where id=$1",[late,owner]);
+ await submit({reference:'CORRECTED-KM',date:'2026-04-03',posting:'2026-05-01'});
+ for(const role of ['anon','authenticated']){
+  assert.equal((await db.query("select has_function_privilege($1,'workforce_submit_mileage(uuid,uuid,uuid,uuid,numeric,date,date,text,text,text,uuid[])','EXECUTE') allowed",[role])).rows[0].allowed,false);
+  assert.equal((await db.query("select has_table_privilege($1,'workforce_mileage_claims','SELECT') allowed",[role])).rows[0].allowed,false);
+ }
+ assert.equal((await db.query("select has_table_privilege('service_role','workforce_mileage_claims','INSERT') allowed")).rows[0].allowed,false);
+ console.log('PASS: mileage policy versions/scope, zero-fuel mapping requirement, precision/evidence, retry/daily dedupe, immutable claims, independent review, historical rate/mapping protection, snapshot gate, exact-once payroll, late posting, rejected correction and server-only access.');
+}

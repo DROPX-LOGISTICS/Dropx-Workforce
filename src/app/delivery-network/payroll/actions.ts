@@ -148,7 +148,11 @@ export async function changePayrollRunStatus(formData: FormData) {
   try {
     requireNetworkPayrollScope(authorization);
     if (!supabaseAdmin || !id) throw new Error("Payroll run is required.");
-    const result = await supabaseAdmin.rpc("workforce_change_payroll_state", {
+    if (authorization.readOnly) throw new Error("Preview mode is read-only.");
+    if (action === "paid") throw new Error("Payment completion is reconciled from Finance. Open Finance Payments to process approved requests.");
+    const result = action === "approve" || action === "send_finance" ? await supabaseAdmin.rpc("workforce_confirm_payroll", {
+      p_company:companyId,p_run:id,p_actor:authorization.userId,p_head:text(formData.get("payment_head_id")) || null,p_owner:isCompanyOwner(authorization),p_remarks:text(formData.get("remarks")) || null
+    }) : await supabaseAdmin.rpc("workforce_change_payroll_state", {
       p_company: companyId, p_run: id, p_actor: authorization.userId, p_action: action,
       p_owner: isCompanyOwner(authorization), p_remarks: text(formData.get("remarks")) || null,
       p_reference: text(formData.get("payment_reference")) || null,
@@ -160,5 +164,5 @@ export async function changePayrollRunStatus(formData: FormData) {
   } catch (error) {
     finish("error", error instanceof Error ? error.message : "Unable to update payroll status.", id);
   }
-  finish("notice", `Payroll marked ${action === "submit" ? "in review" : action}.`, id);
+  finish("notice", ["approve","send_finance"].includes(action) ? "Payroll sent to Finance Payments for approval and processing. No bank transfer has been made." : `Payroll marked ${action === "submit" ? "in review" : action}.`, id);
 }

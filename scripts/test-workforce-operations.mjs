@@ -81,4 +81,5 @@ assert.equal(grants.rows.length,0);
 console.log('PASS: migration compiles; snapshot rollback; totals; maker-checker; immutable approved payroll; correction return; payment evidence and retry; roster overlap; mapping scope; settlement validation, atomic deactivation and retry; RPC privileges.');
 await (await import('./test-workforce-joining-sql.mjs')).testJoiningSql(db);
 await (await import('./test-amazon-onboarding-sql.mjs')).testAmazonOnboardingSql(db);
+await (await import('./test-workforce-finance-sql.mjs')).testFinanceSql(db);
 await db.close();

@@ -63,7 +63,7 @@ export default async function WorkforceRateCardsPage({ searchParams }: { searchP
     <AppShell active="Rate Cards" pageCode="workforce_rate_cards">
       <section className="wf-finance-hero compact">
         <div><span>Commercial policy</span><h1>Date-effective rate cards</h1><p>Control provider, station and designation rates without rewriting historical earnings. Active versions are immutable.</p></div>
-        <div className="wf-finance-actions">{hasPermission(authorization, "payment_methods", "access") ? <PendingLink className="wf-command-secondary" href="/master/payment-methods">Payment methods</PendingLink> : null}{canAdd ? <PendingLink className="wf-command-primary" href="/delivery-network/rate-cards?add=1"><Plus size={16} /> New rate card</PendingLink> : null}</div>
+        <div className="wf-finance-actions"><PendingLink className="wf-command-secondary" href="/delivery-network/pay-scheme-preview">Preview pooled MG / km fuel</PendingLink>{hasPermission(authorization, "payment_methods", "access") ? <PendingLink className="wf-command-secondary" href="/master/payment-methods">Payment methods</PendingLink> : null}{canAdd ? <PendingLink className="wf-command-primary" href="/delivery-network/rate-cards?add=1"><Plus size={16} /> New rate card</PendingLink> : null}</div>
       </section>
 
       {searchParams?.notice || searchParams?.error ? <section className={`panel message-panel ${searchParams.error ? "error" : "success"}`}><div className="panel-body"><strong>{searchParams.error ? "Action required" : "Completed"}</strong><p>{searchParams.error ?? searchParams.notice}</p></div></section> : null}

@@ -18,7 +18,7 @@
 | DropX One joining/training visibility | Live; existing mapped account verified; statements use individual Finance outcomes; effective identity/date earnings fix 7f16ea42 verified |
 | Confirmed payroll → Finance approval/process | Live Workforce a0bbb45 + Finance e411777. Atomic isolated SQL tests passed; authenticated Finance queue checked. No live payroll created or payment sent. Approved payroll payment-head configuration still required |
 | Flexible station payroll calendars | Live e93fff5; station and cross-station duplicate guards tested; authenticated calendar and payroll pages checked. No real calendars or pay terms assigned |
-| Pooled MG / verified km | Pending |
+| Pooled MG / verified km | Mathematical preview implemented with isolated tests; payroll settlement and verified-distance intake remain pending. Preview must never be described as live accrual |
 | Refer-and-earn attribution / approved retention reward | Pending |
 | Provider-authorised daily cover attribution | Pending |
 | Ops payment holds | Live Workforce 0599174/f9c3933 and Ops 8d0f1126; searchable, station-scoped desks browser-verified. SQL checks cover independent release, payroll and late Finance holds. One exposes own period/status only. No production hold placed |
@@ -45,4 +45,11 @@ Prior production audit has existing People projection drift and unassigned payme
 
 Completion means code tested, source committed, production deployment SHA matched, database migration verified and authenticated UI/API/data boundary checked. A build or health endpoint alone does not prove the full business flow.
 
-Latest usability follow-up: station masters sorted by code, station context carried into training/calendar forms, owner-only setup/connection links hidden from other roles, and pincode validation no longer silently strips invalid characters. Local typecheck, full prebuild and application build passed before release; verify the follow-up deployment and selected-station defaults separately.
+Usability follow-up c236b4d is live (dpl_2ArCqcijNz63e6k9yr2aqBsGqRSJ), with GitHub quality run 35539501871 passing. Station masters are sorted by code, station context carries into training/calendar forms, owner-only setup/connection links are hidden from other roles, and pincode validation no longer silently strips invalid characters. QLDA selection was verified in both production master forms without saving.
+
+## Pooled scheme preview boundary
+
+- `workforce-pooled-pay.ts` is a pure calculator, not a payroll source. It distinguishes guarantee-plus-pooled-excess from a pooled minimum floor, counts qualifying days rather than calendar days, adds explicit verified-kilometre fuel, and rounds money to paise.
+- One combined row per date prevents duplicate daily guarantees. Invalid dates, duplicate dates, negative/fractional counts, excessive precision and future work fail. Open/unconfirmed windows are provisional. Even a complete-window illustration returns `payrollEnabled: false`.
+- The Rate Cards page links to an authenticated, client-only formula preview. Blank terms are not silently replaced by the illustrative example. The example is opt-in and never saved; there is no associate assignment or database write.
+- Actual accrual still needs effective associate agreements, independently reviewed distance evidence, window-close supplemental settlement, prior-payment reconciliation and late-source correction handling. Daily or weekly pay cycles must not reset a 30-day pooled threshold. The UI states this limitation explicitly.

@@ -24,6 +24,7 @@ export default function WorkforceAssociateOnboardingPage({
       bulkImportDescription="Upload master-classified Workforce associates. Every registration remains compatible with the existing DropX One flow."
       bulkImportTitle="Bulk associate onboarding"
       designationCategoryFilter={["contractors", "field_executives"]}
+      designationCodeFilter={["DA"]}
       designationPeopleModule="delivery_network"
       detailSubtitle="Associate registration and profile"
       editId={searchParams?.edit}

@@ -796,6 +796,7 @@ function FieldExecutiveBulkImportPanel({
 async function loadFieldExecutiveData(
   authorization: AuthorizationContext,
   designationCategoryFilter: DesignationCategoryFilter[],
+  designationCodeFilter: string[],
   designationPeopleModule: DesignationPeopleModule,
   table: "workforce" | "field_executives" | "contractors" | "vendors" | "workers",
   accessSurface: AccessSurface,
@@ -927,9 +928,11 @@ async function loadFieldExecutiveData(
     providers: firstRelation(location.providers),
     location_models: firstRelation(location.location_models)
   })) as LocationRow[];
+  const acceptedDesignationCodes = new Set(designationCodeFilter.map((code) => code.trim().toUpperCase()).filter(Boolean));
   const profileDesignations = ((designationsResult.data ?? []) as unknown as DesignationRow[]).filter((designation) => {
     const categories = normalizeDesignationCategories(designation.onboarding_categories);
-    return designationCategoryFilter.some((category) => categories.includes(category));
+    return designationCategoryFilter.some((category) => categories.includes(category))
+      || acceptedDesignationCodes.has(String(designation.code ?? "").trim().toUpperCase());
   });
   const designations = profileDesignations;
   const allowedLocationIds = new Set(locations.map((location) => location.id));
@@ -1032,6 +1035,7 @@ export async function FieldExecutivePageContent({
   bulkImportDescription = "Upload existing field executive rows and keep the profile completion pending for the app.",
   bulkImportTitle = "Bulk upload field executives",
   designationCategoryFilter = ["field_executives"],
+  designationCodeFilter = [],
   designationPeopleModule,
   detailSubtitle = "Complete Field Executive profile",
   errorMessage,
@@ -1053,6 +1057,7 @@ export async function FieldExecutivePageContent({
   bulkImportDescription?: string;
   bulkImportTitle?: string;
   designationCategoryFilter?: DesignationCategoryFilter[];
+  designationCodeFilter?: string[];
   designationPeopleModule: DesignationPeopleModule;
   detailSubtitle?: string;
   errorMessage?: string;
@@ -1078,7 +1083,7 @@ export async function FieldExecutivePageContent({
     canEdit: false
   };
   const workforceConfig = nonEmployeeConfigForRoute(returnPath);
-  const { executives, locations, designations, profileDesignations, reviewIssuesByExecutive, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, designationCategoryFilter, designationPeopleModule, workforceConfig.table, accessSurface, editId, viewId);
+  const { executives, locations, designations, profileDesignations, reviewIssuesByExecutive, editExecutive, viewExecutive, error } = await loadFieldExecutiveData(authorization, designationCategoryFilter, designationCodeFilter, designationPeopleModule, workforceConfig.table, accessSurface, editId, viewId);
   const companyId = requireCompanyId(authorization);
   const isOpsWorkforce = accessSurface === "ops" && returnPath === "/field-executive";
   const profileCorrectionApprover = isOpsWorkforce && canApproveProfileCorrections(authorization);

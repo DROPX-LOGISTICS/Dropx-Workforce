@@ -21932,3 +21932,128 @@ td strong,
   .workforce-product.workforce-people-inspired .page-head h1 { font-size:29px; }
   .workforce-product.workforce-people-inspired .panel-head { min-height:0; padding:16px; }
 }
+
+/* Full-surface component language: every Workforce page consumes these shared
+   primitives, giving pages, responses and actions one coherent experience. */
+.workforce-product.workforce-people-inspired .user-menu-trigger {
+  min-height:40px;
+  border:1px solid #dfe5ed;
+  border-radius:11px;
+  background:#fff;
+  box-shadow:0 2px 7px rgba(26,38,61,.04);
+}
+.workforce-product.workforce-people-inspired .user-avatar { width:30px; height:30px; background:linear-gradient(135deg,#f06b38,#d6472b); }
+.workforce-product.workforce-people-inspired .page-head-action,
+.workforce-product.workforce-people-inspired .panel-head > div { min-width:0; }
+.workforce-product.workforce-people-inspired .eyebrow,
+.workforce-product.workforce-people-inspired .panel-head .eyebrow,
+.workforce-product.workforce-people-inspired .wf-command-panel > header span,
+.workforce-product.workforce-people-inspired .wf-workspace-directory > header span {
+  color:#c84b25;
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.09em;
+}
+.workforce-product.workforce-people-inspired .subtle { color:#748198; font-size:12.5px; line-height:1.55; }
+.workforce-product.workforce-people-inspired .button.secondary,
+.workforce-product.workforce-people-inspired .wf-command-secondary,
+.workforce-product.workforce-people-inspired .pager-button {
+  border-color:#dbe2eb;
+  color:#435169;
+  background:#fff;
+  box-shadow:none;
+}
+.workforce-product.workforce-people-inspired .button.ghost { border-color:#f5cbbb; color:#ae421f; background:#fff7f3; }
+.workforce-product.workforce-people-inspired .button.danger { border-radius:10px; }
+.workforce-product.workforce-people-inspired .status-pill,
+.workforce-product.workforce-people-inspired .wf-pay-state { min-height:26px; padding:4px 9px; border-radius:999px; font-size:10px; font-weight:720; }
+.workforce-product.workforce-people-inspired .message-panel { overflow:hidden; border-radius:14px; box-shadow:none; }
+.workforce-product.workforce-people-inspired .message-panel.error { border-color:#f4c7bd; background:#fff7f5; }
+.workforce-product.workforce-people-inspired .message-panel.success { border-color:#b7e4ce; background:#f2fbf6; }
+.workforce-product.workforce-people-inspired .empty-state,
+.workforce-product.workforce-people-inspired .empty-cell { min-height:190px; color:#748198; background:#fbfcfe; }
+.workforce-product.workforce-people-inspired .pagination,
+.workforce-product.workforce-people-inspired .panel-foot { min-height:60px; border-top-color:#e5eaf1; background:#fbfcfd; }
+.workforce-product.workforce-people-inspired .filters,
+.workforce-product.workforce-people-inspired .master-toolbar,
+.workforce-product.workforce-people-inspired .mapping-toolbar {
+  padding:14px 16px;
+  border-color:#e5eaf1;
+  background:#fbfcfe;
+}
+.workforce-product.workforce-people-inspired .table-wrap,
+.workforce-product.workforce-people-inspired .table-scroll { border-color:#e5eaf1; border-radius:0 0 16px 16px; }
+.workforce-product.workforce-people-inspired table tbody tr:hover td { background:#fff9f6; }
+
+/* Deliberately quiet dashboard: orient, see the state, then take action. */
+.workforce-product.workforce-people-inspired .wf-dashboard-intro {
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:26px;
+  margin:0 0 20px;
+  padding:8px 0 22px;
+  border-bottom:1px solid #e5eaf1;
+  background:transparent;
+  box-shadow:none;
+}
+.workforce-product.workforce-people-inspired .wf-dashboard-intro::after { display:none; }
+.workforce-product.workforce-people-inspired .wf-dashboard-intro .wf-live-status { color:#c84b25; }
+.workforce-product.workforce-people-inspired .wf-dashboard-intro .wf-live-status i { background:#26a36d; box-shadow:0 0 0 4px rgba(38,163,109,.11); }
+.workforce-product.workforce-people-inspired .wf-dashboard-intro h1 { margin:8px 0 7px; color:#202a3d; font-size:clamp(32px,2.8vw,42px); font-weight:730; letter-spacing:-.052em; line-height:1.02; }
+.workforce-product.workforce-people-inspired .wf-dashboard-intro p { max-width:660px; margin:0; color:#748198; font-size:13.5px; line-height:1.55; }
+.workforce-product.workforce-people-inspired .wf-dashboard-intro .wf-command-actions { flex:0 0 auto; }
+.workforce-product.workforce-people-inspired .wf-command-kpis {
+  gap:0;
+  margin:0 0 20px;
+  padding:0;
+  border:1px solid #e1e7ef;
+  border-radius:16px;
+  background:#fff;
+  box-shadow:0 8px 26px rgba(31,45,73,.045);
+}
+.workforce-product.workforce-people-inspired .wf-command-kpis article { min-height:104px; padding:18px; border:0; border-right:1px solid #e8ecf1; border-radius:0; background:transparent; }
+.workforce-product.workforce-people-inspired .wf-command-kpis article:last-child { border-right:0; }
+.workforce-product.workforce-people-inspired .wf-command-kpis article > span { width:40px; height:40px; flex-basis:40px; border-radius:12px; }
+.workforce-product.workforce-people-inspired .wf-command-kpis .orange { color:#d95023; background:#fff0e9; }
+.workforce-product.workforce-people-inspired .wf-command-kpis .rose { color:#a8457a; background:#fff0f6; }
+.workforce-product.workforce-people-inspired .wf-command-kpis .green { color:#197b58; background:#eaf8f1; }
+.workforce-product.workforce-people-inspired .wf-command-kpis .navy { color:#45558a; background:#eef1ff; }
+.workforce-product.workforce-people-inspired .wf-command-kpis small { color:#748198; font-size:11px; font-weight:650; }
+.workforce-product.workforce-people-inspired .wf-command-kpis strong { margin-top:1px; color:#202a3d; font-size:26px; font-weight:720; }
+.workforce-product.workforce-people-inspired .wf-command-kpis em { color:#a0aabb; font-size:10px; font-style:normal; }
+.workforce-product.workforce-people-inspired .wf-lifecycle-map { margin-bottom:20px; border-radius:16px; box-shadow:0 8px 26px rgba(31,45,73,.04); }
+.workforce-product.workforce-people-inspired .wf-lifecycle-map > header { min-height:70px; padding:16px 19px; background:#fff; }
+.workforce-product.workforce-people-inspired .wf-lifecycle-map h2 { font-size:17px; font-weight:690; }
+.workforce-product.workforce-people-inspired .wf-lifecycle-map > div { background:#fff; }
+.workforce-product.workforce-people-inspired .wf-lifecycle-map a { min-height:128px; padding:17px; }
+.workforce-product.workforce-people-inspired .wf-lifecycle-map a:hover { background:#fff9f6; }
+.workforce-product.workforce-people-inspired .wf-command-board { gap:16px; margin-bottom:20px; }
+.workforce-product.workforce-people-inspired .wf-command-panel > header,
+.workforce-product.workforce-people-inspired .wf-workspace-directory > header { min-height:72px; padding:16px 19px; }
+.workforce-product.workforce-people-inspired .wf-command-panel > header h2,
+.workforce-product.workforce-people-inspired .wf-workspace-directory > header h2 { font-size:17px; font-weight:690; }
+.workforce-product.workforce-people-inspired .wf-pipeline-list { padding:18px 19px; }
+.workforce-product.workforce-people-inspired .wf-pipeline-list article > div:first-child span { color:#48566d; font-size:12px; font-weight:680; }
+.workforce-product.workforce-people-inspired .wf-pipeline-list article > div:first-child strong { color:#202a3d; font-size:15px; }
+.workforce-product.workforce-people-inspired .wf-desk-actions > a { min-height:72px; }
+.workforce-product.workforce-people-inspired .wf-desk-actions > a > span,
+.workforce-product.workforce-people-inspired .wf-workspace-icon { width:40px; height:40px; border-radius:12px; }
+.workforce-product.workforce-people-inspired .wf-desk-actions strong,
+.workforce-product.workforce-people-inspired .wf-workspace-copy strong { color:#27344a; font-size:12.5px; }
+.workforce-product.workforce-people-inspired .wf-desk-actions small,
+.workforce-product.workforce-people-inspired .wf-workspace-copy small { color:#8691a3; font-size:10.5px; }
+.workforce-product.workforce-people-inspired .wf-workspace-rows > a { min-height:76px; padding:11px 4px; }
+
+@media (max-width:760px) {
+  .workforce-product.workforce-people-inspired .wf-dashboard-intro { align-items:stretch; flex-direction:column; gap:16px; }
+  .workforce-product.workforce-people-inspired .wf-dashboard-intro .wf-command-actions { display:grid; grid-template-columns:1fr 1fr; width:100%; }
+  .workforce-product.workforce-people-inspired .wf-dashboard-intro .wf-command-actions > * { width:100%; }
+  .workforce-product.workforce-people-inspired .wf-command-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .workforce-product.workforce-people-inspired .wf-command-kpis article,
+  .workforce-product.workforce-people-inspired .wf-command-kpis article:nth-child(odd),
+  .workforce-product.workforce-people-inspired .wf-command-kpis article:nth-last-child(-n + 2) { min-height:118px; border:0; border-right:1px solid #e8ecf1; border-bottom:1px solid #e8ecf1; }
+  .workforce-product.workforce-people-inspired .wf-command-kpis article:nth-child(even) { border-right:0; }
+  .workforce-product.workforce-people-inspired .wf-command-kpis article:nth-last-child(-n + 2) { border-bottom:0; }
+  .workforce-product.workforce-people-inspired .wf-lifecycle-map a { min-height:112px; }
+}

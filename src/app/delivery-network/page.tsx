@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, BadgeCheck, Banknote, CircleDollarSign, CircleDot, Clock3, Fingerprint, Gift, MessageSquareMore, ShieldCheck, Sparkles, UserRoundPlus, WalletCards } from "lucide-react";
+import { Activity, ArrowRight, BadgeCheck, Banknote, CircleDollarSign, CircleDot, Clock3, Fingerprint, Gift, MessageSquareMore, ShieldCheck, UserRoundPlus, WalletCards } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PendingLink } from "@/components/pending-link";
 import { hasPermission, requirePagePermission } from "@/lib/authorization";
@@ -175,16 +175,11 @@ export default async function DeliveryNetworkPage() {
 
   return (
     <AppShell active="Workforce Dashboard" pageCode="delivery_associates">
-      <section className="wf-command-header wf-command-hero">
+      <section className="wf-command-header wf-dashboard-intro">
         <div className="wf-command-intro">
-          <span className="wf-live-status"><i /> Workforce control room</span>
-          <h1>What needs action<br /><em>before the next payout?</em></h1>
-          <p>One workspace for associate activation, provider-ID readiness, daily output and payment clearance.</p>
-        </div>
-        <div className="wf-command-brief" aria-label="Today’s operating brief">
-          <span><Sparkles size={15} /> Today&apos;s operating brief</span>
-          <strong>{pending + underReview + financeSnapshot.heldWorkers + financeSnapshot.exceptions.length} items need a decision</strong>
-          <small>Start with registration, mapping and payout blockers; each route preserves its master data and audit trail.</small>
+          <span className="wf-live-status"><i /> Workforce operations</span>
+          <h1>Workforce overview</h1>
+          <p>Track activation, provider readiness and payout work from one clear operational view.</p>
         </div>
         <div className="wf-command-actions">
           <PendingLink className="wf-command-secondary" href="/delivery-network/associates">
@@ -203,28 +198,21 @@ export default async function DeliveryNetworkPage() {
       <section className="wf-command-kpis" aria-label="Workforce status summary">
         <article>
           <span className="orange"><Clock3 size={17} /></span>
-          <div><small>Awaiting registration</small><strong>{pending}</strong></div>
+          <div><small>Needs registration</small><strong>{pending}</strong><em>Associate action required</em></div>
         </article>
         <article>
           <span className="rose"><ShieldCheck size={17} /></span>
-          <div><small>Ready for review</small><strong>{underReview}</strong></div>
+          <div><small>Ready for review</small><strong>{underReview}</strong><em>Documents and activation checks</em></div>
         </article>
         <article>
           <span className="green"><BadgeCheck size={17} /></span>
-          <div><small>Field active</small><strong>{active}</strong></div>
+          <div><small>Active in field</small><strong>{active}</strong><em>Available for operations</em></div>
         </article>
         <article>
           <span className="navy"><Fingerprint size={17} /></span>
-          <div><small>Active ID mappings</small><strong>{mappingCount}</strong></div>
+          <div><small>Provider ID mappings</small><strong>{mappingCount}</strong><em>Current payout mappings</em></div>
         </article>
       </section>
-
-      {hasPermission(authorization, "workforce_earnings", "access") ? <section className="wf-finance-kpis dashboard" aria-label="Workforce earnings summary">
-        <article><span><CircleDollarSign size={18} /></span><small>MTD live earnings</small><strong>₹{Math.round(financeSnapshot.totalNet).toLocaleString("en-IN")}</strong><em>Estimated until payroll approval</em></article>
-        <article><span><Activity size={18} /></span><small>MTD shipments</small><strong>{Math.round(financeSnapshot.totalSourceShipments).toLocaleString("en-IN")}</strong><em>{financeSnapshot.sourceRowCount.toLocaleString("en-IN")} daily source rows</em></article>
-        <article><span><BadgeCheck size={18} /></span><small>Pay ready</small><strong>{financeSnapshot.readyWorkers}</strong><em>{financeSnapshot.heldWorkers} associates on hold</em></article>
-        <article className={financeSnapshot.exceptions.length ? "attention" : "healthy"}><span><ShieldCheck size={18} /></span><small>Earning exceptions</small><strong>{financeSnapshot.exceptions.length}</strong><em>Unmapped IDs or missing rates</em></article>
-      </section> : null}
 
       <section className="wf-lifecycle-map wf-action-lane">
         <header><div><small>Move work forward</small><h2>One action lane, not scattered modules</h2></div><span>{lifecycleStages.length} guarded stages</span></header>

@@ -144,8 +144,26 @@ export function ConnectDashboard({
     const executive = account.profileType !== "employee" && account.profileType !== "user";
     const profileUrl = executive
       ? `/api/connect/field-executive-profile?executiveId=${encodeURIComponent(account.id)}&profileType=${encodeURIComponent(account.profileType)}`
-      : `/api/connect/profile?employeeId=${encodeURIComponent(account.id)}`;
+      : `/api/connect/profile?employeeId=${encodeURIComponent(account.id)}${account.profileType === "user" ? "&profileType=user" : ""}`;
     const month = localIsoDate().slice(0, 7);
+    const attendanceRequest = account.profileType === "user"
+      ? Promise.resolve({ summary: { present: 0, absent: 0, misPunch: 0, fullDay: 0, halfDay: 0, needsReview: 0, shortDay: 0 }, rows: [] } as Attendance)
+      : fetch(`/api/connect/attendance?accountId=${encodeURIComponent(account.id)}&profileType=${encodeURIComponent(account.profileType)}&month=${month}`)
+        .then(async (response) => {
+          const payload = await response.json();
+          if (!response.ok) throw new Error(payload.error || "Unable to load attendance.");
+          return payload as Attendance;
+        })
+        .catch(() => ({ summary: { present: 0, absent: 0, misPunch: 0, fullDay: 0, halfDay: 0, needsReview: 0, shortDay: 0 }, rows: [] } as Attendance));
+    const verificationRequest = account.profileType === "user"
+      ? Promise.resolve([] as Verification[])
+      : fetch(`/api/connect/verification?accountId=${encodeURIComponent(account.id)}&profileType=${encodeURIComponent(account.profileType)}`)
+        .then(async (response) => {
+          const payload = await response.json();
+          if (!response.ok) throw new Error(payload.error || "Unable to load verifications.");
+          return (payload.verifications ?? []) as Verification[];
+        })
+        .catch(() => [] as Verification[]);
 
     Promise.all([
       fetch(profileUrl).then(async (response) => {
@@ -153,18 +171,8 @@ export function ConnectDashboard({
         if (!response.ok) throw new Error(payload.error || "Unable to load profile.");
         return payload.profile as Profile;
       }),
-      fetch(`/api/connect/attendance?accountId=${encodeURIComponent(account.id)}&profileType=${encodeURIComponent(account.profileType)}&month=${month}`)
-        .then(async (response) => {
-          const payload = await response.json();
-          if (!response.ok) throw new Error(payload.error || "Unable to load attendance.");
-          return payload as Attendance;
-        }),
-      fetch(`/api/connect/verification?accountId=${encodeURIComponent(account.id)}&profileType=${encodeURIComponent(account.profileType)}`)
-        .then(async (response) => {
-          const payload = await response.json();
-          if (!response.ok) throw new Error(payload.error || "Unable to load verifications.");
-          return (payload.verifications ?? []) as Verification[];
-        })
+      attendanceRequest,
+      verificationRequest
     ]).then(([nextProfile, nextAttendance, nextVerifications]) => {
       setProfile(nextProfile);
       setAttendance(nextAttendance);

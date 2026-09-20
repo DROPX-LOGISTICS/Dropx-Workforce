@@ -332,10 +332,11 @@ function ReadTile({ label, value, verified, url, full }: { label: string; value?
 
 export function ConnectProfileApp({ account, onExit, onPhoto, onSubmitted }: { account: AppAccount; onExit?: () => void; onPhoto?: (url: string) => void; onSubmitted?: () => Promise<void> | void }) {
   const executive = account.profileType !== "employee" && account.profileType !== "user";
+  const peopleProfile = account.profileType === "user";
   const endpoint = executive ? "/api/connect/field-executive-profile" : "/api/connect/profile";
   const query = executive
     ? `executiveId=${account.id}&profileType=${encodeURIComponent(account.profileType)}`
-    : `employeeId=${account.id}`;
+    : `employeeId=${account.id}${peopleProfile ? "&profileType=user" : ""}`;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [verifications, setVerifications] = useState<Record<string, Verification>>({});
@@ -359,8 +360,8 @@ export function ConnectProfileApp({ account, onExit, onPhoto, onSubmitted }: { a
         if (!response.ok) throw new Error(payload.error);
         return payload.profile as Profile;
       }),
-      fetch(`/api/connect/verification?accountId=${account.id}&profileType=${account.profileType}`).then((response) => response.json()),
-      fetch(`/api/connect/profile-draft?accountId=${account.id}&profileType=${account.profileType}`).then(async (response) => {
+      peopleProfile ? Promise.resolve({ verifications: [] }) : fetch(`/api/connect/verification?accountId=${account.id}&profileType=${account.profileType}`).then((response) => response.json()),
+      peopleProfile ? Promise.resolve(null) : fetch(`/api/connect/profile-draft?accountId=${account.id}&profileType=${account.profileType}`).then(async (response) => {
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || "Unable to load draft.");
         return (payload.draft ?? null) as ProfileDraft | null;
@@ -388,7 +389,7 @@ export function ConnectProfileApp({ account, onExit, onPhoto, onSubmitted }: { a
       if (draft) setNotice("Draft restored.");
       if (next.profilePhotoUrl) onPhoto?.(next.profilePhotoUrl);
     }).catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load profile."));
-  }, [account.id, account.profileType, endpoint, query]);
+  }, [account.id, account.profileType, endpoint, peopleProfile, query]);
 
   const enabled = useMemo(() => {
     const configured = profile?.fieldRules?.enabled;

@@ -63,6 +63,17 @@ type EmployeeProfileRow = {
   designations?: { code: string | null; name: string | null; profile_field_rules?: unknown } | { code: string | null; name: string | null; profile_field_rules?: unknown }[] | null;
 };
 
+type PeopleProfileRow = {
+  id: string;
+  company_id: string;
+  full_name: string | null;
+  email: string | null;
+  employee_id: string | null;
+  role: string | null;
+  mobile: string | null;
+  mobile_country_code: string | null;
+};
+
 function firstRelation<T>(value: T | T[] | null | undefined) {
   return Array.isArray(value) ? value[0] ?? null : value ?? null;
 }
@@ -181,6 +192,51 @@ async function requireEmployeeAccess(employeeId: string) {
   return account;
 }
 
+async function requirePeopleAccess(profileId: string) {
+  const accounts = await loadSessionAccounts();
+  const account = accounts.find((item) => item.profileType === "user" && item.id === profileId);
+  if (!account) throw new Error("People profile is not available for this login.");
+  return account;
+}
+
+async function loadPeopleProfile(profileId: string, companyId: string) {
+  if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+  const result = await supabaseAdmin
+    .from("profiles")
+    .select("id, company_id, full_name, email, employee_id, role, mobile, mobile_country_code")
+    .eq("id", profileId)
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (result.error) throw new Error(result.error.message);
+  if (!result.data) throw new Error("People profile was not found.");
+  return result.data as PeopleProfileRow;
+}
+
+function serializePeopleProfile(row: PeopleProfileRow) {
+  return {
+    id: row.id,
+    readOnly: {
+      employeeId: row.employee_id ?? "-",
+      biometricId: "-",
+      fullName: row.full_name ?? "-",
+      email: row.email ?? "-",
+      location: "-",
+      designation: row.role ?? "People profile",
+      dateOfJoin: "-",
+      mobile: row.mobile ? `+${row.mobile_country_code ?? "91"} ${row.mobile}` : "-"
+    },
+    editable: {},
+    statutoryApplicability: [],
+    fieldRules: { enabled: [], required: [] },
+    uploads: {},
+    uploadUrls: {},
+    profilePhotoUrl: "",
+    status: "active",
+    returnRemarks: ""
+  };
+}
+
 async function loadEmployee(employeeId: string, companyId: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const result = await supabaseAdmin
@@ -292,6 +348,12 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const employeeId = url.searchParams.get("employeeId") ?? "";
+    const profileType = url.searchParams.get("profileType") ?? "employee";
+    if (profileType === "user") {
+      const account = await requirePeopleAccess(employeeId);
+      const profile = await loadPeopleProfile(account.id, account.companyId);
+      return NextResponse.json({ ok: true, profile: serializePeopleProfile(profile) });
+    }
     const account = await requireEmployeeAccess(employeeId);
     const employee = await loadEmployee(account.id, account.companyId);
     return NextResponse.json({ ok: true, profile: await serializeEmployee(employee) });

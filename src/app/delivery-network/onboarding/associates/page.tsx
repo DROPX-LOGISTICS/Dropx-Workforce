@@ -23,7 +23,7 @@ export default function WorkforceAssociateOnboardingPage({
       addTitle="Invite Workforce associate"
       bulkImportDescription="Upload master-classified Workforce associates. Every registration remains compatible with the existing DropX One flow."
       bulkImportTitle="Bulk associate onboarding"
-      designationCategoryFilter={["contractors"]}
+      designationCategoryFilter={["contractors", "field_executives"]}
       designationPeopleModule="delivery_network"
       detailSubtitle="Associate registration and profile"
       editId={searchParams?.edit}
@@ -34,7 +34,7 @@ export default function WorkforceAssociateOnboardingPage({
       listTitle="Associate onboarding requests"
       notice={searchParams?.notice}
       pageCode="delivery_associates"
-      pageSubtitle="Onboard only Workforce-classified contractor roles such as delivery, driving and Wishmaster. People / HR roles are excluded by the designation master."
+      pageSubtitle="Onboard Workforce-classified frontline roles such as Delivery Associate, driving and Wishmaster. People / HR roles remain excluded by the designation master."
       pageTitle="Associate Onboarding"
       returnPath="/delivery-network/onboarding/associates"
       viewId={searchParams?.view}

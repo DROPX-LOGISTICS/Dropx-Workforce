@@ -10,6 +10,9 @@ import { isMissingVerificationTable } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { isNonEmployeeProfileType, workforceTable } from "@/lib/workforce-profiles";
 import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
+import {loadWorkforceEarnings} from '@/lib/workforce-earnings';
+import {readAllRows} from '@/lib/supabase-pagination';
+import {assertFinalPayrollMatches} from '@/lib/workforce-exit-reconciliation';
 
 function lifecycleRedirect(params: { error?: string; notice?: string; tab?: string }): never {
   const query = new URLSearchParams();
@@ -306,6 +309,7 @@ export async function reviewWorkforceExit(formData: FormData) {
     const companyId = requireCompanyId(authorization);
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
     if (!caseId || !["approve", "reject"].includes(action)) throw new Error("Choose a valid exit decision.");
+    if (authorization.readOnly) throw new Error('Preview mode cannot change an exit.');
     if (!remarks) throw new Error("Decision remarks are required.");
     const current = await supabaseAdmin.from("workforce_lifecycle_cases")
       .select("id, field_executive_id, profile_type, profile_id, profile_location_id, status, requested_effective_date")
@@ -331,6 +335,7 @@ export async function reviewWorkforceExit(formData: FormData) {
     if (update.error) throw new Error(update.error.message);
     const profileUpdate = await supabaseAdmin.from(workforceTable(current.data.profile_type)).update({
       lifecycle_status: action === "approve" ? "settlement_pending" : "active",
+      ...(action === 'approve' ? {last_working_date: current.data.requested_effective_date} : {}),
       updated_at: now
     }).eq("company_id", companyId).eq("id", current.data.profile_id);
     if (profileUpdate.error) throw new Error(profileUpdate.error.message);
@@ -360,6 +365,7 @@ export async function completeWorkforceSettlement(formData: FormData) {
   const caseId = text(formData.get("case_id"));
   try {
     const authorization = await requirePagePermission("people_review", "edit");
+    if (authorization.readOnly) throw new Error('Preview mode cannot complete settlement.');
     const companyId = requireCompanyId(authorization);
     if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
     const current = await supabaseAdmin.from("workforce_lifecycle_cases")
@@ -386,6 +392,23 @@ export async function completeWorkforceSettlement(formData: FormData) {
     const incomplete = (masters.data ?? []).filter((item, index) => item.is_required && checklistRows[index]?.status !== "completed");
     if (incomplete.length) throw new Error(`Complete the exit checklist: ${incomplete.map((item) => item.label).join(", ")}.`);
     if (!isCompanyOwner(authorization)) throw new Error("Only an owner can complete or waive a settlement.");
+    if (current.data.profile_type === 'workforce') {
+      const itemId=text(formData.get('payroll_item_id'));
+      const item=await supabaseAdmin.from('workforce_payroll_items').select('id,payroll_run_id,workforce_id,status').eq('company_id',companyId).eq('workforce_id',current.data.profile_id).eq('id',itemId).maybeSingle();
+      if(item.error||!item.data||item.data.status!=='paid') throw new Error('Choose a Finance-paid final payroll item for this associate.');
+      const run=await supabaseAdmin.from('workforce_payroll_runs').select('id,period_start,period_end').eq('company_id',companyId).eq('id',item.data.payroll_run_id).single();
+      if(run.error)throw new Error('The final payroll period could not be verified.');
+      const snapshot=await loadWorkforceEarnings({...authorization,hasAllLocationAccess:false,locationScopeIds:[locationId]},run.data.period_start,run.data.period_end,{payrollRunId:run.data.id});
+      if(snapshot.setupRequired||snapshot.warnings.length)throw new Error('Final earnings sources could not be verified. Resolve the earnings warnings first.');
+      const frozen=await readAllRows(supabaseAdmin.from('workforce_payroll_lines').select('source_type,source_id,work_date,base_amount,incentive_amount,adjustment_amount,net_amount').eq('company_id',companyId).eq('payroll_item_id',itemId).order('id'));
+      if(frozen.error)throw new Error('The paid earnings snapshot could not be loaded.');
+      assertFinalPayrollMatches(snapshot.lines.filter(line=>line.workforceId===current.data!.profile_id),frozen.data??[]);
+      if(formData.get('sources_reviewed')!=='true')throw new Error('Confirm all periods, late imports and claims have been reviewed.');
+      const reconciled=await supabaseAdmin.rpc('workforce_reconcile_exit',{p_company:companyId,p_case:caseId,p_item:itemId,p_actor:authorization.userId,p_owner:true,p_note:text(formData.get('review_note')),p_checklist:checklistRows,p_locations:authorization.hasAllLocationAccess?null:authorization.locationScopeIds});
+      if(reconciled.error)throw new Error(reconciled.error.message);
+      revalidateLifecyclePages();
+      lifecycleRedirect({notice:'Exit reconciled to the existing Finance payment and access deactivated. No additional payment was created.',tab:'exits'});
+    }
     const gross = Number(text(formData.get("gross_amount")) || 0);
     const deductions = Number(text(formData.get("deduction_amount")) || 0);
     if (!Number.isFinite(gross) || !Number.isFinite(deductions) || gross < 0 || deductions < 0) throw new Error("Settlement amounts must be finite and nonnegative.");

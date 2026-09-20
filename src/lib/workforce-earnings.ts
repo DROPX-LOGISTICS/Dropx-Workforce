@@ -333,10 +333,12 @@ function calculateIncentive(campaign: WorkforceIncentiveCampaign, shipment: CpsS
   return campaign.maximum_amount !== null ? Math.min(calculated, maximum) : calculated;
 }
 
-function profileHolds(profile: WorkforceProfileRow) {
+function profileHolds(profile: WorkforceProfileRow, workDate?: string) {
   const holds: string[] = [];
   if (!profile.is_active || key(profile.onboarding_status) !== "ACTIVE") holds.push("Workforce profile is not active");
-  if (profile.lifecycle_status && !["ACTIVE", "ONBOARDING"].includes(key(profile.lifecycle_status))) holds.push(`Lifecycle is ${profile.lifecycle_status}`);
+  const settling = key(profile.lifecycle_status) === "SETTLEMENT_PENDING" && Boolean(profile.last_working_date);
+  if (profile.lifecycle_status && !["ACTIVE", "ONBOARDING"].includes(key(profile.lifecycle_status)) && !settling) holds.push(`Lifecycle is ${profile.lifecycle_status}`);
+  if (workDate && profile.last_working_date && workDate > profile.last_working_date) holds.push("Activity is after the approved last working day");
   if (!String(profile.bank_account_no ?? "").trim() || !String(profile.ifsc_code ?? "").trim()) holds.push("Bank details are incomplete");
   if (!String(profile.dropx_id ?? "").trim()) holds.push("DropX ID is missing");
   return holds;
@@ -400,7 +402,7 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
     const rateCard = mapping && profile && station
       ? resolveRateCard(rateCardsByProvider.get(mapping.provider_id) ?? [], mapping.provider_id, station.id, profile.designation_id, shipment.work_date)
       : null;
-    const holds = profile ? profileHolds(profile) : [];
+    const holds = profile ? profileHolds(profile, shipment.work_date) : [];
     if (!mapping) {
       if (!station) holds.push("Station code is not configured");
       else if (!mappingCandidates.length) holds.push("No effective provider ID mapping");
@@ -595,8 +597,8 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
       adjustmentAmount: money(signedAmount),
       netAmount: money(signedAmount),
       calculationSource: "adjustment",
-      status: profileHolds(profile).length ? "hold" : "ready",
-      holdReasons: profileHolds(profile),
+      status: profileHolds(profile, adjustment.effective_date).length ? "hold" : "ready",
+      holdReasons: profileHolds(profile, adjustment.effective_date),
       sourceUpdatedAt: null,
       trace: { category: adjustment.category, reason: adjustment.reason, type: adjustment.adjustment_type }
     });

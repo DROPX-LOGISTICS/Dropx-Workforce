@@ -86,4 +86,5 @@ const {testCalendarSql}=await import('./test-workforce-calendar-sql.mjs');
 await testCalendarSql(db);
 const {testHoldSql}=await import('./test-workforce-holds-sql.mjs');
 await testHoldSql(db);
+await (await import('./test-workforce-exit-finance-sql.mjs')).testExitFinanceSql(db);
 await db.close();

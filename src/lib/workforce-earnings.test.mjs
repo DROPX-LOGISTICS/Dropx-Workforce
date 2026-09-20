@@ -87,6 +87,17 @@ test("payment holds preserve earnings while blocking payout until release", () =
   }
 });
 
+test('approved exit preserves earned pay through last day and holds later activity',()=>{
+  const base=input();
+  const person={...base.workforce[0],lifecycle_status:'settlement_pending',last_working_date:'2026-08-20'};
+  const result=calculateWorkforceEarnings(input({workforce:[person]}));
+  assert.equal(result.readyWorkers,1);assert.equal(result.totalNet,300);
+  const late=calculateWorkforceEarnings(input({workforce:[person],shipments:[{...base.shipments[0],work_date:'2026-08-21'}]}));
+  assert.equal(late.readyWorkers,0);assert.match(late.lines[0].holdReasons.join(),/last working day/);
+  const missing=calculateWorkforceEarnings(input({workforce:[{...person,last_working_date:null}]}));
+  assert.equal(missing.readyWorkers,0);
+});
+
 test("calculates live mapped earnings from shipment count and configured rate", () => {
   const result = calculateWorkforceEarnings(input());
   assert.equal(result.totalShipments, 30);

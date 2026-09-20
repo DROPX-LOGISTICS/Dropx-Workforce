@@ -194,6 +194,7 @@ export const workforceNavItems: NavItem[] = [
     label: "Configuration",
     icon: "WM",
     children: [
+      { code: "people_review", label: "Setup Checklist", href: "/delivery-network/setup" },
       { code: "amazon_connector", label: "Amazon Connection", href: "/settings/amazon-onboarding" },
       { code: "workforce_categories", label: "Registration Policies", href: "/delivery-network/engagement-types" },
       { code: "designations", label: "Workforce Designations", href: "/delivery-network/designations" },

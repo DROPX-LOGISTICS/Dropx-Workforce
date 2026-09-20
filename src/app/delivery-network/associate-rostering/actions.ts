@@ -6,6 +6,7 @@ import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { isWorkforceDate } from "@/lib/workforce-earnings";
+import { workforceClassification } from "@/lib/workforce-classification";
 
 export async function assignWorkforceShift(form: FormData) {
   const authorization = await requirePagePermission("workforce_activity", "edit");
@@ -38,10 +39,13 @@ export async function saveWorkforceOperatingSchedule(form: FormData) {
   let error: string | null = null;
   try {
     if (!supabaseAdmin) throw new Error("Schedule storage is unavailable.");
-    const result = await supabaseAdmin.rpc("workforce_save_operating_schedule", {
+    const person=await supabaseAdmin.from('workforce').select('designation_id,designation').eq('company_id',companyId).eq('id',String(form.get('workforce_id')??'')).maybeSingle();
+    if(person.error||!person.data||!(await workforceClassification(companyId))(person.data))throw new Error('Choose a master-classified Workforce associate.');
+    const result = await supabaseAdmin.rpc("workforce_version_operating_schedule", {
       p_company: companyId,
       p_actor: authorization.userId,
       p_workforce: String(form.get("workforce_id") ?? ""),
+      p_replaces: String(form.get("replaces") ?? "").trim() || null,
       p_pincode: String(form.get("operating_pincode") ?? "").replace(/\D/g, ""),
       p_weekly_off_day: Number(form.get("weekly_off_day")),
       p_from: from,

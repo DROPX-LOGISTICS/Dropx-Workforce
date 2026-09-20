@@ -119,7 +119,7 @@ export const workforceNavItems: NavItem[] = [
   { code: "delivery_associates", label: "Workforce Dashboard", href: "/delivery-network", icon: "WR" },
   {
     code: "delivery_associates",
-    label: "1. Setup & Workforce",
+    label: "People & work",
     icon: "DA",
     children: [
       { code: "delivery_associates", label: "Workforce Register", href: "/delivery-network/associates" },
@@ -131,7 +131,7 @@ export const workforceNavItems: NavItem[] = [
   },
   {
     code: "provider_mapping",
-    label: "2. IDs, Mapping & Rates",
+    label: "IDs & rates",
     icon: "ID",
     children: [
       { code: "executive_id_onboarding", label: "Provider ID Onboarding", href: "/delivery-network/id-onboarding" },
@@ -142,7 +142,7 @@ export const workforceNavItems: NavItem[] = [
   { code: "delivery_associates", label: "Need Attention", href: "/delivery-network/attention", icon: "!" },
   {
     code: "workforce_earnings",
-    label: "3. Earnings & Payment Runs",
+    label: "Pay & settlements",
     icon: "₹",
     children: [
       { code: "workforce_earnings", label: "Live Earnings", href: "/delivery-network/earnings" },
@@ -153,7 +153,7 @@ export const workforceNavItems: NavItem[] = [
   },
   {
     code: "workforce_earnings",
-    label: "4. Reports",
+    label: "Reports",
     icon: "RP",
     children: [
       { code: "workforce_earnings", label: "Workforce Reports", href: "/delivery-network/reports" },
@@ -164,7 +164,7 @@ export const workforceNavItems: NavItem[] = [
   },
   {
     code: "workforce_communications",
-    label: "Communications",
+    label: "Messaging",
     icon: "CM",
     children: [
       { code: "workforce_communications", label: "Communication Center", href: "/delivery-network/communications" },
@@ -176,7 +176,7 @@ export const workforceNavItems: NavItem[] = [
   },
   {
     code: "users",
-    label: "Workforce Access",
+    label: "Access",
     icon: "UA",
     children: [
       { code: "users", label: "Users & Access", href: "/users?section=users" },
@@ -185,7 +185,7 @@ export const workforceNavItems: NavItem[] = [
   },
   {
     code: "designations",
-    label: "5. Workforce Controls",
+    label: "Configuration",
     icon: "WM",
     children: [
       { code: "workforce_categories", label: "Registration Policies", href: "/delivery-network/engagement-types" },

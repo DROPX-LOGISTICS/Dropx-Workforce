@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, BadgeCheck, Banknote, CircleDollarSign, CircleDot, Clock3, Fingerprint, Gift, MessageSquareMore, ShieldCheck, UserRoundPlus, WalletCards } from "lucide-react";
+import { Activity, ArrowRight, BadgeCheck, Banknote, CircleDollarSign, CircleDot, Clock3, Fingerprint, Gift, MessageSquareMore, ShieldCheck, Sparkles, UserRoundPlus, WalletCards } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PendingLink } from "@/components/pending-link";
 import { hasPermission, requirePagePermission } from "@/lib/authorization";
@@ -175,11 +175,16 @@ export default async function DeliveryNetworkPage() {
 
   return (
     <AppShell active="Workforce Dashboard" pageCode="delivery_associates">
-      <section className="wf-command-header">
-        <div>
-          <span className="wf-live-status"><i /> Live operations desk</span>
-          <h1>Run the full workforce lifecycle</h1>
-          <p>Own every operational associate from registration and field activation through daily output, live earnings, incentives, payroll approval and payout.</p>
+      <section className="wf-command-header wf-command-hero">
+        <div className="wf-command-intro">
+          <span className="wf-live-status"><i /> Workforce control room</span>
+          <h1>What needs action<br /><em>before the next payout?</em></h1>
+          <p>One workspace for associate activation, provider-ID readiness, daily output and payment clearance.</p>
+        </div>
+        <div className="wf-command-brief" aria-label="Today’s operating brief">
+          <span><Sparkles size={15} /> Today&apos;s operating brief</span>
+          <strong>{pending + underReview + financeSnapshot.heldWorkers + financeSnapshot.exceptions.length} items need a decision</strong>
+          <small>Start with registration, mapping and payout blockers; each route preserves its master data and audit trail.</small>
         </div>
         <div className="wf-command-actions">
           <PendingLink className="wf-command-secondary" href="/delivery-network/associates">
@@ -221,8 +226,8 @@ export default async function DeliveryNetworkPage() {
         <article className={financeSnapshot.exceptions.length ? "attention" : "healthy"}><span><ShieldCheck size={18} /></span><small>Earning exceptions</small><strong>{financeSnapshot.exceptions.length}</strong><em>Unmapped IDs or missing rates</em></article>
       </section> : null}
 
-      <section className="wf-lifecycle-map">
-        <header><div><small>360° operating model</small><h2>One controlled workforce lifecycle</h2></div><span>{lifecycleStages.length} permission-aware stages</span></header>
+      <section className="wf-lifecycle-map wf-action-lane">
+        <header><div><small>Move work forward</small><h2>One action lane, not scattered modules</h2></div><span>{lifecycleStages.length} guarded stages</span></header>
         <div>
           {lifecycleStages.map((stage, index) => {
             const StageIcon = stage.icon;
@@ -239,8 +244,8 @@ export default async function DeliveryNetworkPage() {
       <div className="wf-command-board">
         <section className="wf-command-panel wf-pipeline-panel">
           <header>
-            <div><span>Registration flow</span><h2>Workforce pipeline</h2></div>
-            <small>{pending + underReview + active} tracked</small>
+            <div><span>Associate health</span><h2>Activation pulse</h2></div>
+            <small>{pending + underReview + active} people in view</small>
           </header>
           <div className="wf-pipeline-list">
             <article>
@@ -264,7 +269,7 @@ export default async function DeliveryNetworkPage() {
 
         <section className="wf-command-panel wf-desk-panel">
           <header>
-            <div><span>Work queue</span><h2>Open the right desk</h2></div>
+            <div><span>Resolve now</span><h2>Priority queues</h2></div>
           </header>
           <div className="wf-desk-actions">
             <PendingLink href="/delivery-network/onboarding">

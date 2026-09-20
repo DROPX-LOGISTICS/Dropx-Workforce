@@ -17280,6 +17280,103 @@ td strong,
   }
 }
 
+/* Workforce control room — task-led shell, intentionally distinct from the legacy admin dashboard. */
+.workforce-product {
+  --wf-orange: #ff5b2e;
+  --wf-ink: #172033;
+  --wf-canvas: #f4f6fb;
+}
+
+.workforce-product .wf-left-sidebar {
+  width: 254px;
+  background:
+    radial-gradient(circle at 9% 5%, rgba(255, 119, 65, .22), transparent 22%),
+    radial-gradient(circle at 88% 29%, rgba(131, 101, 255, .19), transparent 25%),
+    linear-gradient(180deg, #10192e 0%, #121a31 58%, #0d1527 100%);
+  box-shadow: 14px 0 38px rgba(16, 25, 46, .12);
+}
+.workforce-product .wf-left-brand-row { min-height: 88px; padding: 0 17px; border-bottom-color: rgba(255,255,255,.1); }
+.workforce-product .wf-left-brand { gap: 11px; }
+.workforce-product .wf-workforce-lockup strong { color: #fff; font-size: 15px; letter-spacing: -.035em; }
+.workforce-product .wf-workforce-lockup small { margin-top: 1px; color: #aeb9ce; font-size: 8px; letter-spacing: .1em; }
+.workforce-product .wf-left-navigation { gap: 7px; padding: 16px 12px 20px; }
+.workforce-product .wf-left-direct,
+.workforce-product .wf-left-group-label { min-height: 43px; border-radius: 12px; }
+.workforce-product .wf-left-group-label { color: #c1c9d9; font-size: 11px; letter-spacing: .015em; text-transform: none; }
+.workforce-product .wf-left-navigation section { margin-top: 6px; padding-top: 9px; }
+.workforce-product .wf-left-children { margin: 4px 0 8px; padding-left: 4px; border-left: 1px solid rgba(255,255,255,.1); }
+.workforce-product .wf-left-children a { min-height: 34px; margin-left: 11px; padding-left: 13px; color: #aab4c7; }
+.workforce-product .wf-left-children a::before { display: none; }
+.workforce-product .wf-left-direct.active { background: linear-gradient(100deg, #ff6235, #d64a7c); box-shadow: 0 8px 18px rgba(219, 75, 75, .22); }
+.workforce-product .wf-left-direct.active::before { display: none; }
+.workforce-product .wf-left-direct.active svg { color: #fff; }
+
+.workforce-product .wf-slim-topbar { min-height: 74px; padding: 0 34px; background: rgba(244,246,251,.9); border-bottom: 0; }
+.workforce-product .wf-slim-page-title { padding-left: 14px; border-left: 1px solid #d9deea; }
+.workforce-product .wf-slim-page-title span { color: #777f93; font-size: 9px; letter-spacing: .11em; }
+.workforce-product .wf-slim-page-title strong { color: #1c2740; font-size: 15px; }
+.workforce-product .wf-product-main { background: radial-gradient(circle at 100% 0%, rgba(123, 104, 238, .08), transparent 27%), #f4f6fb; }
+.workforce-product .wf-product-content { max-width: 1640px; padding: 24px 34px 56px; }
+
+.workforce-product .wf-command-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(250px, .75fr) auto;
+  align-items: end;
+  gap: 24px;
+  padding: 32px;
+  border: 0;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 92% 8%, rgba(255, 211, 173, .32), transparent 20%),
+    linear-gradient(118deg, #1a2540, #273158 57%, #3d3061);
+  box-shadow: 0 20px 46px rgba(24, 34, 63, .18);
+}
+.workforce-product .wf-command-hero .wf-live-status { color: #ffbd83; }
+.workforce-product .wf-command-hero .wf-live-status i { background: #55dc9a; box-shadow: 0 0 0 4px rgba(85,220,154,.12); }
+.workforce-product .wf-command-hero h1 { margin: 9px 0 10px; color: #fff; font-size: clamp(34px, 3vw, 50px); line-height: 1; }
+.workforce-product .wf-command-hero h1 em { color: #ff9e65; font-style: normal; }
+.workforce-product .wf-command-hero p { max-width: 620px; color: #c4cce0; }
+.workforce-product .wf-command-brief { display: grid; gap: 8px; padding: 17px 18px; border: 1px solid rgba(255,255,255,.14); border-radius: 16px; background: rgba(255,255,255,.09); }
+.workforce-product .wf-command-brief > span { display: inline-flex; align-items: center; gap: 6px; color: #bfc8dc; font-size: 10px; font-weight: 760; letter-spacing: .08em; text-transform: uppercase; }
+.workforce-product .wf-command-brief > span svg { color: #ffb368; }
+.workforce-product .wf-command-brief strong { color: #fff; font-size: 17px; line-height: 1.2; letter-spacing: -.025em; }
+.workforce-product .wf-command-brief small { color: #b9c1d4; font-size: 11px; line-height: 1.45; }
+.workforce-product .wf-command-hero .wf-command-actions { align-self: center; display: grid; min-width: 132px; }
+.workforce-product .wf-command-hero .wf-command-actions a { border-color: transparent; box-shadow: none; }
+.workforce-product .wf-command-hero .wf-command-secondary { color: #fff; background: rgba(255,255,255,.1); }
+.workforce-product .wf-command-hero .wf-command-primary { background: #ff6535; }
+
+.workforce-product .wf-command-kpis { border-radius: 18px; background: linear-gradient(118deg, #e95837, #d13f76 78%); box-shadow: 0 14px 28px rgba(203,68,90,.18); }
+.workforce-product .wf-finance-kpis.dashboard { margin-top: 18px; }
+.workforce-product .wf-finance-kpis.dashboard article { border-radius: 16px; box-shadow: none; }
+.workforce-product .wf-action-lane { border: 0; border-radius: 18px; box-shadow: 0 10px 25px rgba(26,36,62,.06); }
+.workforce-product .wf-action-lane > header { min-height: 76px; padding: 17px 21px; background: #fff; }
+.workforce-product .wf-action-lane > div { background: #fff; }
+.workforce-product .wf-action-lane a { min-height: 140px; padding: 18px; transition: transform .16s ease, background .16s ease; }
+.workforce-product .wf-action-lane a:hover { background: #fff8f5; transform: translateY(-2px); }
+.workforce-product .wf-action-lane .wf-lifecycle-icon { width: 34px; height: 34px; border-radius: 11px; }
+.workforce-product .wf-action-lane a strong { font-size: 12px; }
+
+.workforce-product .wf-command-panel,
+.workforce-product .wf-workspace-directory { border-radius: 18px; box-shadow: 0 10px 26px rgba(24,35,59,.055); }
+.workforce-product .wf-command-panel > header,
+.workforce-product .wf-workspace-directory > header { min-height: 76px; padding: 17px 20px; }
+.workforce-product .wf-desk-panel { background: linear-gradient(150deg, #fff, #fff7f2); }
+.workforce-product .wf-desk-actions > a { border-radius: 10px; }
+.workforce-product .wf-desk-actions > a:hover { padding-left: 10px; padding-right: 10px; background: #fff; }
+
+@media (max-width: 1100px) {
+  .workforce-product .wf-command-hero { grid-template-columns: 1fr 1fr; }
+  .workforce-product .wf-command-hero .wf-command-actions { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 720px) {
+  .workforce-product .wf-product-content { padding: 15px 14px 40px; }
+  .workforce-product .wf-slim-topbar { padding: 0 14px; }
+  .workforce-product .wf-command-hero { grid-template-columns: 1fr; gap: 18px; padding: 24px 20px; border-radius: 19px; }
+  .workforce-product .wf-command-hero h1 { font-size: 35px; }
+  .workforce-product .wf-command-hero .wf-command-actions { grid-column: auto; }
+}
+
 /* === cash-recon / remittance UI (ported from dropx-ops-pulse) === */
 .remittance-deposit-panel,
 .remittance-final-panel {

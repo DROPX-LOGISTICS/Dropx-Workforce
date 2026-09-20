@@ -12,7 +12,7 @@ export default async function PaySchemePreviewPage() {
     <section className="wf-finance-hero compact">
       <div><span>Commercial planning · No live changes</span><h1>Pay formula preview</h1>
         <p>Compare period-based guarantees and verified kilometre fuel before agreeing a scheme. This calculator does not create a rate card or change payroll.</p></div>
-      <PendingLink className="wf-command-secondary" href="/delivery-network/rate-cards">Back to rate cards</PendingLink>
+      <div className="wf-finance-actions"><PendingLink className="wf-command-secondary" href="/delivery-network/rate-cards">Back to rate cards</PendingLink><PendingLink className="wf-command-secondary" href="/delivery-network/pooled-settlements">Confirmed-base pooled settlement</PendingLink></div>
     </section>
     <PaySchemePreview today={workforceToday()} />
   </AppShell>;

@@ -18,7 +18,7 @@
 | DropX One joining/training visibility | Live; existing mapped account verified; statements use individual Finance outcomes; effective identity/date earnings fix 7f16ea42 verified |
 | Confirmed payroll → Finance approval/process | Live Workforce a0bbb45 + Finance e411777. Atomic isolated SQL tests passed; authenticated Finance queue checked. No live payroll created or payment sent. Approved payroll payment-head configuration still required |
 | Flexible station payroll calendars | Live e93fff5; station and cross-station duplicate guards tested; authenticated calendar and payroll pages checked. No real calendars or pay terms assigned |
-| Pooled MG / verified km | Pooled mathematical preview is live, not settlement. Verified-distance intake/review and payroll adjustment path implemented in the mileage release below; production verification pending |
+| Pooled MG / verified km | Mileage is live (Workforce 286183a + Ops e437d5a). Confirmed-base pooled supplementary settlement implemented in the release below; this new release still requires production verification |
 | Refer-and-earn attribution / approved retention reward | Pending |
 | Provider-authorised daily cover attribution | Pending |
 | Ops payment holds | Live Workforce 0599174/f9c3933 and Ops 8d0f1126; searchable, station-scoped desks browser-verified. SQL checks cover independent release, payroll and late Finance holds. One exposes own period/status only. No production hold placed |
@@ -36,7 +36,7 @@ Prior production audit has existing People projection drift and unassigned payme
 
 - Station-approved terms, associate acceptance, operating pincode/weekly off and a Finance payroll payment head with real approval/processor roles. These are business configuration, not safe defaults.
 - Owner-entered Amazon credentials, any provider-required verification, and a successful real read-only profile scan. Local browser login is not the worker session.
-- Pooled MG averaging and verified kilometre fuel are not covered by the existing daily-hybrid / per-delivery fuel calculations.
+- Pooled settlement requires explicitly accepted station terms and confirmed fixed-daily base payroll. Biometric-only qualifying days, automatic base-rate assignment and late-source arrears/corrections are not implemented by the new supplementary settlement. Verified-distance claims require actual approved mileage policies/evidence, not per-delivery fuel assumptions.
 - End-to-end associate refer-and-earn, unified referral intake and approved retention rewards are not shipped.
 - Provider-authorised daily cover / buffer-ID allocation and double-pay prevention are not shipped.
 - Full mobile and scoped-role acceptance remains incomplete; destructive/payment paths are tested with isolated synthetic fixtures, not real payments or account changes.
@@ -65,3 +65,18 @@ Usability follow-up c236b4d is live (dpl_2ArCqcijNz63e6k9yr2aqBsGqRSJ), with Git
 - UI includes station/status/search/sort, paginated claim history, reporter/reviewer names and IST times. The new Ops permission is independently configurable; ordinary roles are not silently granted access. Workforce uses existing adjustment permission, with owner-only terms and decisions.
 - Local evidence: 82 unit tests, two retry tests, isolated SQL suites including new mileage invariants, TypeScript and 185-route Workforce build passed. Ops typecheck/prebuild passed; full build/deployment/browser acceptance in progress. All mutations were tested using synthetic isolated fixtures, not real policy/claim/payroll records.
 - This does not implement pooled-MG settlement, automated route kilometre capture, associate agreement acceptance, referrals or provider-authorised cover attribution. Real policy/evidence and independent reviewer acceptance remain necessary before real payment.
+
+## Confirmed-base pooled settlement release
+
+- New `Pay & settlements → Pooled MG Settlement` desk: immutable station terms, canonical associate/DropX-ID selection, recorded agreement acceptance, closed-window calculation, independent review and actor/time history. No rates, policies or agreements are seeded.
+- Two distinct formulas: guarantee plus packages above the **whole-window** allowance, or the higher of the guaranteed total and whole-window package earnings. The window is independent of daily/weekly/15-day payroll cycles. Only the supplementary difference becomes an earning adjustment; confirmed base pay is never paid again.
+- Prerequisite: every qualifying production day already has confirmed fixed-daily base payroll equal to the agreed guarantee across its source rows, with fuel separate. Current source rows must exactly match frozen counts, dates, provider ID and station. Held/unconfirmed/missing/changed source work blocks settlement. Source imports, approval and Finance-release validation share a database lock.
+- Pending/rejected claims are not payable. A different owner must review. Exact retries reuse the same settlement; rejected claims permit resubmission with a new reference. Zero supplements are reviewed without fake financial adjustments. Generic adjustment screens cannot bypass the dedicated review. Payroll snapshot and Finance processing recheck the evidence; late posting cannot rewrite a confirmed period. Exit closure also checks accepted windows.
+- Local evidence: 88 unit tests + two retry tests, isolated SQL suites covering actual base-pay payroll → pooled calculation → independent approval → supplementary payroll → Finance gate, plus zero/rejected/retry and pooled-floor cases. TypeScript and 186-route production build passed. Production deployment/browser verification pending at this entry.
+- Scope limitations: no automatic fixed-daily base assignment, no biometric-only production-day accrual, no early-window proration, no late-source correction/arrears workflow, no fabricated acceptance or policy. Existing mapped associates are untouched. This is a usable controlled settlement path, not a claim that the entire lifecycle product is complete.
+
+## DropX One own-adjustment visibility
+
+- Live One commit `2bcaa64b2d9f08472a0db69aad4523aa8c3af7e2`, deployment `dpl_5RqBsa6fZfHSZohTSEVNGuFZJ3Fa`; domain/SHA and authenticated existing mapped account checked.
+- Own-only approved/posted earning and deduction estimates, pending/rejected history, mileage work-date context, status filter and page-25 history. Company/account boundaries, no-store errors/responses, request-race protection and no false raw-import fallback. Twenty targeted tests plus 58 existing tests, typecheck and production build passed. No real adjustments created.
+- Remaining parity follow-up: fixed-daily/monthly earnings need the same per-associate/day/card grouping as Workforce when several provider IDs contribute on one day. Full role/mobile acceptance remains open.

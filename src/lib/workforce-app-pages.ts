@@ -5,6 +5,7 @@ export const workforceAppPageOptions = [
   { value: "attendance", label: "Attendance" },
   { value: "roster", label: "Work & Roster" },
   { value: "performance", label: "Performance" },
+  { value: "reports", label: "Reports" },
   { value: "rate_card", label: "My Rate Card" },
   { value: "connect", label: "Connect" },
   { value: "documents", label: "Documents" },

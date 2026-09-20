@@ -433,7 +433,10 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
 
       const pageAccess = account.profile_type === "employee"
         ? normalizeAppPageAccess(account.profile_type, intersectPageAccess(categoryPages, designationPages))
-        : normalizeAppPageAccess(account.profile_type, designationPages ?? defaultPageAccess(account.profile_type));
+        : normalizeAppPageAccess(account.profile_type, [
+          ...defaultPageAccess(account.profile_type),
+          ...(designationPages ?? [])
+        ]);
 
       return {
       id: account.id,
@@ -446,9 +449,9 @@ export async function findConnectAccounts(countryCode: string, mobile: string) {
       status: account.status ?? null,
       biometricId: account.biometric_id ?? null,
       profilePhotoUrl: await signedProfilePhotoUrl(account.profile_photo_path),
-      pageAccess: account.profile_type === "workforce" && !workforceAccountsWithLeave.has(account.id)
-        ? pageAccess.filter((page) => page !== "leave")
-        : pageAccess,
+      // Leave validates eligibility server-side. Keep the entry visible so a
+      // Workforce account never falls back to an HR-shaped experience.
+      pageAccess,
       isDefault: account.profile_type !== "user" &&
         defaultPreference?.default_company_id === account.company_id &&
         defaultPreference?.default_profile_type === account.profile_type &&

@@ -169,12 +169,12 @@ export async function GET(request: NextRequest) {
     });
     if (worker.profileType !== "workforce") throw new Error("This page is available for Workforce accounts only.");
     const requestedView = request.nextUrl.searchParams.get("view") ?? "payments";
-    const view = ["payments", "advances", "roster", "performance", "rate_card", "connect"].includes(requestedView) ? requestedView : "payments";
+    const view = ["payments", "advances", "roster", "performance", "reports", "rate_card", "connect"].includes(requestedView) ? requestedView : "payments";
     const records = view === "advances"
       ? await advances(worker.companyId, worker.profileId)
       : view === "roster"
         ? await roster(worker.companyId, worker.profileId)
-        : view === "performance"
+        : view === "performance" || view === "reports"
           ? await performance(worker.companyId, worker.profileId)
           : view === "rate_card"
             ? await rateCard(worker.companyId, worker.profileId)

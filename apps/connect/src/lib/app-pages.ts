@@ -1,10 +1,12 @@
 import type { WorkforceProfileType } from "./workforce-profiles";
 
 export const employeeDefaultPageAccess = ["dashboard", "attendance", "leave"];
-export const workforceDefaultPageAccess = ["dashboard", "payments", "advances"];
+// Workforce is an operating workspace, not an HR subset. Designations may add
+// access, but must not remove the associate's core operating journey.
+export const workforceDefaultPageAccess = ["dashboard", "payments", "advances", "attendance", "roster", "performance", "reports", "rate_card", "connect", "documents", "leave"];
 
 const employeePages = new Set(["dashboard", "attendance", "leave"]);
-const workforcePages = new Set(["dashboard", "payments", "advances", "attendance", "roster", "performance", "rate_card", "connect", "documents", "leave"]);
+const workforcePages = new Set(["dashboard", "payments", "advances", "attendance", "roster", "performance", "reports", "rate_card", "connect", "documents", "leave"]);
 
 export function defaultPageAccess(profileType: WorkforceProfileType | "user") {
   return profileType === "employee" ? employeeDefaultPageAccess : workforceDefaultPageAccess;

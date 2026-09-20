@@ -4,7 +4,7 @@ import { BadgeIndianRupee, BarChart3, CalendarDays, CircleHelp, HandCoins, BookO
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { AppAccount } from "./connect-profile-app";
 
-type View = "payments" | "advances" | "roster" | "performance" | "rate_card" | "connect";
+type View = "payments" | "advances" | "roster" | "performance" | "reports" | "rate_card" | "connect";
 type Payload = { records: Array<Record<string, any>>; error?: string };
 
 const labels: Record<View, { eyebrow: string; title: string }> = {
@@ -12,6 +12,7 @@ const labels: Record<View, { eyebrow: string; title: string }> = {
   advances: { eyebrow: "FINANCIAL SUPPORT", title: "Advances" },
   roster: { eyebrow: "WORK SCHEDULE", title: "Associate Rostering" },
   performance: { eyebrow: "WORK SUMMARY", title: "Performance" },
+  reports: { eyebrow: "MY REPORTS", title: "Earnings & delivery report" },
   rate_card: { eyebrow: "COMMERCIAL POLICY", title: "My Rate Card" },
   connect: { eyebrow: "WORKFORCE CONNECT", title: "Get support" }
 };
@@ -56,7 +57,7 @@ export function ConnectWorkforceSelfService({ account, view }: { account: AppAcc
     net: sum.net + Number(row.net_amount ?? row.netAmount ?? 0)
   }), { shipments: 0, activities: 0, net: 0 }), [payload]);
 
-  const Icon = view === "payments" ? BadgeIndianRupee : view === "advances" ? HandCoins : view === "roster" ? CalendarDays : view === "performance" ? BarChart3 : view === "rate_card" ? BookOpenCheck : CircleHelp;
+  const Icon = view === "payments" ? BadgeIndianRupee : view === "advances" ? HandCoins : view === "roster" ? CalendarDays : view === "performance" || view === "reports" ? BarChart3 : view === "rate_card" ? BookOpenCheck : CircleHelp;
 
   async function submitConnect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -90,7 +91,7 @@ export function ConnectWorkforceSelfService({ account, view }: { account: AppAcc
 
     {payload && view === "roster" ? <div className="dx-workforce-records">{payload.records.map((row) => { const shift = relation(row.hr_shifts) as Record<string, any> | null; return <article key={row.id}><header><span><strong>{shift?.name || shift?.code || "Assigned shift"}</strong><small>{date(row.effective_from)} – {row.effective_to ? date(row.effective_to) : "Current"}</small></span><em>Rostered</em></header><dl><div><dt>Start</dt><dd>{String(shift?.start_time || "-").slice(0, 5)}</dd></div><div><dt>End</dt><dd>{String(shift?.end_time || "-").slice(0, 5)}</dd></div><div><dt>Break</dt><dd>{Number(shift?.break_minutes || 0)} min</dd></div></dl>{row.notes ? <p>{row.notes}</p> : null}</article>; })}</div> : null}
 
-    {payload && view === "performance" ? <>
+    {payload && (view === "performance" || view === "reports") ? <>
       <div className="dx-workforce-money-summary"><span><small>Published shipments</small><strong>{totals.shipments}</strong></span><span><small>Total activities</small><strong>{totals.activities}</strong></span></div>
       <div className="dx-workforce-records">{payload.records.map((row) => <article key={row.id}><header><span><strong>{row.provider_name || "Work activity"}</strong><small>{date(row.work_date)}</small></span><em>{row.calculation_source?.replaceAll("_", " ")}</em></header><dl><div><dt>Shipments</dt><dd>{row.shipment_count}</dd></div><div><dt>Activities</dt><dd>{row.activity_count}</dd></div><div><dt>Published value</dt><dd>{money(row.net_amount)}</dd></div></dl></article>)}</div>
     </> : null}

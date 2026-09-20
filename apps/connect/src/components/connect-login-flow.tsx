@@ -12,7 +12,7 @@ import { countryCodeOptions } from "@/lib/country-codes";
 import { ConnectOwnerPreviewSwitcher } from "./connect-owner-preview-switcher";
 import { ConnectWorkforceSelfService } from "./connect-workforce-self-service";
 
-type AppPage = "dashboard" | "payments" | "advances" | "attendance" | "roster" | "performance" | "rate_card" | "connect" | "documents" | "leave";
+type AppPage = "dashboard" | "payments" | "advances" | "attendance" | "roster" | "performance" | "reports" | "rate_card" | "connect" | "documents" | "leave";
 type Step = "mobile" | "pin" | "otp" | "createPin" | "unlock" | "accounts" | AppPage | "profile" | "exit" | "settings";
 type ConnectNotification = {
   id: string;
@@ -48,6 +48,7 @@ function landingPage(account: AppAccount): Step {
   if (allowed(account, "attendance")) return "attendance";
   if (allowed(account, "roster")) return "roster";
   if (allowed(account, "performance")) return "performance";
+  if (allowed(account, "reports")) return "reports";
   if (allowed(account, "rate_card")) return "rate_card";
   if (allowed(account, "connect")) return "connect";
   if (allowed(account, "documents")) return "documents";
@@ -264,7 +265,7 @@ export function ConnectLoginFlow() {
       }
     }
     const destination = notification.route as Step | null | undefined;
-    if (destination && ["dashboard", "profile", "attendance", "leave", "exit", "settings", "payments", "advances", "roster", "performance", "rate_card", "connect", "documents"].includes(destination)) {
+    if (destination && ["dashboard", "profile", "attendance", "leave", "exit", "settings", "payments", "advances", "roster", "performance", "reports", "rate_card", "connect", "documents"].includes(destination)) {
       setNotificationMenu(false);
       open(destination);
     } else if (destination) {
@@ -394,7 +395,7 @@ export function ConnectLoginFlow() {
       setStep("profile");
       return;
     }
-    if (["dashboard", "payments", "advances", "attendance", "roster", "performance", "rate_card", "connect", "documents", "leave"].includes(next) && !allowed(account, next as AppPage)) return;
+    if (["dashboard", "payments", "advances", "attendance", "roster", "performance", "reports", "rate_card", "connect", "documents", "leave"].includes(next) && !allowed(account, next as AppPage)) return;
     setStep(next);
   }
 
@@ -410,7 +411,7 @@ export function ConnectLoginFlow() {
     setStep(refreshed ? landingPage(refreshed) : "accounts");
   }
 
-  const loggedIn = ["accounts","dashboard","payments","advances","profile","attendance","roster","performance","rate_card","connect","documents","leave","exit","settings"].includes(step);
+  const loggedIn = ["accounts","dashboard","payments","advances","profile","attendance","roster","performance","reports","rate_card","connect","documents","leave","exit","settings"].includes(step);
   if (checking) return <div className="dx-auth"><Loader text="" /></div>;
 
   return <div className={`dx-app ${loggedIn ? "logged-in" : ""}`}>
@@ -441,6 +442,7 @@ export function ConnectLoginFlow() {
         {allowed(account, "attendance") ? <button onClick={() => open("attendance")}><Fingerprint />Attendance<ChevronRight /></button> : null}
         {account.profileType !== "employee" && allowed(account, "roster") ? <button onClick={() => open("roster")}><CalendarDays />Associate Rostering<ChevronRight /></button> : null}
         {account.profileType !== "employee" && allowed(account, "performance") ? <button onClick={() => open("performance")}><BarChart3 />Performance<ChevronRight /></button> : null}
+        {account.profileType !== "employee" && allowed(account, "reports") ? <button onClick={() => open("reports")}><FileText />Reports<ChevronRight /></button> : null}
         {account.profileType !== "employee" && allowed(account, "rate_card") ? <button onClick={() => open("rate_card")}><BookOpenCheck />My Rate Card<ChevronRight /></button> : null}
         {account.profileType !== "employee" && allowed(account, "connect") ? <button onClick={() => open("connect")}><CircleHelp />Connect<ChevronRight /></button> : null}
         {allowed(account, "documents") ? <button onClick={() => open("documents")}><FileText />Documents<ChevronRight /></button> : null}
@@ -471,6 +473,7 @@ export function ConnectLoginFlow() {
       {step === "attendance" && account ? <ConnectAttendance account={account} /> : null}
       {step === "roster" && account ? <ConnectWorkforceSelfService account={account} view="roster" /> : null}
       {step === "performance" && account ? <ConnectWorkforceSelfService account={account} view="performance" /> : null}
+      {step === "reports" && account ? <ConnectWorkforceSelfService account={account} view="reports" /> : null}
       {step === "rate_card" && account ? <ConnectWorkforceSelfService account={account} view="rate_card" /> : null}
       {step === "connect" && account ? <ConnectWorkforceSelfService account={account} view="connect" /> : null}
       {step === "documents" && account ? <ConnectProfileApp account={account} onExit={() => open("exit")} onPhoto={(url) => setAvatar(url)} onSubmitted={profileSubmitted} /> : null}

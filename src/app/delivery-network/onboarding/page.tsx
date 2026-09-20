@@ -95,6 +95,7 @@ export default async function WorkforceOnboardingHubPage() {
   return (
     <AppShell active="Onboard Workforce" pageCode="delivery_associates">
       <PageHead
+        action={<PendingLink className="button secondary compact" href="/delivery-network/joining">Joining & Training desk <ArrowRight size={15}/></PendingLink>}
         eyebrow="Workforce onboarding"
         title="Choose the right onboarding journey"
         subtitle="The designation master decides what belongs here. Associates, ground support and fleet partners are kept separate from People / HR while sharing one Workforce lifecycle."

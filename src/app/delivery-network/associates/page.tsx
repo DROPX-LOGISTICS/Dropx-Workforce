@@ -19,7 +19,7 @@ function profileHref(record: WorkforceCommunicationRecipient, mode: "edit" | "vi
   return undefined;
 }
 
-export default async function WorkforceAssociatesPage() {
+export default async function WorkforceAssociatesPage({searchParams={}}:{searchParams?:{view?:string}}) {
   const authorization = await requirePagePermission("delivery_associates", "access");
   const companyId = requireCompanyId(authorization);
   const canAdd = hasPermission(authorization, "delivery_associates", "add");
@@ -53,7 +53,9 @@ export default async function WorkforceAssociatesPage() {
     error = loadError instanceof Error ? loadError.message : "Unable to load the Workforce register.";
   }
 
-  const rows: FieldExecutiveListRow[] = records.map((record) => ({
+  const approvedRecords = records.filter(record=>["active","approved"].includes(record.status.toLowerCase()));
+  const displayedRecords = searchParams.view==="approved" ? approvedRecords : approvedRecords.filter(record=>record.isActive && record.status.toLowerCase()==="active");
+  const rows: FieldExecutiveListRow[] = displayedRecords.map((record) => ({
     id: `${record.profileType}:${record.accountId}`,
     dropxId: record.reference || "ID pending",
     biometricId: record.biometricId || "-",
@@ -100,13 +102,18 @@ export default async function WorkforceAssociatesPage() {
         <article><span>Payment linked</span><strong>{paymentLinked}</strong><small>Mapped to the existing rate and payment engine</small></article>
       </section>
 
+      <nav className="form-actions" aria-label="Workforce register views">
+        <PendingLink className="button secondary compact" href="/delivery-network/associates">Active workforce ({approvedRecords.filter(record=>record.isActive && record.status.toLowerCase()==="active").length})</PendingLink>
+        <PendingLink className="button secondary compact" href="/delivery-network/associates?view=approved">All approved records ({approvedRecords.length})</PendingLink>
+        <PendingLink className="button compact" href="/delivery-network/joining">Applicants, training & activation →</PendingLink>
+      </nav>
       <FieldExecutiveList
         basePath="/delivery-network/associates"
         canEdit={canEdit}
         emptyLabel="No master-classified Workforce profiles are available yet."
         rows={rows}
         showActions={!error}
-        title="All Workforce members"
+        title={searchParams.view==="approved" ? "Approved Workforce records" : "Active Workforce members"}
       />
     </AppShell>
   );

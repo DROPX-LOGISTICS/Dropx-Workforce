@@ -135,6 +135,8 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
             })}
             <div className="workforce-provider-row"><label>Amazon / provider ID<input defaultValue={item.provider_employee_id || ""} name="provider_employee_id" placeholder="Enter ID after creation" /></label><label className="compact-check"><input name="provider_not_required" type="checkbox" value="true" />Not required for this designation</label></div>
             <label>Review remarks<textarea name="remarks" placeholder="Verification, return or rejection note" /></label>
+            <p className="subtle">Provider ID pending? Approve for joining after all other checks. This enables biometric attendance without marking the associate delivery-active.</p>
+            <button className="button secondary" disabled={Boolean(reviewIssues.length)} name="review_action" type="submit" value="approve_for_joining">Approve for joining · configure training</button>
             <div className="form-actions"><button className="button secondary" name="review_action" type="submit" value="return">Return</button><button className="button danger" name="review_action" type="submit" value="reject">Reject</button><button className="button" disabled={Boolean(reviewIssues.length)} name="review_action" title={reviewIssues.length ? "Resolve profile verification issues before approval" : undefined} type="submit" value="approve">{reviewIssues.length ? "Resolve issues first" : "Approve & activate"}</button></div>
           </form> : <p className="subtle">{item.onboarding_review_remarks || "Waiting for the applicant or HO action."}</p>}
         </article>;

@@ -220,7 +220,8 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
     updated_at: new Date().toISOString()
   }, companyId);
 
-  const result = await supabaseAdmin.rpc("workforce_save_mapping", {
+  const result = await supabaseAdmin.rpc("workforce_save_joining_mapping", {
+    p_actor_name: authorization.fullName || authorization.email || "Workforce reviewer",
     p_company: companyId, p_actor: createdBy, p_workforce: workforceId, p_mapping: mappingId,
     p_dropx: dropxId, p_payload: { ...mappingPayload, workforce_id: workforceId, employee_id: null, contractor_id: null, field_executive_id: null },
     p_locations: authorization.hasAllLocationAccess ? null : authorization.locationScopeIds

@@ -2,6 +2,7 @@ import { readAllRows } from "@/lib/supabase-pagination";
 import type { AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { trainingEntitlements, type JoiningPlan, type JoiningAttendance, type JoiningMapping } from "./workforce-joining";
 
 export type WorkforceRateCard = {
   id: string;
@@ -107,6 +108,8 @@ type WorkforceProfileRow = {
   is_active: boolean;
   bank_account_no: string | null;
   ifsc_code: string | null;
+  onboarding_approved_at?: string | null;
+  last_working_date?: string | null;
 };
 
 type ProviderRow = { id: string; code: string; name: string };
@@ -114,7 +117,7 @@ type StationRow = { id: string; station_code: string; station_name: string | nul
 
 export type WorkforceEarningLine = {
   key: string;
-  sourceType: "shipment" | "adjustment";
+  sourceType: "shipment" | "adjustment" | "training";
   sourceId: string;
   workforceId: string | null;
   mappingId: string | null;
@@ -139,7 +142,7 @@ export type WorkforceEarningLine = {
   incentiveAmount: number;
   adjustmentAmount: number;
   netAmount: number;
-  calculationSource: "rate_card" | "mapped_rate" | "imported_payout" | "adjustment" | "unresolved";
+  calculationSource: "rate_card" | "mapped_rate" | "imported_payout" | "adjustment" | "unresolved" | "training_attendance";
   status: "ready" | "hold" | "unmapped" | "missing_rate";
   holdReasons: string[];
   sourceUpdatedAt: string | null;
@@ -200,6 +203,9 @@ export type WorkforceEarningsInput = {
   rateCards: WorkforceRateCard[];
   campaigns: WorkforceIncentiveCampaign[];
   adjustments: WorkforceAdjustment[];
+  joiningPlans?: JoiningPlan[];
+  trainingAttendance?: JoiningAttendance[];
+  trainingMappings?: JoiningMapping[];
 };
 
 function amount(value: unknown) {
@@ -595,6 +601,33 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
     });
   });
 
+  for (const plan of input.joiningPlans ?? []) {
+    const profile = workforceById.get(plan.workforce_id);
+    if (!profile) continue;
+    const station = stationById.get(plan.station_id);
+    for (const entitlement of trainingEntitlements(profile, plan, input.trainingMappings ?? input.mappings, input.trainingAttendance ?? [], input.from, input.to)) {
+      const {attendance, amount: dailyAmount, cutoff} = entitlement;
+      // Delivery activation is not a prerequisite for earned training pay, even for an early leaver.
+      const holds = [...entitlement.holds];
+      if (!profile.bank_account_no?.trim() || !profile.ifsc_code?.trim()) holds.push("Bank details are incomplete");
+      if (!profile.dropx_id?.trim()) holds.push("DropX ID is missing");
+      lines.push({ key:`training:${profile.id}:${attendance.punch_date}`, sourceType:"training", sourceId:attendance.id,
+        workforceId:profile.id,mappingId:null,rateCardId:null,providerId:null,providerName:"Training",providerMemberId:"-",
+        dropxId:profile.dropx_id,workerName:profile.full_name,designationId:profile.designation_id,stationId:plan.station_id,stationCode:station?.station_code ?? "-",
+        workDate:attendance.punch_date,totalDelivery:0,totalActivity:0,amazonDelivery:0,swaDelivery:0,customerReturn:0,mfn:0,mfnReturn:0,
+        baseAmount:dailyAmount,incentiveAmount:0,adjustmentAmount:0,netAmount:dailyAmount,calculationSource:"training_attendance",
+        status:holds.length ? "hold" : "ready",holdReasons:holds,sourceUpdatedAt:attendance.updated_at,
+        trace:{training_policy_id:plan.training_policy_id,daily_rate:plan.daily_rate,minimum_minutes:plan.minimum_minutes,work_minutes:attendance.work_minutes,
+          in_time:attendance.in_time,out_time:attendance.out_time,terms_reference:plan.terms_reference,terms_accepted_on:plan.terms_accepted_on,
+          provider_effective_from:cutoff,attendance_updated_at:attendance.updated_at,joining_plan_version:plan.version}
+      });
+    }
+  }
+  const planByWorker = new Map((input.joiningPlans ?? []).map(plan=>[plan.workforce_id,plan]));
+  for (const line of lines) {
+    const plan = line.workforceId ? planByWorker.get(line.workforceId) : null;
+    if (plan) line.trace.joining_plan_version = plan.version;
+  }
   const summariesByWorker = new Map<string, WorkforceEarningSummary>();
   lines.filter((line) => line.workforceId).forEach((line) => {
     const workforceId = line.workforceId!;
@@ -633,7 +666,7 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
   });
 
   const summaries = Array.from(summariesByWorker.values()).map((summary) => {
-    const workDays = new Set(summary.lines.filter((line) => line.sourceType === "shipment").map((line) => line.workDate)).size;
+    const workDays = new Set(summary.lines.filter((line) => line.sourceType === "shipment" || line.sourceType === "training").map((line) => line.workDate)).size;
     const holdReasons = Array.from(new Set(summary.holdReasons));
     const baseAmount = money(summary.baseAmount);
     const incentiveAmount = money(summary.incentiveAmount);
@@ -657,7 +690,7 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
   }).sort((left, right) => right.netAmount - left.netAmount || left.workerName.localeCompare(right.workerName));
 
   const exceptions = lines.filter((line) => !line.workforceId || line.status === "missing_rate" || line.status === "unmapped");
-  const latestSourceUpdate = input.shipments.map((row) => row.updated_at).filter((value): value is string => Boolean(value)).sort().at(-1) ?? null;
+  const latestSourceUpdate = [...input.shipments.map(row=>row.updated_at),...(input.trainingAttendance ?? []).map(row=>row.updated_at),...(input.joiningPlans ?? []).map(row=>row.updated_at)].filter((value): value is string => Boolean(value)).sort().at(-1) ?? null;
   return {
     from: input.from,
     to: input.to,
@@ -741,7 +774,7 @@ export async function loadWorkforceEarnings(
       .select("id, workforce_id, field_executive_id, contractor_id, employee_id, provider_id, station_id, provider_member_id, effective_from, effective_to, pay_type, payment_values, delivery_rate, pickup_rate, mfn_rate, mfn_return_rate, guarantee_amount, fuel_rate, status")
       .eq("company_id", companyId).neq("status", "cancelled").lte("effective_from", to).or(`effective_to.is.null,effective_to.gte.${from}`).order("id")),
     readAllRows(supabaseAdmin.from("workforce")
-      .select("id, full_name, dropx_id, designation_id, location_id, source_profile_type, source_profile_id, onboarding_status, lifecycle_status, is_active, bank_account_no, ifsc_code")
+      .select("id, full_name, dropx_id, designation_id, location_id, source_profile_type, source_profile_id, onboarding_status, lifecycle_status, is_active, bank_account_no, ifsc_code, onboarding_approved_at, last_working_date")
       .eq("company_id", companyId).is("deleted_at", null).neq("migration_state", "reclassified").order("id")),
     readAllRows(supabaseAdmin.from("providers").select("id, code, name").eq("company_id", companyId).order("id")),
     readAllRows(supabaseAdmin.from("workforce_rate_cards").select("id, company_id, name, provider_id, station_id, designation_id, pay_type, effective_from, effective_to, delivery_rate, return_rate, mfn_rate, mfn_return_rate, fuel_rate, fixed_amount, guarantee_amount, status, approved_at")
@@ -753,12 +786,19 @@ export async function loadWorkforceEarnings(
   const requiredError = stationResult.error?.message || shipmentResult.error || mappingResult.error?.message || workforceResult.error?.message || providerResult.error?.message;
   const optionalErrors = [rateCardResult.error, campaignResult.error, adjustmentResult.error].filter(Boolean);
   const setupRequired = optionalErrors.some((error) => missingTable(error));
+  const { loadWorkforceJoining } = await import("./workforce-joining-data");
+  let joining: Awaited<ReturnType<typeof loadWorkforceJoining>> | null = null;
+  let joiningError: string | null = null;
+  try { joining = await loadWorkforceJoining(authorization,{from,to}); }
+  catch (error) { joiningError = error instanceof Error ? error.message : "Training evidence is unavailable"; }
+  const eligibleIds = joining ? new Set(joining.profiles.map(profile=>profile.id)) : null;
   const snapshot = calculateWorkforceEarnings({
     from,
     to,
     shipments: shipmentResult.rows,
     mappings: (mappingResult.data ?? []) as ProviderMappingRow[],
-    workforce: ((workforceResult.data ?? []) as WorkforceProfileRow[]).filter((profile) => authorization.hasAllLocationAccess || authorization.locationScopeIds.includes(profile.location_id)),
+    workforce: ((workforceResult.data ?? []) as WorkforceProfileRow[]).filter((profile) => (!eligibleIds || eligibleIds.has(profile.id)) && (authorization.hasAllLocationAccess || authorization.locationScopeIds.includes(profile.location_id))),
+    joiningPlans: joining?.plans, trainingAttendance: joining?.attendance, trainingMappings: joining?.mappings,
     providers: (providerResult.data ?? []) as ProviderRow[],
     stations: visibleStations,
     rateCards: rateCardResult.error ? [] : (rateCardResult.data ?? []) as WorkforceRateCard[],
@@ -770,6 +810,7 @@ export async function loadWorkforceEarnings(
     setupRequired,
     warnings: [
       requiredError,
+      joiningError,
       shipmentResult.truncated ? "Shipment source exceeded the 100,000-row calculation safety limit. Narrow the date range before payroll." : null,
       ...optionalErrors.filter((error) => !missingTable(error)).map((error) => error?.message ?? null)
     ].filter((warning): warning is string => Boolean(warning))

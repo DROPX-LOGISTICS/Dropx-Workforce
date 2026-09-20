@@ -18,7 +18,7 @@ function money(value: number) {
 }
 
 function sourceLabel(value: string) {
-  return ({ rate_card: "Rate card", mapped_rate: "Mapped rate", imported_payout: "Imported payout", adjustment: "Adjustment", unresolved: "Unresolved" } as Record<string, string>)[value] ?? value;
+  return ({ rate_card: "Rate card", mapped_rate: "Mapped rate", imported_payout: "Imported payout", adjustment: "Adjustment", unresolved: "Unresolved",training_attendance:"Biometric training" } as Record<string, string>)[value] ?? value;
 }
 
 function href(params: Params, overrides: Partial<Params> = {}) {
@@ -128,7 +128,7 @@ export default async function WorkforceEarningsPage({ searchParams = {} }: { sea
         <label>To<input defaultValue={to} name="to" type="date" /></label>
         <label>Station<select defaultValue={searchParams.station ?? ""} name="station"><option value="">All stations</option>{stations.map((station) => <option key={station} value={station}>{station}</option>)}</select></label>
         <label>State<select defaultValue={searchParams.state ?? ""} name="state"><option value="">All states</option><option value="ready">Ready</option><option value="hold">Hold</option><option value="missing_rate">Missing rate</option><option value="unmapped">Unmapped</option></select></label>
-        <label>Source<select defaultValue={searchParams.source ?? ""} name="source"><option value="">All sources</option><option value="rate_card">Rate card</option><option value="mapped_rate">Mapped rate</option><option value="imported_payout">Imported payout</option><option value="adjustment">Adjustment</option><option value="unresolved">Unresolved</option></select></label>
+        <label>Source<select defaultValue={searchParams.source ?? ""} name="source"><option value="">All sources</option><option value="training_attendance">Biometric training</option><option value="rate_card">Rate card</option><option value="mapped_rate">Mapped rate</option><option value="imported_payout">Imported payout</option><option value="adjustment">Adjustment</option><option value="unresolved">Unresolved</option></select></label>
         <label>Search<input defaultValue={searchParams.q ?? ""} name="q" placeholder="Name, DropX ID, provider ID" type="search" /></label>
         <label>Sort<select defaultValue={sort} name="sort"><option value="net-desc">Net amount high to low</option><option value="date-desc">Newest date</option><option value="date-asc">Oldest date</option><option value="deliveries-desc">Deliveries high to low</option><option value="name-asc">Name A–Z</option><option value="station-asc">Station A–Z</option><option value="state-asc">State</option></select></label>
         <input name="view" type="hidden" value={view} />

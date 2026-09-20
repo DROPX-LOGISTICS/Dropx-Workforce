@@ -9,6 +9,7 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { isMissingVerificationTable } from "@/lib/profile-verifications";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { isNonEmployeeProfileType, workforceTable } from "@/lib/workforce-profiles";
+import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
 
 function lifecycleRedirect(params: { error?: string; notice?: string; tab?: string }): never {
   const query = new URLSearchParams();
@@ -42,6 +43,7 @@ function revalidateLifecyclePages() {
 
 async function requireScopedApplicant(id: string) {
   const authorization = await requirePagePermission("people_review", "edit");
+  if (authorization.readOnly) throw new Error("Preview mode cannot change Workforce records.");
   const companyId = requireCompanyId(authorization);
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const result = await supabaseAdmin
@@ -53,6 +55,10 @@ async function requireScopedApplicant(id: string) {
     .maybeSingle();
   if (result.error) throw new Error(result.error.message);
   if (!result.data) throw new Error("Workforce applicant was not found.");
+  const roles = await supabaseAdmin.from("designations").select("code,name,designation_category:designation_categories!designations_designation_category_id_fkey(people_module)").eq("company_id",companyId);
+  const applicantDesignation=String(result.data.designation || "").trim().toLowerCase();
+  const role = roles.data?.find(row=>[row.code,row.name].some(value=>String(value).trim().toLowerCase()===applicantDesignation));
+  if (roles.error || firstDesignationBusinessCategory(role?.designation_category)?.people_module !== "delivery_network") throw new Error("Only master-classified Workforce profiles can be reviewed here.");
   if (!authorization.hasAllLocationAccess &&
       !authorization.locationScopeIds.includes(String(result.data.location_id ?? ""))) {
     throw new Error("You do not have access to this applicant location.");
@@ -78,14 +84,15 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
   const remarks = text(formData.get("remarks"));
   try {
     if (!id) throw new Error("Choose an onboarding request.");
-    if (!["approve", "return", "reject"].includes(action)) throw new Error("Choose a valid review action.");
+    if (!["approve", "approve_for_joining", "return", "reject"].includes(action)) throw new Error("Choose a valid review action.");
+    const joiningOnly = action === "approve_for_joining";
     if (["return", "reject"].includes(action) && !remarks) throw new Error("Review remarks are required.");
     const { authorization, companyId, applicant } = await requireScopedApplicant(id);
     if (!["under_review", "returned", "approved"].includes(String(applicant.onboarding_status))) {
       throw new Error("Only submitted or returned onboarding requests can be reviewed.");
     }
     const reviewedAt = new Date().toISOString();
-    if (action !== "approve") {
+    if (!["approve", "approve_for_joining"].includes(action)) {
       const toStatus = action === "return" ? "returned" : "rejected";
       const update = await supabaseAdmin!.from("workforce").update({
         onboarding_status: toStatus,
@@ -148,10 +155,10 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
     const providerId = text(formData.get("provider_employee_id"));
     const providerNotRequired = formData.get("provider_not_required") === "true";
     if (providerNotRequired && !isCompanyOwner(authorization)) throw new Error("Only an owner can waive the provider ID requirement.");
-    if (applicable.some((item) => item.code === "provider_id_created" && item.is_required) && !providerNotRequired && !providerId) throw new Error("Enter the verified provider ID before approval.");
+    if (!joiningOnly && applicable.some((item) => item.code === "provider_id_created" && item.is_required) && !providerNotRequired && !providerId) throw new Error("Enter the verified provider ID before activation. Use Approve for joining to start training while the ID is pending.");
     const results = applicable.map((item) => {
       const checked = formData.get(`checklist_${item.id}`) === "true";
-      const status = item.code === "provider_id_created" && providerNotRequired
+      const status = item.code === "provider_id_created" && joiningOnly ? "pending" : item.code === "provider_id_created" && providerNotRequired
         ? "not_required"
         : checked ? "completed" : "pending";
       return {
@@ -168,7 +175,7 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
         updated_at: reviewedAt
       };
     });
-    const incomplete = applicable.filter((item, index) => item.is_required && results[index]?.status === "pending");
+    const incomplete = applicable.filter((item, index) => item.is_required && results[index]?.status === "pending" && !(joiningOnly && item.code === "provider_id_created"));
     if (incomplete.length) throw new Error(`Complete the required checklist: ${incomplete.map((item) => item.label).join(", ")}.`);
     if (results.length) {
       const checklist = await supabaseAdmin!.from("workforce_onboarding_checklist_results")
@@ -176,18 +183,18 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
       if (checklist.error) throw new Error(checklist.error.message);
     }
     const approval = await supabaseAdmin!.from("workforce").update({
-      onboarding_status: "active",
+      onboarding_status: joiningOnly ? "approved" : "active",
       onboarding_reviewed_at: reviewedAt,
       onboarding_reviewed_by: authorization.userId,
       onboarding_review_remarks: remarks || null,
       onboarding_approved_at: reviewedAt,
       onboarding_approved_by: authorization.userId,
-      provider_id_status: providerId ? "created" : "not_required",
+      provider_id_status: providerId ? "created" : joiningOnly ? "pending" : "not_required",
       provider_employee_id: providerId || null,
       identity_exception_approved_at: applicant.identity_exception_required ? reviewedAt : null,
       identity_exception_approved_by: applicant.identity_exception_required ? authorization.userId : null,
-      is_active: true,
-      lifecycle_status: "active",
+      is_active: !joiningOnly,
+      lifecycle_status: joiningOnly ? "onboarding" : "active",
       updated_at: reviewedAt
     }).eq("company_id", companyId).eq("id", id);
     if (approval.error) throw new Error(approval.error.message);
@@ -216,12 +223,12 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
     const event = await supabaseAdmin!.from("workforce_onboarding_events").insert({
       company_id: companyId,
       workforce_id: id,
-      event_code: "ho_approved_and_activated",
+      event_code: joiningOnly ? "approved_for_joining" : "ho_approved_and_activated",
       from_status: applicant.onboarding_status,
-      to_status: "active",
+      to_status: joiningOnly ? "approved" : "active",
       actor_user_id: authorization.userId,
       source_portal: "workforce",
-      remarks: remarks || "HO checklist completed and workforce ID activated.",
+      remarks: remarks || (joiningOnly ? "Registration approved and biometric attendance enabled. Configure agreed joining terms before training pay accrues; provider activation remains pending." : "HO checklist completed and workforce ID activated."),
       metadata: applicant.identity_exception_required ? {
         identity_exception_approved: true,
         identity_exception_context: applicant.identity_exception_context
@@ -229,6 +236,8 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
     });
     if (event.error) throw new Error(event.error.message);
     revalidateLifecyclePages();
+    revalidatePath("/delivery-network/joining");
+    if (joiningOnly) redirect(`/delivery-network/joining?person=${encodeURIComponent(id)}&notice=${encodeURIComponent("Approved for joining. Confirm the agreed terms below; the first valid biometric day will identify training arrival.")}`);
     lifecycleRedirect({ notice: `${applicant.full_name} approved and activated.` });
   } catch (error) {
     if (isRedirect(error)) throw error;

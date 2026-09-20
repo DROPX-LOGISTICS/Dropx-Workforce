@@ -123,6 +123,8 @@ export const workforceNavItems: NavItem[] = [
     icon: "DA",
     children: [
       { code: "delivery_associates", label: "Workforce Register", href: "/delivery-network/associates" },
+      { code: "delivery_associates", label: "Joining & Training", href: "/delivery-network/joining" },
+      { code: "people_review", label: "Training Policies", href: "/delivery-network/training-policies" },
       { code: "delivery_associates", label: "Onboard Workforce", href: "/delivery-network/onboarding" },
       { code: "people_review", label: "Activation & Lifecycle", href: "/delivery-network/lifecycle" },
       { code: "workforce_activity", label: "Attendance & Activity", href: "/delivery-network/activity" },
@@ -135,6 +137,7 @@ export const workforceNavItems: NavItem[] = [
     icon: "ID",
     children: [
       { code: "executive_id_onboarding", label: "Provider ID Onboarding", href: "/delivery-network/id-onboarding" },
+      { code: "executive_id_onboarding", label: "Amazon Station Defaults", href: "/delivery-network/amazon-onboarding-settings" },
       { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping" },
       { code: "workforce_rate_cards", label: "Rate Cards", href: "/delivery-network/rate-cards" }
     ]

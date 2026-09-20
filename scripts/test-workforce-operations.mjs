@@ -79,4 +79,5 @@ assert.equal((await db.query('select count(*)::int n from workforce_lifecycle_ev
 const grants=await db.query("select proname from pg_proc join pg_namespace on pg_namespace.oid=pronamespace where nspname='public' and proname like 'workforce_%' and has_function_privilege('anon',pg_proc.oid,'EXECUTE')");
 assert.equal(grants.rows.length,0);
 console.log('PASS: migration compiles; snapshot rollback; totals; maker-checker; immutable approved payroll; correction return; payment evidence and retry; roster overlap; mapping scope; settlement validation, atomic deactivation and retry; RPC privileges.');
+await (await import('./test-workforce-joining-sql.mjs')).testJoiningSql(db);
 await db.close();

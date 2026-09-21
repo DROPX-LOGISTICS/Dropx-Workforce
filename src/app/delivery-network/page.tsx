@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, BadgeCheck, Banknote, CircleDollarSign, CircleDot, Clock3, Fingerprint, Gift, MessageSquareMore, ShieldCheck, UserRoundPlus, WalletCards } from "lucide-react";
+import { Activity, ArrowRight, BadgeCheck, Banknote, CircleDollarSign, Clock3, Fingerprint, Gift, MessageSquareMore, ShieldCheck, UserRoundPlus, WalletCards } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PendingLink } from "@/components/pending-link";
 import { hasPermission, requirePagePermission } from "@/lib/authorization";
@@ -7,23 +7,17 @@ import { firstDesignationBusinessCategory } from "@/lib/designation-business-cat
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { loadWorkforceCommunicationRecipients } from "@/lib/workforce-communication-recipients";
 import { calculateWorkforceEarnings, loadWorkforceEarnings, workforceToday } from "@/lib/workforce-earnings";
-
-type NetworkProfile = {
-  id: string;
-  onboarding_status: string | null;
-  is_active: boolean;
-};
+import {loadWorkforceJoining} from '@/lib/workforce-joining-data';
+import {workforceOverview} from '@/lib/workforce-overview';
+import {WorkforceJourneySummary} from '@/components/workforce-journey-summary';
 
 export const dynamic = "force-dynamic";
-
-function status(value: string | null) {
-  return String(value ?? "pending").trim().toLowerCase().replaceAll(" ", "_");
-}
 
 export default async function DeliveryNetworkPage() {
   const authorization = await requirePagePermission("delivery_associates", "access");
   const companyId = requireCompanyId(authorization);
-  let profiles: NetworkProfile[] = [];
+  let overview:ReturnType<typeof workforceOverview>|null=null;
+  let journeyError='';
   let designationCount = 0;
   let mappingCount = 0;
   let legacyRegistrationCount = 0;
@@ -49,7 +43,7 @@ export default async function DeliveryNetworkPage() {
         : ["00000000-0000-0000-0000-000000000000"]);
     }
     try {
-      const [workforceRecipients, designationResult, mappingResult, adjustmentCount, payrollCount] = await Promise.all([
+      const [workforceRecipients, designationResult, mappingResult, adjustmentCount, payrollCount, joining] = await Promise.all([
         loadWorkforceCommunicationRecipients(authorization).catch((cause) => { error = cause instanceof Error ? cause.message : "Workforce register is unavailable."; return []; }),
         supabaseAdmin
           .from("designations")
@@ -58,13 +52,14 @@ export default async function DeliveryNetworkPage() {
           .eq("is_active", true),
         mappingQuery,
         authorization.hasAllLocationAccess && hasPermission(authorization, "workforce_adjustments", "access") ? supabaseAdmin.from("workforce_adjustments").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "pending") : Promise.resolve({ count: null, error: null }),
-        authorization.hasAllLocationAccess && hasPermission(authorization, "workforce_payroll", "access") ? supabaseAdmin.from("workforce_payroll_runs").select("id", { count: "exact", head: true }).eq("company_id", companyId).in("status", ["draft", "review"]) : Promise.resolve({ count: null, error: null })
+        authorization.hasAllLocationAccess && hasPermission(authorization, "workforce_payroll", "access") ? supabaseAdmin.from("workforce_payroll_runs").select("id", { count: "exact", head: true }).eq("company_id", companyId).in("status", ["draft", "review"]) : Promise.resolve({ count: null, error: null }),
+        loadWorkforceJoining(authorization,{to:today}).catch(cause=>{journeyError=cause instanceof Error?cause.message:'Joining evidence is unavailable.';return null;})
       ]);
       error = error || designationResult.error?.message || mappingResult.error?.message || null;
       const deliveryDesignations = (designationResult.data ?? []).filter((designation) => (
         firstDesignationBusinessCategory(designation.designation_category)?.people_module === "delivery_network"
       ));
-      profiles = workforceRecipients.map((recipient) => ({ id: recipient.accountId, onboarding_status: recipient.status, is_active: recipient.isActive }));
+      overview=joining?workforceOverview(joining,today):null;
       legacyRegistrationCount = workforceRecipients.filter((recipient) => recipient.compatibilityMode).length;
       designationCount = deliveryDesignations.length;
       mappingCount = mappingResult.count ?? 0;
@@ -75,12 +70,10 @@ export default async function DeliveryNetworkPage() {
     }
   }
   const financeSnapshot = await financeSnapshotPromise;
-  error = [error, ...financeSnapshot.warnings, financeSnapshot.setupRequired ? "Finance setup is incomplete; earnings may be partial." : null].filter(Boolean).join(" ") || null;
+  error = [error, journeyError, ...financeSnapshot.warnings, financeSnapshot.setupRequired ? "Finance setup is incomplete; earnings may be partial." : null].filter(Boolean).join(" ") || null;
 
-  const pending = profiles.filter((profile) => !["active", "under_review", "returned", "rejected", "cancelled"].includes(status(profile.onboarding_status))).length;
-  const underReview = profiles.filter((profile) => status(profile.onboarding_status) === "under_review").length;
-  const active = profiles.filter((profile) => profile.is_active && status(profile.onboarding_status) === "active").length;
-  const pipelineTotal = Math.max(pending + underReview + active, 1);
+  const pending=overview?.needsRegistration??0,underReview=overview?.underReview??0,active=overview?.counts.active??0;
+  const joiningOpen=overview?overview.counts.awaiting_arrival+overview.counts.training+overview.counts.awaiting_activation+overview.counts.ready:0;
 
   const modules = [
     {
@@ -88,8 +81,13 @@ export default async function DeliveryNetworkPage() {
       href: "/delivery-network/onboarding",
       title: "Onboard workforce",
       description: "Create and track delivery, sorting, cleaning, driver and van-operation profiles without entering the HR system.",
-      metric: `${pending + underReview} open`,
+      metric: overview?`${pending + underReview} open`:'Counts unavailable',
       icon: UserRoundPlus
+    },
+    {
+      code:'delivery_associates',href:'/delivery-network/joining',title:'Joining & training',
+      description:'Separate applicants, arrivals, training and own-ID activation using approved terms and biometric evidence.',
+      metric:overview?`${joiningOpen} joining`:'Counts unavailable',icon:Clock3
     },
     {
       code: "executive_id_onboarding",
@@ -112,7 +110,7 @@ export default async function DeliveryNetworkPage() {
       href: "/delivery-network/lifecycle",
       title: "Activation & lifecycle",
       description: "Run Workforce activation checklists, agreements, exits and final settlements.",
-      metric: `${active} active`,
+      metric: overview?`${active} active`:'Counts unavailable',
       icon: BadgeCheck
     },
     {
@@ -162,15 +160,20 @@ export default async function DeliveryNetworkPage() {
       description: "Snapshot live earnings, clear holds, approve the payable register and record payout completion.",
       metric: `${openPayrollCount} open`,
       icon: Banknote
+    },
+    {
+      code:'workforce_payroll',href:'/delivery-network/payment-ledger',title:'Associate payment ledger',
+      description:'Reconcile recorded payroll, individual Finance outcomes and unposted adjustments without double-counting.',
+      metric:'Recorded history',icon:WalletCards
     }
   ].filter((module) => hasPermission(authorization, module.code, "access"));
   const lifecycleStages = [
     { code: "delivery_associates", href: "/delivery-network/onboarding", label: "Register & verify", helper: "Profile, documents, bank details and engagement", icon: UserRoundPlus },
-    { code: "provider_mapping", href: "/delivery-network/rate-mapping", label: "Activate IDs & rates", helper: "Provider member ID, station and commercial mapping", icon: Fingerprint },
-    { code: "workforce_activity", href: "/delivery-network/activity", label: "Run daily workforce", helper: "Attendance, shipments and productivity", icon: Activity },
-    { code: "workforce_earnings", href: "/delivery-network/earnings", label: "Calculate earnings", helper: "Base pay and incentive accrual with trace", icon: CircleDollarSign },
+    { code: "delivery_associates", href: "/delivery-network/joining", label: "Train & prepare", helper: "Agreed training terms, biometric arrival and provider tasks", icon: Clock3 },
+    { code: "provider_mapping", href: "/delivery-network/rate-mapping", label: "Map own ID & rates", helper: "Verified provider ID, effective date and agreed commercial terms", icon: Fingerprint },
+    { code: "workforce_earnings", href: "/delivery-network/earnings", label: "Reconcile daily work", helper: "Attendance, source shipments and earning exceptions", icon: CircleDollarSign },
     { code: "workforce_adjustments", href: "/delivery-network/adjustments", label: "Control exceptions", helper: "Ad hoc additions and deductions with approval", icon: ShieldCheck },
-    { code: "workforce_payroll", href: "/delivery-network/payroll", label: "Approve & pay", helper: "Freeze payroll, export and record payout", icon: Banknote }
+    { code: "workforce_payroll", href: "/delivery-network/payroll", label: "Payroll → Finance", helper: "Confirm payroll; Finance approves and processes payment", icon: Banknote }
   ].filter((stage) => hasPermission(authorization, stage.code, "access"));
 
   return (
@@ -198,19 +201,19 @@ export default async function DeliveryNetworkPage() {
       <section className="wf-command-kpis" aria-label="Workforce status summary">
         <article>
           <span className="orange"><Clock3 size={17} /></span>
-          <div><small>Needs registration</small><strong>{pending}</strong><em>Associate action required</em></div>
+          <div><small>Needs registration</small><strong>{overview?pending:'—'}</strong><em>Applicant action / returned details</em></div>
         </article>
         <article>
           <span className="rose"><ShieldCheck size={17} /></span>
-          <div><small>Ready for review</small><strong>{underReview}</strong><em>Documents and activation checks</em></div>
+          <div><small>Ready for review</small><strong>{overview?underReview:'—'}</strong><em>Documents and activation checks</em></div>
         </article>
         <article>
           <span className="green"><BadgeCheck size={17} /></span>
-          <div><small>Active in field</small><strong>{active}</strong><em>Available for operations</em></div>
+          <div><small>Active in field</small><strong>{overview?active:'—'}</strong><em>Current lifecycle state</em></div>
         </article>
         <article>
           <span className="navy"><Fingerprint size={17} /></span>
-          <div><small>Provider ID mappings</small><strong>{mappingCount}</strong><em>Current payout mappings</em></div>
+          <div><small>Provider ID mappings</small><strong>{mappingCount}</strong><em>Mappings, not unique people</em></div>
         </article>
       </section>
 
@@ -230,30 +233,7 @@ export default async function DeliveryNetworkPage() {
       </section>
 
       <div className="wf-command-board">
-        <section className="wf-command-panel wf-pipeline-panel">
-          <header>
-            <div><span>Associate health</span><h2>Activation pulse</h2></div>
-            <small>{pending + underReview + active} people in view</small>
-          </header>
-          <div className="wf-pipeline-list">
-            <article>
-              <div><span><CircleDot size={15} /> Registration pending</span><strong>{pending}</strong></div>
-              <div className="wf-pipeline-track"><i style={{ width: `${Math.max((pending / pipelineTotal) * 100, pending ? 4 : 0)}%` }} /></div>
-              <small>Workforce member action required</small>
-            </article>
-            <article>
-              <div><span><ShieldCheck size={15} /> Workforce review</span><strong>{underReview}</strong></div>
-              <div className="wf-pipeline-track"><i style={{ width: `${Math.max((underReview / pipelineTotal) * 100, underReview ? 4 : 0)}%` }} /></div>
-              <small>Documents and activation checks</small>
-            </article>
-            <article>
-              <div><span><BadgeCheck size={15} /> Field active</span><strong>{active}</strong></div>
-              <div className="wf-pipeline-track"><i style={{ width: `${Math.max((active / pipelineTotal) * 100, active ? 4 : 0)}%` }} /></div>
-              <small>Ready for operations</small>
-            </article>
-          </div>
-          <footer>{legacyRegistrationCount} migrated registrations remain protected during the transition.</footer>
-        </section>
+        <WorkforceJourneySummary overview={overview}/>
 
         <section className="wf-command-panel wf-desk-panel">
           <header>
@@ -262,8 +242,11 @@ export default async function DeliveryNetworkPage() {
           <div className="wf-desk-actions">
             <PendingLink href="/delivery-network/onboarding">
               <span><UserRoundPlus size={18} /></span>
-              <div><strong>Registration desk</strong><small>{pending + underReview} applications need progress</small></div>
+              <div><strong>Registration desk</strong><small>{overview?`${pending+underReview} applications need progress`:'Registration counts unavailable'}</small></div>
               <ArrowRight size={17} />
+            </PendingLink>
+            <PendingLink href="/delivery-network/joining">
+              <span><Clock3 size={18}/></span><div><strong>Joining &amp; training desk</strong><small>{overview?`${joiningOpen} profiles between approval and field work`:'Review arrival, training and own-ID activation'}</small></div><ArrowRight size={17}/>
             </PendingLink>
             {hasPermission(authorization, "executive_id_onboarding", "access") ? <PendingLink href="/delivery-network/id-onboarding">
               <span><Fingerprint size={18} /></span>
@@ -288,6 +271,7 @@ export default async function DeliveryNetworkPage() {
           </div>
         </section>
       </div>
+      <p className="subtle">{legacyRegistrationCount} migrated registration pathways remain protected. Lifecycle totals count canonical Workforce profiles; provider mappings and payment records are separate.</p>
 
       <section className="wf-workspace-directory">
         <header>

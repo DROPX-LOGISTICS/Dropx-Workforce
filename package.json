@@ -14,7 +14,7 @@
     "lint": "next lint",
     "test:workforce-controls": "tsx --test src/lib/workforce-controls.test.mjs",
     "test:workforce-operations": "node scripts/test-workforce-operations.mjs",
-"test:workforce": "node --test scripts/management-query-retry.test.mjs && tsx --test src/lib/workforce-payment-ledger.test.mjs src/lib/workforce-pooled-input.test.mjs src/lib/workforce-mileage-input.test.mjs src/lib/workforce-pooled-pay.test.mjs src/lib/workforce-designation-policy.test.mjs src/lib/workforce-exit-reconciliation.test.mjs src/lib/workforce-payroll-calendar.test.mjs src/lib/workforce-earnings.test.mjs src/lib/workforce-joining.test.mjs src/lib/workforce-communication-recipients.test.mjs src/lib/workforce-controls.test.mjs src/lib/onboarding-identity.test.mjs && node scripts/test-workforce-operations.mjs && node scripts/test-workforce-schedule-sql.mjs && node scripts/test-mobile-identity-migration.mjs"
+"test:workforce": "node --test scripts/management-query-retry.test.mjs && tsx --test src/lib/workforce-overview.test.mjs src/lib/workforce-payment-ledger.test.mjs src/lib/workforce-pooled-input.test.mjs src/lib/workforce-mileage-input.test.mjs src/lib/workforce-pooled-pay.test.mjs src/lib/workforce-designation-policy.test.mjs src/lib/workforce-exit-reconciliation.test.mjs src/lib/workforce-payroll-calendar.test.mjs src/lib/workforce-earnings.test.mjs src/lib/workforce-joining.test.mjs src/lib/workforce-communication-recipients.test.mjs src/lib/workforce-controls.test.mjs src/lib/onboarding-identity.test.mjs && node scripts/test-workforce-operations.mjs && node scripts/test-workforce-schedule-sql.mjs && node scripts/test-mobile-identity-migration.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

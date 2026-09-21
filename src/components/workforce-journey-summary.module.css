@@ -1,0 +1,10 @@
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:16px}
+.stage{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid #e6eaf0;border-radius:10px;padding:12px;color:#253247;text-decoration:none;background:#fff;min-width:0}
+.stage:hover{border-color:#ec9b77;background:#fffaf7}
+.stage:focus-visible{outline:3px solid #f2a980;outline-offset:2px}
+.stage span{display:grid;gap:4px;min-width:0}
+.stage strong{font-size:12px;font-weight:650}
+.stage small{font-size:11px;color:#64748b;line-height:1.4}
+.stage b{font-size:21px;font-variant-numeric:tabular-nums}
+.notice{padding:16px;font-size:13px;line-height:1.6}
+@media(max-width:420px){.grid{grid-template-columns:1fr}.stage{padding:11px 12px}}

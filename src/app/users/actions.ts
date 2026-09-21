@@ -37,6 +37,14 @@ function locationScopeFromForm(formData: FormData) {
   return parsed.map((value) => String(value)).filter(Boolean);
 }
 
+function uniqueLocationIds(value: unknown) {
+  return [...new Set(
+    Array.isArray(value)
+      ? value.map((item) => String(item).trim()).filter(Boolean)
+      : []
+  )];
+}
+
 function locationAccessMode(value: FormDataEntryValue | null) {
   return clean(value) === "all_locations" ? "all_locations" : "role_based";
 }
@@ -228,7 +236,7 @@ async function selectedPeoplePerson(formData: FormData, companyId: string) {
 
   const scopeResult = await supabaseAdmin
     .from("people_person_access_scopes")
-    .select("workspace_identity_override")
+    .select("location_scope_ids,workspace_identity_override")
     .eq("company_id", companyId)
     .eq("person_id", engagementResult.data.person_id)
     .maybeSingle();
@@ -249,7 +257,8 @@ async function selectedPeoplePerson(formData: FormData, companyId: string) {
     mobile: row.mobile,
     personId: engagementResult.data.person_id as string,
     designationId,
-    designationPolicyId: policyResult.data.id as string
+    designationPolicyId: policyResult.data.id as string,
+    locationScopeIds: uniqueLocationIds(scopeResult.data?.location_scope_ids)
   };
 }
 
@@ -993,13 +1002,13 @@ export async function createUser(formData: FormData) {
     const roleId = required(formData.get("role_id"), "Role");
     const reportsToUserId = clean(formData.get("reports_to_user_id"));
     const sendInvitation = formData.get("send_invitation") === "yes";
-    const locationScopeIds = locationScopeFromForm(formData);
+    const requestedLocationScopeIds = uniqueLocationIds(locationScopeFromForm(formData));
     if (mobile && !/^\d{6,15}$/.test(mobile)) throw new Error("Mobile number must contain 6 to 15 digits.");
 
     await assertRoleAvailableForSurface(roleId, companyId, surface);
     const { data: existingProfile, error: existingProfileError } = await admin
       .from("profiles")
-      .select("id, employee_id, email")
+      .select("id, employee_id, email, location_scope_ids")
       .eq("company_id", companyId)
       .ilike("email", email)
       .maybeSingle();
@@ -1008,7 +1017,7 @@ export async function createUser(formData: FormData) {
       ? { data: existingProfile, error: null }
       : await admin
         .from("profiles")
-        .select("id, employee_id, email")
+        .select("id, employee_id, email, location_scope_ids")
         .eq("company_id", companyId)
         .ilike("employee_id", employeeId)
         .maybeSingle();
@@ -1020,6 +1029,27 @@ export async function createUser(formData: FormData) {
       throw new Error(`This employee already has a portal identity under ${employeeProfile.data.email ?? "another email"}. Update the central identity before assigning new access.`);
     }
     const resolvedExistingProfile = existingProfile ?? employeeProfile.data;
+
+    // A People-managed person can already have a central identity before they
+    // are added to Workforce. An empty form scope must not turn that identity
+    // into a zero-location user: prefer the canonical People scope, then an
+    // existing active product scope (for older People records), when the
+    // operator has not explicitly selected stations.
+    let locationScopeIds = requestedLocationScopeIds.length
+      ? requestedLocationScopeIds
+      : peoplePerson.locationScopeIds;
+    if (!locationScopeIds.length && resolvedExistingProfile) {
+      const existingScopes = await admin
+        .from("company_product_memberships")
+        .select("location_scope_ids")
+        .eq("company_id", companyId)
+        .eq("user_id", resolvedExistingProfile.id)
+        .eq("is_active", true);
+      if (existingScopes.error) throw new Error(existingScopes.error.message);
+      locationScopeIds = uniqueLocationIds(
+        (existingScopes.data ?? []).flatMap((membership) => membership.location_scope_ids ?? [])
+      );
+    }
 
     await validateReportingManager(roleId, reportsToUserId, companyId, surface);
     await validateLocationScope(roleId, reportsToUserId, locationScopeIds, companyId, surface, authorization);
@@ -1060,7 +1090,12 @@ export async function createUser(formData: FormData) {
     }
 
     const profileWrite = resolvedExistingProfile
-      ? { error: null }
+      ? !(resolvedExistingProfile.location_scope_ids ?? []).length && locationScopeIds.length
+        ? await admin.from("profiles").update({
+          location_scope_ids: locationScopeIds,
+          updated_at: new Date().toISOString()
+        }).eq("id", resolvedExistingProfile.id).eq("company_id", companyId)
+        : { error: null }
       : await admin.from("profiles").upsert({
         id: userId,
         employee_id: employeeId,

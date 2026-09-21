@@ -125,6 +125,7 @@ export type WorkforceEarningLine = {
   providerId: string | null;
   providerName: string;
   providerMemberId: string;
+  providerMemberName: string | null;
   dropxId: string | null;
   workerName: string;
   designationId: string | null;
@@ -138,6 +139,12 @@ export type WorkforceEarningLine = {
   customerReturn: number;
   mfn: number;
   mfnReturn: number;
+  activityPayments: {
+    delivery: number | null;
+    customerReturn: number | null;
+    mfn: number | null;
+    mfnReturn: number | null;
+  };
   baseAmount: number;
   incentiveAmount: number;
   adjustmentAmount: number;
@@ -432,6 +439,20 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
       rateTrace = { payType: mapping.pay_type, rates: legacy.rates };
     }
 
+    const activityRates = rateCard ? {
+      delivery: amount(rateCard.delivery_rate),
+      customerReturn: amount(rateCard.return_rate),
+      mfn: amount(rateCard.mfn_rate),
+      mfnReturn: amount(rateCard.mfn_return_rate)
+    } : mapping ? legacyRates(mapping) : null;
+    const hasActivityRates = Boolean(activityRates && [activityRates.delivery, activityRates.customerReturn, activityRates.mfn, activityRates.mfnReturn].some((rate) => rate > 0));
+    const activityPayments = hasActivityRates && activityRates ? {
+      delivery: money(amount(shipment.total_delivery) * activityRates.delivery),
+      customerReturn: money(amount(shipment.c_return) * activityRates.customerReturn),
+      mfn: money(amount(shipment.mfn) * activityRates.mfn),
+      mfnReturn: money(amount(shipment.mfn_return) * activityRates.mfnReturn)
+    } : { delivery: null, customerReturn: null, mfn: null, mfnReturn: null };
+
     if (mapping && missingRate) holds.push("No effective rate card or mapped rate");
     if (mapping && !profile) holds.push("Provider ID is not linked to the canonical Workforce register");
 
@@ -465,6 +486,7 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
       providerId: mapping?.provider_id ?? provider?.id ?? null,
       providerName: provider?.name ?? (mapping ? providerById.get(mapping.provider_id)?.name : null) ?? shipment.client,
       providerMemberId: shipment.provider_employee_id,
+      providerMemberName: shipment.provider_employee_name,
       dropxId: profile?.dropx_id ?? null,
       workerName: profile?.full_name ?? shipment.provider_employee_name ?? shipment.provider_employee_id,
       designationId: profile?.designation_id ?? null,
@@ -478,6 +500,7 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
       customerReturn: amount(shipment.c_return),
       mfn: amount(shipment.mfn),
       mfnReturn: amount(shipment.mfn_return),
+      activityPayments,
       baseAmount: money(baseAmount),
       incentiveAmount: money(incentiveAmount),
       adjustmentAmount: 0,
@@ -579,6 +602,7 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
       providerId: null,
       providerName: "Internal",
       providerMemberId: "-",
+      providerMemberName: null,
       dropxId: profile.dropx_id,
       workerName: profile.full_name,
       designationId: profile.designation_id,
@@ -592,6 +616,7 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
       customerReturn: 0,
       mfn: 0,
       mfnReturn: 0,
+      activityPayments: { delivery: null, customerReturn: null, mfn: null, mfnReturn: null },
       baseAmount: 0,
       incentiveAmount: 0,
       adjustmentAmount: money(signedAmount),
@@ -615,9 +640,10 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
       if (!profile.bank_account_no?.trim() || !profile.ifsc_code?.trim()) holds.push("Bank details are incomplete");
       if (!profile.dropx_id?.trim()) holds.push("DropX ID is missing");
       lines.push({ key:`training:${profile.id}:${attendance.punch_date}`, sourceType:"training", sourceId:attendance.id,
-        workforceId:profile.id,mappingId:null,rateCardId:null,providerId:null,providerName:"Training",providerMemberId:"-",
+        workforceId:profile.id,mappingId:null,rateCardId:null,providerId:null,providerName:"Training",providerMemberId:"-",providerMemberName:null,
         dropxId:profile.dropx_id,workerName:profile.full_name,designationId:profile.designation_id,stationId:plan.station_id,stationCode:station?.station_code ?? "-",
         workDate:attendance.punch_date,totalDelivery:0,totalActivity:0,amazonDelivery:0,swaDelivery:0,customerReturn:0,mfn:0,mfnReturn:0,
+        activityPayments:{delivery:null,customerReturn:null,mfn:null,mfnReturn:null},
         baseAmount:dailyAmount,incentiveAmount:0,adjustmentAmount:0,netAmount:dailyAmount,calculationSource:"training_attendance",
         status:holds.length ? "hold" : "ready",holdReasons:holds,sourceUpdatedAt:attendance.updated_at,
         trace:{training_policy_id:plan.training_policy_id,daily_rate:plan.daily_rate,minimum_minutes:plan.minimum_minutes,work_minutes:attendance.work_minutes,

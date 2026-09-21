@@ -107,6 +107,11 @@
 .workforce-product .wf-finance-table tbody td > a > strong { display:block; color:#172136; font-size:11px; }
 .workforce-product .wf-finance-table tbody td > small,
 .workforce-product .wf-finance-table tbody td > a > small { display:block; max-width:260px; margin-top:3px; color:#8b94a3; font-size:8.75px; line-height:1.35; white-space:normal; }
+.workforce-product .wf-breakup-link { display:inline-flex; align-items:center; min-height:28px; padding:0 9px; border:1px solid #efaa8e; border-radius:7px; color:#c94118; font-size:9px; font-weight:850; }
+.workforce-product .wf-daily-breakup-table { min-width:1120px; }
+.workforce-product .wf-daily-breakup-table .wf-activity-cell { min-width:100px; }
+.workforce-product .wf-daily-breakup-table .wf-activity-cell > strong { font-size:12px; font-variant-numeric:tabular-nums; }
+.workforce-product .wf-daily-breakup-table .wf-activity-cell > small { color:#697386; font-variant-numeric:tabular-nums; }
 .workforce-product .wf-finance-table .empty-cell { padding:40px 18px; color:#8a93a2; text-align:center; }
 .workforce-product .wf-finance-table .empty-cell svg { margin-right:6px; vertical-align:middle; }
 .workforce-product .wf-pay-state { display:inline-flex; align-items:center; justify-content:center; min-height:22px; padding:2px 7px; border-radius:999px; background:#edf0f4; color:#5f6879; font-size:8.5px; font-weight:850; letter-spacing:.02em; text-transform:capitalize; white-space:nowrap; }

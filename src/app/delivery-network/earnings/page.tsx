@@ -17,6 +17,10 @@ function money(value: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(value);
 }
 
+function activityCell(count: number, payment: number | null) {
+  return <td className="wf-activity-cell"><strong>{number(count)}</strong><small>{payment === null ? "Rate unavailable" : money(payment)}</small></td>;
+}
+
 function sourceLabel(value: string) {
   return ({ rate_card: "Rate card", mapped_rate: "Mapped rate", imported_payout: "Imported payout", adjustment: "Adjustment", unresolved: "Unresolved",training_attendance:"Biometric training" } as Record<string, string>)[value] ?? value;
 }
@@ -157,14 +161,15 @@ export default async function WorkforceEarningsPage({ searchParams = {} }: { sea
       {view === "summary" ? (
         <section className="wf-finance-panel">
           <header><div><span>Payable register</span><h2>Associate earnings review</h2><p>Holds do not suppress accrued earnings; they prevent the amount from being approved for payout.</p></div>{hasPermission(authorization, "workforce_rate_cards", "access") ? <PendingLink href="/delivery-network/rate-cards">Manage rate cards <ArrowRight size={14} /></PendingLink> : null}</header>
-          <div className="table-wrap"><table className="wf-finance-table"><thead><tr><th>Associate</th><th>Station</th><th>Work days</th><th>Shipments</th><th>Base</th><th>Incentive</th><th>Adjustments</th><th>Deductions</th><th>Net</th><th>State</th></tr></thead><tbody>
+          <div className="table-wrap"><table className="wf-finance-table"><thead><tr><th>Associate</th><th>Station</th><th>Work days</th><th>Shipments</th><th>Base</th><th>Incentive</th><th>Adjustments</th><th>Deductions</th><th>Net</th><th>State</th><th>Action</th></tr></thead><tbody>
             {visibleSummaries.map((summary) => <tr key={summary.workforceId}>
               <td><strong>{summary.workerName}</strong><small>{summary.dropxId} · {summary.providerIds.join(", ") || "No provider ID"}</small></td>
               <td>{summary.stationCode}</td><td>{summary.workDays}</td><td>{number(summary.shipmentCount)}</td>
               <td>{money(summary.baseAmount)}</td><td>{money(summary.incentiveAmount)}</td><td>{money(summary.earningAdjustments)}</td><td>{money(summary.deductions)}</td><td><strong>{money(summary.netAmount)}</strong></td>
               <td><span className={`wf-pay-state ${summary.status}`}>{summary.status}</span>{summary.holdReasons.length ? <small>{summary.holdReasons.join(" · ")}</small> : null}</td>
+              <td><PendingLink className="wf-breakup-link" href={href(params, { view: "trace", q: summary.dropxId })}>Breakup</PendingLink></td>
             </tr>)}
-            {!visibleSummaries.length ? <tr><td className="empty-cell" colSpan={10}>No associate earnings match these filters.</td></tr> : null}
+            {!visibleSummaries.length ? <tr><td className="empty-cell" colSpan={11}>No associate earnings match these filters.</td></tr> : null}
           </tbody></table></div>
         </section>
       ) : null}
@@ -172,11 +177,11 @@ export default async function WorkforceEarningsPage({ searchParams = {} }: { sea
       {view === "trace" ? (
         <section className="wf-finance-panel">
           <header><div><span>Audit trail</span><h2>Line-level calculation trace</h2><p>Showing {number(Math.min(visibleLines.length, 1000))} of {number(visibleLines.length)} filtered daily rows.</p></div></header>
-          <div className="table-wrap"><table className="wf-finance-table"><thead><tr><th>Date</th><th>Associate</th><th>Provider ID</th><th>Counts</th><th>Source</th><th>Base</th><th>Incentive</th><th>Adjustment</th><th>Net</th><th>State</th></tr></thead><tbody>
+          <div className="table-wrap"><table className="wf-finance-table wf-daily-breakup-table"><thead><tr><th>Date</th><th>DropX associate</th><th>Amazon ID</th><th>Delivery</th><th>C-return</th><th>MFN</th><th>MFN return</th><th>Source</th><th>Payment</th><th>State</th></tr></thead><tbody>
             {visibleLines.slice(0, 1000).map((line) => <tr key={line.key}>
-              <td>{line.workDate}</td><td><strong>{line.workerName}</strong><small>{line.dropxId ?? "Unmapped"} · {line.stationCode}</small></td><td>{line.providerMemberId}</td>
-              <td>{number(line.totalDelivery)} delivered<small>{number(line.totalActivity)} activity</small></td><td>{sourceLabel(line.calculationSource)}</td>
-              <td>{money(line.baseAmount)}</td><td>{money(line.incentiveAmount)}</td><td>{money(line.adjustmentAmount)}</td><td><strong>{money(line.netAmount)}</strong></td><td><span className={`wf-pay-state ${line.status}`}>{line.status.replaceAll("_", " ")}</span></td>
+              <td>{line.workDate}</td><td><strong>{line.workerName}</strong><small>{line.dropxId ?? "Unmapped"} · {line.stationCode}</small></td><td><strong>{line.providerMemberId}</strong><small>{line.providerMemberName ?? "No Amazon source name"}</small></td>
+              {activityCell(line.totalDelivery, line.activityPayments.delivery)}{activityCell(line.customerReturn, line.activityPayments.customerReturn)}{activityCell(line.mfn, line.activityPayments.mfn)}{activityCell(line.mfnReturn, line.activityPayments.mfnReturn)}<td>{sourceLabel(line.calculationSource)}</td>
+              <td><strong>{money(line.netAmount)}</strong><small>{line.incentiveAmount ? `${money(line.incentiveAmount)} incentive` : "Base payment"}</small></td><td><span className={`wf-pay-state ${line.status}`}>{line.status.replaceAll("_", " ")}</span></td>
             </tr>)}
             {!visibleLines.length ? <tr><td className="empty-cell" colSpan={10}>No earning lines match these filters.</td></tr> : null}
           </tbody></table></div>

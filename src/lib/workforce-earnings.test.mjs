@@ -146,9 +146,13 @@ test("supports the payment-head keys already stored in provider mappings", () =>
       ...base.mappings[0],
       payment_values: { DELIVERY: 10, CRETURN: 5, SELLER_PICKUP: 4, SLLLER_RETURN: 2 }
     }],
-    shipments: [{ ...base.shipments[0], c_return: 2, mfn: 3, mfn_return: 1, total_activity: 36 }]
+    shipments: [{ ...base.shipments[0], provider_employee_name: "Amazon Source Name", amazon_delivery: 25, swa_delivery: 5, c_return: 2, mfn: 3, mfn_return: 1, total_activity: 36 }]
   }));
   assert.equal(result.totalBase, 324);
+  assert.equal(result.lines[0].totalDelivery, 30);
+  assert.equal(result.lines[0].providerMemberName, "Amazon Source Name");
+  assert.deepEqual(result.lines[0].activityPayments, { delivery: 300, customerReturn: 10, mfn: 12, mfnReturn: 2 });
+  assert.equal("swaDelivery" in result.lines[0].activityPayments, false);
   assert.equal(result.lines[0].trace.rates.customerReturn, 5);
   assert.equal(result.lines[0].trace.rates.mfn, 4);
   assert.equal(result.lines[0].trace.rates.mfnReturn, 2);

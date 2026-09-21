@@ -8,6 +8,9 @@ import {readAllRows} from '@/lib/supabase-pagination';
 import {workforceClassification} from '@/lib/workforce-classification';
 import {reconcilePaymentLedger,type LedgerItem,type LedgerLink,type LedgerAdjustment,type LedgerBucket} from '@/lib/workforce-payment-ledger';
 import styles from '@/components/workforce-mileage-desk.module.css';
+import {loadRecordedExitChecks} from '@/lib/workforce-exit-recorded-loader';
+import {WorkforceExitReadiness} from '@/components/workforce-exit-readiness';
+import type {RecordedExitChecks} from '@/lib/workforce-exit-recorded-checks';
 export const dynamic='force-dynamic';
 type Person={id:string;full_name:string;dropx_id:string|null;location_id:string;onboarding_status:string;lifecycle_status:string|null;designation_id:string|null;designation:string|null};
 type Search={person?:string;status?:string;sort?:string;page?:string;claim_page?:string};
@@ -19,6 +22,7 @@ const labels:Record<LedgerBucket,string>={paid:'Paid · reconciled',awaiting_fin
 export default async function PaymentLedgerPage({searchParams:params={}}:{searchParams?:Search}){
  const auth=await requirePagePermission('workforce_payroll','access'),company=requireCompanyId(auth);
  let error='',people:Person[]=[],selected:Person|undefined,ledger:ReturnType<typeof reconcilePaymentLedger>|null=null,holds:Hold[]=[],windows:Window[]=[];
+ let exitChecks:RecordedExitChecks|null=null,exitCheckError='';
  const stationNames=new Map<string,string>();
  if(auth.hasAllLocationAccess){try{
   if(!supabaseAdmin)throw new Error('Database is unavailable.');
@@ -39,6 +43,7 @@ export default async function PaymentLedgerPage({searchParams:params={}}:{search
    const rows=(items.data??[]).map(i=>({...i,run:relation(i.run)})) as LedgerItem[],links:LedgerLink[]=[];
    for(let n=0;n<rows.length;n+=100){const r=await readAllRows(supabaseAdmin.from('workforce_payroll_finance_links').select('company_id,payroll_item_id,payroll_run_id,payment_request_id,payment:payment_requests(id,company_id,status,amount,utr_cin,processed_at,request_no)').eq('company_id',company).in('payroll_item_id',rows.slice(n,n+100).map(i=>i.id)).order('payroll_item_id'));if(r.error)throw new Error('Finance evidence could not be loaded. No partial balance is shown.');links.push(...(r.data??[]).map(l=>({...l,payment:relation(l.payment)})) as LedgerLink[]);}
    ledger=reconcilePaymentLedger(company,selected.id,rows,links,(adjustments.data??[]) as LedgerAdjustment[]);holds=holdRows.data??[];windows=(windowRows.data??[]).filter(w=>!(w.settlements??[]).some((s:{status:string})=>s.status==='approved')) as Window[];
+   try{exitChecks=await loadRecordedExitChecks(company,selected.id,null);}catch{exitCheckError='Recorded exit readiness could not be verified. Payroll history below remains read-only; do not clear the exit.';}
   }
  }catch(e){error=e instanceof Error?e.message:'Payment history is unavailable.';ledger=null;}}
  const filtered=ledger?.rows.filter(r=>!params.status||r.bucket===params.status).sort((a,b)=>(params.sort==='oldest'?1:-1)*a.run!.period_end.localeCompare(b.run!.period_end))??[];
@@ -51,6 +56,7 @@ export default async function PaymentLedgerPage({searchParams:params={}}:{search
    {error?<p role="alert" className={styles.notice+' '+styles.error}>{error}</p>:null}
    <section className={styles.panel}><form method="get" className={styles.filters}><label>Associate / DropX ID<SearchableSelect name="person" defaultValue={selected?.id??''} required placeholder="Search name, ID or station" options={people.map(p=>({value:p.id,label:(p.dropx_id??'ID pending')+' · '+p.full_name,helper:[stationNames.get(p.location_id),p.lifecycle_status??p.onboarding_status].filter(Boolean).join(' · ')}))}/></label><button className="button secondary" disabled={!people.length}>Open payment history</button></form><p>This view is read-only. It cannot approve, hold, waive, pay or close an exit.</p></section>
    {ledger&&selected?<>
+    {exitChecks?<WorkforceExitReadiness checks={exitChecks} workforceId={selected.id}/>:<p role="alert" className={styles.notice+' '+styles.error}>{exitCheckError}</p>}
     <section className={styles.notice}><strong>{selected.dropx_id??'ID pending'} · {selected.full_name}</strong><p>{stationNames.get(selected.location_id)} · {selected.lifecycle_status??selected.onboarding_status}</p><p><strong>Coverage:</strong> all recorded payroll items and adjustments for this associate, not uncalculated work. Unimported delivery records, uncalculated training days, unreviewed claims and unclosed pooled windows are not a verified zero balance.</p><Link href="/delivery-network/earnings">Review live earning sources</Link> · <Link href="/delivery-network/joining">Training evidence</Link> · <Link href="/delivery-network/lifecycle">Exit review</Link></section>
     <section className={styles.panel}><h2>Separate balances · never added together automatically</h2><dl className={styles.facts}>
      <div><dt>Finance-paid with individual evidence</dt><dd>{money(ledger.summary.paid)}</dd></div><div><dt>Confirmed · awaiting Finance</dt><dd>{money(ledger.summary.awaitingFinance)}</dd></div><div><dt>Returned / rejected payment requests</dt><dd>{money(ledger.summary.paymentAttention)}</dd></div><div><dt>Held / excluded recorded net</dt><dd>{money(ledger.summary.held)}</dd></div><div><dt>Draft / review · not confirmed</dt><dd>{money(ledger.summary.provisional)}</dd></div><div><dt>Approved additions not yet in payroll</dt><dd>{money(ledger.summary.approvedUnpostedAdditions)}</dd></div><div><dt>Approved deductions not yet in payroll</dt><dd>{money(ledger.summary.approvedUnpostedDeductions)}</dd></div><div><dt>Claims awaiting review</dt><dd>{ledger.summary.pendingClaims}</dd></div>

@@ -13,6 +13,8 @@ import { firstDesignationBusinessCategory } from "@/lib/designation-business-cat
 import {loadWorkforceEarnings} from '@/lib/workforce-earnings';
 import {readAllRows} from '@/lib/supabase-pagination';
 import {assertFinalPayrollMatches} from '@/lib/workforce-exit-reconciliation';
+import {loadRecordedExitChecks} from '@/lib/workforce-exit-recorded-loader';
+import {recordedExitBlockers} from '@/lib/workforce-exit-recorded-checks';
 
 function lifecycleRedirect(params: { error?: string; notice?: string; tab?: string }): never {
   const query = new URLSearchParams();
@@ -393,6 +395,9 @@ export async function completeWorkforceSettlement(formData: FormData) {
     if (incomplete.length) throw new Error(`Complete the exit checklist: ${incomplete.map((item) => item.label).join(", ")}.`);
     if (!isCompanyOwner(authorization)) throw new Error("Only an owner can complete or waive a settlement.");
     if (current.data.profile_type === 'workforce') {
+      const recorded=await loadRecordedExitChecks(companyId,current.data.profile_id,authorization.hasAllLocationAccess?null:authorization.locationScopeIds);
+      const blockers=recordedExitBlockers(recorded);
+      if(blockers.length)throw new Error(blockers.join(' · '));
       const itemId=text(formData.get('payroll_item_id'));
       const item=await supabaseAdmin.from('workforce_payroll_items').select('id,payroll_run_id,workforce_id,status').eq('company_id',companyId).eq('workforce_id',current.data.profile_id).eq('id',itemId).maybeSingle();
       if(item.error||!item.data||item.data.status!=='paid') throw new Error('Choose a Finance-paid final payroll item for this associate.');

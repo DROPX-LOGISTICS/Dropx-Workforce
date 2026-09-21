@@ -67,7 +67,7 @@ export async function WorkforceMileageDesk({pageCode,active,path,params={},submi
    <label>Journey and verification notes<textarea name="notes" minLength={10} maxLength={1500} required/></label>
    <div><p>The amount is distance × policy rate. Submission is not verification or payment.</p><SubmitButton pendingText="Submitting evidence" confirmTitle="Submit mileage claim?" confirmMessage="A different Workforce reviewer must verify the evidence before it can enter payroll.">Submit for review</SubmitButton></div>
   </form></details></section>:null}
-  <section className={styles.panel}><h2>Evidence &amp; review history</h2><form method="get" className={styles.filters}>
+  <section className={styles.panel}><h2>Evidence &amp; review history</h2><form key={JSON.stringify([params.q,params.station,params.status,params.sort])} method="get" className={styles.filters}>
    <label>Search<input name="q" defaultValue={params.q??''} placeholder="Name, ID, claim or evidence"/></label>
    <label>Station<select name="station" defaultValue={params.station??''}><option value="">All accessible stations</option>{stations.map(s=><option key={s.id} value={s.id}>{s.station_code}</option>)}</select></label>
    <label>Status<select name="status" defaultValue={params.status??''}><option value="">All statuses</option>{['pending','approved','rejected','posted'].map(s=><option key={s}>{s}</option>)}</select></label>

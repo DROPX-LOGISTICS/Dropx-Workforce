@@ -71,7 +71,7 @@ export default async function JoiningPage({searchParams:params={}}:{searchParams
         {Object.entries(joiningStages).map(([key,label])=><Link key={key} className={params.stage===key ? styles.selected : ""} href={url(params,{stage:key,person:undefined,page:"1"})}>{label}<strong>{rows.filter(row=>row.state.stage===key).length}</strong></Link>)}
       </nav>
       <div className={styles.brief}><span><Fingerprint size={17}/> <strong>{inviteReady}</strong> ready for an invitation task after direct joining or two complete training days</span><Link href={url(params,{due:"1",stage:undefined,page:"1",person:undefined})}>{due} follow-ups due <ArrowRight size={14}/></Link></div>
-      <form className={styles.filters} method="get">
+      <form key={JSON.stringify([params.stage,params.q,params.person,params.station,params.source,params.sort,params.due])} className={styles.filters} method="get">
         {params.stage ? <input type="hidden" name="stage" value={params.stage}/> : null}
         <label>Search<input name="q" defaultValue={params.q} placeholder="Name, DropX / biometric ID or email"/></label>
         <label>Associate / DropX ID<select name="person" defaultValue={params.person ?? ""}><option value="">Choose associate</option>{data.profiles.map(row=><option key={row.id} value={row.id}>{row.dropx_id || row.biometric_id || "ID pending"} · {row.full_name}</option>)}</select></label>

@@ -1,9 +1,18 @@
 import test from 'node:test';import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {reconcilePaymentLedger} from './workforce-payment-ledger.ts';
 const item=(o={})=>({id:'item',company_id:'company',workforce_id:'person',payroll_run_id:'run',station_code:'TEST',status:'ready',gross_amount:800,deduction_amount:100,net_amount:700,run:{id:'run',company_id:'company',run_number:'RUN',period_start:'2026-01-01',period_end:'2026-01-02',status:'approved',created_at:'2026-01-03T00:00:00Z'},...o});
 const link=(o={})=>({company_id:'company',payroll_item_id:'item',payroll_run_id:'run',payment_request_id:'payment',payment:{id:'payment',company_id:'company',status:'pending',amount:700,request_no:'PAY',utr_cin:null,processed_at:null,...o}});
 const claim=(o={})=>({id:'claim',company_id:'company',workforce_id:'person',status:'approved',adjustment_type:'earning',category:'other',amount:50,effective_date:'2026-02-01',payroll_run_id:null,reason:'Synthetic',requested_at:'2026-01-01',...o});
 const ledger=(i=[item()],l=[],a=[])=>reconcilePaymentLedger('company','person',i,l,a);
+test('filter controls remount on query reset instead of showing stale uncontrolled selections',()=>{
+ const source=readFileSync(new URL('../app/delivery-network/payment-ledger/page.tsx',import.meta.url),'utf8');
+ assert.ok(source.includes('<form key={`${selected.id}:${params.status??\'\'}:${params.sort??\'newest\'}`}'));
+ for(const path of ['../components/workforce-mileage-desk.tsx','../app/delivery-network/pooled-settlements/page.tsx','../app/delivery-network/joining/page.tsx']){
+  const page=readFileSync(new URL(path,import.meta.url),'utf8');
+  assert.match(page,/<form key=\{JSON.stringify\(\[params\./);
+ }
+});
 test('no recorded payroll never asserts zero total earnings or missing work is paid',()=>{assert.deepEqual(ledger([],[],[]).rows,[]);assert.equal('totalDue' in ledger([],[],[]).summary,false);});
 test('confirmed pending, approved and processing Finance requests remain unpaid once',()=>{for(const status of ['pending','approved','processing']){const s=ledger([item()],[link({status})]);assert.equal(s.rows[0].bucket,'awaiting_finance');assert.equal(s.summary.awaitingFinance,700);assert.equal(s.summary.paid,0);}});
 test('paid requires individual processed evidence, bank reference, timestamp and matching amount',()=>{const p={status:'processed',utr_cin:'SYNTHETIC-UTR',processed_at:'2026-02-01T00:00:00Z'};assert.equal(ledger([item({status:'paid'})],[link(p)]).summary.paid,700);for(const o of [{utr_cin:null},{processed_at:null},{amount:701},{processed_at:'bad'}]){const s=ledger([item({status:'paid'})],[link({...p,...o})]);assert.equal(s.summary.paid,0);assert.equal(s.summary.awaitingFinance,0);assert.equal(s.summary.evidenceGaps,1);}});

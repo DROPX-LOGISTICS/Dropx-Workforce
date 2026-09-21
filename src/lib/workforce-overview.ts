@@ -1,5 +1,11 @@
 import {joiningState,joiningStages,type JoiningPerson,type JoiningPlan,type JoiningMapping,type JoiningAttendance,type JoiningStage} from './workforce-joining';
 
+/** Imported active registrations may retain a historical onboarding lifecycle flag. */
+export function isActiveReviewProfile(person:Pick<JoiningPerson,'onboarding_status'|'lifecycle_status'>){
+ if(['inactive','offboarded','exited','terminated','resigned','settled'].includes(person.lifecycle_status||'')||['rejected','cancelled'].includes(person.onboarding_status||''))return false;
+ return person.onboarding_status==='active'||person.lifecycle_status==='active';
+}
+
 /** Same lifecycle rules as Joining; a profile belongs to exactly one visible bucket. */
 export function workforceOverview(data:{profiles:JoiningPerson[];plans:JoiningPlan[];mappings:JoiningMapping[];attendance:JoiningAttendance[]},today:string){
  const counts=Object.fromEntries(Object.keys(joiningStages).map(stage=>[stage,0])) as Record<JoiningStage,number>;

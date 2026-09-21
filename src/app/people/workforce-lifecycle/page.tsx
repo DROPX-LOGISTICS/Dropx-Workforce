@@ -8,6 +8,8 @@ import { SubmitButton } from "@/components/submit-button";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import {isActiveReviewProfile} from '@/lib/workforce-overview';
+import {readAllRows} from '@/lib/supabase-pagination';
 import { isNonEmployeeProfileType, workforceTable, type NonEmployeeProfileType } from "@/lib/workforce-profiles";
 import { completeWorkforceSettlement, reviewWorkforceExit, reviewWorkforceOnboarding, startWorkforceExit } from "./actions";
 
@@ -56,7 +58,7 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
       .eq("company_id", companyId).is("deleted_at", null).neq("migration_state", "reclassified").order("updated_at", { ascending: false });
     if (!authorization.hasAllLocationAccess) applicantQuery = applicantQuery.in("location_id", authorization.locationScopeIds.length ? authorization.locationScopeIds : ["00000000-0000-0000-0000-000000000000"]);
     const [applicantResult, checklistResult, resultResult, acceptanceResult, exitResult, exitMasterResult, designationResult, reviewIssueResult] = await Promise.all([
-      applicantQuery,
+      readAllRows(applicantQuery.order('id')),
       supabaseAdmin.from("workforce_onboarding_checklist_master").select("id, code, label, description, is_required, applicable_designation_codes, sort_order").eq("company_id", companyId).eq("is_active", true).order("sort_order"),
       supabaseAdmin.from("workforce_onboarding_checklist_results").select("workforce_id, checklist_item_id, status, remarks").eq("company_id", companyId).not("workforce_id", "is", null),
       supabaseAdmin.from("workforce_agreement_acceptances").select("profile_id").eq("company_id", companyId).eq("profile_type", "workforce"),
@@ -92,14 +94,14 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
     }
   }
   const pending = applicants.filter((item) => !["active", "cancelled"].includes(item.onboarding_status));
-  const active = applicants.filter((item) => item.lifecycle_status === "active");
+  const active = applicants.filter(isActiveReviewProfile);
   const openExits = exits.filter((item) => !["rejected", "settled", "cancelled"].includes(item.status));
   const resultMap = new Map(checklistResults.map((item) => [`${item.workforce_id}:${item.checklist_item_id}`, item]));
   const applicantMap = new Map(applicants.map((item) => [item.id, item]));
 
   const matches=(item:Applicant)=>!searchParams?.q||[item.full_name,item.dropx_id,item.biometric_id,first(item.stations)?.station_code].some(v=>v?.toLowerCase().includes(searchParams.q!.toLowerCase()));
   const queue=(tab==='active'?active:pending).filter(matches);
-  const selected=queue.find(p=>p.id===searchParams?.person)??queue[0];
+  const selected=searchParams?.person?queue.find(p=>p.id===searchParams.person):queue[0];
   return <AppShell active="Onboarding & review" pageCode="people_review">
     <PageHead eyebrow="Workforce" title="Associate review" subtitle="Review registration, set training pay and map the provider ID in one place." action={<PendingLink className="button" href="/delivery-network/onboarding">Invite associate</PendingLink>}/>
     {searchParams?.notice ? <div className="notice">{searchParams.notice}</div> : null}

@@ -1,10 +1,15 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {workforceOverview} from './workforce-overview.ts';
+import {workforceOverview,isActiveReviewProfile} from './workforce-overview.ts';
 const person=(id,changes={})=>({id,location_id:'station',onboarding_status:'approved',lifecycle_status:'onboarding',is_active:false,...changes});
 const plan=(id,changes={})=>({workforce_id:id,station_id:'station',mode:'training',eligible_from:'2026-09-01',terms_accepted_on:'2026-09-01',training_completed_on:null,closed_on:null,...changes});
 const mapping=(id,changes={})=>({id:'map-'+id,workforce_id:id,provider_member_id:'provider-'+id,station_id:'station',effective_from:'2026-09-01',effective_to:null,status:'active',...changes});
 const punch=(id,changes={})=>({id:'punch-'+id,workforce_id:id,punch_date:'2026-09-01',in_time:'2026-09-01T04:00:00Z',in_source:'biometric',punch_in_location_id:'station',...changes});
 const overview=(profiles,plans=[],mappings=[],attendance=[])=>workforceOverview({profiles,plans,mappings,attendance},'2026-09-21');
+test('review profile queue retains imported active associates without reactivating exits',()=>{
+ assert.equal(isActiveReviewProfile(person('imported',{onboarding_status:'active'})),true);
+ assert.equal(isActiveReviewProfile(person('trainee')),false);
+ for(const lifecycle_status of ['offboarded','inactive','settled','terminated'])assert.equal(isActiveReviewProfile(person('exit',{onboarding_status:'active',lifecycle_status})),false);
+});
 test('all lifecycle states are visible, disjoint and sum to canonical total',()=>{
  const profiles=[person('applicant',{onboarding_status:'under_review'}),person('arrival'),person('training'),person('activation'),person('ready'),person('active',{is_active:true}),person('exited',{lifecycle_status:'offboarded'}),person('closed',{onboarding_status:'rejected'})];
  const result=overview(profiles,[plan('training'),plan('activation',{mode:'direct'})],[mapping('ready')],[punch('training')]);

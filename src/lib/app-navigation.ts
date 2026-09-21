@@ -154,6 +154,7 @@ export const workforceNavItems: NavItem[] = [
       { code: "workforce_adjustments", label: "Mileage Claims", href: "/delivery-network/mileage" },
       { code: "workforce_adjustments", label: "Pooled MG Settlement", href: "/delivery-network/pooled-settlements" },
       { code: "workforce_payroll", label: "Payroll Runs", href: "/delivery-network/payroll" },
+      { code: "workforce_payroll", label: "Associate Payment Ledger", href: "/delivery-network/payment-ledger" },
       { code: "workforce_payroll", label: "Payroll Calendars", href: "/delivery-network/payroll-calendars" },
       { code: "workforce_adjustments", label: "Payment Holds", href: "/delivery-network/payment-holds" }
     ]

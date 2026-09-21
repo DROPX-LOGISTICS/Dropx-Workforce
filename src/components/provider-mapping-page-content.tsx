@@ -283,13 +283,15 @@ export async function ProviderMappingPageContent({
   eyebrow = "Source-of-truth bridge",
   pageCode = "provider_mapping",
   subtitle = "Maintain Delivery Network IDs, provider member IDs, date-effective history, payout methods and partner rates.",
-  title = "ID & pay mapping"
+  title = "ID & pay mapping", embedded = false, workforceId
 }: {
   active?: string;
   eyebrow?: string;
   pageCode?: string;
   subtitle?: string;
   title?: string;
+  embedded?: boolean;
+  workforceId?: string;
 }) {
   const authorization = await requirePagePermission(pageCode, "access");
   const permission = authorization.permissions[pageCode];
@@ -297,7 +299,7 @@ export async function ProviderMappingPageContent({
   const monthStart = `${today.slice(0, 8)}01`;
   const [{ locations, mappings, paymentMethods, error }, earnings] = await Promise.all([
     loadMappingData(authorization),
-    loadWorkforceEarnings(authorization, monthStart, today)
+    embedded ? Promise.resolve({lines: []}) : loadWorkforceEarnings(authorization, monthStart, today)
   ]);
   const pendingByProviderId = new Map<string, ProviderPendingMappingRow>();
   earnings.lines.filter((line) => line.sourceType === "shipment" && line.status === "unmapped").forEach((line) => {
@@ -326,13 +328,13 @@ export async function ProviderMappingPageContent({
   const flashNotice = flash.notice;
   const canEditWorksheet = pageCode === "provider_mapping" && (permission.canAdd || permission.canEdit);
 
-  return (
-    <AppShell active={active} pageCode={pageCode}>
+  const content = <>
+      {!embedded ?
       <PageHead
         eyebrow={eyebrow}
         title={title}
         subtitle={subtitle}
-      />
+      /> : null}
 
       {error || flashError || flashNotice ? (
         <section
@@ -353,14 +355,15 @@ export async function ProviderMappingPageContent({
 
       {(permission.canView || permission.canAdd || permission.canEdit) && !error ? (
         <ProviderMappingWorksheet
+          embedded={embedded}
           canEdit={canEditWorksheet && !error}
           locations={locations}
-          mappings={mappings}
+          mappings={workforceId ? mappings.filter(row=>row.workforceId===workforceId) : mappings}
           paymentMethods={paymentMethods}
           providerPending={providerPending}
           providerPendingPeriod={`${monthStart} to ${today}`}
         />
       ) : null}
-    </AppShell>
-  );
+    </>;
+  return embedded ? content : <AppShell active={active} pageCode={pageCode}>{content}</AppShell>;
 }

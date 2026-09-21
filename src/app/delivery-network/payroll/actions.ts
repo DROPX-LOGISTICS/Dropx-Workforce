@@ -9,6 +9,18 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import {payrollCalendarPeriod,type PayrollCalendar} from '@/lib/workforce-payroll-calendar';
 
 const path = "/delivery-network/payroll";
+export async function publishPayout(form:FormData){
+ const auth=await requirePagePermission('workforce_payroll','edit'),id=String(form.get('id')||'');
+ try{
+  requireNetworkPayrollScope(auth);
+  if(auth.readOnly||!supabaseAdmin)throw new Error('Publishing is unavailable.');
+  const date=(key:string)=>{const raw=String(form.get(key)||'');if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(raw))throw new Error('Choose valid review and notification dates.');return new Date(raw+':00+05:30').toISOString();};
+  const result=await supabaseAdmin.rpc('workforce_publish_payout',{p_company:requireCompanyId(auth),p_run:id,p_actor:auth.userId,p_review_until:date('review_until'),p_notify_at:date('notify_at')});
+  if(result.error)throw new Error(result.error.message);
+  revalidatePath(`${path}/${id}`);
+ }catch(e){finish('error',e instanceof Error?e.message:'Unable to publish.',id);}
+ finish('notice','Payout details published in DropX One. WhatsApp is queued for the selected time. Resolve disputes before confirmation.',id);
+}
 function text(value: FormDataEntryValue | null) { return String(value ?? "").trim(); }
 function finish(kind: "notice" | "error", message: string, id?: string): never { redirect(`${path}${id ? `/${id}` : ""}?${kind}=${encodeURIComponent(message)}`); }
 

@@ -1,4 +1,5 @@
 import { readAllRows } from "@/lib/supabase-pagination";
+import {personalPaymentCard} from './personal-payment-card';
 import type { AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -200,6 +201,7 @@ export type WorkforceEarningsSnapshot = {
 };
 
 export type WorkforceEarningsInput = {
+  corrections?: {id:string;workforce_id:string;source_id:string;kind:string;payload:Record<string,number>;reason:string}[];
   from: string;
   to: string;
   shipments: CpsShipmentRow[];
@@ -352,6 +354,16 @@ function profileHolds(profile: WorkforceProfileRow, workDate?: string) {
 }
 
 export function calculateWorkforceEarnings(input: WorkforceEarningsInput): WorkforceEarningsSnapshot {
+  const originals = new Map(input.shipments.map(row=>[row.id,row]));
+  const corrections = input.corrections ?? [];
+  // Corrections affect this payroll calculation only; imported source rows and mappings stay intact.
+  input = {...input, shipments:input.shipments.map(row=>{
+    const fix=corrections.find(c=>c.source_id===row.id&&c.kind==='counts');
+    if(!fix)return row;
+    const p=fix.payload;
+    return {...row,total_delivery:p.totalDelivery,total_activity:p.totalDelivery+p.customerReturn+p.mfn+p.mfnReturn,
+      amazon_delivery:p.totalDelivery,swa_delivery:0,c_return:p.customerReturn,mfn:p.mfn,mfn_return:p.mfnReturn,da_total_pay:null};
+  })};
   const providerById = new Map(input.providers.map((provider) => [provider.id, provider]));
   const providerByLabel = new Map<string, ProviderRow>();
   input.providers.forEach((provider) => {
@@ -407,9 +419,11 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
       : null;
     const profile = mapping ? workforceBySource.get(mappingSource(mapping)) ?? null : null;
     const rateCard = mapping && profile && station
-      ? resolveRateCard(rateCardsByProvider.get(mapping.provider_id) ?? [], mapping.provider_id, station.id, profile.designation_id, shipment.work_date)
+      ? personalPaymentCard(mapping) ?? resolveRateCard(rateCardsByProvider.get(mapping.provider_id) ?? [], mapping.provider_id, station.id, profile.designation_id, shipment.work_date)
       : null;
     const holds = profile ? profileHolds(profile, shipment.work_date) : [];
+    const countCorrection=corrections.find(c=>c.source_id===shipment.id&&c.kind==='counts');
+    if(countCorrection&&countCorrection.workforce_id!==profile?.id)holds.push('Corrected source belongs to a different associate; reconcile the mapping before payment');
     if (!mapping) {
       if (!station) holds.push("Station code is not configured");
       else if (!mappingCandidates.length) holds.push("No effective provider ID mapping");
@@ -510,6 +524,8 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
       holdReasons: Array.from(new Set(holds)),
       sourceUpdatedAt: shipment.updated_at,
       trace: {
+        ...(corrections.find(c=>c.source_id===shipment.id&&c.kind==='counts') ? {correction_id:corrections.find(c=>c.source_id===shipment.id&&c.kind==='counts')!.id,original_source:originals.get(shipment.id),correction_reason:corrections.find(c=>c.source_id===shipment.id&&c.kind==='counts')!.reason} : {}),
+        providerMemberName:shipment.provider_employee_name,
         campaigns: campaignTrace,
         counts: {
           amazonDelivery: amount(shipment.amazon_delivery),
@@ -558,7 +574,8 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
     }
   }
   for (const group of dailyCards.values()) {
-    const card = input.rateCards.find((rule) => rule.id === group[0].rateCardId)!;
+    const card = input.rateCards.find((rule) => rule.id === group[0].rateCardId) ?? personalPaymentCard(input.mappings.find(m=>m.id===group[0].mappingId)!);
+    if(!card)throw new Error('Daily payment terms could not be reconciled.');
     if (!["fixed_daily", "fixed_monthly", "hybrid"].includes(card.pay_type)) continue;
     const dailyAmount = calculateCardBase(card, aggregate(group));
     allocate(group, dailyAmount, (line, allocated) => {
@@ -653,6 +670,14 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
     }
   }
   const planByWorker = new Map((input.joiningPlans ?? []).map(plan=>[plan.workforce_id,plan]));
+  for(const correction of corrections.filter(c=>c.kind!=='counts')){
+    const line=lines.find(l=>l.sourceId===correction.source_id&&l.workforceId===correction.workforce_id);
+    if(!line)continue;
+    const original=line.adjustmentAmount;
+    line.adjustmentAmount=money(correction.kind==='loss' ? -Number(correction.payload.amount) : original+Number(correction.payload.amount));
+    line.netAmount=money(line.baseAmount+line.incentiveAmount+line.adjustmentAmount);
+    line.trace={...line.trace,correction_id:correction.id,correction_kind:correction.kind,correction_reason:correction.reason,original_adjustment:original,correction_amount:line.adjustmentAmount-original};
+  }
   for (const line of lines) {
     const plan = line.workforceId ? planByWorker.get(line.workforceId) : null;
     if (plan) line.trace.joining_plan_version = plan.version;
@@ -825,7 +850,10 @@ export async function loadWorkforceEarnings(
   try { joining = await loadWorkforceJoining(authorization,{from,to}); }
   catch (error) { joiningError = error instanceof Error ? error.message : "Training evidence is unavailable"; }
   const eligibleIds = joining ? new Set(joining.profiles.map(profile=>profile.id)) : null;
+  const correctionResult=typeof options.payrollRunId==='string' ? await readAllRows(supabaseAdmin.from('workforce_payout_corrections').select('id,workforce_id,source_id,kind,payload,reason').eq('company_id',companyId).eq('payroll_run_id',options.payrollRunId).eq('status','approved').order('id')) : {data:[],error:null};
+  if(correctionResult.error)throw new Error('Payout corrections could not be loaded. Recalculation stopped.');
   const snapshot = calculateWorkforceEarnings({
+    corrections:correctionResult.data ?? [],
     from,
     to,
     shipments: shipmentResult.rows,

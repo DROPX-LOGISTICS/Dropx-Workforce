@@ -6,14 +6,15 @@ import { workforceClassification } from "@/lib/workforce-classification";
 import { belongsToPerson } from "./workforce-joining";
 import type { JoiningAttendance, JoiningMapping, JoiningPerson, JoiningPlan, TrainingPolicy } from "./workforce-joining";
 
-export type JoiningProfile = JoiningPerson & {full_name: string; dropx_id: string | null; biometric_id: string | null; designation: string | null; designation_id: string | null; onboarding_application_source: string | null};
+export type JoiningProfile = JoiningPerson & {full_name: string; date_of_join:string|null; dropx_id: string | null; biometric_id: string | null; designation: string | null; designation_id: string | null; onboarding_application_source: string | null};
 export type JoiningEvent = {id: string; workforce_id: string; event_code: string; actor_name: string; created_at: string; details: Record<string, unknown>};
-export async function loadWorkforceJoining(authorization: AuthorizationContext, options: {from?: string; to: string; evidence?: boolean}) {
+export async function loadWorkforceJoining(authorization: AuthorizationContext, options: {from?: string; to: string; evidence?: boolean;workforceId?:string}) {
   if (!supabaseAdmin) throw new Error("Database connection is unavailable.");
   const db = supabaseAdmin; const company = requireCompanyId(authorization);
-  let profilesQuery = db.from("workforce").select("id,full_name,dropx_id,biometric_id,designation,designation_id,location_id,source_profile_type,source_profile_id,onboarding_status,lifecycle_status,is_active,onboarding_approved_at,last_working_date,onboarding_application_source")
+  let profilesQuery = db.from("workforce").select("id,full_name,date_of_join,dropx_id,biometric_id,designation,designation_id,location_id,source_profile_type,source_profile_id,onboarding_status,lifecycle_status,is_active,onboarding_approved_at,last_working_date,onboarding_application_source")
     .eq("company_id",company).is("deleted_at",null).neq("migration_state","reclassified").order("id");
   if (!authorization.hasAllLocationAccess) profilesQuery = profilesQuery.in("location_id", authorization.locationScopeIds.length ? authorization.locationScopeIds : ["00000000-0000-0000-0000-000000000000"]);
+  if(options.workforceId)profilesQuery=profilesQuery.eq('id',options.workforceId);
   const [peopleResult, plansResult, mappingsResult, stationsResult, isWorkforce, policyResult] = await Promise.all([
     readAllRows(profilesQuery),
     readAllRows(db.from("workforce_joining_plans").select("*").eq("company_id",company).order("workforce_id")),
@@ -33,10 +34,10 @@ export async function loadWorkforceJoining(authorization: AuthorizationContext, 
   // Keep each visible person's full mapping history, including previous stations, for the pay cutoff.
   const mappings = ((mappingsResult.data ?? []) as JoiningMapping[]).filter(row=>profiles.some(person=>belongsToPerson(row,person)));
   const attendance: JoiningAttendance[] = [];
-  const firstEligible = plans.map(row=>row.eligible_from).sort()[0];
+  const firstEligible = [...plans.map(row=>row.eligible_from),...(options.workforceId ? profiles.map(p=>p.date_of_join).filter((v):v is string=>Boolean(v)) : [])].sort()[0];
   if (firstEligible && options.evidence !== false) {
     const from = options.from && options.from > firstEligible ? options.from : firstEligible;
-    const people = profiles.filter(row=>planIds.has(row.id));
+    const people = profiles.filter(row=>options.workforceId || planIds.has(row.id));
     // Query canonical and protected legacy identities, never guess a person by name.
     for (const column of ["workforce_id","field_executive_id","contractor_id"] as const) {
       const values = column === "workforce_id" ? people.map(row=>row.id) : people.filter(row=>row.source_profile_type === (column === "field_executive_id" ? "field_executive" : "contractor")).map(row=>row.source_profile_id!).filter(Boolean);

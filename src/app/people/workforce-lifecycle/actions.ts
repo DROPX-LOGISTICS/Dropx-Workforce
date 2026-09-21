@@ -242,7 +242,7 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
     if (event.error) throw new Error(event.error.message);
     revalidateLifecyclePages();
     revalidatePath("/delivery-network/joining");
-    if (joiningOnly) redirect(`/delivery-network/joining?person=${encodeURIComponent(id)}&notice=${encodeURIComponent("Approved for joining. Confirm the agreed terms below; the first valid biometric day will identify training arrival.")}`);
+    if (joiningOnly) redirect(`/delivery-network/lifecycle?person=${encodeURIComponent(id)}&notice=${encodeURIComponent("Registration approved. Configure training and provider mapping in this review.")}`);
     lifecycleRedirect({ notice: `${applicant.full_name} approved and activated.` });
   } catch (error) {
     if (isRedirect(error)) throw error;

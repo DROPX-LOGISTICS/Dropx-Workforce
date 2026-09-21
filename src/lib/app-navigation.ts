@@ -123,10 +123,8 @@ export const workforceNavItems: NavItem[] = [
     icon: "DA",
     children: [
       { code: "delivery_associates", label: "Workforce Register", href: "/delivery-network/associates" },
-      { code: "delivery_associates", label: "Joining & Training", href: "/delivery-network/joining" },
-      { code: "people_review", label: "Training Policies", href: "/delivery-network/training-policies" },
-      { code: "delivery_associates", label: "Onboard Workforce", href: "/delivery-network/onboarding" },
-      { code: "people_review", label: "Activation & Lifecycle", href: "/delivery-network/lifecycle" },
+      { code: "delivery_associates", label: "Invite associate", href: "/delivery-network/onboarding" },
+      { code: "people_review", label: "Onboarding & review", href: "/delivery-network/lifecycle" },
       { code: "workforce_activity", label: "Attendance & Activity", href: "/delivery-network/activity" },
       { code: "workforce_activity", label: "Roster & Route Planning", href: "/delivery-network/associate-rostering" }
     ]
@@ -137,7 +135,6 @@ export const workforceNavItems: NavItem[] = [
     icon: "ID",
     children: [
       { code: "executive_id_onboarding", label: "Provider ID Onboarding", href: "/delivery-network/id-onboarding" },
-      { code: "executive_id_onboarding", label: "Amazon Station Defaults", href: "/delivery-network/amazon-onboarding-settings" },
       { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping" },
       { code: "workforce_rate_cards", label: "Rate Cards", href: "/delivery-network/rate-cards" }
     ]
@@ -149,14 +146,10 @@ export const workforceNavItems: NavItem[] = [
     icon: "₹",
     children: [
       { code: "workforce_earnings", label: "Live Earnings", href: "/delivery-network/earnings" },
-      { code: "workforce_incentives", label: "Incentives", href: "/delivery-network/incentives" },
-      { code: "workforce_adjustments", label: "Ad hoc Adjustments", href: "/delivery-network/adjustments" },
-      { code: "workforce_adjustments", label: "Mileage Claims", href: "/delivery-network/mileage" },
-      { code: "workforce_adjustments", label: "Pooled MG Settlement", href: "/delivery-network/pooled-settlements" },
-      { code: "workforce_payroll", label: "Payroll Runs", href: "/delivery-network/payroll" },
-      { code: "workforce_payroll", label: "Associate Payment Ledger", href: "/delivery-network/payment-ledger" },
-      { code: "workforce_payroll", label: "Payroll Calendars", href: "/delivery-network/payroll-calendars" },
-      { code: "workforce_adjustments", label: "Payment Holds", href: "/delivery-network/payment-holds" }
+      { code: "workforce_payroll", label: "Payouts", href: "/delivery-network/payroll" },
+      { code: "workforce_adjustments", label: "Disputes & corrections", href: "/delivery-network/payout-review" },
+      { code: "workforce_adjustments", label: "Adjustments & holds", href: "/delivery-network/adjustments" },
+      { code: "workforce_payroll", label: "Payment history", href: "/delivery-network/payment-ledger" }
     ]
   },
   {
@@ -198,6 +191,10 @@ export const workforceNavItems: NavItem[] = [
     icon: "WM",
     children: [
       { code: "people_review", label: "Setup Checklist", href: "/delivery-network/setup" },
+      { code: "people_review", label: "Station training defaults", href: "/delivery-network/training-policies" },
+      { code: "executive_id_onboarding", label: "Amazon station defaults", href: "/delivery-network/amazon-onboarding-settings" },
+      { code: "workforce_payroll", label: "Payout calendars", href: "/delivery-network/payroll-calendars" },
+      { code: "workforce_incentives", label: "Incentive rules", href: "/delivery-network/incentives" },
       { code: "amazon_connector", label: "Amazon Connection", href: "/settings/amazon-onboarding" },
       { code: "workforce_categories", label: "Registration Policies", href: "/delivery-network/engagement-types" },
       { code: "designations", label: "Workforce Designations", href: "/delivery-network/designations" },

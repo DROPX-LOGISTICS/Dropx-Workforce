@@ -127,7 +127,8 @@ export function ProviderMappingWorksheet({
   mappings,
   paymentMethods,
   providerPending,
-  providerPendingPeriod
+  providerPendingPeriod,
+  embedded = false
 }: {
   canEdit: boolean;
   locations: LocationOption[];
@@ -135,6 +136,7 @@ export function ProviderMappingWorksheet({
   paymentMethods: PaymentMethodOption[];
   providerPending: ProviderPendingMappingRow[];
   providerPendingPeriod: string;
+  embedded?: boolean;
 }) {
   const initialRows = useMemo(() => mappings, [mappings]);
   const initialSignatures = useMemo(() => initialRows.map(rowSignature), [initialRows]);
@@ -142,7 +144,7 @@ export function ProviderMappingWorksheet({
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [mappingStatus, setMappingStatus] = useState("all");
-  const [directionView, setDirectionView] = useState<"provider" | "dropx">("provider");
+  const [directionView, setDirectionView] = useState<"provider" | "dropx">(embedded ? "dropx" : "provider");
   const [stationFilter, setStationFilter] = useState("");
   const [pageSize, setPageSize] = useState("25");
   const [currentPage, setCurrentPage] = useState(1);
@@ -366,7 +368,13 @@ export function ProviderMappingWorksheet({
           {filteredProviderPending.map((row) => <tr key={row.id}><td><strong className="mono">{row.providerMemberId}</strong></td><td>{row.sourceName}</td><td>{row.providerName}</td><td>{row.stationCode}</td><td>{row.deliveries.toLocaleString("en-IN")} delivered<small>{row.dailyRows} daily rows</small></td><td>{row.lastSeen}<small>First {row.firstSeen}</small></td><td><span className="wf-pay-state unmapped">Pending DropX ID</span><small>{row.reason}</small></td></tr>)}
           {!filteredProviderPending.length ? <tr><td className="empty-cell" colSpan={7}>No provider IDs are pending for these filters.</td></tr> : null}
         </tbody></table></div> : <div className="mapping-rows">
-          {rows.map((row, index) => (
+          {rows.map((row, index) => Number(row.paymentValues.DROPX_PERSONAL_TERMS) === 1 ? (
+            <div className="mapping-row-card" hidden={!paginatedIndexes.has(index)} key={`${row.workforceId}-${index}`}>
+              <strong>{row.dropxName} · {row.providerMemberId}</strong>
+              <span>Individual dated payment terms</span>
+              <a href={`/delivery-network/lifecycle?tab=active&person=${row.workforceId}&section=payments`}>View or change payment stages</a>
+            </div>
+          ) : (
             <div className={`mapping-row-card ${dirtyRows[index] ? "unsaved-row" : ""}`} hidden={!paginatedIndexes.has(index)} key={`${row.workforceId}-${index}`}>
               <input type="hidden" name={`rows[${index}][id]`} value={row.id} />
               <input type="hidden" name={`rows[${index}][workforce_id]`} value={row.workforceId} />

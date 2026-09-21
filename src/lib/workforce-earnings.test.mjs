@@ -73,6 +73,30 @@ function input(overrides = {}) {
   };
 }
 
+test('individual stages respect dates, override only opted-in rates and allocate daily pay once',()=>{
+ const original=input(),mapping=original.mappings[0],shipment=original.shipments[0];
+ const first={...mapping,id:'daily',effective_from:'2026-08-05',effective_to:'2026-08-19',pay_type:'MG_PER_DAY',payment_values:{DROPX_PERSONAL_TERMS:1,MG_PER_DAY:800}};
+ const next={...mapping,id:'variable',effective_from:'2026-08-20',payment_values:{DROPX_PERSONAL_TERMS:1,DELIVERY:16,CRETURN:14,SELLER_PICKUP:4,SLLLER_RETURN:3}};
+ const result=calculateWorkforceEarnings({...original,mappings:[first,next],shipments:[{...shipment,id:'day1a',work_date:'2026-08-19',da_total_pay:9999},{...shipment,id:'day1b',work_date:'2026-08-19',da_total_pay:9999},{...shipment,id:'day2',da_total_pay:9999}]});
+ assert.equal(result.lines.filter(l=>l.workDate==='2026-08-19').reduce((n,l)=>n+l.baseAmount,0),800);
+ assert.equal(result.lines.find(l=>l.workDate==='2026-08-20').baseAmount,508);
+ assert.equal(result.totalBase,1308);assert.equal(original.mappings[0].payment_values.DROPX_PERSONAL_TERMS,undefined);
+});
+test('payout count corrections recalculate pay without changing imported data or mappings',()=>{
+ const original=input();original.shipments[0].da_total_pay=999;
+ const correction={id:'fix',workforce_id:'workforce-1',source_id:'shipment-1',kind:'counts',payload:{totalDelivery:35,customerReturn:0,mfn:0,mfnReturn:0},reason:'Verified source correction'};
+ const result=calculateWorkforceEarnings({...original,corrections:[correction]});
+ assert.equal(result.totalShipments,35);assert.equal(result.totalNet,350);
+ assert.equal(original.shipments[0].total_delivery,30);assert.equal(original.shipments[0].da_total_pay,999);
+ assert.equal(result.lines[0].trace.correction_id,'fix');assert.equal(result.lines[0].trace.original_source.total_delivery,30);
+ const mismatch=calculateWorkforceEarnings({...original,corrections:[{...correction,workforce_id:'other'}]});assert.equal(mismatch.summaries[0].status,'hold');
+});
+test('loss removal and signed pay corrections preserve the original financial trace',()=>{
+ const original=input({adjustments:[{id:'loss',workforce_id:'workforce-1',adjustment_type:'deduction',category:'cash_recovery',amount:100,effective_date:'2026-08-20',reason:'Loss evidence',status:'approved'}]});
+ const result=calculateWorkforceEarnings({...original,corrections:[{id:'loss-fix',workforce_id:'workforce-1',source_id:'loss',kind:'loss',payload:{amount:0},reason:'Recovery removed after review'},{id:'tax-fix',workforce_id:'workforce-1',source_id:'shipment-1',kind:'tds',payload:{amount:-10},reason:'Tax correction approved'}]});
+ assert.equal(result.totalNet,290);assert.equal(result.totalDeductions,10);
+ assert.equal(result.lines.find(l=>l.sourceId==='loss').trace.original_adjustment,-100);assert.equal(original.adjustments[0].amount,100);
+});
 test("payment holds preserve earnings while blocking payout until release", () => {
   const hold={id:'hold-1',workforce_id:'workforce-1',period_start:'2026-08-01',period_end:'2026-08-31',status:'active',reference:'CASE-1'};
   for (const status of ['active','release_requested']) {

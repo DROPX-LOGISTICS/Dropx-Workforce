@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
 
     return new NextResponse(file.data, {
       headers: {
-        "Content-Disposition": `inline; filename="${safeFilename(storagePath)}"`,
+        "Content-Disposition": `${request.nextUrl.searchParams.get('download')==='1'?'attachment':'inline'}; filename="${safeFilename(storagePath)}"`,
         "Content-Type": file.data.type || "application/octet-stream",
         "Cache-Control": "private, max-age=0, no-store",
         "X-Content-Type-Options": "nosniff"

@@ -69,7 +69,7 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
     isActive: record.isActive,
     status: record.status,
     canEdit,
-    viewHref: profileHref(record, "view"),
+    viewHref: record.profileType==='workforce'&&hasPermission(authorization,'people_review','access')?`/delivery-network/lifecycle?tab=${record.status.toLowerCase()==='active'?'active':'onboarding'}&person=${record.accountId}`:profileHref(record, "view"),
     editHref: profileHref(record, "edit")
   }));
   const pending = records.filter((record) => !["active", "rejected", "cancelled"].includes(record.status.toLowerCase())).length;

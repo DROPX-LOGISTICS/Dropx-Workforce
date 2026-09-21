@@ -17,13 +17,23 @@ function clean(value: FormDataEntryValue | null) {
 
 function mappingRedirect(params: { error?: string; notice?: string }) {
   let path = "/provider-mapping";
+  let reviewPath: string | null = null;
   try {
-    if (new URL(headers().get("referer") ?? "http://localhost").pathname.startsWith("/delivery-network/")) {
+    const ref=new URL(headers().get("referer") ?? "http://localhost");
+    if(ref.pathname==='/delivery-network/lifecycle'){
+      const q=new URLSearchParams(params);const person=ref.searchParams.get('person');
+      if(person&&/^[a-f0-9-]{36}$/i.test(person))q.set('person',person);
+      if(ref.searchParams.get('tab')==='active')q.set('tab','active');
+      q.set('section','payments');
+      reviewPath='/delivery-network/lifecycle?'+q;
+    }
+    if (ref.pathname.startsWith("/delivery-network/")) {
       path = "/delivery-network/rate-mapping";
     }
   } catch {
     // Keep the compatibility route when the request has no usable referrer.
   }
+  if(reviewPath)redirect(reviewPath);
   cookies().set("dropx_provider_mapping_flash", JSON.stringify(params), {
     httpOnly: true,
     maxAge: 15,
@@ -93,6 +103,13 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
     throw new Error(`Row ${index + 1}: Worker source is invalid.`);
   }
   const mappingId = rowValue(formData, index, "mapping_id");
+  if (mappingId) {
+    const existing = await supabaseAdmin.from("field_executive_provider_mappings").select("payment_values").eq("company_id", companyId).eq("id", mappingId).maybeSingle();
+    if (existing.error) throw new Error("Existing payment terms could not be checked.");
+    if (Number(existing.data?.payment_values?.DROPX_PERSONAL_TERMS) === 1) {
+      throw new Error("Change this associate’s individual terms in Profile → Payments → Payment stages to preserve dated history.");
+    }
+  }
   if (!hasPermission(authorization, "provider_mapping", mappingId ? "edit" : "add") || authorization.readOnly) throw new Error("You do not have permission for this mapping action.");
   const dropxId = rowRequired(formData, index, "dropx_id", "DropX ID").toUpperCase();
   const providerId = rowRequired(formData, index, "provider_id", "Provider");

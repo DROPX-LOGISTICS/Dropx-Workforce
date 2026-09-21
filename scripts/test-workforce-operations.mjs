@@ -91,4 +91,5 @@ await (await import('./test-workforce-loss-sql.mjs')).testLossSql(db);
 await (await import('./test-workforce-mileage-sql.mjs')).testMileageSql(db);
 await (await import('./test-workforce-pooled-sql.mjs')).testPooledSql(db);
 await (await import('./test-workforce-exit-recorded-sql.mjs')).testExitRecordedSql(db);
+await (await import('./test-payout-review-sql.mjs')).testPayoutReviewSql(db);
 await db.close();

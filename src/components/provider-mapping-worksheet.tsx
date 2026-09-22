@@ -299,6 +299,7 @@ export function ProviderMappingWorksheet({
         value={JSON.stringify(dirtyRows.flatMap((dirty, index) => dirty ? [index] : []))}
       />
       <section className="panel">
+        {!embedded ? <>
         <div className="panel-head">
           <div>
             <h2>ID & pay mapping worksheet</h2>
@@ -364,6 +365,7 @@ export function ProviderMappingWorksheet({
           </div>
         </div>
 
+        </> : null}
         {directionView === "provider" ? <div className="table-wrap mapping-pending-table"><table><thead><tr><th>Provider ID</th><th>Source name</th><th>Provider</th><th>Station</th><th>Activity</th><th>Last seen</th><th>Reason</th></tr></thead><tbody>
           {filteredProviderPending.map((row) => <tr key={row.id}><td><strong className="mono">{row.providerMemberId}</strong></td><td>{row.sourceName}</td><td>{row.providerName}</td><td>{row.stationCode}</td><td>{row.deliveries.toLocaleString("en-IN")} delivered<small>{row.dailyRows} daily rows</small></td><td>{row.lastSeen}<small>First {row.firstSeen}</small></td><td><span className="wf-pay-state unmapped">Pending DropX ID</span><small>{row.reason}</small></td></tr>)}
           {!filteredProviderPending.length ? <tr><td className="empty-cell" colSpan={7}>No provider IDs are pending for these filters.</td></tr> : null}

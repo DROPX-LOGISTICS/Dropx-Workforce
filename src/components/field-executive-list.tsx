@@ -365,7 +365,7 @@ export function FieldExecutiveList({
                 </td> : null}
               </tr>
             )) : (
-              <tr><td className="empty-cell" colSpan={showActions ? 9 : 8}>{emptyLabel}</td></tr>
+              <tr><td className="empty-cell" colSpan={showActions ? 9 : 8}>{hasFilters ? "No associates match these filters." : emptyLabel}</td></tr>
             )}
           </tbody>
         </table>
@@ -398,7 +398,7 @@ export function FieldExecutiveList({
               </footer>
             ) : null}
           </article>
-        )) : <div className="mobile-empty-card">{emptyLabel}</div>}
+        )) : <div className="mobile-empty-card">{hasFilters ? "No associates match these filters." : emptyLabel}</div>}
       </div>
       {totalPages > 1 ? (
         <div className="panel-foot pagination">

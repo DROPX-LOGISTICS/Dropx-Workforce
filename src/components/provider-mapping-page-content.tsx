@@ -13,6 +13,7 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { loadWorkforceEarnings, workforceToday } from "@/lib/workforce-earnings";
+import { hasWorkforcePaymentIdentity } from "@/lib/workforce-register-designations";
 
 type LocationRow = {
   id: string;
@@ -78,10 +79,6 @@ type PaymentMethodRow = {
 
 function amountValue(value: number | string | null | undefined) {
   return value === null || value === undefined ? "" : String(value);
-}
-
-function isWorkforceSourceType(value: string) {
-  return value === "canonical" || value === "employee" || value === "contractor" || value === "field_executive";
 }
 
 function loadFlashMessage() {
@@ -224,11 +221,7 @@ async function loadMappingData(authorization: AuthorizationContext) {
     .filter((designation) => firstDesignationBusinessCategory(designation.designation_category)?.people_module === "delivery_network");
   const deliveryNetworkDesignationIds = new Set(deliveryNetworkDesignations.map((designation) => designation.id));
   const workers = ((workforceResult.data ?? []) as WorkforceRow[])
-    .filter((worker) =>
-      isWorkforceSourceType(worker.source_profile_type) &&
-      deliveryNetworkDesignationIds.has(worker.designation_id) &&
-      Boolean(worker.dropx_id?.trim())
-    )
+    .filter((worker) => hasWorkforcePaymentIdentity(worker, deliveryNetworkDesignationIds))
     .map((worker) => ({
       id: worker.id,
       workforceId: worker.id,

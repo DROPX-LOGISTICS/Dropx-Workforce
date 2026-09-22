@@ -1,5 +1,10 @@
 export type RegisterDesignation = { id: string; code: string; name: string };
 
+export function hasWorkforcePaymentIdentity(worker: { designation_id: string; dropx_id: string | null }, workforceDesignationIds: Set<string>) {
+  // A canonical Workforce record is classified by today's master, not its legacy source table.
+  return workforceDesignationIds.has(worker.designation_id) && Boolean(worker.dropx_id?.trim());
+}
+
 const normalize = (value: string) => value.trim().toLocaleLowerCase();
 
 // Match master code or full name, never substrings (DA must not include ODCD/PTDA).

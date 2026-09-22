@@ -5,10 +5,14 @@ import {workspaceDestination,activeWorkspace} from './workforce-workspace-naviga
 import {workforceRegisterViewMatches} from './workforce-register-views.ts';
 
 test('each operational tool remains reachable with one sidebar destination per workspace',()=>{
- assert.equal(workforceNavItems.length,7);
+ assert.equal(workforceNavItems.length,9);
  const links=workforceNavItems.flatMap(x=>x.children??[x]);
  for(const path of ['/delivery-network/lifecycle','/delivery-network/rate-mapping','/delivery-network/id-onboarding','/delivery-network/activity','/delivery-network/payroll','/delivery-network/payout-review','/delivery-network/training-policies','/settings/amazon-onboarding'])assert.ok(links.some(x=>x.href===path),path);
  assert.equal(links.filter(x=>x.href?.startsWith('/delivery-network/reports')).length,1);
+ assert.ok(workforceNavItems.find(x=>x.label==='IDs & rates')?.children?.some(x=>x.href==='/delivery-network/rate-mapping'));
+ assert.ok(workforceNavItems.find(x=>x.label==='User access')?.children?.some(x=>x.href==='/users?section=roles'));
+ assert.ok(links.some(x=>x.href==='/delivery-network/communications/whatsapp'));
+ assert.ok(links.some(x=>x.href==='/delivery-network/onboarding/associates#bulk-upload'));
 });
 test('restricted roles land on an allowed child, never a hardcoded register',()=>{
  const group={...workforceNavItems[1],children:[{code:'provider_mapping',label:'ID & Rate Mapping',href:'/delivery-network/rate-mapping',secondary:true}]};

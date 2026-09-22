@@ -96,6 +96,8 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
         <input type="hidden" name="view" value={view}/>
         <label>Station<select name="station" defaultValue={searchParams.station||''}><option value="">All stations</option>{[...new Set(records.map(record=>record.location).filter(Boolean))].sort().map(station=><option key={station}>{station}</option>)}</select></label>
         <button className="button secondary compact">Apply</button>
+        {hasPermission(authorization,'provider_mapping','access')?<PendingLink className="button secondary compact" href={`/delivery-network/rate-mapping?station=${encodeURIComponent(searchParams.station||'')}`}>Station IDs & rates</PendingLink>:null}
+        {canAdd?<PendingLink className="button secondary compact" href="/delivery-network/onboarding/associates#bulk-upload">Bulk upload & template</PendingLink>:null}
         {hasPermission(authorization,'workforce_earnings','access')?<PendingLink className="button secondary compact" href={`/delivery-network/earnings?station=${encodeURIComponent(searchParams.station||'')}`}>View station earnings →</PendingLink>:null}
         {hasPermission(authorization,'people_review','access')?<PendingLink className="button secondary compact" href="/delivery-network/lifecycle?tab=exits">Exit & settlement queue</PendingLink>:null}
       </form>

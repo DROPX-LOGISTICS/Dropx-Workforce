@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { designationMatches, registerDesignationOptions, hasWorkforcePaymentIdentity } from './workforce-register-designations.ts';
 import './workforce-workspace-navigation.test.mjs';
+import './provider-mapping-bulk.test.mjs';
 
 const master = [
   {id:'da',code:'DA',name:'Delivery Associate'},

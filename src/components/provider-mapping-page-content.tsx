@@ -276,7 +276,7 @@ export async function ProviderMappingPageContent({
   eyebrow = "Source-of-truth bridge",
   pageCode = "provider_mapping",
   subtitle = "Maintain Delivery Network IDs, provider member IDs, date-effective history, payout methods and partner rates.",
-  title = "ID & pay mapping", embedded = false, workforceId
+  title = "ID & pay mapping", embedded = false, workforceId, initialStation
 }: {
   active?: string;
   eyebrow?: string;
@@ -285,6 +285,7 @@ export async function ProviderMappingPageContent({
   title?: string;
   embedded?: boolean;
   workforceId?: string;
+  initialStation?: string;
 }) {
   const authorization = await requirePagePermission(pageCode, "access");
   const permission = authorization.permissions[pageCode];
@@ -349,6 +350,7 @@ export async function ProviderMappingPageContent({
       {(permission.canView || permission.canAdd || permission.canEdit) && !error ? (
         <ProviderMappingWorksheet
           embedded={embedded}
+          initialStation={locations.find(location=>location.id===initialStation || location.label.split(' - ')[0]===initialStation)?.id ?? ''}
           canEdit={canEditWorksheet && !error}
           locations={locations}
           mappings={workforceId ? mappings.filter(row=>row.workforceId===workforceId) : mappings}

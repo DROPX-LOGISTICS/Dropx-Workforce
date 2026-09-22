@@ -37,7 +37,7 @@ export async function WorkforceAssociateSetup({auth,id,dateOfJoin,tab,section='p
   {section==='payments'?<>
   <header><h3>Payment configuration</h3><p>View existing rates and effective dates. Changes apply only to this associate.</p></header>
   <AssociatePaymentStages id={id} tab={tab} rows={(history.data||[]) as PersonalMapping[]} canEdit={hasPermission(auth,'provider_mapping','edit')&&!auth.readOnly}/>
-  {hasPermission(auth,'provider_mapping','access')?<details open={!history.data?.length}><summary>{history.data?.length?'Change provider mapping / other pay methods':'Configure provider ID & payment method'}</summary><ProviderMappingPageContent embedded workforceId={id}/></details>:null}
+  {hasPermission(auth,'provider_mapping','access')?<section><h3>Provider ID & rate mapping</h3><ProviderMappingPageContent embedded workforceId={id}/></section>:null}
   <p><a href={`?tab=${tab}&person=${id}&section=training`}>View or change training terms</a></p>
   </>:null}
   {section==='training'?<>

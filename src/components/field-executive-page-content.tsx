@@ -758,7 +758,7 @@ function FieldExecutiveBulkImportPanel({
   title: string;
 }) {
   return (
-    <section className="panel workforce-bulk-panel">
+    <section className="panel workforce-bulk-panel" id="bulk-upload">
       <div className="panel-head">
         <div>
           <h2>{title}</h2>

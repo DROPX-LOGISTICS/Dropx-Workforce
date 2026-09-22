@@ -5,6 +5,7 @@ import { Download } from "lucide-react";
 import { useFormStatus } from "react-dom";
 import { saveProviderMappingWorksheet } from "@/app/provider-mapping/actions";
 import { SubmitButton } from "@/components/submit-button";
+import {mappingRate,mappingRateColumns,stageMappingImport} from '@/lib/provider-mapping-bulk';
 
 export type LocationOption = {
   id: string;
@@ -93,7 +94,7 @@ function rowSignature(row: MappingWorksheetRow) {
     row.effectiveFrom,
     row.effectiveTo,
     row.paymentMethodId,
-    JSON.stringify(row.paymentValues),
+    JSON.stringify(Object.entries(row.paymentValues).sort(([a],[b])=>a.localeCompare(b))),
     row.deliveryRate,
     row.pickupRate,
     row.mfnRate,
@@ -128,7 +129,8 @@ export function ProviderMappingWorksheet({
   paymentMethods,
   providerPending,
   providerPendingPeriod,
-  embedded = false
+  embedded = false,
+  initialStation = ''
 }: {
   canEdit: boolean;
   locations: LocationOption[];
@@ -137,6 +139,7 @@ export function ProviderMappingWorksheet({
   providerPending: ProviderPendingMappingRow[];
   providerPendingPeriod: string;
   embedded?: boolean;
+  initialStation?: string;
 }) {
   const initialRows = useMemo(() => mappings, [mappings]);
   const initialSignatures = useMemo(() => initialRows.map(rowSignature), [initialRows]);
@@ -144,8 +147,10 @@ export function ProviderMappingWorksheet({
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [mappingStatus, setMappingStatus] = useState("all");
-  const [directionView, setDirectionView] = useState<"provider" | "dropx">(embedded ? "dropx" : "provider");
-  const [stationFilter, setStationFilter] = useState("");
+  const [directionView, setDirectionView] = useState<"provider" | "dropx">('dropx');
+  const [stationFilter, setStationFilter] = useState(initialStation);
+  const [bulkMessage,setBulkMessage]=useState('');
+  const [bulkBusy,setBulkBusy]=useState(false);
   const [pageSize, setPageSize] = useState("25");
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -275,6 +280,46 @@ export function ProviderMappingWorksheet({
   const pageStart = (safePage - 1) * numericPageSize;
   const paginatedIndexes = new Set(filteredIndexes.slice(pageStart, pageStart + numericPageSize));
 
+  async function downloadMappingTemplate() {
+    const XLSX=await import('xlsx');
+    const components=[...new Set(paymentMethods.flatMap(method=>method.components.map(c=>c.code)))];
+    const headers=['DropX ID','Name','Station','Provider ID','Payment method code','Effective from','Effective to',...components.map(code=>`RATE_${code}`)];
+    const data=filteredIndexes.filter(index=>Number(rows[index].paymentValues.DROPX_PERSONAL_TERMS)!==1).map(index=>{
+      const row=rows[index];
+      return [row.dropxId,row.dropxName,locationLabelById.get(row.stationId)||'',row.providerMemberId,paymentMethodById.get(row.paymentMethodId)?.code||'',row.effectiveFrom,row.effectiveTo,...components.map(code=>row.paymentValues[code]!==undefined&&row.paymentValues[code]!==''?Number(row.paymentValues[code]):'')];
+    });
+    const workbook=XLSX.utils.book_new();
+    const mappingSheet=XLSX.utils.aoa_to_sheet([headers,...data]);
+    mappingSheet['!cols']=headers.map(header=>({wch:Math.max(18,header.length+3)}));
+    mappingSheet['!autofilter']={ref:`A1:${XLSX.utils.encode_col(headers.length-1)}${data.length+1}`};
+    XLSX.utils.book_append_sheet(workbook,mappingSheet,'Mappings');
+    XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(paymentMethods.flatMap(method=>method.components.map(c=>({'Payment method code':method.code,Name:method.name,Column:`RATE_${c.code}`,Meaning:c.label})))),'Payment methods');
+    XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
+      ['Instructions'],['Keep DropX ID unchanged. Name and Station are reference only. Delete rows you are not updating.'],['Provider IDs and dates must remain text. Dates: YYYY-MM-DD.'],['Fill all RATE_ columns required by the chosen payment method. Other RATE_ columns are ignored.'],['Upload stages edits only. Review the worksheet then Save all.'],['Individual dated terms are excluded; change them in the associate profile.'],['Maximum 500 rows per upload. Existing server permissions, date and payroll locks still apply.']
+    ]),'Instructions');
+    workbook.Sheets['Payment methods']['!cols']=[{wch:28},{wch:35},{wch:28},{wch:35}];
+    workbook.Sheets.Instructions['!cols']=[{wch:115}];
+    XLSX.writeFile(workbook,'workforce-id-rate-mapping.xlsx');
+  }
+
+  async function stageFile(file:File) {
+    setBulkMessage('');setBulkBusy(true);
+    try {
+      if(hasDirtyRows)throw new Error('Save or reload your current unsaved edits before uploading a file.');
+      if(file.size>2*1024*1024)throw new Error('File must be under 2 MB.');
+      const XLSX=await import('xlsx');
+      const workbook=XLSX.read(await file.arrayBuffer(),{type:'array',raw:true});
+      const sheet=workbook.Sheets.Mappings??workbook.Sheets[workbook.SheetNames[0]];
+      if(!sheet)throw new Error('The file has no worksheet.');
+      if(Object.values(sheet).some(cell=>cell&&typeof cell==='object'&&'f' in cell))throw new Error('Use values only, not formulas.');
+      const input=XLSX.utils.sheet_to_json<Record<string,unknown>>(sheet,{defval:'',raw:false});
+      const next=stageMappingImport(input,rows,paymentMethods,new Set(filteredIndexes.map(index=>rows[index].dropxId.toUpperCase())));
+      setRows(next);setDirectionView('dropx');setMappingStatus('all');setRowErrors({});
+      setBulkMessage(`${input.length} rows staged for review. Nothing saved yet. Check the rates below, then Save all.`);
+    }catch(error){setBulkMessage(error instanceof Error?error.message:'Unable to read this file.');}
+    finally{setBulkBusy(false);}
+  }
+
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, mappingStatus, pageSize, stationFilter, directionView]);
@@ -303,16 +348,17 @@ export function ProviderMappingWorksheet({
         <div className="panel-head">
           <div>
             <h2>ID & pay mapping worksheet</h2>
-            <p className="subtle">Reconcile both directions: source provider IDs without a DropX identity and Workforce DropX IDs without a provider ID.</p>
+            <p className="subtle">Choose a station to review provider IDs and individual rates. Edit below or upload the mapping template.</p>
           </div>
-          {directionView === "dropx" ? <SubmitButton disabled={!canEdit || !hasDirtyRows} disabledText={canEdit ? "No edits" : "No edit access"}>Save all</SubmitButton> : null}
+          {directionView === "dropx" ? <SubmitButton confirmMessage="Save all staged ID and rate changes? Existing permission and payroll locks still apply." disabled={!canEdit || !hasDirtyRows || bulkBusy} disabledText={canEdit ? "No edits" : "No edit access"}>Save all</SubmitButton> : null}
         </div>
 
         <div className="mapping-direction-tabs">
+          <button className={directionView==='dropx'&&mappingStatus==='all'?'active':''} onClick={()=>{setDirectionView('dropx');setMappingStatus('all');}} type="button">All IDs & rates <strong>{rows.length}</strong></button>
           <button className={directionView === "provider" ? "active" : ""} onClick={() => { setDirectionView("provider"); setMappingStatus("all"); }} type="button">
             Provider IDs pending DropX ID <strong>{providerPending.length}</strong>
           </button>
-          <button className={directionView === "dropx" ? "active" : ""} onClick={() => { setDirectionView("dropx"); setMappingStatus("unmapped"); }} type="button">
+          <button className={directionView === "dropx"&&mappingStatus==='unmapped' ? "active" : ""} onClick={() => { setDirectionView("dropx"); setMappingStatus("unmapped"); }} type="button">
             DropX IDs pending provider ID <strong>{rows.filter((row) => !row.providerMemberId.trim()).length}</strong>
           </button>
         </div>
@@ -360,24 +406,34 @@ export function ProviderMappingWorksheet({
                 })))
               : downloadCsv("dropx-ids-provider-mapping.csv", filteredIndexes.map((index) => ({
                   "DropX ID": rows[index].dropxId, Name: rows[index].dropxName, Station: locationLabelById.get(rows[index].stationId) ?? "",
-                  "Provider ID": rows[index].providerMemberId, Status: rows[index].providerMemberId ? "Mapped" : "Pending", "Effective from": rows[index].effectiveFrom
+                  "Provider ID": rows[index].providerMemberId, Status: rows[index].providerMemberId ? "Mapped" : "Pending", "Effective from": rows[index].effectiveFrom,
+                  "Effective to":rows[index].effectiveTo,"Payment method":paymentMethodById.get(rows[index].paymentMethodId)?.name||'Individual terms',...rows[index].paymentValues
                 })))} type="button"><Download size={13} /> Download CSV</button>
           </div>
         </div>
 
+        {directionView==='dropx'?<div className="mapping-bulk-tools">
+          <button className="button secondary compact" type="button" onClick={downloadMappingTemplate}>Download mapping Excel</button>
+          {canEdit?<label>Upload mappings (review before saving)<input type="file" accept=".xlsx,.xls,.csv" disabled={bulkBusy||hasDirtyRows} onChange={event=>{const file=event.target.files?.[0];if(file)void stageFile(file);event.target.value='';}}/></label>:null}
+          <a href="/delivery-network/onboarding/associates#bulk-upload">Bulk associate details & template</a>
+          {bulkMessage?<p role="status">{bulkMessage}</p>:null}
+        </div>:null}
         </> : null}
+        {directionView==='dropx'?<div className="mapping-rate-summary"><table aria-label="Station provider IDs and rates"><thead><tr><th>Associate / DropX ID</th><th>Station</th><th>Provider ID</th><th>Payment method</th>{mappingRateColumns.map(([code,label])=><th key={code}>{label}</th>)}<th>Other pay terms</th><th>Effective dates</th><th>Setup</th></tr></thead><tbody>
+          {[...paginatedIndexes].map(index=>{const row=rows[index];const fallback:Record<string,string>={DELIVERY:row.deliveryRate,CRETURN:row.pickupRate,SELLER_PICKUP:row.mfnRate,SLLLER_RETURN:row.mfnReturnRate};return <tr key={row.id}><td><strong>{row.dropxName}</strong><small>{row.dropxId}{dirtyRows[index]?' · Unsaved':''}</small></td><td>{locationLabelById.get(row.stationId)}</td><td>{row.providerMemberId||'Not mapped'}</td><td>{paymentMethodById.get(row.paymentMethodId)?.name||(Number(row.paymentValues.DROPX_PERSONAL_TERMS)===1?'Individual dated terms':'Not configured')}</td>{mappingRateColumns.map(([code])=><td key={code}>{mappingRate(row.paymentValues,code,fallback[code])}</td>)}<td>{Object.entries(row.paymentValues).filter(([code])=>!code.startsWith('DROPX_')&&!mappingRateColumns.some(([key])=>key===code)).map(([code,value])=><small key={code}>{code.replaceAll('_',' ')}: {mappingRate({[code]:value},code)}</small>)}</td><td>{row.effectiveFrom}<small>to {row.effectiveTo||'ongoing'}</small></td><td><a href={`#mapping-${row.id}`}>Edit here</a><br/><a href={`/delivery-network/lifecycle?person=${row.workforceId}&section=payments`}>Profile & history</a></td></tr>;})}
+        </tbody></table><small>Rates shown for the displayed mapping and effective dates; — means not configured for that component.</small></div>:null}
         {directionView === "provider" ? <div className="table-wrap mapping-pending-table"><table><thead><tr><th>Provider ID</th><th>Source name</th><th>Provider</th><th>Station</th><th>Activity</th><th>Last seen</th><th>Reason</th></tr></thead><tbody>
           {filteredProviderPending.map((row) => <tr key={row.id}><td><strong className="mono">{row.providerMemberId}</strong></td><td>{row.sourceName}</td><td>{row.providerName}</td><td>{row.stationCode}</td><td>{row.deliveries.toLocaleString("en-IN")} delivered<small>{row.dailyRows} daily rows</small></td><td>{row.lastSeen}<small>First {row.firstSeen}</small></td><td><span className="wf-pay-state unmapped">Pending DropX ID</span><small>{row.reason}</small></td></tr>)}
           {!filteredProviderPending.length ? <tr><td className="empty-cell" colSpan={7}>No provider IDs are pending for these filters.</td></tr> : null}
         </tbody></table></div> : <div className="mapping-rows">
           {rows.map((row, index) => Number(row.paymentValues.DROPX_PERSONAL_TERMS) === 1 ? (
-            <div className="mapping-row-card" hidden={!paginatedIndexes.has(index)} key={`${row.workforceId}-${index}`}>
+            <div className="mapping-row-card" id={`mapping-${row.id}`} hidden={!paginatedIndexes.has(index)} key={`${row.workforceId}-${index}`}>
               <strong>{row.dropxName} · {row.providerMemberId}</strong>
               <span>Individual dated payment terms</span>
               <a href={`/delivery-network/lifecycle?tab=active&person=${row.workforceId}&section=payments`}>View or change payment stages</a>
             </div>
           ) : (
-            <div className={`mapping-row-card ${dirtyRows[index] ? "unsaved-row" : ""}`} hidden={!paginatedIndexes.has(index)} key={`${row.workforceId}-${index}`}>
+            <div id={`mapping-${row.id}`} className={`mapping-row-card ${dirtyRows[index] ? "unsaved-row" : ""}`} hidden={!paginatedIndexes.has(index)} key={`${row.workforceId}-${index}`}>
               <input type="hidden" name={`rows[${index}][id]`} value={row.id} />
               <input type="hidden" name={`rows[${index}][workforce_id]`} value={row.workforceId} />
               <input type="hidden" name={`rows[${index}][source_type]`} value={row.sourceType} />

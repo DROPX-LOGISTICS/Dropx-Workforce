@@ -113,6 +113,13 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
             const directActive = item === workspace;
             const destination = workspaceDestination(item);
 
+            if (item.children?.length) {
+              return <details className="wf-visible-menu" key={`${item.label}:${directActive}`} open={directActive}>
+                <summary className={directActive ? 'active' : ''}><NavigationIcon aria-hidden="true" size={16}/><span>{item.label}</span><ChevronDown size={14}/></summary>
+                <div>{item.children.map(child=><PendingLink key={child.label} href={child.href!} className={active===child.label?'active':''}>{child.label}</PendingLink>)}</div>
+              </details>;
+            }
+
             if (destination) {
               return (
                 <PendingLink

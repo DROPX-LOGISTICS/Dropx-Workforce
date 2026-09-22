@@ -11,3 +11,18 @@
 .workforce-product .wf-action-lane>div{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}.workforce-product details.wf-workspace-directory>summary{padding:16px;cursor:pointer;font-weight:650}
 @media(max-width:680px){.workforce-product .workforce-lifecycle-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.wf-station-context{align-items:stretch}}
 @media(max-width:680px){.wf-profile-progress{grid-template-columns:repeat(2,minmax(0,1fr))}.wf-workspace-nav{gap:3px}.wf-workspace-nav>a{padding:8px;font-size:12px}.wf-journey-nav{gap:6px}.wf-journey-nav a{padding:8px 10px}}
+.workforce-product .wf-visible-menu { margin: 3px 0; }
+.workforce-product .wf-visible-menu > summary { display:flex; gap:9px; align-items:center; padding:12px; border-radius:9px; cursor:pointer; color:#536177; font-size:12px; font-weight:650; list-style:none; }
+.workforce-product .wf-visible-menu > summary::-webkit-details-marker { display:none; }
+.workforce-product .wf-visible-menu > summary span { flex:1; }
+.workforce-product .wf-visible-menu > summary.active { background:#202c43; color:white; }
+.workforce-product .wf-visible-menu[open] > summary > svg:last-child { transform:rotate(180deg); }
+.workforce-product .wf-visible-menu > div { display:grid; gap:3px; padding:6px 0 9px 20px; }
+.workforce-product .wf-visible-menu > div a { padding:9px 10px; border-radius:7px; font-size:11px; color:#59677c; }
+.workforce-product .wf-visible-menu > div a:hover,.workforce-product .wf-visible-menu > div a.active { background:#fff0e8; color:#ad421e; }
+.workforce-product .mapping-rate-summary { overflow:auto; padding:12px; }
+.workforce-product .mapping-rate-summary table { width:100%; border-collapse:collapse; font-size:12px; }
+.workforce-product .mapping-rate-summary th,.workforce-product .mapping-rate-summary td { padding:10px; text-align:left; border-bottom:1px solid #e4e9f0; white-space:nowrap; }
+.workforce-product .mapping-rate-summary th { background:#f5f7fa; }
+.workforce-product .mapping-rate-summary small { display:block; color:#69768a; }
+.workforce-product .mapping-bulk-tools { display:flex; gap:10px; flex-wrap:wrap; align-items:center; padding:12px 16px; border-block:1px solid #e4e9f0; }

@@ -124,11 +124,18 @@ export const workforceNavItems: NavItem[] = [
     children: [
       { code: "delivery_associates", label: "Workforce Register", href: "/delivery-network/associates" },
       { code: "delivery_associates", label: "Invite associate", href: "/delivery-network/onboarding", secondary: true },
+      { code: "delivery_associates", label: "Bulk associate upload", href: "/delivery-network/onboarding/associates#bulk-upload" },
       { code: "people_review", label: "Onboarding & review", href: "/delivery-network/lifecycle", secondary: true },
       { code: "delivery_associates", label: "Joining & Training", href: "/delivery-network/joining", secondary: true },
-      { code: "executive_id_onboarding", label: "Provider ID Onboarding", href: "/delivery-network/id-onboarding", secondary: true },
-      { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping", secondary: true },
       { code: "delivery_associates", label: "Need Attention", href: "/delivery-network/attention", secondary: true }
+    ]
+  },
+  {
+    code: "provider_mapping", label: "IDs & rates", icon: "ID",
+    children: [
+      { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping" },
+      { code: "workforce_rate_cards", label: "Rate Cards", href: "/delivery-network/rate-cards" },
+      { code: "executive_id_onboarding", label: "Provider ID Onboarding", href: "/delivery-network/id-onboarding" }
     ]
   },
   {
@@ -172,11 +179,17 @@ export const workforceNavItems: NavItem[] = [
     ]
   },
   {
+    code: "users", label: "User access", icon: "UA",
+    children: [
+      { code: "users", label: "Users & Access", href: "/users?section=users" },
+      { code: "users", label: "User Roles", href: "/users?section=roles" }
+    ]
+  },
+  {
     code: "designations",
     label: "Settings",
     icon: "WM",
     children: [
-      { code: "workforce_rate_cards", label: "Rate Cards", href: "/delivery-network/rate-cards" },
       { code: "people_review", label: "Setup Checklist", href: "/delivery-network/setup", secondary: true },
       { code: "people_review", label: "Station training defaults", href: "/delivery-network/training-policies" },
       { code: "executive_id_onboarding", label: "Amazon station defaults", href: "/delivery-network/amazon-onboarding-settings", secondary: true },
@@ -187,8 +200,6 @@ export const workforceNavItems: NavItem[] = [
       { code: "designations", label: "Workforce Designations", href: "/delivery-network/designations", secondary: true },
       { code: "designations", label: "DropX One User Preview", href: "/delivery-network/dropx-one-preview", secondary: true },
       { code: "designations", label: "Designation Routing", href: "/delivery-network/designation-routing", secondary: true },
-      { code: "users", label: "Users & Access", href: "/users?section=users", secondary: true },
-      { code: "users", label: "User Roles", href: "/users?section=roles", secondary: true }
     ]
   }
 ];

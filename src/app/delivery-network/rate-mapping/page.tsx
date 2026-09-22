@@ -1,11 +1,12 @@
 import { ProviderMappingPageContent } from "@/components/provider-mapping-page-content";
 
-export default function WorkforceRateMappingPage() {
+export default function WorkforceRateMappingPage({searchParams}:{searchParams:{station?:string}}) {
   return (
     <ProviderMappingPageContent
       eyebrow="Workforce rates"
       subtitle="Map only Workforce associates to provider IDs, payout methods and date-effective rate cards."
       title="ID & Rate Mapping"
+      initialStation={searchParams.station}
     />
   );
 }

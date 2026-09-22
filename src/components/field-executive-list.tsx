@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, EllipsisVertical, Eye, Pencil, ShieldAlert, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { PendingLink } from "@/components/pending-link";
 import { StatusPill } from "@/components/status-pill";
+import { registerDesignationOptions, type RegisterDesignation } from "@/lib/workforce-register-designations";
+import "./workforce-register-switches.css";
 
 export type FieldExecutiveListRow = {
   id: string;
@@ -25,6 +27,7 @@ export type FieldExecutiveListRow = {
   createdBy?: string | null;
   editHref?: string;
   viewHref?: string;
+  paymentsHref?: string;
 };
 
 const pageSize = 20;
@@ -106,6 +109,8 @@ export function FieldExecutiveList({
   emptyLabel = "No field executives added yet.",
   rows,
   showActions = true,
+  designationSwitches,
+  directProfileLinks = false,
   title = "Field Executive register"
 }: {
   basePath?: string;
@@ -113,6 +118,8 @@ export function FieldExecutiveList({
   emptyLabel?: string;
   rows: FieldExecutiveListRow[];
   showActions?: boolean;
+  designationSwitches?: RegisterDesignation[];
+  directProfileLinks?: boolean;
   title?: string;
 }) {
   const [search, setSearch] = useState("");
@@ -120,6 +127,9 @@ export function FieldExecutiveList({
   const [modelFilter, setModelFilter] = useState<string[]>([]);
   const [locationFilter, setLocationFilter] = useState<string[]>([]);
   const [designationFilter, setDesignationFilter] = useState<string[]>([]);
+  const [designationSwitch, setDesignationSwitch] = useState("");
+  const switchOptions = useMemo(() => registerDesignationOptions(designationSwitches ?? [], rows.map(row => row.designation)), [designationSwitches, rows]);
+  const selectedSwitch = switchOptions.find(option => option.id === designationSwitch);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -188,10 +198,11 @@ export function FieldExecutiveList({
       return matchesSearch && matchesProvider && matchesModel && matchesLocation && matchesDesignation && matchesStatus;
     });
   }, [designationFilter, locationFilter, modelFilter, providerFilter, rows, search, statusFilter]);
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const displayRows = selectedSwitch ? filteredRows.filter(row => selectedSwitch.values.includes(row.designation)) : filteredRows;
+  const totalPages = Math.max(1, Math.ceil(displayRows.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const visibleRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const hasFilters = Boolean(search || providerFilter.length || modelFilter.length || locationFilter.length || designationFilter.length || statusFilter.length);
+  const visibleRows = displayRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const hasFilters = Boolean(designationSwitch || search || providerFilter.length || modelFilter.length || locationFilter.length || designationFilter.length || statusFilter.length);
 
   function clearFilters() {
     setSearch("");
@@ -199,16 +210,23 @@ export function FieldExecutiveList({
     setModelFilter([]);
     setLocationFilter([]);
     setDesignationFilter([]);
+    setDesignationSwitch("");
     setStatusFilter([]);
     setPage(1);
   }
 
   return (
     <section className="panel">
+      {designationSwitches ? <div className="wf-designation-switches" role="group" aria-label="Filter workforce by designation">
+        <button type="button" aria-pressed={!designationSwitch} onClick={() => { setDesignationSwitch(""); setPage(1); }}>All <span>{filteredRows.length}</span></button>
+        {switchOptions.map(option => <button key={option.id} type="button" title={option.name} aria-label={`${option.code} — ${option.name}`} aria-pressed={designationSwitch === option.id} onClick={() => { setDesignationSwitch(option.id); setPage(1); }}>
+          {['DA', 'DCD', 'ODCD'].includes(option.code) ? option.code : option.name}<span>{filteredRows.filter(row => option.values.includes(row.designation)).length}</span>
+        </button>)}
+      </div> : null}
       <div className="panel-head toolbar">
         <div>
           <h2>{title}</h2>
-          <p className="subtle"><SlidersHorizontal aria-hidden="true" size={13} /> {filteredRows.length} of {rows.length} records</p>
+          <p className="subtle"><SlidersHorizontal aria-hidden="true" size={13} /> {displayRows.length} of {rows.length} records{selectedSwitch ? ` · ${selectedSwitch.name}` : ""}</p>
         </div>
         <div className="field-executive-filters">
           <MultiCheckFilter
@@ -241,7 +259,7 @@ export function FieldExecutiveList({
             options={modelOptions}
             selected={modelFilter}
           />
-          <MultiCheckFilter
+          {!designationSwitches ? <MultiCheckFilter
             allLabel="All designations"
             label="Designation"
             onChange={(values) => {
@@ -250,7 +268,7 @@ export function FieldExecutiveList({
             }}
             options={designationOptions}
             selected={designationFilter}
-          />
+          /> : null}
           <MultiCheckFilter
             allLabel="All statuses"
             label="Status"
@@ -300,7 +318,7 @@ export function FieldExecutiveList({
                     <span className="executive-avatar" aria-hidden="true">
                       {row.profilePhotoUrl ? <img alt="" src={row.profilePhotoUrl} /> : <UserRound size={17} />}
                     </span>
-                    <strong>{row.fullName}</strong>
+                    {directProfileLinks && row.viewHref ? <PendingLink className="wf-profile-name" href={row.viewHref}><strong>{row.fullName}</strong></PendingLink> : <strong>{row.fullName}</strong>}
                   </div>
                 </td>
                 <td>{row.dropxId}</td>
@@ -311,6 +329,10 @@ export function FieldExecutiveList({
                 <td>{row.designation}</td>
                 <td><StatusPill status={row.status} /></td>
                 {showActions ? <td className="action-cell">
+                  {directProfileLinks ? <div className="wf-profile-actions">
+                    {row.viewHref ? <PendingLink href={row.viewHref}>Profile</PendingLink> : null}
+                    {row.paymentsHref ? <PendingLink href={row.paymentsHref}>Payments</PendingLink> : null}
+                  </div> : null}
                   <div className="row-action-menu" ref={openMenuId === row.id ? menuRef : undefined}>
                     <button
                       aria-expanded={openMenuId === row.id}
@@ -370,6 +392,7 @@ export function FieldExecutiveList({
             {showActions ? (
               <footer>
                 <PendingLink className="button secondary" href={row.viewHref ?? `${basePath}?view=${row.id}`} scroll={false}><Eye aria-hidden="true" size={15} /> View</PendingLink>
+                {row.paymentsHref ? <PendingLink className="button secondary" href={row.paymentsHref}>Payments</PendingLink> : null}
                 {canEdit && row.canEdit !== false && row.needsReview ? <PendingLink className="button" href={row.editHref ?? `${basePath}?edit=${row.id}&review=1`} scroll={false}><ShieldAlert aria-hidden="true" size={15} /> Resolve review{row.reviewIssueCount ? ` (${row.reviewIssueCount})` : ""}</PendingLink> : null}
                 {canEdit && row.canEdit !== false && !row.needsReview ? <PendingLink className="button" href={row.editHref ?? `${basePath}?edit=${row.id}`} scroll={false}><Pencil aria-hidden="true" size={15} /> Edit</PendingLink> : null}
               </footer>

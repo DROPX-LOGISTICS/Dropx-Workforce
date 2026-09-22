@@ -5,6 +5,8 @@ import { PendingLink } from "@/components/pending-link";
 import { hasPermission, requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
+import type { RegisterDesignation } from "@/lib/workforce-register-designations";
 import {
   loadWorkforceCommunicationRecipients,
   type WorkforceCommunicationRecipient
@@ -25,12 +27,19 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
   const canAdd = hasPermission(authorization, "delivery_associates", "add");
   const canEdit = hasPermission(authorization, "delivery_associates", "edit");
   let records: WorkforceCommunicationRecipient[] = [];
+  let designations: RegisterDesignation[] = [];
   const mappedSourceIds = new Set<string>();
   let error: string | null = null;
 
   try {
     records = await loadWorkforceCommunicationRecipients(authorization);
     if (supabaseAdmin) {
+      const result = await supabaseAdmin.from("designations")
+        .select("id, code, name, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active)")
+        .eq("company_id", companyId).eq("is_active", true).order("code");
+      if (result.error) throw new Error(result.error.message);
+      designations = (result.data ?? []).filter(item => firstDesignationBusinessCategory(item.designation_category)?.people_module === "delivery_network")
+        .map(({ id, code, name }) => ({ id, code, name }));
       let mappingQuery = supabaseAdmin
         .from("field_executive_provider_mappings")
         .select("workforce_id, field_executive_id, contractor_id")
@@ -70,7 +79,9 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
     status: record.status,
     canEdit,
     viewHref: record.profileType==='workforce'&&hasPermission(authorization,'people_review','access')?`/delivery-network/lifecycle?tab=${record.status.toLowerCase()==='active'?'active':'onboarding'}&person=${record.accountId}`:profileHref(record, "view"),
-    editHref: profileHref(record, "edit")
+    editHref: profileHref(record, "edit"),
+    paymentsHref: record.profileType === 'workforce' && hasPermission(authorization, 'people_review', 'access') && hasPermission(authorization, 'provider_mapping', 'access')
+      ? `/delivery-network/lifecycle?tab=${record.status.toLowerCase() === 'active' ? 'active' : 'onboarding'}&person=${record.accountId}&section=payments` : undefined
   }));
   const pending = records.filter((record) => !["active", "rejected", "cancelled"].includes(record.status.toLowerCase())).length;
   const protectedRegistrations = records.filter((record) => record.profileType === "workforce").length;
@@ -85,7 +96,7 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
       <PageHead
         eyebrow="Workforce"
         title="Workforce Register"
-        subtitle="One operational register for delivery, sorting, cleaning, driver, van and every future master-classified Workforce role."
+        subtitle="Find an associate. Open their profile or configure payments."
         action={canAdd ? <PendingLink className="button compact" href="/delivery-network/onboarding">Onboard workforce</PendingLink> : null}
       />
 
@@ -112,6 +123,8 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
         canEdit={canEdit}
         emptyLabel="No master-classified Workforce profiles are available yet."
         rows={rows}
+        designationSwitches={designations}
+        directProfileLinks
         showActions={!error}
         title={searchParams.view==="approved" ? "Approved Workforce records" : "Active Workforce members"}
       />

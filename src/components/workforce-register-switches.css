@@ -1,0 +1,9 @@
+.wf-designation-switches{display:flex;gap:8px;flex-wrap:wrap;padding:16px 18px;border-bottom:1px solid #e5eaf2}
+.wf-designation-switches button{display:flex;gap:8px;align-items:center;border:1px solid #dde4ef;background:#fff;border-radius:8px;padding:9px 13px;font:inherit;font-size:13px;font-weight:650;color:#47566e;cursor:pointer}
+.wf-designation-switches button[aria-pressed=true]{background:#202c44;border-color:#202c44;color:#fff}
+.wf-designation-switches button span{border-radius:5px;padding:2px 6px;background:#edf1f6;color:#53627a;font-size:11px}
+.wf-designation-switches button[aria-pressed=true] span{background:#ffffff24;color:#fff}
+.wf-designation-switches button:focus-visible,.wf-profile-actions a:focus-visible{outline:2px solid #e66632;outline-offset:3px}
+.wf-profile-name{color:inherit;text-decoration:none}.wf-profile-name:hover{text-decoration:underline}
+.wf-profile-actions{display:inline-flex;gap:10px;margin-right:10px;white-space:nowrap}.wf-profile-actions a{color:#b7461f;font-weight:650;font-size:12px}
+@media(max-width:680px){.wf-designation-switches{flex-wrap:nowrap;overflow-x:auto}.wf-designation-switches button{flex-shrink:0}}

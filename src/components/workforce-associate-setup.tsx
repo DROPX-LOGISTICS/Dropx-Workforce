@@ -24,14 +24,19 @@ export async function WorkforceAssociateSetup({auth,id,dateOfJoin,tab,section='p
  if(history.error)throw new Error('Payment history could not load.');
  const biometric=data.attendance.filter(d=>isBiometricDay(d,person.location_id));
  return <section className="wf-simple-setup">
-  <nav className="workforce-lifecycle-tabs" aria-label="Associate profile sections">{[['profile','Profile & attendance'],['payments','Payments & provider ID']].map(([key,label])=><a className={section===key?'active':''} key={key} href={`?tab=${tab}&person=${id}&section=${key}`}>{label}</a>)}</nav>
+  <a href="/delivery-network/associates">← Workforce register</a>
+  <nav className="workforce-lifecycle-tabs" aria-label="Associate profile sections">{[['profile','Profile & attendance'],['payments','Payment configuration']].map(([key,label])=><a className={section===key?'active':''} aria-current={section===key?'page':undefined} key={key} href={`?tab=${tab}&person=${id}&section=${key}`}>{label}</a>)}</nav>
   {section!=='payments'?<>
   <AssociateRegistrationDetails auth={auth} id={id}/>
   <header><h3>Biometric attendance</h3><p>ID: <strong>{person.biometric_id||'Enrol at station on day one'}</strong> · {new Set(biometric.map(d=>d.punch_date)).size} punched days since {dateOfJoin||'joining date not set'}</p></header>
   <details><summary>View daily punches ({data.attendance.length})</summary><div className="table-wrap"><table><thead><tr><th>Date</th><th>In / out (IST)</th><th>Minutes</th><th>Attendance</th></tr></thead><tbody>{data.attendance.map(d=><tr key={d.id}><td>{d.punch_date}</td><td>{[d.in_time,d.out_time].map(v=>v?new Date(v).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'}):'Missing').join(' – ')}</td><td>{d.work_minutes??'—'}</td><td>{d.flagged?'Flagged — review':isBiometricDay(d,person.location_id)?'Biometric · '+d.status:'Review source / station'}</td></tr>)}</tbody></table>{!data.attendance.length?<p>No punches found for this identity and joining period.</p>:null}</div></details>
   <p><a href={`?tab=${tab}&person=${id}&section=payments`}>Configure training, provider ID & payment stages →</a></p>
   </>:<>
-  <header><h3>Training & provider ID</h3><p>Biometric ID: <strong>{person.biometric_id||'Enrol at station on day one'}</strong></p></header>
+  <header><h3>Payment configuration</h3><p>View existing rates and effective dates. Changes apply only to this associate.</p></header>
+  <AssociatePaymentStages id={id} tab={tab} rows={(history.data||[]) as PersonalMapping[]} canEdit={hasPermission(auth,'provider_mapping','edit')&&!auth.readOnly}/>
+  {hasPermission(auth,'provider_mapping','access')?<details open><summary>Configure provider ID & payment method</summary><ProviderMappingPageContent embedded workforceId={id}/></details>:null}
+  <details><summary>Training pay & Amazon progress</summary>
+  <p>Biometric ID: <strong>{person.biometric_id||'Enrol at station on day one'}</strong></p>
   {['approved','active'].includes(person.onboarding_status||'')?<>
    <form action={saveReviewTerms} className="wf-simple-fields">
     <input name="workforce_id" type="hidden" value={id}/><input name="version" type="hidden" value={plan?.version??0}/><input name="tab" type="hidden" value={tab}/>
@@ -47,8 +52,7 @@ export async function WorkforceAssociateSetup({auth,id,dateOfJoin,tab,section='p
    </form>
    <details><summary>Biometric training: {days.filter(d=>!d.holds.length).length} payable days · ₹{days.filter(d=>!d.holds.length).reduce((n,d)=>n+d.amount,0).toLocaleString('en-IN')}</summary><div className="table-wrap"><table><thead><tr><th>Date</th><th>Minutes</th><th>Payment</th><th>Status</th></tr></thead><tbody>{days.map(d=><tr key={d.attendance.id}><td>{d.attendance.punch_date}</td><td>{d.attendance.work_minutes}</td><td>₹{d.amount}</td><td>{d.holds.join(' · ')||'Payable'}</td></tr>)}</tbody></table>{!days.length?<p>No eligible biometric attendance recorded yet.</p>:null}</div></details>
   </>:<p>Approve the submitted registration below, then configure training and map the provider ID here.</p>}
-  <AssociatePaymentStages id={id} tab={tab} rows={(history.data||[]) as PersonalMapping[]} canEdit={hasPermission(auth,'provider_mapping','edit')&&!auth.readOnly}/>
-  {hasPermission(auth,'provider_mapping','access')?<details><summary>Provider ID & payment mapping</summary><ProviderMappingPageContent embedded workforceId={id}/></details>:null}
+  </details>
   <details><summary>Detailed Amazon checklist</summary><a href={`/delivery-network/joining?person=${id}`}>Open checklist and follow-up history</a></details>
   </>}
  </section>;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { withAuthDeadline, isTemporaryAuthError, MiddlewareAuthTimeout } from "./lib/middleware-auth-deadline";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAuthKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -189,7 +190,10 @@ export async function middleware(request: NextRequest) {
   };
   const getStoredValue = (key: string) => {
     const legacyValue = request.cookies.get(key)?.value;
-    if (legacyValue) return decodeCookieValue(legacyValue);
+    if (legacyValue) {
+      try { return decodeCookieValue(legacyValue); }
+      catch { clearStoredValue(key); return null; }
+    }
 
     let value = "";
     for (let index = 0; index < MAX_COOKIE_CHUNKS; index += 1) {
@@ -197,7 +201,8 @@ export async function middleware(request: NextRequest) {
       if (!chunk) break;
       value += chunk;
     }
-    return value ? decodeCookieValue(value) : null;
+    try { return value ? decodeCookieValue(value) : null; }
+    catch { clearStoredValue(key); return null; }
   };
   const setStoredValue = (key: string, value: string) => {
     clearStoredValue(key);
@@ -209,52 +214,74 @@ export async function middleware(request: NextRequest) {
       response.cookies.set(name, chunk, cookieOptions);
     });
   };
-  const supabase = createClient(supabaseUrl, supabaseAuthKey, {
-    auth: {
-      flowType: "pkce",
-      ...(isOpsHost ? { storageKey: "dropx-ops-auth-v3" } : {}),
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-      persistSession: true,
-      storage: {
-        getItem: getStoredValue,
-        setItem: setStoredValue,
-        removeItem: clearStoredValue
-      }
-    }
-  });
-
-  const { data } = await supabase.auth.getUser();
+  const copyAuthCookies = (target: NextResponse) => {
+    response.cookies.getAll().forEach((cookie) => target.cookies.set(cookie));
+    target.headers.set("Cache-Control", "private, no-store");
+    return target;
+  };
+  const unavailable = () => copyAuthCookies(new NextResponse(
+    '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Workforce — Please retry</title><body><main><h1>Connection temporarily unavailable</h1><p>We could not verify your session. Please retry in a few seconds.</p><p><a href="">Try again</a></p></main></body></html>',
+    { status: 503, headers: { "Content-Type": "text/html; charset=utf-8", "Retry-After": "5", "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'" } }
+  ));
+  const authStarted = Date.now();
+  let authResult;
+  try {
+    authResult = await withAuthDeadline(async (signal) => {
+      const supabase = createClient(supabaseUrl, supabaseAuthKey, {
+        global: { fetch: (input, init) => fetch(input, { ...init, signal }) },
+        auth: {
+          flowType: "pkce",
+          ...(isOpsHost ? { storageKey: "dropx-ops-auth-v3" } : {}),
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+          persistSession: true,
+          storage: {
+            getItem: getStoredValue,
+            setItem: setStoredValue,
+            removeItem: clearStoredValue
+          }
+        }
+      });
+      return await supabase.auth.getUser();
+    });
+  } catch (error) {
+    console.error("[middleware-auth] verification unavailable", {
+      reason: error instanceof MiddlewareAuthTimeout ? "deadline" : "unexpected_error",
+      elapsedMs: Date.now() - authStarted
+    });
+    return unavailable();
+  }
+  const { data, error } = authResult;
+  if (isTemporaryAuthError(error)) {
+    console.error("[middleware-auth] verification unavailable", { reason: "upstream", status: error?.status, elapsedMs: Date.now() - authStarted });
+    return unavailable();
+  }
   if (!data.user) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", request.nextUrl.pathname);
-    return NextResponse.redirect(loginUrl);
+    return copyAuthCookies(NextResponse.redirect(loginUrl));
   }
 
   if (isPlatformAdminHost && path === "/") {
     const rewriteUrl = request.nextUrl.clone();
     rewriteUrl.pathname = "/platform-admin";
-    return NextResponse.rewrite(rewriteUrl);
+    return copyAuthCookies(NextResponse.rewrite(rewriteUrl, { request: { headers: request.headers } }));
   }
 
 
   if (isWorkforceHost && path === "/") {
     const rewriteUrl = request.nextUrl.clone();
     rewriteUrl.pathname = "/delivery-network";
-    const rewriteResponse = NextResponse.rewrite(rewriteUrl);
-    response.cookies.getAll().forEach((cookie) => rewriteResponse.cookies.set(cookie));
-    return rewriteResponse;
+    return copyAuthCookies(NextResponse.rewrite(rewriteUrl, { request: { headers: request.headers } }));
   }
 
   if (isOpsHost && isCleanOpsPath(path)) {
     const rewriteUrl = request.nextUrl.clone();
     rewriteUrl.pathname = path === "/" ? "/ops-pulse" : `/ops-pulse${path}`;
-    const rewriteResponse = NextResponse.rewrite(rewriteUrl);
-    response.cookies.getAll().forEach((cookie) => rewriteResponse.cookies.set(cookie));
-    return rewriteResponse;
+    return copyAuthCookies(NextResponse.rewrite(rewriteUrl, { request: { headers: request.headers } }));
   }
 
-  return response;
+  return copyAuthCookies(NextResponse.next({ request: { headers: request.headers } }));
 }
 
 export const config = {

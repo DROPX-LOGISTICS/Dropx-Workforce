@@ -23,7 +23,14 @@ function lifecycleRedirect(params: { error?: string; notice?: string; tab?: stri
   if (params.tab) query.set("tab", params.tab);
   let path = "/delivery-network/lifecycle";
   try {
-    if (new URL(headers().get("referer") ?? "http://localhost").pathname.startsWith("/people/")) {
+    const referer = new URL(headers().get("referer") ?? "http://localhost");
+    // Keep the operator on the same scoped profile after an existing action.
+    const person = referer.searchParams.get('person');
+    if(person && /^[0-9a-f-]{36}$/i.test(person)) {
+      query.set('person',person);
+      query.set('section',params.tab==='exits'?'exit':referer.searchParams.get('section')||'profile');
+    }
+    if (referer.pathname.startsWith("/people/")) {
       path = "/people/workforce-lifecycle";
     }
   } catch {

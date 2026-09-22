@@ -6,7 +6,7 @@ import {requireCompanyId} from '@/lib/company-scope';
 import {supabaseAdmin} from '@/lib/supabase-admin';
 export async function saveReviewTerms(form:FormData){
  const auth=await requirePagePermission('people_review','edit'),person=String(form.get('workforce_id')||'');
- const query=new URLSearchParams({person,tab:String(form.get('tab')||'onboarding'),section:'payments'});
+ const query=new URLSearchParams({person,tab:String(form.get('tab')||'onboarding'),section:'training'});
  try{
   if(auth.readOnly||!supabaseAdmin)throw new Error('Editing is unavailable.');
   const field=(key:string)=>String(form.get(key)||'').trim();

@@ -111,6 +111,7 @@ export function FieldExecutiveList({
   showActions = true,
   designationSwitches,
   directProfileLinks = false,
+  hideLocationFilter = false,
   title = "Field Executive register"
 }: {
   basePath?: string;
@@ -120,6 +121,7 @@ export function FieldExecutiveList({
   showActions?: boolean;
   designationSwitches?: RegisterDesignation[];
   directProfileLinks?: boolean;
+  hideLocationFilter?: boolean;
   title?: string;
 }) {
   const [search, setSearch] = useState("");
@@ -239,7 +241,7 @@ export function FieldExecutiveList({
             options={providerOptions}
             selected={providerFilter}
           />
-          <MultiCheckFilter
+          {!hideLocationFilter ? <MultiCheckFilter
             allLabel="All locations"
             label="Location"
             onChange={(values) => {
@@ -248,7 +250,7 @@ export function FieldExecutiveList({
             }}
             options={locationOptions}
             selected={locationFilter}
-          />
+          /> : null}
           <MultiCheckFilter
             allLabel="All models"
             label="Model"

@@ -5,7 +5,7 @@ import { WorkforceAssociateSetup } from "@/components/workforce-associate-setup"
 import { PageHead } from "@/components/page-head";
 import { PendingLink } from "@/components/pending-link";
 import { SubmitButton } from "@/components/submit-button";
-import { requirePagePermission } from "@/lib/authorization";
+import { hasPermission, requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import {isActiveReviewProfile} from '@/lib/workforce-overview';
@@ -35,11 +35,11 @@ function first<T>(value: T | T[] | null | undefined) { return Array.isArray(valu
 function title(value: string | null | undefined) { return String(value ?? "-").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 function when(value: string | null | undefined) { if (!value) return "-"; const date = new Date(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(date); }
 
-export default async function WorkforceLifecyclePage({ searchParams }: { searchParams?: { tab?: string; person?:string; section?:string; q?:string; error?: string; notice?: string } }) {
+export default async function WorkforceLifecyclePage({ searchParams }: { searchParams?: { tab?: string; person?:string; section?:string; q?:string; from?:string;to?:string;error?: string; notice?: string } }) {
   const authorization = await requirePagePermission("people_review", "access");
   const companyId = requireCompanyId(authorization);
   const canEdit = Boolean(authorization.permissions.people_review?.canEdit && !authorization.readOnly);
-  const tab = ["onboarding", "active", "exits"].includes(searchParams?.tab ?? "") ? searchParams!.tab! : "onboarding";
+  let tab = ["onboarding", "active", "exits"].includes(searchParams?.tab ?? "") ? searchParams!.tab! : "onboarding";
   let error = "";
   let applicants: Applicant[] = [];
   let checklist: ChecklistItem[] = [];
@@ -100,13 +100,19 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
   const applicantMap = new Map(applicants.map((item) => [item.id, item]));
 
   const matches=(item:Applicant)=>!searchParams?.q||[item.full_name,item.dropx_id,item.biometric_id,first(item.stations)?.station_code].some(v=>v?.toLowerCase().includes(searchParams.q!.toLowerCase()));
+  const requestedPerson=searchParams?.person?applicants.find(p=>p.id===searchParams.person):undefined;
+  if(requestedPerson && tab!=='exits') tab=isActiveReviewProfile(requestedPerson)||['inactive','offboarded','exited','terminated','resigned','settled'].includes(requestedPerson.lifecycle_status)?'active':'onboarding';
   const queue=(tab==='active'?active:pending).filter(matches);
-  const selected=searchParams?.person?queue.find(p=>p.id===searchParams.person):queue[0];
+  const selected=searchParams?.person?requestedPerson:queue[0];
+  const section=['profile','training','payments','earnings','exit'].includes(searchParams?.section||'')?searchParams!.section!:'profile';
+  const navPerson=requestedPerson??(tab!=='exits'?selected:undefined);
+  const visibleExits=searchParams?.person?exits.filter(item=>item.profile_type==='workforce'&&item.profile_id===searchParams.person):exits;
+  const profileSections=[['profile','Registration'],['training','Training & ID progress'],['payments','ID & payment setup'],...(hasPermission(authorization,'workforce_earnings','access')?[['earnings','Earnings']]:[]),['exit','Exit']];
   return <AppShell active="Onboarding & review" pageCode="people_review">
-    <PageHead eyebrow="Workforce" title="Associate review" subtitle="Review registration, set training pay and map the provider ID in one place." action={<PendingLink className="button" href="/delivery-network/onboarding">Invite associate</PendingLink>}/>
+    <PageHead eyebrow="Workforce · Associates" title={requestedPerson?'Associate profile':tab==='exits'?'Exit & settlement':'Registration review'} subtitle={requestedPerson?'Registration → optional training → ID & payment setup → earnings → exit.':'Select an associate to continue their setup.'} action={<PendingLink className="button secondary" href="/delivery-network/associates">← All associates</PendingLink>}/>
     {searchParams?.notice ? <div className="notice">{searchParams.notice}</div> : null}
     {searchParams?.error || error ? <div className="error-box"><strong>Action required</strong><p>{searchParams?.error || error}</p></div> : null}
-    <section className="workforce-lifecycle-summary">
+    {!searchParams?.person?<><section className="workforce-lifecycle-summary">
       <article><ClipboardCheck /><span>Awaiting HO</span><strong>{pending.filter((item) => item.onboarding_status === "under_review").length}</strong></article>
       <article><UserCheck /><span>Active partners</span><strong>{active.length}</strong></article>
       <article><LogOut /><span>Open exits</span><strong>{openExits.length}</strong></article>
@@ -116,8 +122,9 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
       <PendingLink className={tab === "onboarding" ? "active" : ""} href="?tab=onboarding">Onboarding approvals</PendingLink>
       <PendingLink className={tab === "active" ? "active" : ""} href="?tab=active">Active partners</PendingLink>
       <PendingLink className={tab === "exits" ? "active" : ""} href="?tab=exits">Exit & settlement</PendingLink>
-    </nav>
-    {tab!=='exits'?<><form className="wf-simple-search" method="get"><input type="hidden" name="tab" value={tab}/><input name="q" aria-label="Find associate" placeholder="Name, DropX ID, biometric ID or station" defaultValue={searchParams?.q}/><button className="button secondary">Search</button></form><div className="wf-simple-queue" aria-label="Associate review queue">{queue.map(item=><PendingLink key={item.id} className={selected?.id===item.id?'active':''} href={`?tab=${tab}&person=${item.id}`}><strong>{item.full_name}</strong><small>{item.dropx_id||'Registration pending'} · {first(item.stations)?.station_code} · {title(item.onboarding_status)}</small></PendingLink>)}</div></>:null}
+    </nav></>:null}
+    {navPerson?<nav className="workforce-lifecycle-tabs" aria-label="Associate profile sections">{profileSections.map(([key,label])=><PendingLink key={key} className={(tab==='exits'?key==='exit':section===key)?'active':''} href={`?tab=${isActiveReviewProfile(navPerson)?'active':'onboarding'}&person=${navPerson.id}&section=${key}`}>{label}</PendingLink>)}</nav>:null}
+    {tab!=='exits'&&!searchParams?.person?<><form className="wf-simple-search" method="get"><input type="hidden" name="tab" value={tab}/><input name="q" aria-label="Find associate" placeholder="Name, DropX ID, biometric ID or station" defaultValue={searchParams?.q}/><button className="button secondary">Search</button></form><div className="wf-simple-queue" aria-label="Associate review queue">{queue.map(item=><PendingLink key={item.id} className={selected?.id===item.id?'active':''} href={`?tab=${tab}&person=${item.id}`}><strong>{item.full_name}</strong><small>{item.dropx_id||'Registration pending'} · {first(item.stations)?.station_code} · {title(item.onboarding_status)}</small></PendingLink>)}</div></>:null}
 
     {tab === "onboarding" ? <section className="workforce-lifecycle-grid">
       {selected ? [selected].map((item) => {
@@ -131,7 +138,8 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
         return <article className="card workforce-lifecycle-card" key={item.id}>
           <header><div><small>{title(item.onboarding_application_source)} request</small><h2>{item.full_name}</h2><p>{item.dropx_id || "ID reserved"} · {station?.station_code || "No station"} · {item.designation || "No designation"}</p></div><span className={`status ${item.onboarding_status}`}>{title(item.onboarding_status)}</span></header>
           <div className="workforce-lifecycle-facts"><span>Mobile<strong>+{item.mobile_country_code || "91"} {item.mobile}</strong></span><span>Submitted<strong>{when(item.onboarding_submitted_at || item.updated_at)}</strong></span><span>Agreement<strong>{acceptedIds.has(item.id) ? "Accepted" : "Pending"}</strong></span><span>Provider ID<strong>{item.provider_employee_id || title(item.provider_id_status)}</strong></span></div>
-          <WorkforceAssociateSetup auth={authorization} id={item.id} dateOfJoin={item.date_of_join} tab={tab} section={searchParams?.section}/>
+          <WorkforceAssociateSetup auth={authorization} id={item.id} dateOfJoin={item.date_of_join} tab={tab} section={section} from={searchParams?.from} to={searchParams?.to}/>
+          {section==='profile'?<>
           {item.identity_exception_required ? <section className="workforce-lifecycle-issues"><header><span><AlertTriangle size={15} /> Existing employee · approval exception</span></header>{existingProfiles.map((profile, index) => <div key={`${String(profile.source_type ?? "profile")}:${String(profile.source_id ?? index)}`}><strong>{String(profile.display_name ?? "Existing person")}</strong><span>{String(profile.designation_name ?? profile.designation_code ?? "Existing designation")} · {title(String(profile.profile_status ?? "existing"))}</span></div>)}</section> : null}
           {reviewIssues.length ? <section className="workforce-lifecycle-issues"><header><span><AlertTriangle size={15} /> Profile correction required</span><PendingLink href={`/delivery-network/onboarding/associates?edit=${encodeURIComponent(item.id)}&review=1`}>Resolve {reviewIssues.length} {reviewIssues.length === 1 ? "issue" : "issues"}</PendingLink></header>{reviewIssues.map((issue) => <div key={`${issue.kind}:${issue.updated_at ?? ""}`}><strong>{title(issue.kind)}</strong><span>{issue.message || "Verification requires manual review."}{issue.display_name ? ` · Verified source: ${issue.display_name}` : ""}</span></div>)}</section> : null}
           {canEdit && ["under_review", "returned", "approved"].includes(item.onboarding_status) ? <form action={reviewWorkforceOnboarding} className="workforce-review-form">
@@ -148,21 +156,22 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
             <button className="button secondary" disabled={Boolean(reviewIssues.length)} name="review_action" type="submit" value="approve_for_joining">Approve for joining · configure training</button>
             <div className="form-actions"><button className="button secondary" name="review_action" type="submit" value="return">Return</button><button className="button danger" name="review_action" type="submit" value="reject">Reject</button><button className="button" disabled={Boolean(reviewIssues.length)} name="review_action" title={reviewIssues.length ? "Resolve profile verification issues before approval" : undefined} type="submit" value="approve">{reviewIssues.length ? "Resolve issues first" : "Approve & activate"}</button></div>
           </form> : <p className="subtle">{item.onboarding_review_remarks || "Waiting for the applicant or HO action."}</p>}
+          </>:null}
         </article>;
       }) : <div className="card workforce-empty"><BadgeCheck /><h2>No onboarding requests pending</h2><p>New workforce requests from Recruit and Ops will appear here after the applicant submits the profile.</p></div>}
     </section> : null}
 
     {tab === "active" ? <section className="workforce-lifecycle-grid">
       {selected ? [selected].map((item) => { const station = first(item.stations); return <article className="card workforce-lifecycle-card" key={item.id}>
-        <header><div><small>Active workforce</small><h2>{item.full_name}</h2><p>{item.dropx_id || "-"} · {station?.station_code || "-"} · {item.designation || "-"}</p></div><span className="status active">Active</span></header>
+        <header><div><small>Workforce associate</small><h2>{item.full_name}</h2><p>{item.dropx_id || "-"} · {station?.station_code || "-"} · {item.designation || "-"}</p></div><span className="status">{isActiveReviewProfile(item)?'Active':title(item.lifecycle_status)}</span></header>
         <div className="workforce-lifecycle-facts"><span>Biometric<strong>{item.biometric_id || "-"}</strong></span><span>Provider ID<strong>{item.provider_employee_id || "Not required"}</strong></span><span>Date of join<strong>{item.date_of_join || "-"}</strong></span><span>Mobile<strong>+{item.mobile_country_code || "91"} {item.mobile}</strong></span></div>
-        <WorkforceAssociateSetup auth={authorization} id={item.id} dateOfJoin={item.date_of_join} tab={tab} section={searchParams?.section}/>
-        {canEdit ? <form action={startWorkforceExit} className="workforce-exit-start"><input name="id" type="hidden" value={item.id} /><label>Exit type<select name="case_type" required><option value="">Select</option><option value="resignation">Resignation</option><option value="termination">Termination</option></select></label><label>Effective date<input name="effective_date" required type="date" /></label><label>Reason<select name="reason_code" required><option value="">Select</option><option value="voluntary">Voluntary resignation</option><option value="attendance">Attendance / abandonment</option><option value="performance">Performance</option><option value="conduct">Conduct / compliance</option><option value="business">Business requirement</option><option value="other">Other</option></select></label><label>Details<textarea name="reason_details" /></label><SubmitButton confirmMessage="This creates a formal workforce exit case and starts the settlement workflow." confirmTitle="Start exit process?">Start exit process</SubmitButton></form> : null}
+        <WorkforceAssociateSetup auth={authorization} id={item.id} dateOfJoin={item.date_of_join} tab={tab} section={section} from={searchParams?.from} to={searchParams?.to}/>
+        {section==='exit'&&canEdit&&isActiveReviewProfile(item)&&!openExits.some(exit=>exit.profile_type==='workforce'&&exit.profile_id===item.id) ? <form action={startWorkforceExit} className="workforce-exit-start"><input name="id" type="hidden" value={item.id} /><label>Exit type<select name="case_type" required><option value="">Select</option><option value="resignation">Resignation</option><option value="termination">Termination</option></select></label><label>Effective date<input name="effective_date" required type="date" /></label><label>Reason<select name="reason_code" required><option value="">Select</option><option value="voluntary">Voluntary resignation</option><option value="attendance">Attendance / abandonment</option><option value="performance">Performance</option><option value="conduct">Conduct / compliance</option><option value="business">Business requirement</option><option value="other">Other</option></select></label><label>Details<textarea name="reason_details" /></label><SubmitButton confirmMessage="This creates a formal workforce exit case and starts the settlement workflow." confirmTitle="Start exit process?">Start exit process</SubmitButton></form> : null}
       </article>; }) : <div className="card workforce-empty"><BriefcaseBusiness /><h2>No active workforce in scope</h2></div>}
     </section> : null}
 
-    {tab === "exits" ? <section className="workforce-lifecycle-grid">
-      {exits.length ? exits.map((item) => { const person = item.profile_type === "workforce" ? applicantMap.get(item.profile_id) : isNonEmployeeProfileType(item.profile_type) ? exitProfileMap.get(`${item.profile_type}:${item.profile_id}`) : null; return <article className="card workforce-lifecycle-card" key={item.id}>
+    {tab === "exits" || section==='exit' ? <section className="workforce-lifecycle-grid">
+      {visibleExits.length ? visibleExits.map((item) => { const person = item.profile_type === "workforce" ? applicantMap.get(item.profile_id) : isNonEmployeeProfileType(item.profile_type) ? exitProfileMap.get(`${item.profile_type}:${item.profile_id}`) : null; return <article className="card workforce-lifecycle-card" key={item.id}>
         <header><div><small>{title(item.profile_type)} · {title(item.case_type)}</small><h2>{person?.full_name || "Workforce profile"}</h2><p>{person?.dropx_id ? `${person.dropx_id} · ` : ""}Requested last day {item.requested_effective_date} · {title(item.reason_code)}</p></div><span className={`status ${item.status}`}>{title(item.status)}</span></header>
         {item.reason_details ? <p>{item.reason_details}</p> : null}
         {canEdit && ["submitted", "under_review"].includes(item.status) ? <form action={reviewWorkforceExit} className="workforce-decision-form"><input name="case_id" type="hidden" value={item.id} /><label>Decision remarks<textarea name="remarks" required /></label><div className="form-actions"><button className="button danger" name="review_action" type="submit" value="reject">Reject exit</button><button className="button" name="review_action" type="submit" value="approve">Approve for settlement</button></div></form> : null}

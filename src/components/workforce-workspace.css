@@ -1,0 +1,13 @@
+.wf-workspace-nav{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:20px;border-bottom:1px solid #dfe5ed;padding-bottom:12px;font-size:13px}
+.wf-workspace-nav>a,.wf-workspace-nav summary{padding:9px 12px;border-radius:8px;color:#506079;text-decoration:none;cursor:pointer}
+.wf-workspace-nav>a.active{color:#b94319;background:#fff0e8;font-weight:650}
+.wf-workspace-nav details{position:relative;margin-left:auto}.wf-workspace-nav summary{display:flex;align-items:center;gap:8px;list-style:none}
+.wf-workspace-nav details>div{position:absolute;right:0;top:100%;background:white;border:1px solid #dfe5ed;border-radius:12px;box-shadow:0 8px 25px #18233b1a;padding:8px;min-width:235px;z-index:25}
+.wf-workspace-nav details>div>a{display:block;padding:10px;border-radius:7px;color:#34445d;text-decoration:none}.wf-workspace-nav a:hover{background:#f1f4f8}
+.wf-station-context{display:flex;align-items:end;flex-wrap:wrap;gap:10px;margin:18px 0}.wf-station-context label{display:grid;gap:5px;font-size:12px}.wf-station-context select{min-width:180px;padding:10px;border:1px solid #dfe5ed;border-radius:8px;background:#fff}
+.wf-journey-nav{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}.wf-journey-nav a{border:1px solid #dfe5ed;background:white;padding:10px 14px;border-radius:9px;font-size:13px;color:#44516a;text-decoration:none}.wf-journey-nav a[aria-current=page]{background:#1f2b43;color:white;border-color:#1f2b43}.wf-journey-nav strong{margin-left:8px}
+.wf-profile-progress{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}.wf-profile-progress>div{background:#f5f7fa;border-radius:9px;padding:12px;font-size:13px}.wf-profile-progress small{display:block;color:#66758b;margin-bottom:5px}.wf-profile-progress strong{display:block;overflow-wrap:anywhere}
+.workforce-product .workforce-lifecycle-grid{grid-template-columns:minmax(0,1fr)}.workforce-product .wf-simple-setup{margin:0;padding:18px;border-top:1px solid #e4e9f0;min-width:0}.workforce-product .workforce-lifecycle-tabs{flex-wrap:wrap}.workforce-product .workforce-lifecycle-facts{grid-template-columns:repeat(4,minmax(0,1fr))}
+.workforce-product .wf-action-lane>div{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}.workforce-product details.wf-workspace-directory>summary{padding:16px;cursor:pointer;font-weight:650}
+@media(max-width:680px){.workforce-product .workforce-lifecycle-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.wf-station-context{align-items:stretch}}
+@media(max-width:680px){.wf-profile-progress{grid-template-columns:repeat(2,minmax(0,1fr))}.wf-workspace-nav{gap:3px}.wf-workspace-nav>a{padding:8px;font-size:12px}.wf-journey-nav{gap:6px}.wf-journey-nav a{padding:8px 10px}}

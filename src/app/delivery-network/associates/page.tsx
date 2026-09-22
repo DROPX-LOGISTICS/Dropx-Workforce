@@ -7,6 +7,10 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
 import type { RegisterDesignation } from "@/lib/workforce-register-designations";
+import {loadWorkforceJoining} from '@/lib/workforce-joining-data';
+import {joiningState, joiningStages} from '@/lib/workforce-joining';
+import {workforceToday} from '@/lib/workforce-earnings';
+import {workforceRegisterViewMatches} from '@/lib/workforce-register-views';
 import {
   loadWorkforceCommunicationRecipients,
   type WorkforceCommunicationRecipient
@@ -21,18 +25,21 @@ function profileHref(record: WorkforceCommunicationRecipient, mode: "edit" | "vi
   return undefined;
 }
 
-export default async function WorkforceAssociatesPage({searchParams={}}:{searchParams?:{view?:string}}) {
+export default async function WorkforceAssociatesPage({searchParams={}}:{searchParams?:{view?:string;station?:string}}) {
   const authorization = await requirePagePermission("delivery_associates", "access");
   const companyId = requireCompanyId(authorization);
   const canAdd = hasPermission(authorization, "delivery_associates", "add");
   const canEdit = hasPermission(authorization, "delivery_associates", "edit");
   let records: WorkforceCommunicationRecipient[] = [];
   let designations: RegisterDesignation[] = [];
-  const mappedSourceIds = new Set<string>();
   let error: string | null = null;
+  const stages = new Map<string,string>();
 
   try {
-    records = await loadWorkforceCommunicationRecipients(authorization);
+    const [recipients, joining] = await Promise.all([loadWorkforceCommunicationRecipients(authorization), loadWorkforceJoining(authorization,{to:workforceToday()})]);
+    records = recipients;
+    const plans = new Map(joining.plans.map(plan=>[plan.workforce_id,plan]));
+    for(const person of joining.profiles) stages.set(person.id,joiningState(person,plans.get(person.id)??null,joining.mappings,joining.attendance,workforceToday()).stage);
     if (supabaseAdmin) {
       const result = await supabaseAdmin.from("designations")
         .select("id, code, name, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active)")
@@ -40,30 +47,16 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
       if (result.error) throw new Error(result.error.message);
       designations = (result.data ?? []).filter(item => firstDesignationBusinessCategory(item.designation_category)?.people_module === "delivery_network")
         .map(({ id, code, name }) => ({ id, code, name }));
-      let mappingQuery = supabaseAdmin
-        .from("field_executive_provider_mappings")
-        .select("workforce_id, field_executive_id, contractor_id")
-        .eq("company_id", companyId)
-        .is("effective_to", null);
-      if (!authorization.hasAllLocationAccess) {
-        mappingQuery = mappingQuery.in("station_id", authorization.locationScopeIds.length
-          ? authorization.locationScopeIds
-          : ["00000000-0000-0000-0000-000000000000"]);
-      }
-      const mappingResult = await mappingQuery;
-      if (mappingResult.error) throw new Error(mappingResult.error.message);
-      for (const mapping of mappingResult.data ?? []) {
-        if (mapping.workforce_id) mappedSourceIds.add(`workforce:${mapping.workforce_id}`);
-        if (mapping.field_executive_id) mappedSourceIds.add(`field_executive:${mapping.field_executive_id}`);
-        if (mapping.contractor_id) mappedSourceIds.add(`contractor:${mapping.contractor_id}`);
-      }
     }
   } catch (loadError) {
     error = loadError instanceof Error ? loadError.message : "Unable to load the Workforce register.";
   }
 
-  const approvedRecords = records.filter(record=>["active","approved"].includes(record.status.toLowerCase()));
-  const displayedRecords = searchParams.view==="approved" ? approvedRecords : approvedRecords.filter(record=>record.isActive && record.status.toLowerCase()==="active");
+  const stationRecords = records.filter(record=>!searchParams.station || record.location===searchParams.station);
+  const view = ['active','joining','training','offboarded','closed','all','approved'].includes(searchParams.view||'')?searchParams.view!:'active';
+  const stageFor = (record:WorkforceCommunicationRecipient)=>stages.get(record.accountId) || (record.isActive&&record.status.toLowerCase()==='active'?'active':'applicant');
+  const viewMatches = (record:WorkforceCommunicationRecipient,key:string)=>workforceRegisterViewMatches(key,stageFor(record),record.status);
+  const displayedRecords = stationRecords.filter(record=>viewMatches(record,view));
   const rows: FieldExecutiveListRow[] = displayedRecords.map((record) => ({
     id: `${record.profileType}:${record.accountId}`,
     dropxId: record.reference || "ID pending",
@@ -76,28 +69,21 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
     model: record.model || "-",
     designation: record.designation || "-",
     isActive: record.isActive,
-    status: record.status,
+    status: stageFor(record)==='applicant'?record.status:joiningStages[stageFor(record) as keyof typeof joiningStages]||record.status,
     canEdit,
     viewHref: record.profileType==='workforce'&&hasPermission(authorization,'people_review','access')?`/delivery-network/lifecycle?tab=${record.status.toLowerCase()==='active'?'active':'onboarding'}&person=${record.accountId}`:profileHref(record, "view"),
     editHref: profileHref(record, "edit"),
     paymentsHref: record.profileType === 'workforce' && hasPermission(authorization, 'people_review', 'access') && hasPermission(authorization, 'provider_mapping', 'access')
       ? `/delivery-network/lifecycle?tab=${record.status.toLowerCase() === 'active' ? 'active' : 'onboarding'}&person=${record.accountId}&section=payments` : undefined
   }));
-  const pending = records.filter((record) => !["active", "rejected", "cancelled"].includes(record.status.toLowerCase())).length;
-  const protectedRegistrations = records.filter((record) => record.profileType === "workforce").length;
-  const paymentLinked = records.filter((record) => (
-    record.profileType === "workforce"
-      ? mappedSourceIds.has(`workforce:${record.accountId}`) || mappedSourceIds.has(`contractor:${record.accountId}`) || mappedSourceIds.has(`field_executive:${record.accountId}`)
-      : mappedSourceIds.has(`${record.profileType}:${record.accountId}`)
-  )).length;
 
   return (
     <AppShell active="Workforce Register" pageCode="delivery_associates">
       <PageHead
         eyebrow="Workforce"
-        title="Workforce Register"
-        subtitle="Find an associate. Open their profile or configure payments."
-        action={canAdd ? <PendingLink className="button compact" href="/delivery-network/onboarding">Onboard workforce</PendingLink> : null}
+        title="Associates"
+        subtitle="One profile for registration, training, IDs, payments and exit."
+        action={canAdd ? <PendingLink className="button compact" href="/delivery-network/onboarding">Invite associate</PendingLink> : null}
       />
 
       {error ? (
@@ -106,17 +92,15 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
         </section>
       ) : null}
 
-      <section className="performance-summary-grid">
-        <article><span>Total workforce</span><strong>{records.length}</strong><small>Designation-master classified profiles</small></article>
-        <article><span>Open registration</span><strong>{pending}</strong><small>Pending, submitted or under review</small></article>
-        <article><span>Registration protected</span><strong>{protectedRegistrations}</strong><small>Existing DropX One identities remain active</small></article>
-        <article><span>Payment linked</span><strong>{paymentLinked}</strong><small>Mapped to the existing rate and payment engine</small></article>
-      </section>
-
-      <nav className="form-actions" aria-label="Workforce register views">
-        <PendingLink className="button secondary compact" href="/delivery-network/associates">Active workforce ({approvedRecords.filter(record=>record.isActive && record.status.toLowerCase()==="active").length})</PendingLink>
-        <PendingLink className="button secondary compact" href="/delivery-network/associates?view=approved">All approved records ({approvedRecords.length})</PendingLink>
-        <PendingLink className="button compact" href="/delivery-network/joining">Applicants, training & activation →</PendingLink>
+      <form method="get" className="wf-station-context">
+        <input type="hidden" name="view" value={view}/>
+        <label>Station<select name="station" defaultValue={searchParams.station||''}><option value="">All stations</option>{[...new Set(records.map(record=>record.location).filter(Boolean))].sort().map(station=><option key={station}>{station}</option>)}</select></label>
+        <button className="button secondary compact">Apply</button>
+        {hasPermission(authorization,'workforce_earnings','access')?<PendingLink className="button secondary compact" href={`/delivery-network/earnings?station=${encodeURIComponent(searchParams.station||'')}`}>View station earnings →</PendingLink>:null}
+        {hasPermission(authorization,'people_review','access')?<PendingLink className="button secondary compact" href="/delivery-network/lifecycle?tab=exits">Exit & settlement queue</PendingLink>:null}
+      </form>
+      <nav className="wf-journey-nav" aria-label="Workforce register views">
+        {[['active','Active'],['joining','Joining & review'],['training','Training'],['offboarded','Offboarded'],['closed','Closed'],['all','All']].map(([key,label])=><PendingLink key={key} aria-current={view===key?'page':undefined} href={`/delivery-network/associates?view=${key}&station=${encodeURIComponent(searchParams.station||'')}`}>{label}<strong>{stationRecords.filter(record=>viewMatches(record,key)).length}</strong></PendingLink>)}
       </nav>
       <FieldExecutiveList
         basePath="/delivery-network/associates"
@@ -125,8 +109,10 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
         rows={rows}
         designationSwitches={designations}
         directProfileLinks
+        hideLocationFilter
+        key={`${view}:${searchParams.station||''}`}
         showActions={!error}
-        title={searchParams.view==="approved" ? "Approved Workforce records" : "Active Workforce members"}
+        title="Associate register"
       />
     </AppShell>
   );

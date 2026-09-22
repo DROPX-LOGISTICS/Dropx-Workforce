@@ -1,7 +1,7 @@
 import type { AuthorizationContext } from "@/lib/authorization";
 
 export type NavItem = {
-  children?: Array<{ code?: string; href?: string; label: string }>;
+  children?: Array<{ code?: string; href?: string; label: string; secondary?: boolean }>;
   code: string;
   href?: string;
   icon: string;
@@ -119,49 +119,44 @@ export const workforceNavItems: NavItem[] = [
   { code: "delivery_associates", label: "Workforce Dashboard", href: "/delivery-network", icon: "WR" },
   {
     code: "delivery_associates",
-    label: "People & work",
+    label: "Associates",
     icon: "DA",
     children: [
       { code: "delivery_associates", label: "Workforce Register", href: "/delivery-network/associates" },
-      { code: "delivery_associates", label: "Invite associate", href: "/delivery-network/onboarding" },
-      { code: "people_review", label: "Onboarding & review", href: "/delivery-network/lifecycle" },
+      { code: "delivery_associates", label: "Invite associate", href: "/delivery-network/onboarding", secondary: true },
+      { code: "people_review", label: "Onboarding & review", href: "/delivery-network/lifecycle", secondary: true },
+      { code: "delivery_associates", label: "Joining & Training", href: "/delivery-network/joining", secondary: true },
+      { code: "executive_id_onboarding", label: "Provider ID Onboarding", href: "/delivery-network/id-onboarding", secondary: true },
+      { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping", secondary: true },
+      { code: "delivery_associates", label: "Need Attention", href: "/delivery-network/attention", secondary: true }
+    ]
+  },
+  {
+    code: "workforce_activity",
+    label: "Attendance & routes",
+    icon: "ID",
+    children: [
       { code: "workforce_activity", label: "Attendance & Activity", href: "/delivery-network/activity" },
       { code: "workforce_activity", label: "Roster & Route Planning", href: "/delivery-network/associate-rostering" }
     ]
   },
   {
-    code: "provider_mapping",
-    label: "IDs & rates",
-    icon: "ID",
-    children: [
-      { code: "executive_id_onboarding", label: "Provider ID Onboarding", href: "/delivery-network/id-onboarding" },
-      { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping" },
-      { code: "workforce_rate_cards", label: "Rate Cards", href: "/delivery-network/rate-cards" }
-    ]
-  },
-  { code: "delivery_associates", label: "Need Attention", href: "/delivery-network/attention", icon: "!" },
-  {
     code: "workforce_earnings",
-    label: "Pay & settlements",
+    label: "Payments",
     icon: "₹",
     children: [
       { code: "workforce_earnings", label: "Live Earnings", href: "/delivery-network/earnings" },
       { code: "workforce_payroll", label: "Payouts", href: "/delivery-network/payroll" },
       { code: "workforce_adjustments", label: "Disputes & corrections", href: "/delivery-network/payout-review" },
-      { code: "workforce_adjustments", label: "Adjustments & holds", href: "/delivery-network/adjustments" },
-      { code: "workforce_payroll", label: "Payment history", href: "/delivery-network/payment-ledger" }
+      { code: "workforce_adjustments", label: "Adjustments & holds", href: "/delivery-network/adjustments", secondary: true },
+      { code: "workforce_payroll", label: "Payment history", href: "/delivery-network/payment-ledger", secondary: true }
     ]
   },
   {
     code: "workforce_earnings",
     label: "Reports",
     icon: "RP",
-    children: [
-      { code: "workforce_earnings", label: "Workforce Reports", href: "/delivery-network/reports" },
-      { code: "workforce_earnings", label: "Daily Earnings", href: "/delivery-network/reports?report=earnings" },
-      { code: "workforce_earnings", label: "Payment Register", href: "/delivery-network/reports?report=payments" },
-      { code: "workforce_earnings", label: "Mapping & Rate Exceptions", href: "/delivery-network/reports?report=exceptions" }
-    ]
+    href: "/delivery-network/reports"
   },
   {
     code: "workforce_communications",
@@ -171,35 +166,29 @@ export const workforceNavItems: NavItem[] = [
       { code: "workforce_communications", label: "Workforce Connect Centre", href: "/delivery-network/communications" },
       { code: "workforce_communications", label: "Workforce support desk", href: "/delivery-network/connect" },
       { code: "workforce_speak_up", label: "Confidential Speak Up", href: "/delivery-network/speak-up" },
-      { code: "workforce_communications_app", label: "DropX One Notifications", href: "/delivery-network/communications/dropx-one" },
-      { code: "workforce_communications_whatsapp", label: "WhatsApp", href: "/delivery-network/communications/whatsapp" },
-      { code: "workforce_communications_history", label: "Communication History", href: "/delivery-network/communications/history" }
-    ]
-  },
-  {
-    code: "users",
-    label: "Access",
-    icon: "UA",
-    children: [
-      { code: "users", label: "Users & Access", href: "/users?section=users" },
-      { code: "users", label: "User Roles", href: "/users?section=roles" }
+      { code: "workforce_communications_app", label: "DropX One Notifications", href: "/delivery-network/communications/dropx-one", secondary: true },
+      { code: "workforce_communications_whatsapp", label: "WhatsApp", href: "/delivery-network/communications/whatsapp", secondary: true },
+      { code: "workforce_communications_history", label: "Communication History", href: "/delivery-network/communications/history", secondary: true }
     ]
   },
   {
     code: "designations",
-    label: "Configuration",
+    label: "Settings",
     icon: "WM",
     children: [
-      { code: "people_review", label: "Setup Checklist", href: "/delivery-network/setup" },
+      { code: "workforce_rate_cards", label: "Rate Cards", href: "/delivery-network/rate-cards" },
+      { code: "people_review", label: "Setup Checklist", href: "/delivery-network/setup", secondary: true },
       { code: "people_review", label: "Station training defaults", href: "/delivery-network/training-policies" },
-      { code: "executive_id_onboarding", label: "Amazon station defaults", href: "/delivery-network/amazon-onboarding-settings" },
+      { code: "executive_id_onboarding", label: "Amazon station defaults", href: "/delivery-network/amazon-onboarding-settings", secondary: true },
       { code: "workforce_payroll", label: "Payout calendars", href: "/delivery-network/payroll-calendars" },
-      { code: "workforce_incentives", label: "Incentive rules", href: "/delivery-network/incentives" },
-      { code: "amazon_connector", label: "Amazon Connection", href: "/settings/amazon-onboarding" },
-      { code: "workforce_categories", label: "Registration Policies", href: "/delivery-network/engagement-types" },
-      { code: "designations", label: "Workforce Designations", href: "/delivery-network/designations" },
-      { code: "designations", label: "DropX One User Preview", href: "/delivery-network/dropx-one-preview" },
-      { code: "designations", label: "Designation Routing", href: "/delivery-network/designation-routing" }
+      { code: "workforce_incentives", label: "Incentive rules", href: "/delivery-network/incentives", secondary: true },
+      { code: "amazon_connector", label: "Amazon Connection", href: "/settings/amazon-onboarding", secondary: true },
+      { code: "workforce_categories", label: "Registration Policies", href: "/delivery-network/engagement-types", secondary: true },
+      { code: "designations", label: "Workforce Designations", href: "/delivery-network/designations", secondary: true },
+      { code: "designations", label: "DropX One User Preview", href: "/delivery-network/dropx-one-preview", secondary: true },
+      { code: "designations", label: "Designation Routing", href: "/delivery-network/designation-routing", secondary: true },
+      { code: "users", label: "Users & Access", href: "/users?section=users", secondary: true },
+      { code: "users", label: "User Roles", href: "/users?section=roles", secondary: true }
     ]
   }
 ];

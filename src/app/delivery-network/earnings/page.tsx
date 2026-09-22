@@ -109,8 +109,8 @@ export default async function WorkforceEarningsPage({ searchParams = {} }: { sea
       <section className="wf-finance-hero">
         <div>
           <span>Live earning engine</span>
-          <h1>Every shipment to payable earnings</h1>
-          <p>Current accruals are rebuilt from shipment counts, transitioned Workforce ID mappings, approved rate cards, incentive campaigns and approved adjustments.</p>
+          <h1>Station earnings</h1>
+          <p>Choose a station and period. Review each associate’s earnings or change their payment setup.</p>
           <div className="wf-source-freshness"><i /> {snapshot.latestSourceUpdate ? `Source refreshed ${new Date(snapshot.latestSourceUpdate).toLocaleString("en-IN")}` : "Waiting for a shipment source update"}</div>
         </div>
         <div className="wf-finance-actions">
@@ -167,7 +167,7 @@ export default async function WorkforceEarningsPage({ searchParams = {} }: { sea
               <td>{summary.stationCode}</td><td>{summary.workDays}</td><td>{number(summary.shipmentCount)}</td>
               <td>{money(summary.baseAmount)}</td><td>{money(summary.incentiveAmount)}</td><td>{money(summary.earningAdjustments)}</td><td>{money(summary.deductions)}</td><td><strong>{money(summary.netAmount)}</strong></td>
               <td><span className={`wf-pay-state ${summary.status}`}>{summary.status}</span>{summary.holdReasons.length ? <small>{summary.holdReasons.join(" · ")}</small> : null}</td>
-              <td><PendingLink className="wf-breakup-link" href={href(params, { view: "trace", q: summary.dropxId })}>Breakup</PendingLink></td>
+              <td><PendingLink className="wf-breakup-link" href={href(params, { view: "trace", q: summary.dropxId })}>Breakup</PendingLink>{hasPermission(authorization,'people_review','access')?<PendingLink className="wf-breakup-link" href={`/delivery-network/lifecycle?person=${summary.workforceId}&section=payments`}>Payment setup</PendingLink>:null}</td>
             </tr>)}
             {!visibleSummaries.length ? <tr><td className="empty-cell" colSpan={11}>No associate earnings match these filters.</td></tr> : null}
           </tbody></table></div>

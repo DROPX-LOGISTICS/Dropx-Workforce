@@ -19,6 +19,8 @@ import {
 import { EventLogTracker } from "@/components/event-log-tracker";
 import { PendingLink } from "@/components/pending-link";
 import type { NavItem } from "@/lib/app-navigation";
+import {activeWorkspace, workspaceDestination} from '@/lib/workforce-workspace-navigation';
+import './workforce-workspace.css';
 
 type WorkforceProductFrameProps = {
   active: string;
@@ -64,13 +66,13 @@ function iconFor(item: NavItem) {
 export function WorkforceProductFrame({ active, actions, children, items }: WorkforceProductFrameProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const activeGroup = items.find((item) => item.children?.some((child) => child.label === active))?.label ?? null;
-  const [expandedGroup, setExpandedGroup] = useState<string | null>(activeGroup);
+  const workspace = activeWorkspace(items, pathname, active);
+  const primary = workspace?.children?.filter(item=>!item.secondary) ?? [];
+  const secondary = workspace?.children?.filter(item=>item.secondary) ?? [];
 
   useEffect(() => {
     setMobileOpen(false);
-    setExpandedGroup(activeGroup);
-  }, [activeGroup, pathname]);
+  }, [pathname]);
 
   useEffect(() => {
     document.body.classList.toggle("workforce-mobile-open", mobileOpen);
@@ -108,16 +110,15 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
         <nav className="wf-left-navigation" aria-label="Workforce navigation">
           {items.map((item) => {
             const NavigationIcon = iconFor(item);
-            const directActive = item.label === active;
-            const childActive = item.children?.some((child) => child.label === active) ?? false;
-            const expanded = expandedGroup === item.label;
+            const directActive = item === workspace;
+            const destination = workspaceDestination(item);
 
-            if (item.href) {
+            if (destination) {
               return (
                 <PendingLink
                   aria-current={directActive ? "page" : undefined}
                   className={`wf-left-direct ${directActive ? "active" : ""}`.trim()}
-                  href={item.href}
+                  href={destination}
                   key={item.label}
                 >
                   <NavigationIcon aria-hidden="true" size={16} />
@@ -126,36 +127,7 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
               );
             }
 
-            return (
-              <section className={childActive ? "active" : ""} key={item.label}>
-                <button
-                  aria-expanded={expanded}
-                  aria-controls={`wf-nav-${item.code}`}
-                  className="wf-left-group-label"
-                  onClick={() => setExpandedGroup((current) => current === item.label ? null : item.label)}
-                  type="button"
-                >
-                  <NavigationIcon aria-hidden="true" size={15} />
-                  <span>{item.label}</span>
-                  <ChevronDown aria-hidden="true" className={`wf-left-group-chevron ${expanded ? "open" : ""}`.trim()} size={12} />
-                </button>
-                {expanded ? (
-                  <div className="wf-left-children" id={`wf-nav-${item.code}`}>
-                    {item.children?.map((child) => child.href ? (
-                      <PendingLink
-                        aria-current={active === child.label ? "page" : undefined}
-                        className={active === child.label ? "active" : ""}
-                        disableWhenCurrent
-                        href={child.href}
-                        key={child.label}
-                      >
-                        {child.label}
-                      </PendingLink>
-                    ) : null)}
-                  </div>
-                ) : null}
-              </section>
-            );
+            return null;
           })}
         </nav>
 
@@ -184,7 +156,13 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
         </header>
 
         <main className="wf-product-main">
-          <div className="wf-product-content">{children}</div>
+          <div className="wf-product-content">
+            {workspace?.children?.length ? <nav className="wf-workspace-nav" aria-label={`${workspace.label} workspace`}>
+              {primary.map(child=><PendingLink key={child.label} href={child.href!} className={pathname===child.href?.split('?')[0]?'active':''}>{child.label}</PendingLink>)}
+              {secondary.length ? <details key={pathname}><summary>More tools <ChevronDown size={14}/></summary><div>{secondary.map(child=><PendingLink key={child.label} href={child.href!}>{child.label}</PendingLink>)}</div></details>:null}
+            </nav>:null}
+            {children}
+          </div>
         </main>
       </div>
     </div>

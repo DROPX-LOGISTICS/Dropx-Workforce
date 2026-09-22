@@ -168,11 +168,8 @@ export default async function DeliveryNetworkPage() {
     }
   ].filter((module) => hasPermission(authorization, module.code, "access"));
   const lifecycleStages = [
-    { code: "delivery_associates", href: "/delivery-network/onboarding", label: "Register & verify", helper: "Profile, documents, bank details and engagement", icon: UserRoundPlus },
-    { code: "delivery_associates", href: "/delivery-network/joining", label: "Train & prepare", helper: "Agreed training terms, biometric arrival and provider tasks", icon: Clock3 },
-    { code: "provider_mapping", href: "/delivery-network/rate-mapping", label: "Map own ID & rates", helper: "Verified provider ID, effective date and agreed commercial terms", icon: Fingerprint },
-    { code: "workforce_earnings", href: "/delivery-network/earnings", label: "Reconcile daily work", helper: "Attendance, source shipments and earning exceptions", icon: CircleDollarSign },
-    { code: "workforce_adjustments", href: "/delivery-network/adjustments", label: "Control exceptions", helper: "Ad hoc additions and deductions with approval", icon: ShieldCheck },
+    { code: "delivery_associates", href: "/delivery-network/associates?view=joining", label: "Join & set up", helper: "One profile: registration, optional training, ID and pay", icon: UserRoundPlus },
+    { code: "workforce_earnings", href: "/delivery-network/earnings", label: "Review earnings", helper: "Station totals, daily activity and deductions", icon: CircleDollarSign },
     { code: "workforce_payroll", href: "/delivery-network/payroll", label: "Payroll → Finance", helper: "Confirm payroll; Finance approves and processes payment", icon: Banknote }
   ].filter((stage) => hasPermission(authorization, stage.code, "access"));
 
@@ -218,7 +215,7 @@ export default async function DeliveryNetworkPage() {
       </section>
 
       <section className="wf-lifecycle-map wf-action-lane">
-        <header><div><small>Move work forward</small><h2>One action lane, not scattered modules</h2></div><span>{lifecycleStages.length} guarded stages</span></header>
+        <header><div><small>Daily workflow</small><h2>Set up. Review. Pay.</h2></div></header>
         <div>
           {lifecycleStages.map((stage, index) => {
             const StageIcon = stage.icon;
@@ -240,12 +237,12 @@ export default async function DeliveryNetworkPage() {
             <div><span>Resolve now</span><h2>Priority queues</h2></div>
           </header>
           <div className="wf-desk-actions">
-            <PendingLink href="/delivery-network/onboarding">
+            <PendingLink href="/delivery-network/associates?view=joining">
               <span><UserRoundPlus size={18} /></span>
               <div><strong>Registration desk</strong><small>{overview?`${pending+underReview} applications need progress`:'Registration counts unavailable'}</small></div>
               <ArrowRight size={17} />
             </PendingLink>
-            <PendingLink href="/delivery-network/joining">
+            <PendingLink href="/delivery-network/associates?view=training">
               <span><Clock3 size={18}/></span><div><strong>Joining &amp; training desk</strong><small>{overview?`${joiningOpen} profiles between approval and field work`:'Review arrival, training and own-ID activation'}</small></div><ArrowRight size={17}/>
             </PendingLink>
             {hasPermission(authorization, "executive_id_onboarding", "access") ? <PendingLink href="/delivery-network/id-onboarding">
@@ -271,9 +268,7 @@ export default async function DeliveryNetworkPage() {
           </div>
         </section>
       </div>
-      <p className="subtle">{legacyRegistrationCount} migrated registration pathways remain protected. Lifecycle totals count canonical Workforce profiles; provider mappings and payment records are separate.</p>
-
-      <section className="wf-workspace-directory">
+      <details className="wf-workspace-directory"><summary>Additional operational tools</summary><section>
         <header>
           <div><span>Workforce tools</span><h2>Operational workspaces</h2></div>
           {hasPermission(authorization, "designations", "access") ? (
@@ -294,7 +289,7 @@ export default async function DeliveryNetworkPage() {
             );
           })}
         </div>
-      </section>
+      </section></details>
     </AppShell>
   );
 }

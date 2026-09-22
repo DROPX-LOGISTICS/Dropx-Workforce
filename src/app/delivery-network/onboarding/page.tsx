@@ -95,10 +95,10 @@ export default async function WorkforceOnboardingHubPage() {
   return (
     <AppShell active="Onboard Workforce" pageCode="delivery_associates">
       <PageHead
-        action={<PendingLink className="button secondary compact" href="/delivery-network/joining">Joining & Training desk <ArrowRight size={15}/></PendingLink>}
+        action={<PendingLink className="button secondary compact" href="/delivery-network/associates?view=joining">Track invitations <ArrowRight size={15}/></PendingLink>}
         eyebrow="Workforce onboarding"
-        title="Choose the right onboarding journey"
-        subtitle="The designation master decides what belongs here. Associates, ground support and fleet partners are kept separate from People / HR while sharing one Workforce lifecycle."
+        title="Invite an associate"
+        subtitle="Choose the role group. They register in DropX One; continue setup in their Workforce profile."
       />
 
       {error ? <section className="panel message-panel error"><div className="panel-body"><strong>Action required</strong><p className="subtle">{error}</p></div></section> : null}
@@ -120,6 +120,8 @@ export default async function WorkforceOnboardingHubPage() {
           <PendingLink className="wf-journey-action" href="/delivery-network/onboarding/operations">Open partner onboarding <ArrowRight size={15} /></PendingLink>
         </article>
 
+      </section>
+      <details className="wf-onboarding-compatibility"><summary>Existing invitations & registration safeguards</summary><section>
         <article className="protected">
           <header><span><ShieldCheck size={18} /></span><div><small>Transition protection</small><h2>Existing mobile invitations</h2></div></header>
           <p>Invitations already sent through the earlier flow continue on the same profile ID, now resolved through the canonical Workforce register.</p>
@@ -150,7 +152,7 @@ export default async function WorkforceOnboardingHubPage() {
         <article><Building2 size={17} /><div><strong>People / HR isolation</strong><small>HR-classified designations never appear in these journeys or Workforce registers.</small></div></article>
         <article><ShieldCheck size={17} /><div><strong>Registration continuity</strong><small>Existing tokens, drafts and mobile submissions resolve to the same canonical Workforce identity.</small></div></article>
         <article><Route size={17} /><div><strong>One lifecycle</strong><small>Registration, review, provider ID, rates, communication and exit stay connected.</small></div></article>
-      </section>
+      </section></details>
     </AppShell>
   );
 }

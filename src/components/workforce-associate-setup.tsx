@@ -42,6 +42,7 @@ export async function WorkforceAssociateSetup({auth,id,dateOfJoin,tab,section='p
   </>:null}
   {section==='training'?<>
   <header><h3>Training & ID progress</h3><p>Use station biometrics. Skip training for direct joining.</p></header>
+  {!plan?<p role="status">No training terms saved. Existing provider mappings and payments are unchanged.</p>:null}
   <p>Biometric ID: <strong>{person.biometric_id||'Enrol at station on day one'}</strong></p>
   {['approved','active'].includes(person.onboarding_status||'')?<>
    <form action={saveReviewTerms} className="wf-simple-fields">

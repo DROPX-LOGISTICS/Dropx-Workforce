@@ -13,10 +13,12 @@ type PendingLinkProps = {
   scroll?: boolean;
   title?: string;
   "aria-label"?: string;
+  "aria-current"?: "page";
 };
 
 export function PendingLink({
   "aria-label": ariaLabel,
+  "aria-current": ariaCurrent,
   children,
   className,
   disableWhenCurrent = false,
@@ -54,7 +56,7 @@ export function PendingLink({
   return (
     <Link
       aria-label={ariaLabel}
-      aria-current={isCurrent ? "page" : undefined}
+      aria-current={ariaCurrent ?? (isCurrent ? "page" : undefined)}
       aria-disabled={isCurrent ? true : undefined}
       className={`${className ?? ""} ${loading ? "loading" : ""} ${isCurrent ? "current disabled-current" : ""}`.trim()}
       href={href}

@@ -245,16 +245,6 @@ export default async function DeliveryNetworkPage() {
             <PendingLink href="/delivery-network/associates?view=training">
               <span><Clock3 size={18}/></span><div><strong>Joining &amp; training desk</strong><small>{overview?`${joiningOpen} profiles between approval and field work`:'Review arrival, training and own-ID activation'}</small></div><ArrowRight size={17}/>
             </PendingLink>
-            {hasPermission(authorization, "executive_id_onboarding", "access") ? <PendingLink href="/delivery-network/id-onboarding">
-              <span><Fingerprint size={18} /></span>
-              <div><strong>Provider ID desk</strong><small>Complete transporter and provider activation</small></div>
-              <ArrowRight size={17} />
-            </PendingLink> : null}
-            {hasPermission(authorization, "provider_mapping", "access") ? <PendingLink href="/delivery-network/rate-mapping">
-              <span><WalletCards size={18} /></span>
-              <div><strong>Rate readiness</strong><small>{mappingCount} active payout mappings</small></div>
-              <ArrowRight size={17} />
-            </PendingLink> : null}
             {hasPermission(authorization, "workforce_earnings", "access") ? <PendingLink href="/delivery-network/earnings">
               <span><CircleDollarSign size={18} /></span>
               <div><strong>Live earnings desk</strong><small>{financeSnapshot.heldWorkers + financeSnapshot.exceptions.length} blockers before payroll</small></div>

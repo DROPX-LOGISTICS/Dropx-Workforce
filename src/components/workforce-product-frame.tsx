@@ -9,6 +9,7 @@ import {
   Fingerprint,
   LayoutDashboard,
   Menu,
+  ListTree,
   MessageSquareMore,
   ReceiptIndianRupee,
   Settings2,
@@ -35,6 +36,7 @@ const navigationIcons: Record<string, typeof LayoutDashboard> = {
   workforce_earnings: ReceiptIndianRupee,
   workforce_communications: MessageSquareMore,
   users: ShieldCheck,
+  payment_methods: ListTree,
   designations: Settings2
 };
 

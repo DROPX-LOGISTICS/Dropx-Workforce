@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:connect": "next dev apps/connect",
-    "prebuild": "node --test scripts/test-middleware-auth.mjs && node scripts/verify-contractor-schema-boundary.mjs && node scripts/verify-designation-profile-destination.mjs && node scripts/verify-workforce-registration-policy.mjs && node scripts/verify-workforce-designation-isolation.mjs && node scripts/verify-product-access-cutover.mjs && node scripts/verify-people-classification-boundary.mjs && node scripts/verify-portal-preview.mjs && pnpm exec tsx --test src/lib/workforce-register-designations.test.mjs && pnpm run test:workforce",
+    "prebuild": "node --test scripts/test-payment-method-master.mjs scripts/test-middleware-auth.mjs && pnpm exec tsx --test src/lib/payment-method-input.test.mjs src/lib/workforce-workspace-navigation.test.mjs && node scripts/verify-contractor-schema-boundary.mjs && node scripts/verify-designation-profile-destination.mjs && node scripts/verify-workforce-registration-policy.mjs && node scripts/verify-workforce-designation-isolation.mjs && node scripts/verify-product-access-cutover.mjs && node scripts/verify-people-classification-boundary.mjs && node scripts/verify-portal-preview.mjs && pnpm exec tsx --test src/lib/workforce-register-designations.test.mjs && pnpm run test:workforce",
     "test:workforce-finance": "tsx --test src/lib/workforce-earnings.test.mjs",
     "test:workforce-recipients": "tsx --test src/lib/workforce-communication-recipients.test.mjs",
     "build": "next build",

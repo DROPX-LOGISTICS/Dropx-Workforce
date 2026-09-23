@@ -1,17 +1,18 @@
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
-import { PaymentMethodForm } from "@/components/payment-method-form";
+import { PaymentMethodForm, type PaymentFieldOption } from "@/components/payment-method-form";
 import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
 import { PendingLink } from "@/components/pending-link";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
-import { isSupabaseAdminConfigured, supabaseAdmin } from "@/lib/supabase-admin";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createPaymentMethod, deletePaymentMethod, updatePaymentMethod } from "./actions";
 import { cookies } from "next/headers";
 
 type PaymentComponentRow = {
   id: string;
+  payment_field_id: string;
   component_code: string;
   component_type: "amount" | "production";
   label: string;
@@ -46,6 +47,7 @@ async function loadPaymentMethods(companyId: string) {
       is_active,
       payment_method_components (
         id,
+        payment_field_id,
         component_code,
         component_type,
         label,
@@ -59,17 +61,14 @@ async function loadPaymentMethods(companyId: string) {
 
   if (error) return { methods: [] as PaymentMethodRow[], error: error.message };
 
-  const usageResult = await supabaseAdmin
-    .from("field_executive_provider_mappings")
-    .select("payment_method_id")
-    .eq("company_id", companyId);
-  if (usageResult.error) return { methods: [] as PaymentMethodRow[], error: usageResult.error.message };
-
-  const usageByMethod = new Map<string, number>();
-  (usageResult.data ?? []).forEach((mapping) => {
-    if (!mapping.payment_method_id) return;
-    usageByMethod.set(mapping.payment_method_id, (usageByMethod.get(mapping.payment_method_id) ?? 0) + 1);
-  });
+  const usage = await Promise.all((data ?? []).map(async (method) => {
+    const result = await supabaseAdmin!.from("field_executive_provider_mappings")
+      .select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("payment_method_id", method.id);
+    return { id: method.id, count: result.count ?? 0, error: result.error };
+  }));
+  const usageError = usage.find((item) => item.error)?.error;
+  if (usageError) return { methods: [] as PaymentMethodRow[], error: usageError.message };
+  const usageByMethod = new Map(usage.map((item) => [item.id, item.count]));
 
   return {
     methods: ((data ?? []) as Omit<PaymentMethodRow, "usage_count">[]).map((method) => ({
@@ -99,29 +98,37 @@ function loadPaymentMethodFlash() {
 
 export const dynamic = "force-dynamic";
 
-export default async function PaymentMethodsPage({ searchParams }: { searchParams?: { edit?: string } }) {
+export default async function PaymentMethodsPage({ searchParams }: { searchParams?: { edit?: string; fields?: string } }) {
   const authorization = await requirePagePermission("payment_methods", "access");
   const companyId = requireCompanyId(authorization);
   const pagePermission = authorization.permissions.payment_methods;
-  const { methods, error } = await loadPaymentMethods(companyId);
+  const [{ methods, error: methodsError }, fieldResult] = await Promise.all([
+    loadPaymentMethods(companyId),
+    supabaseAdmin?.from("payment_fields").select("id,code,label,field_type,pay_schedule,is_active").eq("company_id", companyId).order("label")
+  ]);
+  const error = methodsError ?? fieldResult?.error?.message;
+  const fields = (fieldResult?.data ?? []) as PaymentFieldOption[];
   const flash = loadPaymentMethodFlash();
   const editMethod = methods.find((method) => method.id === searchParams?.edit) ?? null;
 
   return (
     <AppShell active="Payment Methods" pageCode="payment_methods">
       <PageHead
-        eyebrow="Master Data"
+        eyebrow="Master"
         title="Payment methods"
-        subtitle="Define the payment method and the exact fields managers must fill during Provider ID mapping."
-        action={<span className={`status-pill ${isSupabaseAdminConfigured ? "good" : "warn"}`}>{isSupabaseAdminConfigured ? "Database connected" : "Database key missing"}</span>}
+        subtitle="Shared with Dashboard. Choose the fields here; set each associate’s rates in ID & Rate Mapping."
+        action={<div className="component-chip-list">
+          <PendingLink className="button secondary compact" href="/master/payment-methods?fields=1">Payment fields</PendingLink>
+          {authorization.permissions.provider_mapping?.canView ? <PendingLink className="button compact" href="/delivery-network/rate-mapping">ID & Rate Mapping</PendingLink> : null}
+        </div>}
       />
 
       {error ? (
         <section className="panel message-panel error">
           <div className="panel-body">
-            <strong>Database setup needed</strong>
+            <strong>Unable to load payment methods</strong>
             <p className="subtle" style={{ marginTop: 6 }}>
-              {error} Run `scripts/payment_methods_v1.sql` in Supabase SQL Editor, then refresh this page.
+              Please retry shortly. No payment configuration has been changed.
             </p>
           </div>
         </section>
@@ -130,21 +137,21 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
       {!error && (flash.error || flash.notice) ? (
         <section className={`panel message-panel ${flash.error ? "error" : "success"}`}>
           <div className="panel-body">
-            <strong>{flash.error ? "Payment method not deleted" : "Completed"}</strong>
+            <strong>{flash.error ? "Payment method not saved" : "Completed"}</strong>
             <p className="subtle" style={{ marginTop: 6 }}>{flash.error ?? flash.notice}</p>
           </div>
         </section>
       ) : null}
 
-      {pagePermission.canAdd ? (
+      {!error && pagePermission.canAdd ? (
         <section className="panel">
           <div className="panel-head">
             <div>
               <h2>Add payment method</h2>
-              <p className="subtle">Example: Per Packet with Production fields named Delivery rate and Pickup rate.</p>
+              <p className="subtle">Use the existing field catalog. Creating a method does not change anyone’s rates.</p>
             </div>
           </div>
-          <PaymentMethodForm action={createPaymentMethod} />
+          <PaymentMethodForm action={createPaymentMethod} availableFields={fields} />
         </section>
       ) : null}
 
@@ -197,7 +204,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
         </section>
       ) : null}
 
-      {editMethod && pagePermission.canEdit ? (
+      {!error && editMethod && pagePermission.canEdit ? (
         <div className="modal-backdrop">
           <section className="modal-panel wide" aria-label="Edit payment method">
             <div className="panel-head">
@@ -205,12 +212,15 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
               <PendingLink className="icon-button" href="/master/payment-methods" scroll={false} aria-label="Close">x</PendingLink>
             </div>
             <PaymentMethodForm
+              key={editMethod.id}
               action={updatePaymentMethod}
+              availableFields={fields}
               initialMethod={{
                 id: editMethod.id,
                 code: editMethod.code,
                 name: editMethod.name,
-                components: editMethod.payment_method_components ?? []
+                usage_count: editMethod.usage_count,
+                field_ids: (editMethod.payment_method_components ?? []).map((component) => component.payment_field_id)
               }}
               submitLabel="Save changes"
             />
@@ -225,6 +235,21 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                 pendingText="Deleting"
               >Delete payment method</SubmitButton>
             </form>
+          </section>
+        </div>
+      ) : null}
+      {!error && searchParams?.fields === "1" ? (
+        <div className="modal-backdrop">
+          <section className="modal-panel wide" role="dialog" aria-modal="true" aria-label="Payment fields">
+            <div className="panel-head">
+              <div><h2>Payment fields</h2><p className="subtle">The same reusable catalog used by Dashboard and provider-ID mapping.</p></div>
+              <PendingLink className="icon-button" href="/master/payment-methods" aria-label="Close payment fields">×</PendingLink>
+            </div>
+            <div className="table-wrap"><table>
+              <thead><tr><th>Field</th><th>Field ID</th><th>Type / schedule</th><th>Status</th></tr></thead>
+              <tbody>{fields.map((field) => <tr key={field.id}><td>{field.label}</td><td>{field.code}</td><td>{field.field_type === "production" ? "Production" : field.pay_schedule?.replaceAll("_", " ")}</td><td><StatusPill status={field.is_active ? "Active" : "Inactive"} /></td></tr>)}</tbody>
+            </table></div>
+            <div className="panel-body"><a className="button secondary compact" href="https://dashboard.dropxlogistics.com/master/payment-methods?fields=1" target="_blank" rel="noreferrer">Manage shared field definitions in Dashboard ↗</a></div>
           </section>
         </div>
       ) : null}

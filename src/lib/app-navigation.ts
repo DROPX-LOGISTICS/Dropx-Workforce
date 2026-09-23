@@ -186,6 +186,12 @@ export const workforceNavItems: NavItem[] = [
     ]
   },
   {
+    code: "payment_methods", label: "Master", icon: "MD",
+    children: [
+      { code: "payment_methods", label: "Payment Methods", href: "/master/payment-methods" }
+    ]
+  },
+  {
     code: "designations",
     label: "Settings",
     icon: "WM",

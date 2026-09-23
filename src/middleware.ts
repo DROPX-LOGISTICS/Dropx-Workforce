@@ -19,8 +19,8 @@ const WORKFORCE_ROOTS = [
   "/users",
   "/unauthorized"
 ];
-const MOVED_FINANCE_PATHS = ["/master/payment-methods", "/master/payment-banks", "/master/payment-heads"];
-const WORKFORCE_EXACT_PATHS = new Set(["/", "/settings/amazon-onboarding"]);
+const MOVED_FINANCE_PATHS = ["/master/payment-banks", "/master/payment-heads"];
+const WORKFORCE_EXACT_PATHS = new Set(["/", "/settings/amazon-onboarding", "/master/payment-methods"]);
 
 function cleanOpsPath(path: string) {
   if (path === "/ops-pulse") return "/";

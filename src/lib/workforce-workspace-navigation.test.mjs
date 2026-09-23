@@ -5,7 +5,8 @@ import {workspaceDestination,activeWorkspace} from './workforce-workspace-naviga
 import {workforceRegisterViewMatches} from './workforce-register-views.ts';
 
 test('each operational tool remains reachable with one sidebar destination per workspace',()=>{
- assert.equal(workforceNavItems.length,9);
+ assert.equal(workforceNavItems.length,10);
+ assert.ok(workforceNavItems.find(x=>x.label==='Master')?.children?.some(x=>x.href==='/master/payment-methods'));
  const links=workforceNavItems.flatMap(x=>x.children??[x]);
  for(const path of ['/delivery-network/lifecycle','/delivery-network/rate-mapping','/delivery-network/id-onboarding','/delivery-network/activity','/delivery-network/payroll','/delivery-network/payout-review','/delivery-network/training-policies','/settings/amazon-onboarding'])assert.ok(links.some(x=>x.href===path),path);
  assert.equal(links.filter(x=>x.href?.startsWith('/delivery-network/reports')).length,1);
@@ -20,6 +21,7 @@ test('restricted roles land on an allowed child, never a hardcoded register',()=
  assert.equal(workspaceDestination({...group,children:[]}),undefined);
 });
 test('longest route chooses profile workspace and does not mark overview active',()=>{
+ assert.equal(activeWorkspace(workforceNavItems,'/master/payment-methods','Payment Methods')?.label,'Master');
  assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/lifecycle','Associate profile')?.label,'Associates');
  assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/onboarding/associates','Edit')?.label,'Associates');
  assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/communications/history','History')?.label,'Connect');

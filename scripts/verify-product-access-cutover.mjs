@@ -36,7 +36,7 @@ const checks = [
   [migration.includes("station_responsibility_assignments") && migration.includes("effective_to"), "Station responsibility replacements must retain effective-dated history."],
   [userActions.includes('from("company_product_memberships")') && !userActions.includes("Workforce user access is add-only"), "Workforce must manage its own users through product memberships."],
   [workforceNavigation.includes("/delivery-network/engagement-types"), "Workforce must own its Engagement Types master."],
-  [!workforceNavigation.includes("/master/payment-methods") && !workforceNavigation.includes("/master/payment-heads") && !workforceNavigation.includes("/master/payment-banks"), "Finance masters must not remain in Workforce navigation."],
+  [workforceNavigation.includes("/master/payment-methods") && !workforceNavigation.includes("/master/payment-heads") && !workforceNavigation.includes("/master/payment-banks"), "Workforce must expose shared Payment Methods while bank and payment-head masters remain in Finance."],
   [middleware.includes("MOVED_FINANCE_PATHS") && middleware.includes("https://fin.dropxlogistics.com"), "Old Workforce finance-master links must redirect to Finance."],
   [middleware.includes('"/users"') && middleware.includes('"/delivery-network"'), "Workforce user and operating routes must remain available on the Workforce host."],
   [canonicalRoleMigration.trimStart().startsWith("begin;") && canonicalRoleMigration.trimEnd().endsWith("commit;"), "Canonical People-role cutover must be transactional."],

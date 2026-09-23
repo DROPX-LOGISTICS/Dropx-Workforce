@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { readAllRows } from '@/lib/supabase-pagination';
 import { workforceDesignationPredicate } from '@/lib/workforce-designation-policy';
 import { replacementAuthorized, replacementFilters, replacementSources } from '@/lib/workforce-replacement-policy';
+import { workforcePartitionPage } from '@/lib/workforce-partition-page';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -75,6 +76,30 @@ export async function GET(request: NextRequest) {
       return reply({...base,day:day||null,associateCount:people.length,activeProfileCount:people.filter(p=>p.is_active).length,workingIds:new Set(rows.map(r=>r.provider_employee_id)).size,stationCount:new Set(rows.map(r=>r.station_code)).size,shipmentRows:rows.length,deliveries:total('total_delivery'),amazon:total('amazon_delivery'),swa:total('swa_delivery'),returns:total('c_return'),pickups:total('mfn'),sellerReturns:total('mfn_return'),unmapped:rows.filter(r=>r.link_status!=='Linked').length,paymentMissing:rows.filter(r=>r.mapping_status==='Payment setup missing').length,sourceUpdatedAt:rows.map(r=>r.updated_at).filter(Boolean).sort().at(-1)||null,exceptions:rows.filter(r=>r.link_status!=='Linked'||r.mapping_status==='Payment setup missing'),joining:joining.data,batches:batches.data});
     }
     const spec = replacementSources[kind];
+    if(kind==='attendance'){
+      const partitions:Array<{column:string;ids:string[]}>=[];
+      for(const [column,values] of [
+        ['workforce_id',canonicalIds],
+        ['field_executive_id',identities('source_profile_id','field_executive')],
+        ['contractor_id',identities('source_profile_id','contractor')],
+      ] as const){
+        const ids=[...new Set(values)];
+        for(let start=0;start<ids.length;start+=80)partitions.push({column,ids:ids.slice(start,start+80)});
+      }
+      const data=await workforcePartitionPage<{id:string;punch_date:string}>(partitions,filters.page,async (partition,from,to)=>{
+        let query=db.from(spec.table).select(spec.select,{count:'exact'}).eq('company_id',company).in(partition.column,partition.ids);
+        // Canonical identity takes precedence. Legacy partitions are disjoint.
+        if(partition.column!=='workforce_id')query=query.is('workforce_id',null);
+        if(partition.column==='contractor_id')query=query.is('field_executive_id',null);
+        if(selectedStation)query=query.eq('location_id',selectedStation.id);
+        if(filters.from)query=query.gte('punch_date',filters.from);
+        if(filters.to)query=query.lte('punch_date',filters.to);
+        const result=await query.order('punch_date',{ascending:false}).order('id').range(from,to);
+        if(result.error)throw result.error;
+        return {rows:(result.data || []) as unknown as Array<{id:string;punch_date:string}>,total:result.count||0};
+      });
+      return reply({...base,...data,rows:data.rows.map(row=>{const person=ownPerson(row);return {...row,...(person?{canonical_id:person.id,associate_name:person.full_name,dropx_id:person.dropx_id}:{})};})});
+    }
     let query = db.from(spec.table).select(spec.select,{count:'exact'}).eq('company_id',company);
     if(spec.station && selectedStation)query=query.eq(spec.station,spec.station==='station_code'?selectedStation.station_code:selectedStation.id);
     if(spec.date){if(filters.from)query=query.gte(spec.date,filters.from);if(filters.to)query=query.lte(spec.date,filters.to);}

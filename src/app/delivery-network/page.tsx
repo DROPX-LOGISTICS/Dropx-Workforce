@@ -168,18 +168,22 @@ export default async function DeliveryNetworkPage() {
     }
   ].filter((module) => hasPermission(authorization, module.code, "access"));
   const lifecycleStages = [
-    { code: "delivery_associates", href: "/delivery-network/associates?view=joining", label: "Join & set up", helper: "One profile: registration, optional training, ID and pay", icon: UserRoundPlus },
-    { code: "workforce_earnings", href: "/delivery-network/earnings", label: "Review earnings", helper: "Station totals, daily activity and deductions", icon: CircleDollarSign },
-    { code: "workforce_payroll", href: "/delivery-network/payroll", label: "Payroll → Finance", helper: "Confirm payroll; Finance approves and processes payment", icon: Banknote }
-  ].filter((stage) => hasPermission(authorization, stage.code, "access"));
+    {code:'delivery_associates', label:'Register', helper:'Invite, documents & review', href:'/delivery-network/associates?view=joining', icon:UserRoundPlus},
+    {code:'delivery_associates', label:'Join & train', helper:'Arrival, training days & agreed pay', href:'/delivery-network/joining', icon:Clock3},
+    {code:'executive_id_onboarding', label:'Activate provider ID', helper:'Invitation, verification & course', href:'/delivery-network/id-onboarding', icon:Fingerprint},
+    {code:'workforce_activity', label:'Work & deliveries', helper:'Attendance and imported shipments', href:'/delivery-network/activity', icon:Activity},
+    {code:'workforce_earnings', label:'Review & pay', helper:'Effective rates, exceptions & payroll', href:'/delivery-network/earnings', icon:WalletCards},
+    {code:'people_review', label:'Exit & settle', helper:'Dues, assets & final settlement', href:'/delivery-network/lifecycle?tab=exits', icon:ShieldCheck}
+  ].filter(stage=>hasPermission(authorization,stage.code,'access'));
+
 
   return (
     <AppShell active="Workforce Dashboard" pageCode="delivery_associates">
       <section className="wf-command-header wf-dashboard-intro">
         <div className="wf-command-intro">
           <span className="wf-live-status"><i /> Workforce operations</span>
-          <h1>Workforce overview</h1>
-          <p>Track activation, provider readiness and payout work from one clear operational view.</p>
+          <h1>Workforce today</h1>
+          <p>Move associates from registration to settlement. Open a queue to act.</p>
         </div>
         <div className="wf-command-actions">
           <PendingLink className="wf-command-secondary" href="/delivery-network/associates">
@@ -214,8 +218,8 @@ export default async function DeliveryNetworkPage() {
         </article>
       </section>
 
-      <section className="wf-lifecycle-map wf-action-lane">
-        <header><div><small>Daily workflow</small><h2>Set up. Review. Pay.</h2></div></header>
+      <section className="wf-lifecycle-map wf-action-lane" aria-label="Workforce lifecycle actions">
+        <header><div><small>Associate lifecycle</small><h2>From first arrival to final settlement</h2></div></header>
         <div>
           {lifecycleStages.map((stage, index) => {
             const StageIcon = stage.icon;
@@ -237,17 +241,17 @@ export default async function DeliveryNetworkPage() {
             <div><span>Resolve now</span><h2>Priority queues</h2></div>
           </header>
           <div className="wf-desk-actions">
-            <PendingLink href="/delivery-network/associates?view=joining">
+            <PendingLink href="/delivery-network/associates?view=joining&stage=applicant">
               <span><UserRoundPlus size={18} /></span>
               <div><strong>Registration desk</strong><small>{overview?`${pending+underReview} applications need progress`:'Registration counts unavailable'}</small></div>
               <ArrowRight size={17} />
             </PendingLink>
-            <PendingLink href="/delivery-network/associates?view=training">
+            <PendingLink href="/delivery-network/joining">
               <span><Clock3 size={18}/></span><div><strong>Joining &amp; training desk</strong><small>{overview?`${joiningOpen} profiles between approval and field work`:'Review arrival, training and own-ID activation'}</small></div><ArrowRight size={17}/>
             </PendingLink>
             {hasPermission(authorization, "workforce_earnings", "access") ? <PendingLink href="/delivery-network/earnings">
               <span><CircleDollarSign size={18} /></span>
-              <div><strong>Live earnings desk</strong><small>{financeSnapshot.heldWorkers + financeSnapshot.exceptions.length} blockers before payroll</small></div>
+              <div><strong>Live earnings desk</strong><small>{financeSnapshot.exceptions.length} exceptions · {financeSnapshot.heldWorkers} associates held</small></div>
               <ArrowRight size={17} />
             </PendingLink> : null}
             {hasPermission(authorization, "workforce_payroll", "access") ? <PendingLink href="/delivery-network/payroll">

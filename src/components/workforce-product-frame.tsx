@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import {
@@ -20,7 +20,7 @@ import {
 import { EventLogTracker } from "@/components/event-log-tracker";
 import { PendingLink } from "@/components/pending-link";
 import type { NavItem } from "@/lib/app-navigation";
-import {activeWorkspace, workspaceDestination} from '@/lib/workforce-workspace-navigation';
+import {activeWorkspace, compactWorkspaces, workspaceDestination, workspaceLinkActive} from '@/lib/workforce-workspace-navigation';
 import './workforce-workspace.css';
 
 type WorkforceProductFrameProps = {
@@ -61,16 +61,19 @@ function WorkforceRiderMark() {
 }
 
 function iconFor(item: NavItem) {
-  if (item.label === "Workforce Dashboard") return LayoutDashboard;
+  if (item.label === "Today") return LayoutDashboard;
   return navigationIcons[item.code] ?? LayoutDashboard;
 }
 
 export function WorkforceProductFrame({ active, actions, children, items }: WorkforceProductFrameProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const workspace = activeWorkspace(items, pathname, active);
+  const workspaces = compactWorkspaces(items);
+  const workspace = activeWorkspace(workspaces, pathname, active);
   const primary = workspace?.children?.filter(item=>!item.secondary) ?? [];
   const secondary = workspace?.children?.filter(item=>item.secondary) ?? [];
+  const isCurrent = (href?: string) => workspaceLinkActive(href, pathname, searchParams.toString());
 
   useEffect(() => {
     setMobileOpen(false);
@@ -82,7 +85,7 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
   }, [mobileOpen]);
 
   return (
-    <div className="workforce-product workforce-people-inspired">
+    <div className="workforce-product workforce-people-inspired wf-compact">
       <EventLogTracker />
 
       {mobileOpen ? (
@@ -110,17 +113,10 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
         </div>
 
         <nav className="wf-left-navigation" aria-label="Workforce navigation">
-          {items.map((item) => {
+          {workspaces.map((item) => {
             const NavigationIcon = iconFor(item);
             const directActive = item === workspace;
             const destination = workspaceDestination(item);
-
-            if (item.children?.length) {
-              return <details className="wf-visible-menu" key={`${item.label}:${directActive}`} open={directActive}>
-                <summary className={directActive ? 'active' : ''}><NavigationIcon aria-hidden="true" size={16}/><span>{item.label}</span><ChevronDown size={14}/></summary>
-                <div>{item.children.map(child=><PendingLink key={child.label} href={child.href!} className={active===child.label?'active':''}>{child.label}</PendingLink>)}</div>
-              </details>;
-            }
 
             if (destination) {
               return (
@@ -141,8 +137,8 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
         </nav>
 
         <div className="wf-left-footer">
-          <span><i /> System live</span>
-          <small>Workforce workspace</small>
+          <span>DropX Workforce</span>
+          <small>Role and station access applies</small>
         </div>
       </aside>
 
@@ -167,8 +163,8 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
         <main className="wf-product-main">
           <div className="wf-product-content">
             {workspace?.children?.length ? <nav className="wf-workspace-nav" aria-label={`${workspace.label} workspace`}>
-              {primary.map(child=><PendingLink key={child.label} href={child.href!} className={pathname===child.href?.split('?')[0]?'active':''}>{child.label}</PendingLink>)}
-              {secondary.length ? <details key={pathname}><summary>More tools <ChevronDown size={14}/></summary><div>{secondary.map(child=><PendingLink key={child.label} href={child.href!}>{child.label}</PendingLink>)}</div></details>:null}
+              {primary.map(child=><PendingLink key={child.label} href={child.href!} aria-current={isCurrent(child.href)?'page':undefined} className={isCurrent(child.href)?'active':''}>{child.label}</PendingLink>)}
+              {secondary.length ? <details key={`${pathname}:${searchParams.toString()}`}><summary>{secondary.find(child=>isCurrent(child.href))?.label ?? 'More tools'} <ChevronDown size={14}/></summary><div>{secondary.map(child=><PendingLink key={child.label} href={child.href!} aria-current={isCurrent(child.href)?'page':undefined}>{child.label}</PendingLink>)}</div></details>:null}
             </nav>:null}
             {children}
           </div>

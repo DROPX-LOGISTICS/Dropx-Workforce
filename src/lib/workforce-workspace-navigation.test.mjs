@@ -38,3 +38,44 @@ test('lifecycle views form non-overlapping buckets; training optional; archive r
  assert.equal(workforceRegisterViewMatches('training','awaiting_activation','Approved'),false);
  assert.ok(workforceRegisterViewMatches('approved','ready','Approved'));
 });
+
+test('compact navigation preserves every authorized destination exactly once',async()=>{
+ const {compactWorkspaces}=await import('./workforce-workspace-navigation.ts');
+ const compact=compactWorkspaces(workforceNavItems);
+ assert.equal(compact.length,6);
+ const destinations=items=>items.flatMap(item=>item.children??[item]).map(item=>item.href).sort();
+ assert.deepEqual(destinations(compact),destinations(workforceNavItems));
+ for(const original of workforceNavItems) {
+  const filtered=original.children?.map(child=>({...original,children:[child]}))??[original];
+  for(const only of filtered) {
+   const result=compactWorkspaces([only]);
+   assert.deepEqual(destinations(result),destinations([only]));
+   assert.equal(workspaceDestination(result[0]),workspaceDestination(only));
+  }
+ }
+ assert.equal(activeWorkspace(compact,'/delivery-network/rate-cards','Rate Cards')?.label,'Associates');
+ assert.equal(activeWorkspace(compact,'/delivery-network/payment-holds','Holds')?.label,'Pay & settlement');
+ assert.equal(activeWorkspace(compact,'/users','User Roles')?.label,'Settings');
+ assert.equal(activeWorkspace(compact,'/delivery-network/onboarding/associates','Bulk upload')?.label,'Associates');
+});
+
+test('lifecycle count links preserve the exact stage rather than merging joining queues',async()=>{
+ const {registerStageHref,validRegisterStage}=await import('./workforce-register-views.ts');
+ for(const stage of ['applicant','awaiting_arrival','training','awaiting_activation','ready','active','offboarded','closed']) {
+  const url=new URL(registerStageHref(stage),'https://workforce.example');
+  assert.equal(url.searchParams.get('stage'),stage);
+  assert.equal(validRegisterStage(stage),stage);
+  assert.ok(workforceRegisterViewMatches(url.searchParams.get('view'),stage,'Approved'));
+ }
+ assert.equal(validRegisterStage('__proto__'),undefined);
+ assert.equal(validRegisterStage('unknown'),undefined);
+});
+
+test('tab selection distinguishes query-based roles and tolerates page filters and bulk anchors',async()=>{
+ const {workspaceLinkActive}=await import('./workforce-workspace-navigation.ts');
+ assert.ok(workspaceLinkActive('/delivery-network/payroll','/delivery-network/payroll','status=draft'));
+ assert.ok(workspaceLinkActive('/users?section=roles','/users','section=roles'));
+ assert.equal(workspaceLinkActive('/users?section=users','/users','section=roles'),false);
+ assert.ok(workspaceLinkActive('/delivery-network/onboarding/associates#bulk-upload','/delivery-network/onboarding/associates',''));
+ assert.equal(workspaceLinkActive('/delivery-network','/delivery-network/associates',''),false);
+});

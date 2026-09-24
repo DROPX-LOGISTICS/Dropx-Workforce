@@ -10,7 +10,7 @@ import type { RegisterDesignation } from "@/lib/workforce-register-designations"
 import {loadWorkforceJoining} from '@/lib/workforce-joining-data';
 import {joiningState, joiningStages} from '@/lib/workforce-joining';
 import {workforceToday} from '@/lib/workforce-earnings';
-import {workforceRegisterViewMatches} from '@/lib/workforce-register-views';
+import {workforceRegisterViewMatches, validRegisterStage} from '@/lib/workforce-register-views';
 import {
   loadWorkforceCommunicationRecipients,
   type WorkforceCommunicationRecipient
@@ -25,7 +25,7 @@ function profileHref(record: WorkforceCommunicationRecipient, mode: "edit" | "vi
   return undefined;
 }
 
-export default async function WorkforceAssociatesPage({searchParams={}}:{searchParams?:{view?:string;station?:string}}) {
+export default async function WorkforceAssociatesPage({searchParams={}}:{searchParams?:{view?:string;station?:string;stage?:string}}) {
   const authorization = await requirePagePermission("delivery_associates", "access");
   const companyId = requireCompanyId(authorization);
   const canAdd = hasPermission(authorization, "delivery_associates", "add");
@@ -56,7 +56,8 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
   const view = ['active','joining','training','offboarded','closed','all','approved'].includes(searchParams.view||'')?searchParams.view!:'active';
   const stageFor = (record:WorkforceCommunicationRecipient)=>stages.get(record.accountId) || (record.isActive&&record.status.toLowerCase()==='active'?'active':'applicant');
   const viewMatches = (record:WorkforceCommunicationRecipient,key:string)=>workforceRegisterViewMatches(key,stageFor(record),record.status);
-  const displayedRecords = stationRecords.filter(record=>viewMatches(record,view));
+  const selectedStage = validRegisterStage(searchParams.stage);
+  const displayedRecords = stationRecords.filter(record=>viewMatches(record,view) && (!selectedStage || stageFor(record)===selectedStage));
   const rows: FieldExecutiveListRow[] = displayedRecords.map((record) => ({
     id: `${record.profileType}:${record.accountId}`,
     dropxId: record.reference || "ID pending",
@@ -94,6 +95,7 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
 
       <form method="get" className="wf-station-context">
         <input type="hidden" name="view" value={view}/>
+        {selectedStage ? <input type="hidden" name="stage" value={selectedStage}/> : null}
         <label>Station<select name="station" defaultValue={searchParams.station||''}><option value="">All stations</option>{[...new Set(records.map(record=>record.location).filter(Boolean))].sort().map(station=><option key={station}>{station}</option>)}</select></label>
         <button className="button secondary compact">Apply</button>
         {hasPermission(authorization,'provider_mapping','access')?<PendingLink className="button secondary compact" href={`/delivery-network/rate-mapping?station=${encodeURIComponent(searchParams.station||'')}`}>Station IDs & rates</PendingLink>:null}
@@ -104,6 +106,7 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
       <nav className="wf-journey-nav" aria-label="Workforce register views">
         {[['active','Active'],['joining','Joining & review'],['training','Training'],['offboarded','Offboarded'],['closed','Closed'],['all','All']].map(([key,label])=><PendingLink key={key} aria-current={view===key?'page':undefined} href={`/delivery-network/associates?view=${key}&station=${encodeURIComponent(searchParams.station||'')}`}>{label}<strong>{stationRecords.filter(record=>viewMatches(record,key)).length}</strong></PendingLink>)}
       </nav>
+      {selectedStage ? <div className="wf-stage-filter" role="status"><span>{joiningStages[selectedStage as keyof typeof joiningStages]} · {displayedRecords.length} profiles</span><PendingLink href={`/delivery-network/associates?view=${view}&station=${encodeURIComponent(searchParams.station||'')}`}>Clear stage filter</PendingLink></div> : null}
       <FieldExecutiveList
         basePath="/delivery-network/associates"
         canEdit={canEdit}
@@ -112,7 +115,7 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
         designationSwitches={designations}
         directProfileLinks
         hideLocationFilter
-        key={`${view}:${searchParams.station||''}`}
+        key={`${view}:${selectedStage||''}:${searchParams.station||''}`}
         showActions={!error}
         title="Associate register"
       />

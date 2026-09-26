@@ -23,7 +23,7 @@ export default async function DeliveryNetworkPage() {
   let legacyRegistrationCount = 0;
   let pendingAdjustmentCount = 0;
   let openPayrollCount = 0;
-  let amazonPendingCount = 0;
+  let setupPendingCount = 0;
   let amazonErrorCount = 0;
   let error: string | null = null;
   const today = workforceToday();
@@ -72,9 +72,8 @@ export default async function DeliveryNetworkPage() {
       openPayrollCount = payrollCount.error ? 0 : payrollCount.count ?? 0;
       if (joining) {
         const approvedIds = new Set(joining.profiles.filter(person => ['approved','active'].includes(person.onboarding_status ?? '')).map(person => person.id));
-        const activatedIds = new Set(joining.plans.filter(plan => plan.provider_stage === 'activated').map(plan => plan.workforce_id));
-        const readyIds = new Set(joining.mappings.filter(mapping => mapping.status !== 'cancelled' && mapping.provider_member_id && mapping.payment_method_id && (!mapping.effective_to || mapping.effective_to >= today)).map(mapping => mapping.workforce_id).filter((id): id is string => Boolean(id) && activatedIds.has(id!)));
-        amazonPendingCount = Math.max(0, approvedIds.size - readyIds.size);
+        const readyIds = new Set(joining.mappings.filter(mapping => mapping.status !== 'cancelled' && mapping.provider_member_id && mapping.payment_method_id && (!mapping.effective_to || mapping.effective_to >= today)).map(mapping => mapping.workforce_id).filter((id): id is string => Boolean(id)));
+        setupPendingCount = Math.max(0, approvedIds.size - readyIds.size);
       }
       amazonErrorCount=amazonErrors.error?0:amazonErrors.count??0;
     } catch (loadError) {
@@ -85,7 +84,7 @@ export default async function DeliveryNetworkPage() {
   error = [error, journeyError, ...financeSnapshot.warnings, financeSnapshot.setupRequired ? "Finance setup is incomplete; earnings may be partial." : null].filter(Boolean).join(" ") || null;
 
   const pending=overview?.needsRegistration??0,underReview=overview?.underReview??0,active=overview?.counts.active??0;
-  const joiningOpen=amazonPendingCount;
+  const joiningOpen=setupPendingCount;
 
   const modules = [
     {
@@ -99,8 +98,8 @@ export default async function DeliveryNetworkPage() {
     {
       code: "executive_id_onboarding",
       href: "/delivery-network/id-onboarding",
-      title: "Amazon ID & activation",
-      description: "Queue invitations, close DA In-App Onboarding tasks and move provider IDs into pay mapping.",
+      title: "Partner setup & readiness",
+      description: "Complete the account, external ID and commercial setup required for each assigned delivery partner.",
       metric: `${joiningOpen} pending · ${amazonErrorCount} errors`,
       icon: Fingerprint
     },
@@ -176,8 +175,8 @@ export default async function DeliveryNetworkPage() {
   ].filter((module) => hasPermission(authorization, module.code, "access"));
   const lifecycleStages = [
     {code:'delivery_associates', label:'Register & approve', helper:'Invite, documents & review', href:'/delivery-network/associates?view=pending', icon:UserRoundPlus},
-    {code:'executive_id_onboarding', label:'Create Amazon ID', helper:'Invitation and DA In-App action', href:'/delivery-network/id-onboarding?view=pending', icon:Fingerprint},
-    {code:'provider_mapping', label:'Map ID & pay', helper:'Provider ID and dated payment stages', href:'/delivery-network/rate-mapping', icon:WalletCards},
+    {code:'executive_id_onboarding', label:'Complete work setup', helper:'Partner account, external ID and exceptions', href:'/delivery-network/id-onboarding?view=pending', icon:Fingerprint},
+    {code:'provider_mapping', label:'Confirm commercial terms', helper:'Payment method, source and effective dates', href:'/delivery-network/rate-mapping', icon:WalletCards},
     {code:'workforce_activity', label:'Work & deliveries', helper:'Attendance and imported shipments', href:'/delivery-network/activity', icon:Activity},
     {code:'workforce_earnings', label:'Review & pay', helper:'Effective rates, exceptions & payroll', href:'/delivery-network/earnings', icon:WalletCards},
     {code:'people_review', label:'Exit & settle', helper:'Dues, assets & final settlement', href:'/delivery-network/lifecycle?tab=exits', icon:ShieldCheck}
@@ -213,7 +212,7 @@ export default async function DeliveryNetworkPage() {
         </article>
         <article>
           <span className="rose"><ShieldCheck size={17} /></span>
-          <div><small>Amazon ID pending</small><strong>{amazonPendingCount}</strong><em>{amazonErrorCount} worker or activation errors</em></div>
+          <div><small>Work setup pending</small><strong>{setupPendingCount}</strong><em>{amazonErrorCount} connector or onboarding errors</em></div>
         </article>
         <article>
           <span className="green"><BadgeCheck size={17} /></span>
@@ -254,7 +253,7 @@ export default async function DeliveryNetworkPage() {
               <ArrowRight size={17} />
             </PendingLink>
             <PendingLink href="/delivery-network/id-onboarding?view=pending">
-              <span><Clock3 size={18}/></span><div><strong>Amazon activation desk</strong><small>{joiningOpen} pending · {amazonErrorCount} errors</small></div><ArrowRight size={17}/>
+              <span><Clock3 size={18}/></span><div><strong>Partner setup desk</strong><small>{joiningOpen} pending · {amazonErrorCount} exceptions</small></div><ArrowRight size={17}/>
             </PendingLink>
             {hasPermission(authorization, "workforce_earnings", "access") ? <PendingLink href="/delivery-network/earnings">
               <span><CircleDollarSign size={18} /></span>

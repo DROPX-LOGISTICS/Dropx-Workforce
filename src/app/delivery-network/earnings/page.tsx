@@ -177,7 +177,7 @@ export default async function WorkforceEarningsPage({ searchParams = {} }: { sea
       {view === "trace" ? (
         <section className="wf-finance-panel">
           <header><div><span>Audit trail</span><h2>Line-level calculation trace</h2><p>Showing {number(Math.min(visibleLines.length, 1000))} of {number(visibleLines.length)} filtered daily rows.</p></div></header>
-          <div className="table-wrap"><table className="wf-finance-table wf-daily-breakup-table"><thead><tr><th>Date</th><th>DropX associate</th><th>Amazon ID</th><th>Delivery</th><th>C-return</th><th>MFN</th><th>MFN return</th><th>Source</th><th>Payment</th><th>State</th></tr></thead><tbody>
+          <div className="table-wrap"><table className="wf-finance-table wf-daily-breakup-table"><thead><tr><th>Date</th><th>DropX associate</th><th>Partner ID</th><th>Delivery</th><th>C-return</th><th>MFN</th><th>MFN return</th><th>Source</th><th>Payment</th><th>State</th></tr></thead><tbody>
             {visibleLines.slice(0, 1000).map((line) => <tr key={line.key}>
               <td>{line.workDate}</td><td><strong>{line.workerName}</strong><small>{line.dropxId ?? "Unmapped"} · {line.stationCode}</small></td><td><strong>{line.providerMemberId}</strong><small>{line.providerMemberName ?? "No Amazon source name"}</small></td>
               {activityCell(line.totalDelivery, line.activityPayments.delivery)}{activityCell(line.customerReturn, line.activityPayments.customerReturn)}{activityCell(line.mfn, line.activityPayments.mfn)}{activityCell(line.mfnReturn, line.activityPayments.mfnReturn)}<td>{sourceLabel(line.calculationSource)}</td>

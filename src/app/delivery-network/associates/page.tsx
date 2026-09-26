@@ -104,7 +104,7 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
       <PageHead
         eyebrow="Workforce"
         title="Associate Lifecycle"
-        subtitle="Registration, approval, Amazon activation, Provider ID, pay readiness and exit in one flow."
+        subtitle="Source intake, approval, work setup, commercial readiness and exit in one flow across every delivery partner."
         action={canAdd ? <PendingLink className="button compact" href="/delivery-network/onboarding">Add associate</PendingLink> : null}
       />
 
@@ -117,10 +117,10 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
       {searchParams.error ? <div className="message-panel error">{searchParams.error}</div> : null}
 
       <section className="performance-summary-grid" aria-label="Associate lifecycle progress">
-        <article><span>1 · Registration</span><strong>{stationRecords.filter(record=>stageFor(record)==='applicant').length}</strong><small>Review identity and approve</small></article>
-        <article><span>2 · Amazon ID</span><strong>{stationRecords.filter(record=>['awaiting_arrival','training','awaiting_activation'].includes(stageFor(record))).length}</strong><small>Invitation and DA In-App action</small></article>
-        <article><span>3 · Provider &amp; pay</span><strong>{stationRecords.filter(record=>stageFor(record)==='ready').length}</strong><small>ID or rate setup pending</small></article>
-        <article><span>4 · Active</span><strong>{stationRecords.filter(record=>stageFor(record)==='active').length}</strong><small>Operational and payable</small></article>
+        <article><span>Applications</span><strong>{stationRecords.filter(record=>stageFor(record)==='applicant').length}</strong><small>Identity and approval required</small></article>
+        <article><span>Joining setup</span><strong>{stationRecords.filter(record=>['awaiting_arrival','training','awaiting_activation'].includes(stageFor(record))).length}</strong><small>Assignment, partner account or terms pending</small></article>
+        <article><span>Ready</span><strong>{stationRecords.filter(record=>stageFor(record)==='ready').length}</strong><small>Setup complete; first work pending</small></article>
+        <article><span>Active</span><strong>{stationRecords.filter(record=>stageFor(record)==='active').length}</strong><small>Working under an effective assignment</small></article>
       </section>
 
       {view!=='referrals'?<form method="get" className="wf-station-context">

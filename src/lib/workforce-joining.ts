@@ -1,7 +1,7 @@
 /** Pure joining rules. Provider effective dates, never entry timestamps, end training. */
 export const joiningStages = {
   applicant: "Applicants", awaiting_arrival: "Awaiting arrival", training: "Training",
-  awaiting_activation: "Awaiting activation", ready: "Ready to start", active: "Active", offboarded: "Offboarded", closed: "Closed applications"
+  awaiting_activation: "Work setup pending", ready: "Ready to start", active: "Active", offboarded: "Offboarded", closed: "Closed applications"
 } as const;
 export type JoiningStage = keyof typeof joiningStages;
 export type TrainingPolicy={id:string;station_id:string;name:string;daily_rate:number|string;minimum_minutes:number;policy_reference:string;effective_from:string;effective_to:string|null;is_active:boolean};
@@ -33,7 +33,7 @@ export const providerStages = {
   not_started: "Not started", email_setup: "Associate email required", documents_pending: "Documents pending",
   invitation_sent: "Invitation sent", invitation_accepted: "Invitation accepted", app_details: "App details pending",
   submitted: "Submitted to provider", verification_pending: "Verification pending", background_check: "Background check",
-  course_pending: "Amazon learning course pending", provisioning: "ID provisioning",
+  course_pending: "Required learning course pending", provisioning: "Account provisioning",
   activated: "Activated — mapping required", blocked: "Blocked", withdrawn: "Withdrawn"
 } as const;
 export type JoiningPlan = {

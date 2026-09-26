@@ -167,7 +167,7 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
     const providerId = text(formData.get("provider_employee_id"));
     const providerNotRequired = formData.get("provider_not_required") === "true";
     if (providerNotRequired && !isCompanyOwner(authorization)) throw new Error("Only an owner can waive the provider ID requirement.");
-    if (!joiningOnly && applicable.some((item) => item.code === "provider_id_created" && item.is_required) && !providerNotRequired && !providerId) throw new Error("Enter the verified provider ID before activation. Use Approve registration while the Amazon ID is pending.");
+    if (!joiningOnly && applicable.some((item) => item.code === "provider_id_created" && item.is_required) && !providerNotRequired && !providerId) throw new Error("Enter the verified partner account ID before activation. Approve the registration first while account setup is pending.");
     const results = applicable.map((item) => {
       const checked = formData.get(`checklist_${item.id}`) === "true";
       const status = item.code === "provider_id_created" && joiningOnly ? "pending" : item.code === "provider_id_created" && providerNotRequired
@@ -240,7 +240,7 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
       to_status: joiningOnly ? "approved" : "active",
       actor_user_id: authorization.userId,
       source_portal: "workforce",
-      remarks: remarks || (joiningOnly ? "Registration approved. Amazon ID activation and Provider ID mapping remain pending." : "HO checklist completed and workforce ID activated."),
+      remarks: remarks || (joiningOnly ? "Registration approved. Partner account and commercial setup remain pending." : "HO checklist completed and workforce ID activated."),
       metadata: applicant.identity_exception_required ? {
         identity_exception_approved: true,
         identity_exception_context: applicant.identity_exception_context
@@ -249,7 +249,7 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
     if (event.error) throw new Error(event.error.message);
     revalidateLifecyclePages();
     revalidatePath("/delivery-network/joining");
-    if (joiningOnly) redirect(`/delivery-network/lifecycle?person=${encodeURIComponent(id)}&section=activation&notice=${encodeURIComponent("Registration approved. Continue with Amazon ID activation.")}`);
+    if (joiningOnly) redirect(`/delivery-network/lifecycle?person=${encodeURIComponent(id)}&section=activation&notice=${encodeURIComponent("Registration approved. Continue with work setup.")}`);
     lifecycleRedirect({ notice: `${applicant.full_name} approved and activated.` });
   } catch (error) {
     if (isRedirect(error)) throw error;

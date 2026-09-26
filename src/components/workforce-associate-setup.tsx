@@ -34,20 +34,20 @@ export async function WorkforceAssociateSetup({auth,id,dateOfJoin,tab,section='p
   <AssociateRegistrationDetails auth={auth} id={id}/>
   <header><h3>Biometric attendance</h3><p>ID: <strong>{person.biometric_id||'Enrol at station on day one'}</strong> · {new Set(biometric.map(d=>d.punch_date)).size} punched days since {dateOfJoin||'joining date not set'}</p></header>
   <details><summary>View daily punches ({data.attendance.length})</summary><div className="table-wrap"><table><thead><tr><th>Date</th><th>In / out (IST)</th><th>Minutes</th><th>Attendance</th></tr></thead><tbody>{data.attendance.map(d=><tr key={d.id}><td>{d.punch_date}</td><td>{[d.in_time,d.out_time].map(v=>v?new Date(v).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'}):'Missing').join(' – ')}</td><td>{d.work_minutes??'—'}</td><td>{d.flagged?'Flagged — review':isBiometricDay(d,person.location_id)?'Biometric · '+d.status:'Review source / station'}</td></tr>)}</tbody></table>{!data.attendance.length?<p>No punches found for this identity and joining period.</p>:null}</div></details>
-  <p><a href="/delivery-network/id-onboarding?view=pending">Next: Amazon ID & activation →</a></p>
+  <p><a href="/delivery-network/id-onboarding?view=pending">Next: complete work setup →</a></p>
   </>:null}
   {section==='payments'?<>
   <header><h3>Payment configuration</h3><p>View existing rates and effective dates. Changes apply only to this associate.</p></header>
   <AssociatePaymentStages id={id} tab={tab} rows={(history.data||[]) as PersonalMapping[]} methods={methods} canEdit={hasPermission(auth,'provider_mapping','edit')&&!auth.readOnly}/>
   {hasPermission(auth,'provider_mapping','access')?<section><h3>Provider ID & rate mapping</h3><ProviderMappingPageContent embedded workforceId={id}/></section>:null}
-  <p><a href="/delivery-network/id-onboarding?view=pending">View Amazon activation status</a></p>
+  <p><a href="/delivery-network/id-onboarding?view=pending">View partner-account readiness</a></p>
   </>:null}
   {section==='training'||section==='activation'?<>
-  <header><h3>Amazon ID & activation</h3><p>The DA In-App Onboarding import and invitation worker are the activation source.</p></header>
+  <header><h3>Partner account setup</h3><p>Complete the account required by the assigned delivery partner. Amazon assignments use the invitation worker and DA In-App evidence; other partners follow their configured setup.</p></header>
   <p>Current stage: <strong>{providerStages[plan?.provider_stage as keyof typeof providerStages]||'Invitation not started'}</strong></p>
-  <p>Amazon email: <strong>{plan?.contact_email||'Configure in the activation desk'}</strong></p>
-  <p><a href={`/delivery-network/id-onboarding?view=pending&q=${encodeURIComponent(person.dropx_id||person.full_name)}`}>Open invitation, DA In-App tasks and error handling →</a></p>
-  <p><a href={`?tab=${tab}&person=${id}&section=payments`}>Next: map provider ID & regular payment →</a></p>
+  <p>Account login: <strong>{plan?.contact_email||'Configure in the setup desk'}</strong></p>
+  <p><a href={`/delivery-network/id-onboarding?view=pending&q=${encodeURIComponent(person.dropx_id||person.full_name)}`}>Open account tasks, imported evidence and exceptions →</a></p>
+  <p><a href={`?tab=${tab}&person=${id}&section=payments`}>Next: confirm external ID and commercial terms →</a></p>
   </>:null}
  </section>;
 }

@@ -110,9 +110,9 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
   const section=['profile','activation','payments','earnings','exit'].includes(requestedSection||'')?requestedSection!:'profile';
   const navPerson=requestedPerson??(tab!=='exits'?selected:undefined);
   const visibleExits=searchParams?.person?exits.filter(item=>item.profile_type==='workforce'&&item.profile_id===searchParams.person):exits;
-  const profileSections=[['profile','1 · Registration'],['activation','2 · Amazon ID'],['payments','3 · Provider & pay'],...(hasPermission(authorization,'workforce_earnings','access')?[['earnings','4 · Earnings']]:[]),['exit','5 · Exit']];
+  const profileSections=[['profile','Registration'],['activation','Work setup'],['payments','Commercial terms'],...(hasPermission(authorization,'workforce_earnings','access')?[['earnings','Earnings']]:[]),['exit','Exit']];
   return <AppShell active="Associate Lifecycle" pageCode="people_review">
-    <PageHead eyebrow="Workforce · Associate lifecycle" title={requestedPerson?'Associate workflow':tab==='exits'?'Exit & settlement':'Registration review'} subtitle={requestedPerson?'Registration → Amazon ID → Provider ID → pay readiness → exit.':'Select an associate and complete the next required action.'} action={<PendingLink className="button secondary" href="/delivery-network/associates">← All associates</PendingLink>}/>
+    <PageHead eyebrow="Workforce · Associate lifecycle" title={requestedPerson?'Associate workflow':tab==='exits'?'Exit & settlement':'Registration review'} subtitle={requestedPerson?'Complete the next requirement for this associate, from registration through assignment, partner setup, commercial terms and exit.':'Select an associate and complete the next required action.'} action={<PendingLink className="button secondary" href="/delivery-network/associates">← All associates</PendingLink>}/>
     {searchParams?.notice ? <div className="notice">{searchParams.notice}</div> : null}
     {searchParams?.error || error ? <div className="error-box"><strong>Action required</strong><p>{searchParams?.error || error}</p></div> : null}
     {!searchParams?.person?<><section className="workforce-lifecycle-summary">
@@ -154,11 +154,11 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
               const existing = resultMap.get(`${item.id}:${check.id}`);
               return <label key={check.id}><input defaultChecked={["completed", "not_required"].includes(existing?.status ?? "")} name={`checklist_${check.id}`} type="checkbox" value="true" /><span><strong>{check.label}{check.is_required ? " *" : ""}</strong><small>{check.description}</small></span></label>;
             })}
-            <div className="workforce-provider-row"><label>Amazon / provider ID<input defaultValue={item.provider_employee_id || ""} name="provider_employee_id" placeholder="Enter ID after creation" /></label><label className="compact-check"><input name="provider_not_required" type="checkbox" value="true" />Not required for this designation</label></div>
+            <div className="workforce-provider-row"><label>Partner account ID<input defaultValue={item.provider_employee_id || ""} name="provider_employee_id" placeholder="Enter only after verification" /></label><label className="compact-check"><input name="provider_not_required" type="checkbox" value="true" />Not required for this assignment</label></div>
             <label>Review remarks<textarea name="remarks" placeholder="Verification, return or rejection note" /></label>
             <p className="subtle">Provider ID pending? Approve for joining after all other checks. This enables biometric attendance without marking the associate delivery-active.</p>
-            <button className="button" disabled={Boolean(reviewIssues.length)} name="review_action" type="submit" value="approve_for_joining">Approve registration → Amazon ID</button>
-            <div className="form-actions"><button className="button secondary" name="review_action" type="submit" value="return">Return</button><button className="button danger" name="review_action" type="submit" value="reject">Reject</button>{!activationGated?<button className="button secondary" disabled={Boolean(reviewIssues.length)} name="review_action" title={reviewIssues.length ? "Resolve profile verification issues before approval" : undefined} type="submit" value="approve">Activate without Amazon ID</button>:null}</div>
+            <button className="button" disabled={Boolean(reviewIssues.length)} name="review_action" type="submit" value="approve_for_joining">Approve registration → work setup</button>
+            <div className="form-actions"><button className="button secondary" name="review_action" type="submit" value="return">Return</button><button className="button danger" name="review_action" type="submit" value="reject">Reject</button>{!activationGated?<button className="button secondary" disabled={Boolean(reviewIssues.length)} name="review_action" title={reviewIssues.length ? "Resolve profile verification issues before approval" : undefined} type="submit" value="approve">Activate without partner account</button>:null}</div>
           </form> : <p className="subtle">{item.onboarding_review_remarks || "Waiting for the applicant or HO action."}</p>}
           </>:null}
         </article>;

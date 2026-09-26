@@ -547,8 +547,8 @@ export function DesignationForm({
             type="checkbox"
           />
           <span>
-            <strong>Amazon activation gate</strong>
-            <small>Show only Amazon ID status in DropX One until the provider ID is active.</small>
+            <strong>Work-readiness gate</strong>
+            <small>Show only required partner-account setup in DropX One until an approved assignment is active.</small>
           </span>
         </label>
         {initial ? (

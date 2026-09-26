@@ -47,3 +47,23 @@ export async function retryAmazonInvitation(form: FormData) {
     redirect(destination(form,{error:error instanceof Error?error.message:"Unable to retry the invitation."}));
   }
 }
+
+export async function reviewProviderCandidate(form: FormData) {
+  const auth = await requirePagePermission("executive_id_onboarding","edit");
+  try {
+    if (auth.readOnly || !supabaseAdmin) throw new Error("Provider ID review is unavailable.");
+    const decision=String(form.get("decision")??"");
+    if(!["confirm","dismiss"].includes(decision))throw new Error("Choose confirm or dismiss.");
+    const result=await supabaseAdmin.rpc("workforce_review_amazon_provider_candidate",{
+      p_company:requireCompanyId(auth),p_actor:auth.userId,p_actor_name:auth.fullName||auth.email||"Workforce",
+      p_workforce:String(form.get("workforce_id")??""),p_candidate:String(form.get("provider_candidate")??"").trim(),
+      p_decision:decision,p_remarks:String(form.get("remarks")??"").trim(),p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds
+    });
+    if(result.error)throw new Error(result.error.message);
+    revalidatePath("/delivery-network/id-onboarding");revalidatePath("/delivery-network/associates");revalidatePath("/delivery-network/lifecycle");
+    redirect(destination(form,{notice:decision==="confirm"?"Provider ID confirmed. Configure the effective rate next.":"Provider ID suggestion dismissed."}));
+  }catch(error){
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    redirect(destination(form,{error:error instanceof Error?error.message:"Unable to review the Provider ID suggestion."}));
+  }
+}

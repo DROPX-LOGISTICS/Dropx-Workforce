@@ -4,15 +4,14 @@ import type { NavItem } from './app-navigation';
 export function compactWorkspaces(items: NavItem[]): NavItem[] {
   const groups = [
     { label: 'Today', sources: ['Workforce Dashboard'] },
-    { label: 'Associates', sources: ['Associates', 'IDs & rates'] },
+    { label: 'Associate Lifecycle', sources: ['Associate Lifecycle'] },
     { label: 'Operations', sources: ['Attendance & routes', 'Reports'] },
     { label: 'Pay & settlement', sources: ['Payments'] },
     { label: 'Connect', sources: ['Connect'] },
     { label: 'Settings', sources: ['Master', 'Settings', 'User access'] }
   ];
   const prominent = new Set([
-    '/delivery-network/associates', '/delivery-network/id-onboarding',
-    '/delivery-network/rate-mapping', '/delivery-network/rate-cards',
+    '/delivery-network/associates',
     '/master/payment-methods', '/delivery-network/amazon-onboarding-settings',
     '/delivery-network/payroll-calendars',
     '/users?section=users'
@@ -22,7 +21,7 @@ export function compactWorkspaces(items: NavItem[]): NavItem[] {
     if (!sources.length) return [];
     if (group.sources[0] === 'Workforce Dashboard') return [{ ...sources[0], label: group.label }];
     const children = sources.flatMap(item => item.children ?? [{ code: item.code, href: item.href, label: item.label }])
-      .map(child => ({ ...child, secondary: group.label === 'Associates' || group.label === 'Settings'
+      .map(child => ({ ...child, secondary: group.label === 'Settings'
         ? !prominent.has(child.href ?? '') : child.secondary }));
     return [{ ...sources[0], label: group.label, href: undefined, children }];
   });
@@ -45,10 +44,17 @@ export function workspaceDestination(item: NavItem) {
 export function activeWorkspace(items: NavItem[], pathname: string, active: string) {
   const related:Record<string,string>={
     '/delivery-network/payment-holds':'Payments','/delivery-network/mileage':'Payments',
-    '/delivery-network/pooled-settlements':'Payments','/delivery-network/contractor-profiles':'Associates'
+    '/delivery-network/pooled-settlements':'Payments','/delivery-network/contractor-profiles':'Associate Lifecycle',
+    '/delivery-network/lifecycle':'Associate Lifecycle','/delivery-network/id-onboarding':'Associate Lifecycle',
+    '/delivery-network/rate-mapping':'Associate Lifecycle','/delivery-network/rate-cards':'Associate Lifecycle',
+    '/delivery-network/onboarding':'Associate Lifecycle','/delivery-network/attention':'Associate Lifecycle'
   };
-  const relatedLabel = related[pathname] === 'Payments' ? 'Pay & settlement' : related[pathname];
-  const relatedWorkspace=items.find(item=>item.label===relatedLabel || item.label===related[pathname]);
+  const relatedPath = Object.keys(related)
+    .filter(path => pathname === path || pathname.startsWith(`${path}/`))
+    .sort((a, b) => b.length - a.length)[0];
+  const relatedSource = relatedPath ? related[relatedPath] : undefined;
+  const relatedLabel = relatedSource === 'Payments' ? 'Pay & settlement' : relatedSource;
+  const relatedWorkspace=items.find(item=>item.label===relatedLabel || item.label===relatedSource);
   if(relatedWorkspace)return relatedWorkspace;
   const matches = items.flatMap(item => [item, ...(item.children ?? [])]
     .filter(link => link.href && (pathname === routePath(link.href) || pathname.startsWith(routePath(link.href) + '/')))

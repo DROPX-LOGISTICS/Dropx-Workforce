@@ -10,6 +10,13 @@ test("station email pattern is deterministic and station aware", () => {
 
 test("DA In-App rows are recognized without relying on column order", () => {
   assert.equal(isAmazonOnboardingRecord({ "Email ID": "a@b.com", "Station Code": "KLZA", "Pending Task": "BGC" }), true);
+  assert.equal(isAmazonOnboardingRecord({ rabbit_id: "a@b.com", station_code: "KLZA", transporter_id: "20001", action_item: "No Further action required" }), true);
+});
+
+test("Amazon completion wording marks the ID active", () => {
+  const result = resolveAmazonActivation("", "No Further action required", []);
+  assert.equal(result.stage, "activated");
+  assert.equal(result.label, "Amazon ID active");
 });
 
 test("configured guidance wins and exceptions stay visible", () => {

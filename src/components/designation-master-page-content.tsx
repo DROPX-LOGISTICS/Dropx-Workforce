@@ -65,6 +65,7 @@ type DesignationRow = {
   portal_permissions?: unknown;
   profile_field_rules?: unknown;
   is_field_operations?: boolean | null;
+  dropx_one_activation_gate?: boolean | null;
   is_active: boolean;
 };
 
@@ -120,7 +121,7 @@ async function loadDesignations(
   }
 
   const [designationsResult, providersResult, locationsResult, modelsResult, categoriesResult, businessCategoriesResult, rolesResult] = await Promise.all([
-    supabaseAdmin.from("designations").select("id, code, name, designation_category_id, designation_category:designation_categories!designations_designation_category_id_fkey!inner(id, code, name, people_module, is_active), profile_destination, registration_category_code, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_field_operations, is_active").eq("company_id", companyId).eq("designation_category.people_module", peopleModule).eq("designation_category.is_active", true).order("code"),
+    supabaseAdmin.from("designations").select("id, code, name, designation_category_id, designation_category:designation_categories!designations_designation_category_id_fkey!inner(id, code, name, people_module, is_active), profile_destination, registration_category_code, provider_ids, model_ids, location_ids, onboarding_categories, profile_field_rules, app_page_access, onboarding_role_ids, portal_permissions, is_field_operations, dropx_one_activation_gate, is_active").eq("company_id", companyId).eq("designation_category.people_module", peopleModule).eq("designation_category.is_active", true).order("code"),
     supabaseAdmin.from("providers").select("id, code, name, is_active").eq("company_id", companyId).order("code"),
     supabaseAdmin.from("stations").select("id, station_code, station_name, hide_from_location_list").eq("company_id", companyId).eq("is_active", true).order("station_code"),
     supabaseAdmin.from("location_models").select("id, provider_id, code, name, is_active, providers (code, name)").eq("company_id", companyId).eq("is_active", true).order("code"),
@@ -165,6 +166,7 @@ async function loadDesignations(
         profile_destination: null,
         registration_category_code: null,
         is_field_operations: false,
+        dropx_one_activation_gate: false,
       }));
       designationError = fallbackError;
     }

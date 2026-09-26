@@ -52,6 +52,7 @@ type DesignationInitial = {
   portal_permissions?: unknown;
   profile_field_rules?: unknown;
   is_field_operations?: boolean | null;
+  dropx_one_activation_gate?: boolean | null;
   is_active: boolean;
 };
 
@@ -536,6 +537,18 @@ export function DesignationForm({
           <span>
             <strong>Field Operations</strong>
             <small>Include people with this designation in ID &amp; Pay Mapping.</small>
+          </span>
+        </label>
+        <label className="check-row designation-field-operations">
+          <input
+            className="matrix-checkbox"
+            defaultChecked={Boolean(initial?.dropx_one_activation_gate)}
+            name="dropx_one_activation_gate"
+            type="checkbox"
+          />
+          <span>
+            <strong>Amazon activation gate</strong>
+            <small>Show only Amazon ID status in DropX One until the provider ID is active.</small>
           </span>
         </label>
         {initial ? (

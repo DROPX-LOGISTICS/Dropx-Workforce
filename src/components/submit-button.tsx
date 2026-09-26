@@ -34,7 +34,9 @@ export function SubmitButton({
   confirmationSelect,
   confirmationCheckboxes,
   confirmationBlocked = false,
-  form
+  form,
+  name,
+  value
 }: {
   children: ReactNode;
   className?: string;
@@ -51,6 +53,8 @@ export function SubmitButton({
   confirmationCheckboxes?: ConfirmationCheckbox[];
   confirmationBlocked?: boolean;
   form?: string;
+  name?: string;
+  value?: string;
 }) {
   const { pending } = useFormStatus();
   const [confirmationOpen, setConfirmationOpen] = useState(false);
@@ -79,6 +83,8 @@ export function SubmitButton({
         className={className}
         disabled={pending || disabled}
         form={form}
+        name={name}
+        value={value}
         onClick={(event) => {
           if (confirmMessage) {
             const form = event.currentTarget.form;

@@ -5,15 +5,14 @@ import {workspaceDestination,activeWorkspace} from './workforce-workspace-naviga
 import {workforceRegisterViewMatches} from './workforce-register-views.ts';
 
 test('each operational tool remains reachable with one sidebar destination per workspace',()=>{
- assert.equal(workforceNavItems.length,10);
+ assert.equal(workforceNavItems.length,9);
  assert.ok(workforceNavItems.find(x=>x.label==='Master')?.children?.some(x=>x.href==='/master/payment-methods'));
  const links=workforceNavItems.flatMap(x=>x.children??[x]);
- for(const path of ['/delivery-network/lifecycle','/delivery-network/rate-mapping','/delivery-network/id-onboarding','/delivery-network/activity','/delivery-network/payroll','/delivery-network/payout-review','/delivery-network/amazon-onboarding-settings','/delivery-network/amazon-status-guidance','/settings/amazon-onboarding'])assert.ok(links.some(x=>x.href===path),path);
+ for(const path of ['/delivery-network/associates','/delivery-network/activity','/delivery-network/payroll','/delivery-network/payout-review','/delivery-network/amazon-onboarding-settings','/delivery-network/amazon-status-guidance','/settings/amazon-onboarding'])assert.ok(links.some(x=>x.href===path),path);
  assert.equal(links.filter(x=>x.href?.startsWith('/delivery-network/reports')).length,1);
- assert.ok(workforceNavItems.find(x=>x.label==='IDs & rates')?.children?.some(x=>x.href==='/delivery-network/rate-mapping'));
+ assert.ok(workforceNavItems.find(x=>x.label==='Associate Lifecycle')?.children?.some(x=>x.href==='/delivery-network/associates'));
  assert.ok(workforceNavItems.find(x=>x.label==='User access')?.children?.some(x=>x.href==='/users?section=roles'));
  assert.ok(links.some(x=>x.href==='/delivery-network/communications/whatsapp'));
- assert.ok(links.some(x=>x.href==='/delivery-network/onboarding/associates#bulk-upload'));
 });
 test('restricted roles land on an allowed child, never a hardcoded register',()=>{
  const group={...workforceNavItems[1],children:[{code:'provider_mapping',label:'ID & Rate Mapping',href:'/delivery-network/rate-mapping',secondary:true}]};
@@ -22,8 +21,8 @@ test('restricted roles land on an allowed child, never a hardcoded register',()=
 });
 test('longest route chooses profile workspace and does not mark overview active',()=>{
  assert.equal(activeWorkspace(workforceNavItems,'/master/payment-methods','Payment Methods')?.label,'Master');
- assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/lifecycle','Associate profile')?.label,'Associates');
- assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/onboarding/associates','Edit')?.label,'Associates');
+ assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/lifecycle','Associate profile')?.label,'Associate Lifecycle');
+ assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/onboarding/associates','Edit')?.label,'Associate Lifecycle');
  assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/communications/history','History')?.label,'Connect');
  assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/earnings','Live Earnings')?.label,'Payments');
  assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/payment-holds','Holds')?.label,'Payments');
@@ -53,10 +52,10 @@ test('compact navigation preserves every authorized destination exactly once',as
    assert.equal(workspaceDestination(result[0]),workspaceDestination(only));
   }
  }
- assert.equal(activeWorkspace(compact,'/delivery-network/rate-cards','Rate Cards')?.label,'Associates');
+ assert.equal(activeWorkspace(compact,'/delivery-network/rate-cards','Rate Cards')?.label,'Associate Lifecycle');
  assert.equal(activeWorkspace(compact,'/delivery-network/payment-holds','Holds')?.label,'Pay & settlement');
  assert.equal(activeWorkspace(compact,'/users','User Roles')?.label,'Settings');
- assert.equal(activeWorkspace(compact,'/delivery-network/onboarding/associates','Bulk upload')?.label,'Associates');
+ assert.equal(activeWorkspace(compact,'/delivery-network/onboarding/associates','Bulk upload')?.label,'Associate Lifecycle');
 });
 
 test('lifecycle count links preserve the exact stage rather than merging joining queues',async()=>{

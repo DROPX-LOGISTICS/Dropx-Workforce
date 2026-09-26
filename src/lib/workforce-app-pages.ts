@@ -9,7 +9,8 @@ export const workforceAppPageOptions = [
   { value: "rate_card", label: "My Rate Card" },
   { value: "connect", label: "Connect" },
   { value: "documents", label: "Documents" },
-  { value: "leave", label: "Leave" }
+  { value: "leave", label: "Leave" },
+  { value: "refer_earn", label: "Refer & Earn" }
 ] as const;
 
 export const defaultWorkforceAppPageAccess = ["dashboard", "payments", "advances"];

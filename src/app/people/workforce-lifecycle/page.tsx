@@ -48,6 +48,7 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
   let exits: ExitCase[] = [];
   let exitChecklist: Array<{ id: string; label: string; description: string | null; is_required: boolean }> = [];
   let designationCodes = new Map<string, string>();
+  let activationGates = new Map<string, boolean>();
   const reviewIssuesByApplicant = new Map<string, ReviewIssue[]>();
   const exitProfileMap = new Map<string, ExitProfile>();
   if (!supabaseAdmin) {
@@ -64,7 +65,7 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
       supabaseAdmin.from("workforce_agreement_acceptances").select("profile_id").eq("company_id", companyId).eq("profile_type", "workforce"),
       supabaseAdmin.from("workforce_lifecycle_cases").select("id, field_executive_id, profile_type, profile_id, profile_location_id, case_type, status, requested_effective_date, approved_effective_date, reason_code, reason_details, review_remarks, created_at").eq("company_id", companyId).order("created_at", { ascending: false }),
       supabaseAdmin.from("workforce_exit_checklist_master").select("id, label, description, is_required").eq("company_id", companyId).eq("is_active", true).order("sort_order"),
-      supabaseAdmin.from("designations").select("name, code").eq("company_id", companyId).eq("is_active", true),
+      supabaseAdmin.from("designations").select("name, code, dropx_one_activation_gate").eq("company_id", companyId).eq("is_active", true),
       supabaseAdmin.from("connect_profile_verifications").select("account_id, kind, display_name, message, updated_at").eq("company_id", companyId).eq("profile_type", "workforce").or("manual_review.eq.true,block_submit.eq.true")
     ]);
     const firstError = [applicantResult, checklistResult, resultResult, acceptanceResult, exitResult, exitMasterResult, designationResult, reviewIssueResult].find((result) => result.error)?.error;
@@ -80,6 +81,7 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
       }
       exitChecklist = (exitMasterResult.data ?? []) as typeof exitChecklist;
       designationCodes = new Map((designationResult.data ?? []).map((row) => [String(row.name).toLowerCase(), String(row.code).toUpperCase()]));
+      activationGates = new Map((designationResult.data ?? []).flatMap((row) => [[String(row.name).toLowerCase(),Boolean(row.dropx_one_activation_gate)],[String(row.code).toLowerCase(),Boolean(row.dropx_one_activation_gate)]]));
       for (const issue of (reviewIssueResult.data ?? []) as ReviewIssue[]) {
         reviewIssuesByApplicant.set(issue.account_id, [...(reviewIssuesByApplicant.get(issue.account_id) ?? []), issue]);
       }
@@ -104,12 +106,13 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
   if(requestedPerson && tab!=='exits') tab=isActiveReviewProfile(requestedPerson)||['inactive','offboarded','exited','terminated','resigned','settled'].includes(requestedPerson.lifecycle_status)?'active':'onboarding';
   const queue=(tab==='active'?active:pending).filter(matches);
   const selected=searchParams?.person?requestedPerson:queue[0];
-  const section=['profile','training','payments','earnings','exit'].includes(searchParams?.section||'')?searchParams!.section!:'profile';
+  const requestedSection=searchParams?.section==='training'?'activation':searchParams?.section;
+  const section=['profile','activation','payments','earnings','exit'].includes(requestedSection||'')?requestedSection!:'profile';
   const navPerson=requestedPerson??(tab!=='exits'?selected:undefined);
   const visibleExits=searchParams?.person?exits.filter(item=>item.profile_type==='workforce'&&item.profile_id===searchParams.person):exits;
-  const profileSections=[['profile','Registration'],['training','Training & ID progress'],['payments','ID & payment setup'],...(hasPermission(authorization,'workforce_earnings','access')?[['earnings','Earnings']]:[]),['exit','Exit']];
-  return <AppShell active="Onboarding & review" pageCode="people_review">
-    <PageHead eyebrow="Workforce · Associates" title={requestedPerson?'Associate profile':tab==='exits'?'Exit & settlement':'Registration review'} subtitle={requestedPerson?'Registration → optional training → ID & payment setup → earnings → exit.':'Select an associate to continue their setup.'} action={<PendingLink className="button secondary" href="/delivery-network/associates">← All associates</PendingLink>}/>
+  const profileSections=[['profile','1 · Registration'],['activation','2 · Amazon ID'],['payments','3 · Provider & pay'],...(hasPermission(authorization,'workforce_earnings','access')?[['earnings','4 · Earnings']]:[]),['exit','5 · Exit']];
+  return <AppShell active="Associate Lifecycle" pageCode="people_review">
+    <PageHead eyebrow="Workforce · Associate lifecycle" title={requestedPerson?'Associate workflow':tab==='exits'?'Exit & settlement':'Registration review'} subtitle={requestedPerson?'Registration → Amazon ID → Provider ID → pay readiness → exit.':'Select an associate and complete the next required action.'} action={<PendingLink className="button secondary" href="/delivery-network/associates">← All associates</PendingLink>}/>
     {searchParams?.notice ? <div className="notice">{searchParams.notice}</div> : null}
     {searchParams?.error || error ? <div className="error-box"><strong>Action required</strong><p>{searchParams?.error || error}</p></div> : null}
     {!searchParams?.person?<><section className="workforce-lifecycle-summary">
@@ -130,6 +133,7 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
       {selected ? [selected].map((item) => {
         const station = first(item.stations);
         const applicantDesignationCode = designationCodes.get(String(item.designation ?? "").toLowerCase()) ?? "";
+        const activationGated = activationGates.get(String(item.designation ?? "").toLowerCase()) ?? activationGates.get(applicantDesignationCode.toLowerCase()) ?? false;
         const applicable = checklist.filter((check) => !check.applicable_designation_codes?.length || check.applicable_designation_codes.map((code) => code.toUpperCase()).includes(applicantDesignationCode));
         const reviewIssues = reviewIssuesByApplicant.get(item.id) ?? [];
         const existingProfiles = Array.isArray(item.identity_exception_context?.existing_profiles)
@@ -153,8 +157,8 @@ export default async function WorkforceLifecyclePage({ searchParams }: { searchP
             <div className="workforce-provider-row"><label>Amazon / provider ID<input defaultValue={item.provider_employee_id || ""} name="provider_employee_id" placeholder="Enter ID after creation" /></label><label className="compact-check"><input name="provider_not_required" type="checkbox" value="true" />Not required for this designation</label></div>
             <label>Review remarks<textarea name="remarks" placeholder="Verification, return or rejection note" /></label>
             <p className="subtle">Provider ID pending? Approve for joining after all other checks. This enables biometric attendance without marking the associate delivery-active.</p>
-            <button className="button secondary" disabled={Boolean(reviewIssues.length)} name="review_action" type="submit" value="approve_for_joining">Approve for joining · configure training</button>
-            <div className="form-actions"><button className="button secondary" name="review_action" type="submit" value="return">Return</button><button className="button danger" name="review_action" type="submit" value="reject">Reject</button><button className="button" disabled={Boolean(reviewIssues.length)} name="review_action" title={reviewIssues.length ? "Resolve profile verification issues before approval" : undefined} type="submit" value="approve">{reviewIssues.length ? "Resolve issues first" : "Approve & activate"}</button></div>
+            <button className="button" disabled={Boolean(reviewIssues.length)} name="review_action" type="submit" value="approve_for_joining">Approve registration → Amazon ID</button>
+            <div className="form-actions"><button className="button secondary" name="review_action" type="submit" value="return">Return</button><button className="button danger" name="review_action" type="submit" value="reject">Reject</button>{!activationGated?<button className="button secondary" disabled={Boolean(reviewIssues.length)} name="review_action" title={reviewIssues.length ? "Resolve profile verification issues before approval" : undefined} type="submit" value="approve">Activate without Amazon ID</button>:null}</div>
           </form> : <p className="subtle">{item.onboarding_review_remarks || "Waiting for the applicant or HO action."}</p>}
           </>:null}
         </article>;

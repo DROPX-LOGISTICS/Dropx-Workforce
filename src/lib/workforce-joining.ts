@@ -42,6 +42,9 @@ export type JoiningPlan = {
   terms_accepted_on: string; training_completed_on: string | null; closed_on: string | null;
   provider_stage: keyof typeof providerStages; provider_reference: string | null; provider_submitted_on: string | null;
   provider_activated_on: string | null; next_follow_up_on: string | null; owner_note: string | null;
+  provider_candidate_reference?: string | null; provider_candidate_first_seen?: string | null;
+  provider_candidate_detected_at?: string | null; provider_candidate_status?: "pending" | "confirmed" | "dismissed" | null;
+  provider_candidate_evidence?: Record<string, unknown>;
   contact_email?: string | null; assigned_to?: string | null;
   amazon_tasks?: Partial<Record<keyof typeof amazonTasks,keyof typeof amazonTaskStates>>;
   provider_profile_id?: string | null;

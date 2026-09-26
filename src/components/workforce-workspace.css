@@ -6,6 +6,7 @@
 .wf-workspace-nav details>div>a{display:block;padding:10px;border-radius:7px;color:#34445d;text-decoration:none}.wf-workspace-nav a:hover{background:#f1f4f8}
 .wf-station-context{display:flex;align-items:end;flex-wrap:wrap;gap:10px;margin:18px 0}.wf-station-context label{display:grid;gap:5px;font-size:12px}.wf-station-context select{min-width:180px;padding:10px;border:1px solid #dfe5ed;border-radius:8px;background:#fff}
 .wf-journey-nav{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}.wf-journey-nav a{border:1px solid #dfe5ed;background:white;padding:10px 14px;border-radius:9px;font-size:13px;color:#44516a;text-decoration:none}.wf-journey-nav a[aria-current=page]{background:#1f2b43;color:white;border-color:#1f2b43}.wf-journey-nav strong{margin-left:8px}
+.workforce-referral-desk{display:grid;gap:14px}.workforce-referral-desk .panel{margin:0}.workforce-referral-desk .form-grid{align-items:end}.workforce-referral-desk .inline-actions{display:flex;flex-wrap:wrap;gap:6px;min-width:360px}.workforce-referral-desk .inline-actions input{min-height:34px;max-width:150px;border:1px solid #dfe5ed;border-radius:8px;padding:6px 8px}.workforce-referral-desk td small{display:block;margin-top:3px;color:#78869b}
 .wf-profile-progress{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}.wf-profile-progress>div{background:#f5f7fa;border-radius:9px;padding:12px;font-size:13px}.wf-profile-progress small{display:block;color:#66758b;margin-bottom:5px}.wf-profile-progress strong{display:block;overflow-wrap:anywhere}
 .workforce-product .workforce-lifecycle-grid{grid-template-columns:minmax(0,1fr)}.workforce-product .wf-simple-setup{margin:0;padding:18px;border-top:1px solid #e4e9f0;min-width:0}.workforce-product .workforce-lifecycle-tabs{flex-wrap:wrap}.workforce-product .workforce-lifecycle-facts{grid-template-columns:repeat(4,minmax(0,1fr))}
 .workforce-product .wf-action-lane>div{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}.workforce-product details.wf-workspace-directory>summary{padding:16px;cursor:pointer;font-weight:650}
@@ -26,6 +27,9 @@
 .workforce-product .mapping-rate-summary th { background:#f5f7fa; }
 .workforce-product .mapping-rate-summary small { display:block; color:#69768a; }
 .workforce-product .mapping-bulk-tools { display:flex; gap:10px; flex-wrap:wrap; align-items:center; padding:12px 16px; border-block:1px solid #e4e9f0; }
+.workforce-product .candidate-review { display:grid; gap:6px; min-width:180px; }
+.workforce-product .candidate-review input { width:100%; min-height:32px; border:1px solid #dfe5ed; border-radius:8px; padding:5px 8px; font:inherit; }
+.workforce-product .candidate-review .form-actions { display:flex; gap:6px; flex-wrap:wrap; }
 
 /* A scoped compact layout overrides inherited Dashboard theme sizes. */
 .workforce-product.workforce-people-inspired.wf-compact .wf-product-content { padding:18px 22px 32px; }

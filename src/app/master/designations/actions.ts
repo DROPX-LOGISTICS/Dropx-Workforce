@@ -222,6 +222,7 @@ async function createDesignationForScope(formData: FormData, scope: DesignationA
       app_page_access: appPageAccess(formData),
       onboarding_role_ids: roleIds,
       is_field_operations: formData.has("is_field_operations"),
+      dropx_one_activation_gate: formData.has("dropx_one_activation_gate"),
       is_active: true
     }, companyId));
     if (error) throw new Error(error.message);
@@ -270,6 +271,7 @@ async function updateDesignationForScope(formData: FormData, scope: DesignationA
         app_page_access: appPageAccess(formData),
         onboarding_role_ids: roleIds,
         is_field_operations: formData.has("is_field_operations"),
+        dropx_one_activation_gate: formData.has("dropx_one_activation_gate"),
         is_active: status,
         updated_at: new Date().toISOString()
       })

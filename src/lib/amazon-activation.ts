@@ -30,13 +30,14 @@ export function findAmazonField(record: Record<string, unknown>, aliases: string
 
 export function isAmazonOnboardingRecord(record: Record<string, unknown>) {
   const labels = Object.keys(record).map(amazonKey);
-  return labels.some((label) => label.includes("email") || label.includes("mailid"))
+  return labels.some((label) => label.includes("email") || label.includes("mailid") || label === "rabbitid" || label === "loginid")
     && labels.some((label) => label.includes("station") || label.includes("servicearea"))
     && labels.some((label) => label.includes("status") || label.includes("task") || label.includes("transporter"));
 }
 
 function inferredStage(status: string) {
   const value = amazonKey(status);
+  if (/nofurtheractionrequired/.test(value)) return "activated";
   if (/active|completed|complete|cleared|provisioned/.test(value)) return "activated";
   if (/fail|reject|error|insufficient|mismatch|duplicate|blocked/.test(value)) return "failed";
   if (/background|bgc|idfy|video/.test(value)) return value.includes("video") || value.includes("idfy") ? "video_verification" : "background_check";
@@ -91,4 +92,3 @@ export function validAmazonEmailPattern(pattern: string) {
   return value.includes("@") && value.includes("{station_code}")
     && (value.includes("{first_name}") || value.includes("{full_name}"));
 }
-

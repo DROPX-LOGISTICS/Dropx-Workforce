@@ -43,10 +43,10 @@ export async function WorkforceAssociateSetup({auth,id,dateOfJoin,tab,section='p
   <p><a href="/delivery-network/id-onboarding?view=pending">View Amazon activation status</a></p>
   </>:null}
   {section==='training'||section==='activation'?<>
-  <header><h3>Amazon ID & activation</h3><p>The DANAP import and invitation worker are the activation source.</p></header>
+  <header><h3>Amazon ID & activation</h3><p>The DA In-App Onboarding import and invitation worker are the activation source.</p></header>
   <p>Current stage: <strong>{providerStages[plan?.provider_stage as keyof typeof providerStages]||'Invitation not started'}</strong></p>
   <p>Amazon email: <strong>{plan?.contact_email||'Configure in the activation desk'}</strong></p>
-  <p><a href={`/delivery-network/id-onboarding?view=pending&q=${encodeURIComponent(person.dropx_id||person.full_name)}`}>Open invitation, DANAP tasks and error handling →</a></p>
+  <p><a href={`/delivery-network/id-onboarding?view=pending&q=${encodeURIComponent(person.dropx_id||person.full_name)}`}>Open invitation, DA In-App tasks and error handling →</a></p>
   <p><a href={`?tab=${tab}&person=${id}&section=payments`}>Next: map provider ID & regular payment →</a></p>
   </>:null}
  </section>;

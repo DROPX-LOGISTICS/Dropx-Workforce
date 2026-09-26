@@ -100,7 +100,7 @@ export default async function DeliveryNetworkPage() {
       code: "executive_id_onboarding",
       href: "/delivery-network/id-onboarding",
       title: "Amazon ID & activation",
-      description: "Queue invitations, close DANAP tasks and move provider IDs into pay mapping.",
+      description: "Queue invitations, close DA In-App Onboarding tasks and move provider IDs into pay mapping.",
       metric: `${joiningOpen} pending · ${amazonErrorCount} errors`,
       icon: Fingerprint
     },
@@ -176,7 +176,7 @@ export default async function DeliveryNetworkPage() {
   ].filter((module) => hasPermission(authorization, module.code, "access"));
   const lifecycleStages = [
     {code:'delivery_associates', label:'Register & approve', helper:'Invite, documents & review', href:'/delivery-network/associates?view=pending', icon:UserRoundPlus},
-    {code:'executive_id_onboarding', label:'Create Amazon ID', helper:'Invitation and DANAP action', href:'/delivery-network/id-onboarding?view=pending', icon:Fingerprint},
+    {code:'executive_id_onboarding', label:'Create Amazon ID', helper:'Invitation and DA In-App action', href:'/delivery-network/id-onboarding?view=pending', icon:Fingerprint},
     {code:'provider_mapping', label:'Map ID & pay', helper:'Provider ID and dated payment stages', href:'/delivery-network/rate-mapping', icon:WalletCards},
     {code:'workforce_activity', label:'Work & deliveries', helper:'Attendance and imported shipments', href:'/delivery-network/activity', icon:Activity},
     {code:'workforce_earnings', label:'Review & pay', helper:'Effective rates, exceptions & payroll', href:'/delivery-network/earnings', icon:WalletCards},

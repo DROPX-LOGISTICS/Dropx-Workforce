@@ -8,7 +8,7 @@ test("station email pattern is deterministic and station aware", () => {
   assert.equal(validAmazonEmailPattern("{first_name}@gmail.com"), false);
 });
 
-test("DANAP rows are recognized without relying on column order", () => {
+test("DA In-App rows are recognized without relying on column order", () => {
   assert.equal(isAmazonOnboardingRecord({ "Email ID": "a@b.com", "Station Code": "KLZA", "Pending Task": "BGC" }), true);
 });
 

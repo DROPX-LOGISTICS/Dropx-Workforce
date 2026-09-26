@@ -1224,6 +1224,18 @@ export async function FieldExecutivePageContent({
         eyebrow="Workforce master"
         title={pageTitle}
         subtitle={pageSubtitle}
+        action={
+          returnPath === "/delivery-network/onboarding/associates" ? (
+            <div className="component-chip-list">
+              <PendingLink className="button secondary compact" href="/delivery-network/amazon-lifecycle">
+                Amazon lifecycle
+              </PendingLink>
+              <PendingLink className="button secondary compact" href="/delivery-network/amazon-onboarding-settings">
+                Station master
+              </PendingLink>
+            </div>
+          ) : undefined
+        }
       />
 
       {error || errorMessage || notice ? (

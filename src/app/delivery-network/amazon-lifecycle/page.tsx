@@ -53,6 +53,14 @@ type LifecycleRow = {
 
 type View = "not_onboarded" | "onboarded" | "in_progress" | "idfy" | "all";
 
+const viewLabel: Record<View, string> = {
+  not_onboarded: "Not onboarded",
+  in_progress: "In progress",
+  onboarded: "Onboarded",
+  idfy: "IDfy issues",
+  all: "All",
+};
+
 export default async function AmazonLifecyclePage({
   searchParams = {},
 }: {
@@ -103,6 +111,8 @@ export default async function AmazonLifecyclePage({
     if (view === "idfy") return Boolean(row.idfy?.hasInsufficiency);
     return row.bucket === view;
   });
+  const tabStyle = (id: View) =>
+    view === id ? { background: "#172033", color: "#fff", borderColor: "#172033" } : undefined;
 
   return (
     <AppShell active="Amazon lifecycle" pageCode="executive_id_onboarding">
@@ -161,20 +171,20 @@ export default async function AmazonLifecyclePage({
 
       <section className="panel">
         <div className="panel-body inline-actions" style={{ gap: 8, flexWrap: "wrap" }}>
-          <Link className={`button secondary compact ${view === "not_onboarded" ? "active" : ""}`} href="?view=not_onboarded">
-            Not onboarded
+          <Link className="button secondary compact" style={tabStyle("not_onboarded")} href="?view=not_onboarded">
+            Not onboarded ({counts.notOnboarded})
           </Link>
-          <Link className={`button secondary compact ${view === "in_progress" ? "active" : ""}`} href="?view=in_progress">
-            In progress
+          <Link className="button secondary compact" style={tabStyle("in_progress")} href="?view=in_progress">
+            In progress ({counts.inProgress})
           </Link>
-          <Link className={`button secondary compact ${view === "onboarded" ? "active" : ""}`} href="?view=onboarded">
-            Onboarded
+          <Link className="button secondary compact" style={tabStyle("onboarded")} href="?view=onboarded">
+            Onboarded ({counts.onboarded})
           </Link>
-          <Link className={`button secondary compact ${view === "idfy" ? "active" : ""}`} href="?view=idfy">
-            IDfy issues
+          <Link className="button secondary compact" style={tabStyle("idfy")} href="?view=idfy">
+            IDfy issues ({counts.idfyIssues})
           </Link>
-          <Link className={`button secondary compact ${view === "all" ? "active" : ""}`} href="?view=all">
-            All
+          <Link className="button secondary compact" style={tabStyle("all")} href="?view=all">
+            All ({rows.length})
           </Link>
           {canEdit ? (
             <>
@@ -281,7 +291,7 @@ export default async function AmazonLifecyclePage({
                       )}
                     </td>
                     <td>
-                      {canEdit && row.bucket === "not_onboarded" ? (
+                      {canEdit && row.bucket === "not_onboarded" && row.dropx.locationId ? (
                         <form action={onboardAndInviteAmazon} className="inline-actions">
                           <input type="hidden" name="view" value={view} />
                           <input type="hidden" name="workforce_id" value={row.dropx.id} />
@@ -312,7 +322,12 @@ export default async function AmazonLifecyclePage({
               })}
               {!filtered.length ? (
                 <tr>
-                  <td colSpan={5}>No associates in this view.</td>
+                  <td colSpan={5}>
+                    No associates in {viewLabel[view]}.
+                    {view === "idfy"
+                      ? " Run Sync IDfy, then open this tab. Issues only appear here."
+                      : " The numbers above are totals. Open the matching tab to see those associates."}
+                  </td>
                 </tr>
               ) : null}
             </tbody>

@@ -126,7 +126,7 @@ export const workforceNavItems: NavItem[] = [
       { code: "delivery_associates", label: "Invite associate", href: "/delivery-network/onboarding", secondary: true },
       { code: "delivery_associates", label: "Bulk associate upload", href: "/delivery-network/onboarding/associates#bulk-upload" },
       { code: "people_review", label: "Onboarding & review", href: "/delivery-network/lifecycle", secondary: true },
-      { code: "delivery_associates", label: "Joining & Training", href: "/delivery-network/joining", secondary: true },
+      { code: "executive_id_onboarding", label: "Amazon ID & Activation", href: "/delivery-network/id-onboarding" },
       { code: "delivery_associates", label: "Need Attention", href: "/delivery-network/attention", secondary: true }
     ]
   },
@@ -134,8 +134,7 @@ export const workforceNavItems: NavItem[] = [
     code: "provider_mapping", label: "IDs & rates", icon: "ID",
     children: [
       { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping" },
-      { code: "workforce_rate_cards", label: "Rate Cards", href: "/delivery-network/rate-cards" },
-      { code: "executive_id_onboarding", label: "Provider ID Onboarding", href: "/delivery-network/id-onboarding" }
+      { code: "workforce_rate_cards", label: "Rate Cards", href: "/delivery-network/rate-cards" }
     ]
   },
   {
@@ -197,8 +196,8 @@ export const workforceNavItems: NavItem[] = [
     icon: "WM",
     children: [
       { code: "people_review", label: "Setup Checklist", href: "/delivery-network/setup", secondary: true },
-      { code: "people_review", label: "Station training defaults", href: "/delivery-network/training-policies" },
-      { code: "executive_id_onboarding", label: "Amazon station defaults", href: "/delivery-network/amazon-onboarding-settings", secondary: true },
+      { code: "executive_id_onboarding", label: "Amazon Activation Master", href: "/delivery-network/amazon-onboarding-settings" },
+      { code: "executive_id_onboarding", label: "Amazon Status Guidance", href: "/delivery-network/amazon-status-guidance", secondary: true },
       { code: "workforce_payroll", label: "Payout calendars", href: "/delivery-network/payroll-calendars" },
       { code: "workforce_incentives", label: "Incentive rules", href: "/delivery-network/incentives", secondary: true },
       { code: "amazon_connector", label: "Amazon Connection", href: "/settings/amazon-onboarding", secondary: true },

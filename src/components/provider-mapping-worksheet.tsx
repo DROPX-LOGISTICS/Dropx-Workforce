@@ -48,6 +48,7 @@ export type PaymentMethodOption = {
   code: string;
   name: string;
   components: PaymentMethodComponentOption[];
+  sourceOfTruth: string;
 };
 
 export type ProviderPendingMappingRow = {
@@ -61,6 +62,9 @@ export type ProviderPendingMappingRow = {
   dailyRows: number;
   deliveries: number;
   reason: string;
+  suggestedWorkforceId?: string;
+  suggestedDropxId?: string;
+  suggestedName?: string;
 };
 
 function csvCell(value: unknown) {
@@ -319,6 +323,12 @@ export function ProviderMappingWorksheet({
     }catch(error){setBulkMessage(error instanceof Error?error.message:'Unable to read this file.');}
     finally{setBulkBusy(false);}
   }
+  function applySuggestion(pending:ProviderPendingMappingRow){
+    const index=rows.findIndex(row=>row.workforceId===pending.suggestedWorkforceId);
+    if(index<0)return;
+    updateRow(index,"providerMemberId",pending.providerMemberId);
+    setDirectionView("dropx");setMappingStatus("all");setStationFilter(rows[index].stationId);setSearchQuery(rows[index].dropxId);
+  }
 
   useEffect(() => {
     setCurrentPage(1);
@@ -422,9 +432,9 @@ export function ProviderMappingWorksheet({
         {directionView==='dropx'?<div className="mapping-rate-summary"><table aria-label="Station provider IDs and rates"><thead><tr><th>Associate / DropX ID</th><th>Station</th><th>Provider ID</th><th>Payment method</th>{mappingRateColumns.map(([code,label])=><th key={code}>{label}</th>)}<th>Other pay terms</th><th>Effective dates</th><th>Setup</th></tr></thead><tbody>
           {[...paginatedIndexes].map(index=>{const row=rows[index];const fallback:Record<string,string>={DELIVERY:row.deliveryRate,CRETURN:row.pickupRate,SELLER_PICKUP:row.mfnRate,SLLLER_RETURN:row.mfnReturnRate};return <tr key={row.id}><td><strong>{row.dropxName}</strong><small>{row.dropxId}{dirtyRows[index]?' · Unsaved':''}</small></td><td>{locationLabelById.get(row.stationId)}</td><td>{row.providerMemberId||'Not mapped'}</td><td>{paymentMethodById.get(row.paymentMethodId)?.name||(Number(row.paymentValues.DROPX_PERSONAL_TERMS)===1?'Individual dated terms':'Not configured')}</td>{mappingRateColumns.map(([code])=><td key={code}>{mappingRate(row.paymentValues,code,fallback[code])}</td>)}<td>{Object.entries(row.paymentValues).filter(([code])=>!code.startsWith('DROPX_')&&!mappingRateColumns.some(([key])=>key===code)).map(([code,value])=><small key={code}>{code.replaceAll('_',' ')}: {mappingRate({[code]:value},code)}</small>)}</td><td>{row.effectiveFrom}<small>to {row.effectiveTo||'ongoing'}</small></td><td><a href={`#mapping-${row.id}`}>Edit here</a><br/><a href={`/delivery-network/lifecycle?person=${row.workforceId}&section=payments`}>Profile & history</a></td></tr>;})}
         </tbody></table><small>Rates shown for the displayed mapping and effective dates; — means not configured for that component.</small></div>:null}
-        {directionView === "provider" ? <div className="table-wrap mapping-pending-table"><table><thead><tr><th>Provider ID</th><th>Source name</th><th>Provider</th><th>Station</th><th>Activity</th><th>Last seen</th><th>Reason</th></tr></thead><tbody>
-          {filteredProviderPending.map((row) => <tr key={row.id}><td><strong className="mono">{row.providerMemberId}</strong></td><td>{row.sourceName}</td><td>{row.providerName}</td><td>{row.stationCode}</td><td>{row.deliveries.toLocaleString("en-IN")} delivered<small>{row.dailyRows} daily rows</small></td><td>{row.lastSeen}<small>First {row.firstSeen}</small></td><td><span className="wf-pay-state unmapped">Pending DropX ID</span><small>{row.reason}</small></td></tr>)}
-          {!filteredProviderPending.length ? <tr><td className="empty-cell" colSpan={7}>No provider IDs are pending for these filters.</td></tr> : null}
+        {directionView === "provider" ? <div className="table-wrap mapping-pending-table"><table><thead><tr><th>Provider ID</th><th>Source name</th><th>Provider</th><th>Station</th><th>Activity</th><th>Last seen</th><th>Suggested associate</th><th>Reason</th></tr></thead><tbody>
+          {filteredProviderPending.map((row) => <tr key={row.id}><td><strong className="mono">{row.providerMemberId}</strong></td><td>{row.sourceName}</td><td>{row.providerName}</td><td>{row.stationCode}</td><td>{row.deliveries.toLocaleString("en-IN")} delivered<small>{row.dailyRows} daily rows</small></td><td>{row.lastSeen}<small>First {row.firstSeen}</small></td><td>{row.suggestedWorkforceId?<><strong>{row.suggestedName}</strong><small>{row.suggestedDropxId} · exact station/name suggestion</small><button className="button secondary compact" type="button" onClick={()=>applySuggestion(row)}>Use suggestion</button></>:"No unique safe match"}</td><td><span className="wf-pay-state unmapped">Pending approval</span><small>{row.reason}</small></td></tr>)}
+          {!filteredProviderPending.length ? <tr><td className="empty-cell" colSpan={8}>No provider IDs are pending for these filters.</td></tr> : null}
         </tbody></table></div> : <div className="mapping-rows">
           {rows.map((row, index) => Number(row.paymentValues.DROPX_PERSONAL_TERMS) === 1 ? (
             <div className="mapping-row-card" id={`mapping-${row.id}`} hidden={!paginatedIndexes.has(index)} key={`${row.workforceId}-${index}`}>
@@ -472,7 +482,7 @@ export function ProviderMappingWorksheet({
                   >
                     <option value="">Select payment method</option>
                     {paymentMethods.map((method) => (
-                      <option key={method.id} value={method.id}>{method.name}</option>
+                      <option key={method.id} value={method.id}>{method.name} · {method.sourceOfTruth.replaceAll("_", " ")}</option>
                     ))}
                   </select>
                 </label>

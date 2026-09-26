@@ -27,9 +27,8 @@ export async function savePersonalPaymentStage(form:FormData){
  const t=(k:string)=>String(form.get(k)||'').trim(),query=new URLSearchParams({person:t('workforce_id'),tab:t('tab')||'active',section:'payments'});
  try{
   if(auth.readOnly||!supabaseAdmin)throw new Error('Editing is unavailable.');
-  const keys=t('pay_type')==='MG_PER_DAY'?['MG_PER_DAY']:['DELIVERY','CRETURN','SELLER_PICKUP','SLLLER_RETURN'];
-  if(keys.some(k=>t(k)===''||!Number.isFinite(Number(t(k)))))throw new Error('Complete every rate. Use 0 for a non-paying activity.');
-  const r=await supabaseAdmin.rpc('workforce_save_personal_payment_stage',{p_company:requireCompanyId(auth),p_actor:auth.userId,p_actor_name:auth.fullName||auth.email||'Workforce',p_workforce:t('workforce_id'),p_mapping:t('mapping_id'),p_expected:t('expected_updated_at')||null,p_mode:t('mode'),p_from:t('effective_from'),p_to:t('effective_to')||null,p_type:t('pay_type'),p_values:Object.fromEntries(keys.map(k=>[k,Number(t(k))])),p_reason:t('reason'),p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds});
+  let values:Record<string,number>;try{const parsed=JSON.parse(t('payment_values_json')) as Record<string,unknown>;values=Object.fromEntries(Object.entries(parsed).map(([key,value])=>{const number=Number(value);if(!key||!Number.isFinite(number)||number<0)throw new Error('invalid');return [key,number];}));}catch{throw new Error('Complete every configured payment field with a valid amount.');}
+  const r=await supabaseAdmin.rpc('workforce_save_personal_payment_stage_v2',{p_company:requireCompanyId(auth),p_actor:auth.userId,p_actor_name:auth.fullName||auth.email||'Workforce',p_workforce:t('workforce_id'),p_mapping:t('mapping_id'),p_expected:t('expected_updated_at')||null,p_mode:t('mode'),p_from:t('effective_from'),p_to:t('effective_to')||null,p_method:t('payment_method_id'),p_values:values,p_reason:t('reason'),p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds});
   if(r.error)throw new Error(r.error.message);
   revalidatePath('/delivery-network/lifecycle');revalidatePath('/delivery-network/earnings');query.set('notice','Payment stage saved. Recalculate any affected draft payout.');
  }catch(e){query.set('error',e instanceof Error?e.message:'Unable to save payment stage.');}

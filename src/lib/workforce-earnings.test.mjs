@@ -82,6 +82,12 @@ test('individual stages respect dates, override only opted-in rates and allocate
  assert.equal(result.lines.find(l=>l.workDate==='2026-08-20').baseAmount,508);
  assert.equal(result.totalBase,1308);assert.equal(original.mappings[0].payment_values.DROPX_PERSONAL_TERMS,undefined);
 });
+test('biometric-source payment stages pay attendance days and never shipment presence',()=>{
+ const original=input(),mapping={...original.mappings[0],payment_values:{DROPX_PERSONAL_TERMS:1,DROPX_SOURCE_OF_TRUTH:'biometric_attendance',DROPX_CALCULATION_BASIS:'attendance_day',DAILY_AMOUNT:800},pay_type:'STATION_DAILY'};
+ const attendance={id:'attendance-1',workforce_id:'workforce-1',field_executive_id:null,contractor_id:null,punch_date:'2026-08-20',in_time:'2026-08-20T03:30:00Z',out_time:'2026-08-20T12:30:00Z',work_minutes:540,status:'P',punch_in_location_id:'station-1',location_id:'station-1',in_source:'biometric',out_source:'biometric',enrolment_id:'BIO-1',updated_at:'2026-08-20T12:30:00Z'};
+ const result=calculateWorkforceEarnings({...original,mappings:[mapping],trainingAttendance:[attendance]});
+ assert.equal(result.totalBase,800);assert.equal(result.lines.find(line=>line.sourceId==='shipment-1').baseAmount,0);assert.equal(result.lines.find(line=>line.sourceId==='attendance-1').baseAmount,800);
+});
 test('payout count corrections recalculate pay without changing imported data or mappings',()=>{
  const original=input();original.shipments[0].da_total_pay=999;
  const correction={id:'fix',workforce_id:'workforce-1',source_id:'shipment-1',kind:'counts',payload:{totalDelivery:35,customerReturn:0,mfn:0,mfnReturn:0},reason:'Verified source correction'};

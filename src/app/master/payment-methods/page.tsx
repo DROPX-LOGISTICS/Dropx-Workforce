@@ -28,6 +28,7 @@ type PaymentMethodRow = {
   is_active: boolean;
   payment_method_components?: PaymentComponentRow[] | null;
   usage_count: number;
+  source_of_truth: string;
 };
 
 async function loadPaymentMethods(companyId: string) {
@@ -61,6 +62,10 @@ async function loadPaymentMethods(companyId: string) {
 
   if (error) return { methods: [] as PaymentMethodRow[], error: error.message };
 
+  const sourceResult = await supabaseAdmin.from("workforce_payment_method_sources")
+    .select("payment_method_id,source_of_truth").eq("company_id",companyId);
+  if (sourceResult.error) return { methods: [] as PaymentMethodRow[], error: sourceResult.error.message };
+  const sourceByMethod = new Map((sourceResult.data ?? []).map((row) => [row.payment_method_id,row.source_of_truth]));
   const usage = await Promise.all((data ?? []).map(async (method) => {
     const result = await supabaseAdmin!.from("field_executive_provider_mappings")
       .select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("payment_method_id", method.id);
@@ -74,6 +79,7 @@ async function loadPaymentMethods(companyId: string) {
     methods: ((data ?? []) as Omit<PaymentMethodRow, "usage_count">[]).map((method) => ({
       ...method,
       usage_count: usageByMethod.get(method.id) ?? 0,
+      source_of_truth: sourceByMethod.get(method.id) ?? "",
       payment_method_components: (method.payment_method_components ?? [])
         .slice()
         .sort((first, second) => first.sort_order - second.sort_order)
@@ -170,6 +176,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                   <th>Method ID</th>
                   <th>Name</th>
                   <th>Configured fields</th>
+                  <th>Source of truth</th>
                   <th>Status</th>
                   {pagePermission.canEdit ? <th>Action</th> : null}
                 </tr>
@@ -192,11 +199,12 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                         )) : <span className="subtle">No fields configured</span>}
                       </div>
                     </td>
+                    <td>{method.source_of_truth ? method.source_of_truth.replaceAll("_"," ") : <span className="status-badge warning">Configure</span>}</td>
                     <td><StatusPill status={method.is_active ? "Active" : "Inactive"} /></td>
                     {pagePermission.canEdit ? <td><PendingLink className="button secondary compact" href={`/master/payment-methods?edit=${method.id}`} scroll={false}>Edit</PendingLink></td> : null}
                   </tr>
                 )) : (
-                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 5 : 4}>No payment methods added yet.</td></tr>
+                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 6 : 5}>No payment methods added yet.</td></tr>
                 )}
               </tbody>
             </table>
@@ -220,6 +228,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                 code: editMethod.code,
                 name: editMethod.name,
                 usage_count: editMethod.usage_count,
+                source_of_truth: editMethod.source_of_truth,
                 field_ids: (editMethod.payment_method_components ?? []).map((component) => component.payment_field_id)
               }}
               submitLabel="Save changes"

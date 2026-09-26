@@ -33,7 +33,7 @@ export const providerStages = {
   not_started: "Not started", email_setup: "Associate email required", documents_pending: "Documents pending",
   invitation_sent: "Invitation sent", invitation_accepted: "Invitation accepted", app_details: "App details pending",
   submitted: "Submitted to provider", verification_pending: "Verification pending", background_check: "Background check",
-  course_pending: "Associate training course pending", provisioning: "ID provisioning",
+  course_pending: "Amazon learning course pending", provisioning: "ID provisioning",
   activated: "Activated — mapping required", blocked: "Blocked", withdrawn: "Withdrawn"
 } as const;
 export type JoiningPlan = {
@@ -57,7 +57,7 @@ export type JoiningPerson = {
 export type JoiningMapping = {
   id: string; workforce_id?: string | null; field_executive_id?: string | null; contractor_id?: string | null;
   employee_id?: string | null; effective_from: string; effective_to: string | null; status: string;
-  provider_member_id: string; provider_id?: string; station_id?: string | null;
+  provider_member_id: string; provider_id?: string; payment_method_id?: string | null; station_id?: string | null;
 };
 export type JoiningAttendance = {
   id: string; workforce_id: string | null; field_executive_id: string | null; contractor_id: string | null;

@@ -8,7 +8,7 @@ test('each operational tool remains reachable with one sidebar destination per w
  assert.equal(workforceNavItems.length,10);
  assert.ok(workforceNavItems.find(x=>x.label==='Master')?.children?.some(x=>x.href==='/master/payment-methods'));
  const links=workforceNavItems.flatMap(x=>x.children??[x]);
- for(const path of ['/delivery-network/lifecycle','/delivery-network/rate-mapping','/delivery-network/id-onboarding','/delivery-network/activity','/delivery-network/payroll','/delivery-network/payout-review','/delivery-network/training-policies','/settings/amazon-onboarding'])assert.ok(links.some(x=>x.href===path),path);
+ for(const path of ['/delivery-network/lifecycle','/delivery-network/rate-mapping','/delivery-network/id-onboarding','/delivery-network/activity','/delivery-network/payroll','/delivery-network/payout-review','/delivery-network/amazon-onboarding-settings','/delivery-network/amazon-status-guidance','/settings/amazon-onboarding'])assert.ok(links.some(x=>x.href===path),path);
  assert.equal(links.filter(x=>x.href?.startsWith('/delivery-network/reports')).length,1);
  assert.ok(workforceNavItems.find(x=>x.label==='IDs & rates')?.children?.some(x=>x.href==='/delivery-network/rate-mapping'));
  assert.ok(workforceNavItems.find(x=>x.label==='User access')?.children?.some(x=>x.href==='/users?section=roles'));

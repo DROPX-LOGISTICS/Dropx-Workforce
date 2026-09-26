@@ -95,7 +95,7 @@ export default async function WorkforceOnboardingHubPage() {
   return (
     <AppShell active="Onboard Workforce" pageCode="delivery_associates">
       <PageHead
-        action={<PendingLink className="button secondary compact" href="/delivery-network/associates?view=joining">Track invitations <ArrowRight size={15}/></PendingLink>}
+        action={<PendingLink className="button secondary compact" href="/delivery-network/associates?view=pending">Track registrations <ArrowRight size={15}/></PendingLink>}
         eyebrow="Workforce onboarding"
         title="Invite an associate"
         subtitle="Choose the role group. They register in DropX One; continue setup in their Workforce profile."

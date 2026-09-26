@@ -53,9 +53,11 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
   }
 
   const stationRecords = records.filter(record=>!searchParams.station || record.location===searchParams.station);
-  const view = ['active','joining','training','offboarded','closed','all','approved'].includes(searchParams.view||'')?searchParams.view!:'active';
+  const view = ['active','pending','offboarded','all'].includes(searchParams.view||'')?searchParams.view!:'pending';
   const stageFor = (record:WorkforceCommunicationRecipient)=>stages.get(record.accountId) || (record.isActive&&record.status.toLowerCase()==='active'?'active':'applicant');
-  const viewMatches = (record:WorkforceCommunicationRecipient,key:string)=>workforceRegisterViewMatches(key,stageFor(record),record.status);
+  const viewMatches = (record:WorkforceCommunicationRecipient,key:string)=>key==='pending'
+    ? !record.isActive && !['offboarded','closed','rejected','cancelled'].includes(stageFor(record))
+    : workforceRegisterViewMatches(key,stageFor(record),record.status);
   const selectedStage = validRegisterStage(searchParams.stage);
   const displayedRecords = stationRecords.filter(record=>viewMatches(record,view) && (!selectedStage || stageFor(record)===selectedStage));
   const rows: FieldExecutiveListRow[] = displayedRecords.map((record) => ({
@@ -83,7 +85,7 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
       <PageHead
         eyebrow="Workforce"
         title="Associates"
-        subtitle="One profile for registration, training, IDs, payments and exit."
+        subtitle="One register for approval, Amazon activation, provider ID, payment and exit."
         action={canAdd ? <PendingLink className="button compact" href="/delivery-network/onboarding">Invite associate</PendingLink> : null}
       />
 
@@ -104,7 +106,7 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
         {hasPermission(authorization,'people_review','access')?<PendingLink className="button secondary compact" href="/delivery-network/lifecycle?tab=exits">Exit & settlement queue</PendingLink>:null}
       </form>
       <nav className="wf-journey-nav" aria-label="Workforce register views">
-        {[['active','Active'],['joining','Joining & review'],['training','Training'],['offboarded','Offboarded'],['closed','Closed'],['all','All']].map(([key,label])=><PendingLink key={key} aria-current={view===key?'page':undefined} href={`/delivery-network/associates?view=${key}&station=${encodeURIComponent(searchParams.station||'')}`}>{label}<strong>{stationRecords.filter(record=>viewMatches(record,key)).length}</strong></PendingLink>)}
+        {[['pending','Pending'],['active','Active'],['offboarded','Offboarded'],['all','All']].map(([key,label])=><PendingLink key={key} aria-current={view===key?'page':undefined} href={`/delivery-network/associates?view=${key}&station=${encodeURIComponent(searchParams.station||'')}`}>{label}<strong>{stationRecords.filter(record=>viewMatches(record,key)).length}</strong></PendingLink>)}
       </nav>
       {selectedStage ? <div className="wf-stage-filter" role="status"><span>{joiningStages[selectedStage as keyof typeof joiningStages]} · {displayedRecords.length} profiles</span><PendingLink href={`/delivery-network/associates?view=${view}&station=${encodeURIComponent(searchParams.station||'')}`}>Clear stage filter</PendingLink></div> : null}
       <FieldExecutiveList

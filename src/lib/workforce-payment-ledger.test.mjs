@@ -8,10 +8,11 @@ const ledger=(i=[item()],l=[],a=[])=>reconcilePaymentLedger('company','person',i
 test('filter controls remount on query reset instead of showing stale uncontrolled selections',()=>{
  const source=readFileSync(new URL('../app/delivery-network/payment-ledger/page.tsx',import.meta.url),'utf8');
  assert.ok(source.includes('<form key={`${selected.id}:${params.status??\'\'}:${params.sort??\'newest\'}`}'));
- for(const path of ['../components/workforce-mileage-desk.tsx','../app/delivery-network/pooled-settlements/page.tsx','../app/delivery-network/joining/page.tsx']){
+ for(const path of ['../components/workforce-mileage-desk.tsx','../app/delivery-network/pooled-settlements/page.tsx']){
   const page=readFileSync(new URL(path,import.meta.url),'utf8');
   assert.match(page,/<form key=\{JSON.stringify\(\[params\./);
  }
+ const legacy=readFileSync(new URL('../app/delivery-network/joining/page.tsx',import.meta.url),'utf8');assert.match(legacy,/redirect\(`\/delivery-network\/id-onboarding/);
 });
 test('no recorded payroll never asserts zero total earnings or missing work is paid',()=>{assert.deepEqual(ledger([],[],[]).rows,[]);assert.equal('totalDue' in ledger([],[],[]).summary,false);});
 test('confirmed pending, approved and processing Finance requests remain unpaid once',()=>{for(const status of ['pending','approved','processing']){const s=ledger([item()],[link({status})]);assert.equal(s.rows[0].bucket,'awaiting_finance');assert.equal(s.summary.awaitingFinance,700);assert.equal(s.summary.paid,0);}});

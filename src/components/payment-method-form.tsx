@@ -13,7 +13,7 @@ export type PaymentFieldOption = {
 export function PaymentMethodForm({ action, availableFields, initialMethod, submitLabel = "Create payment method" }: {
   action: (formData: FormData) => Promise<void>;
   availableFields: PaymentFieldOption[];
-  initialMethod?: { id: string; code: string; name: string; usage_count: number; field_ids: string[] };
+  initialMethod?: { id: string; code: string; name: string; usage_count: number; field_ids: string[]; source_of_truth: string };
   submitLabel?: string;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>(initialMethod?.field_ids ?? []);
@@ -29,6 +29,12 @@ export function PaymentMethodForm({ action, availableFields, initialMethod, subm
         <div className="payment-method-fields">
           <label>Method ID<input className="field" name="code" required maxLength={80} pattern="[A-Za-z0-9_]+" readOnly={locked} defaultValue={initialMethod?.code} /></label>
           <label>Method name<input className="field" name="name" required maxLength={160} defaultValue={initialMethod?.name} /></label>
+          <label>Source of truth<select className="field" name="source_of_truth" required defaultValue={initialMethod?.source_of_truth ?? ""}>
+            <option value="" disabled>Select source</option>
+            <option value="biometric_attendance">Biometric attendance</option>
+            <option value="amazon_daily_shipment">Amazon Daily Shipment Count</option>
+            <option value="manual_approved">Approved manual evidence</option>
+          </select><small>This controls which operational record can earn this payment.</small></label>
           {locked ? <p className="subtle">In use in {initialMethod?.usage_count} mappings. You can rename it; create a new method to change fields.</p> : null}
         </div>
         <fieldset className="workforce-method-picker">

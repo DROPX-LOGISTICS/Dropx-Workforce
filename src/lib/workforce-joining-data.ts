@@ -18,7 +18,7 @@ export async function loadWorkforceJoining(authorization: AuthorizationContext, 
   const [peopleResult, plansResult, mappingsResult, stationsResult, isWorkforce, policyResult] = await Promise.all([
     readAllRows(profilesQuery),
     readAllRows(db.from("workforce_joining_plans").select("*").eq("company_id",company).order("workforce_id")),
-    readAllRows(db.from("field_executive_provider_mappings").select("id,workforce_id,field_executive_id,contractor_id,employee_id,provider_id,provider_member_id,station_id,effective_from,effective_to,status")
+    readAllRows(db.from("field_executive_provider_mappings").select("id,workforce_id,field_executive_id,contractor_id,employee_id,provider_id,provider_member_id,payment_method_id,station_id,effective_from,effective_to,status")
       .eq("company_id",company).neq("status","cancelled").order("effective_from").order("id")),
     readAllRows(db.from("stations").select("id,station_code").eq("company_id",company).order("station_code").order("id")),
     workforceClassification(company),
@@ -30,14 +30,13 @@ export async function loadWorkforceJoining(authorization: AuthorizationContext, 
   const profiles = ((peopleResult.data ?? []) as JoiningProfile[]).filter(isWorkforce);
   const ids = new Set(profiles.map(row=>row.id));
   const plans = ((plansResult.data ?? []) as JoiningPlan[]).filter(row=>ids.has(row.workforce_id));
-  const planIds = new Set(plans.map(row=>row.workforce_id));
   // Keep each visible person's full mapping history, including previous stations, for the pay cutoff.
   const mappings = ((mappingsResult.data ?? []) as JoiningMapping[]).filter(row=>profiles.some(person=>belongsToPerson(row,person)));
   const attendance: JoiningAttendance[] = [];
-  const firstEligible = [...plans.map(row=>row.eligible_from),...(options.workforceId ? profiles.map(p=>p.date_of_join).filter((v):v is string=>Boolean(v)) : [])].sort()[0];
+  const firstEligible = [...plans.map(row=>row.eligible_from),...profiles.map(p=>p.date_of_join).filter((v):v is string=>Boolean(v))].sort()[0];
   if (firstEligible && options.evidence !== false) {
     const from = options.from && options.from > firstEligible ? options.from : firstEligible;
-    const people = profiles.filter(row=>options.workforceId || planIds.has(row.id));
+    const people = profiles;
     // Query canonical and protected legacy identities, never guess a person by name.
     for (const column of ["workforce_id","field_executive_id","contractor_id"] as const) {
       const values = column === "workforce_id" ? people.map(row=>row.id) : people.filter(row=>row.source_profile_type === (column === "field_executive_id" ? "field_executive" : "contractor")).map(row=>row.source_profile_id!).filter(Boolean);

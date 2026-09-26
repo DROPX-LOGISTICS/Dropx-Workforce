@@ -11,10 +11,10 @@ export function compactWorkspaces(items: NavItem[]): NavItem[] {
     { label: 'Settings', sources: ['Master', 'Settings', 'User access'] }
   ];
   const prominent = new Set([
-    '/delivery-network/associates', '/delivery-network/joining',
+    '/delivery-network/associates', '/delivery-network/id-onboarding',
     '/delivery-network/rate-mapping', '/delivery-network/rate-cards',
-    '/delivery-network/id-onboarding', '/master/payment-methods',
-    '/delivery-network/training-policies', '/delivery-network/payroll-calendars',
+    '/master/payment-methods', '/delivery-network/amazon-onboarding-settings',
+    '/delivery-network/payroll-calendars',
     '/users?section=users'
   ]);
   return groups.flatMap(group => {

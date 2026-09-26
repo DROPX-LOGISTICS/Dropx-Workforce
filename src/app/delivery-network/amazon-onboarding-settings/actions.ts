@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { validAmazonEmailPattern } from "@/lib/amazon-activation";
 
 export async function saveAmazonStation(form:FormData) {
   const auth = await requirePagePermission("executive_id_onboarding","edit");
@@ -16,16 +17,18 @@ export async function saveAmazonStation(form:FormData) {
     const code = value("service_area_code").toUpperCase();
     const supervisor = value("supervisor_alias");
     const contract = value("contract_type");
+    const emailPattern = value("associate_email_pattern").toLowerCase();
     if (!/^[A-Z0-9_-]{2,24}$/.test(code)) throw new Error("Enter the exact Amazon service-area code for this station.");
     if (!/^[a-zA-Z0-9._-]{2,80}$/.test(supervisor)) throw new Error("Enter the Amazon supervisor badge login without @amazon.com.");
     if (!["Independent Contractor","Subcontractor","DSP Employed"].includes(contract)) throw new Error("Choose the approved Amazon DA contract type.");
+    if (!validAmazonEmailPattern(emailPattern)) throw new Error("Email pattern must include {station_code} and {first_name} or {full_name}, followed by a valid domain.");
     const version = Number(value("version"));
     if (!Number.isInteger(version) || version<0) throw new Error("Refresh the station settings first.");
     const result = await supabaseAdmin.rpc("workforce_save_amazon_station",{p_company:requireCompanyId(auth),p_actor:auth.userId,p_actor_name:auth.fullName || auth.email || "Workforce reviewer",p_station:station,p_version:version,p_locations:auth.hasAllLocationAccess ? null : auth.locationScopeIds,
-      p_settings:{service_area_code:code,service_type:"Amazon Logistics",supervisor_alias:supervisor,contract_type:contract}});
+      p_settings:{service_area_code:code,service_type:"Amazon Logistics",supervisor_alias:supervisor,contract_type:contract,associate_email_pattern:emailPattern,invitation_enabled:form.get("invitation_enabled")==="on"}});
     if (result.error) throw new Error(result.error.message);
     query.set("notice","Station onboarding defaults saved. No Amazon profile was changed or invitation sent.");
-    revalidatePath("/delivery-network/amazon-onboarding-settings");revalidatePath("/delivery-network/joining");
+    revalidatePath("/delivery-network/amazon-onboarding-settings");revalidatePath("/delivery-network/id-onboarding");
   } catch(error) { query.set("error",error instanceof Error ? error.message : "Unable to save station defaults."); }
   redirect(`/delivery-network/amazon-onboarding-settings?${query}`);
 }

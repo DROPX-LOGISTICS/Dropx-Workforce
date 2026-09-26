@@ -107,7 +107,7 @@ async function loadMappingData(authorization: AuthorizationContext) {
   }
 
   const companyId = requireCompanyId(authorization);
-  const [locationsResult, workforceResult, designationsResult, mappingsResult, paymentMethodsResult] = await Promise.all([
+  const [locationsResult, workforceResult, designationsResult, mappingsResult, paymentMethodsResult, paymentSourcesResult] = await Promise.all([
     supabaseAdmin
       .from("stations")
       .select("id, station_code, station_name, provider_id")
@@ -172,7 +172,9 @@ async function loadMappingData(authorization: AuthorizationContext) {
       `)
       .eq("company_id", companyId)
       .eq("is_active", true)
-      .order("code")
+      .order("code"),
+    supabaseAdmin.from("workforce_payment_method_sources")
+      .select("payment_method_id,source_of_truth").eq("company_id",companyId)
   ]);
 
   if (!authorization.hasAllLocationAccess) {
@@ -181,10 +183,12 @@ async function loadMappingData(authorization: AuthorizationContext) {
     const visibleWorkforce = new Set((workforceResult.data ?? []).map((row) => row.id));
     mappingsResult.data = (mappingsResult.data ?? []).filter((row) => visibleWorkforce.has(row.workforce_id) && (!row.station_id || authorization.locationScopeIds.includes(row.station_id)));
   }
+  const sourceByMethod=new Map((paymentSourcesResult.data??[]).map(row=>[row.payment_method_id,row.source_of_truth]));
   const paymentMethods = ((paymentMethodsResult.data ?? []) as PaymentMethodRow[]).map((method) => ({
     id: method.id,
     code: method.code,
     name: method.name,
+    sourceOfTruth:sourceByMethod.get(method.id)??"not_configured",
     components: (method.payment_method_components ?? [])
       .slice()
       .sort((first, second) => first.sort_order - second.sort_order)
@@ -267,7 +271,7 @@ async function loadMappingData(authorization: AuthorizationContext) {
     locations,
     mappings,
     paymentMethods,
-    error: mappingsResult.error?.message || workforceResult.error?.message || designationsResult.error?.message || locationsResult.error?.message || paymentMethodsResult.error?.message || null
+    error: mappingsResult.error?.message || workforceResult.error?.message || designationsResult.error?.message || locationsResult.error?.message || paymentMethodsResult.error?.message || paymentSourcesResult.error?.message || null
   };
 }
 
@@ -317,6 +321,8 @@ export async function ProviderMappingPageContent({
     pendingByProviderId.set(key, current);
   });
   const providerPending = Array.from(pendingByProviderId.values()).sort((left, right) => right.deliveries - left.deliveries || left.providerMemberId.localeCompare(right.providerMemberId));
+  const matchKey=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]/g,"");
+  for(const pending of providerPending){const candidates=mappings.filter(row=>matchKey(row.dropxName)===matchKey(pending.sourceName)&&locations.find(location=>location.id===row.stationId)?.label.split(" - ")[0]===pending.stationCode);if(candidates.length===1){pending.suggestedWorkforceId=candidates[0].workforceId;pending.suggestedDropxId=candidates[0].dropxId;pending.suggestedName=candidates[0].dropxName;}}
   const flash = loadFlashMessage();
   const flashError = flash.error;
   const flashNotice = flash.notice;

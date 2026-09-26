@@ -22,9 +22,10 @@ async function save(formData: FormData, editing: boolean) {
   try {
     if (!supabaseAdmin) throw new Error("Payment configuration is temporarily unavailable.");
     const input = parsePaymentMethodInput(formData, editing);
-    const { error } = await supabaseAdmin.rpc("workforce_save_payment_method", {
+    const { error } = await supabaseAdmin.rpc("workforce_save_payment_method_v2", {
       p_company_id: companyId, p_method_id: input.id, p_code: input.code,
-      p_name: input.name, p_field_ids: input.fieldIds
+      p_name: input.name, p_field_ids: input.fieldIds, p_actor: authorization.userId,
+      p_source_of_truth: input.sourceOfTruth, p_calculation_basis: input.calculationBasis
     });
     if (error) {
       if (error.code === "23505") throw new Error("That Method ID already exists. Choose a different ID.");

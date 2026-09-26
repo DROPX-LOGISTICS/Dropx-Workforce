@@ -1,9 +1,9 @@
 import { readAllRows } from "@/lib/supabase-pagination";
-import {personalPaymentCard} from './personal-payment-card';
+import {personalDailyAmount,personalPaymentCard,personalPaymentSource} from './personal-payment-card';
 import type { AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { trainingEntitlements, type JoiningPlan, type JoiningAttendance, type JoiningMapping } from "./workforce-joining";
+import { belongsToPerson,isBiometricDay,trainingEntitlements, type JoiningPlan, type JoiningAttendance, type JoiningMapping } from "./workforce-joining";
 
 export type WorkforceRateCard = {
   id: string;
@@ -418,8 +418,9 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
       ? mappingCandidates.sort((left, right) => right.effective_from.localeCompare(left.effective_from))[0] ?? null
       : null;
     const profile = mapping ? workforceBySource.get(mappingSource(mapping)) ?? null : null;
+    const personalSource=mapping?personalPaymentSource(mapping):"";
     const rateCard = mapping && profile && station
-      ? personalPaymentCard(mapping) ?? resolveRateCard(rateCardsByProvider.get(mapping.provider_id) ?? [], mapping.provider_id, station.id, profile.designation_id, shipment.work_date)
+      ? personalPaymentCard(mapping) ?? (personalSource==='biometric_attendance'?null:resolveRateCard(rateCardsByProvider.get(mapping.provider_id) ?? [], mapping.provider_id, station.id, profile.designation_id, shipment.work_date))
       : null;
     const holds = profile ? profileHolds(profile, shipment.work_date) : [];
     const countCorrection=corrections.find(c=>c.source_id===shipment.id&&c.kind==='counts');
@@ -437,7 +438,9 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
     let missingRate = false;
     let rateTrace: Record<string, unknown> = {};
 
-    if (mapping && rateCard) {
+    if(mapping&&personalSource==='biometric_attendance'){
+      baseAmount=0;calculationSource="rate_card";rateTrace={sourceOfTruth:"biometric_attendance",paymentMethod:mapping.pay_type};
+    } else if (mapping && rateCard) {
       baseAmount = calculateCardBase(rateCard, shipment);
       calculationSource = "rate_card";
       rateTrace = { rateCard: rateCard.name, payType: rateCard.pay_type, policyVersion: { ...rateCard } };
@@ -646,27 +649,27 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
     });
   });
 
+  // Preserve already agreed historical training entitlements. New onboarding no longer creates training plans.
   for (const plan of input.joiningPlans ?? []) {
-    const profile = workforceById.get(plan.workforce_id);
-    if (!profile) continue;
-    const station = stationById.get(plan.station_id);
-    for (const entitlement of trainingEntitlements(profile, plan, input.trainingMappings ?? input.mappings, input.trainingAttendance ?? [], input.from, input.to)) {
-      const {attendance, amount: dailyAmount, cutoff} = entitlement;
-      // Delivery activation is not a prerequisite for earned training pay, even for an early leaver.
-      const holds = [...entitlement.holds];
-      if (!profile.bank_account_no?.trim() || !profile.ifsc_code?.trim()) holds.push("Bank details are incomplete");
-      if (!profile.dropx_id?.trim()) holds.push("DropX ID is missing");
-      lines.push({ key:`training:${profile.id}:${attendance.punch_date}`, sourceType:"training", sourceId:attendance.id,
-        workforceId:profile.id,mappingId:null,rateCardId:null,providerId:null,providerName:"Training",providerMemberId:"-",providerMemberName:null,
-        dropxId:profile.dropx_id,workerName:profile.full_name,designationId:profile.designation_id,stationId:plan.station_id,stationCode:station?.station_code ?? "-",
-        workDate:attendance.punch_date,totalDelivery:0,totalActivity:0,amazonDelivery:0,swaDelivery:0,customerReturn:0,mfn:0,mfnReturn:0,
-        activityPayments:{delivery:null,customerReturn:null,mfn:null,mfnReturn:null},
-        baseAmount:dailyAmount,incentiveAmount:0,adjustmentAmount:0,netAmount:dailyAmount,calculationSource:"training_attendance",
-        status:holds.length ? "hold" : "ready",holdReasons:holds,sourceUpdatedAt:attendance.updated_at,
-        trace:{training_policy_id:plan.training_policy_id,daily_rate:plan.daily_rate,minimum_minutes:plan.minimum_minutes,work_minutes:attendance.work_minutes,
-          in_time:attendance.in_time,out_time:attendance.out_time,terms_reference:plan.terms_reference,terms_accepted_on:plan.terms_accepted_on,
-          provider_effective_from:cutoff,attendance_updated_at:attendance.updated_at,joining_plan_version:plan.version}
-      });
+    const profile = workforceById.get(plan.workforce_id);if(!profile)continue;const station=stationById.get(plan.station_id);
+    for(const entitlement of trainingEntitlements(profile,plan,input.trainingMappings??input.mappings,input.trainingAttendance??[],input.from,input.to)){
+      const {attendance,amount:dailyAmount,cutoff}=entitlement,holds=[...entitlement.holds];
+      if(!profile.bank_account_no?.trim()||!profile.ifsc_code?.trim())holds.push("Bank details are incomplete");if(!profile.dropx_id?.trim())holds.push("DropX ID is missing");
+      lines.push({key:`training:${profile.id}:${attendance.punch_date}`,sourceType:"training",sourceId:attendance.id,workforceId:profile.id,mappingId:null,rateCardId:null,providerId:null,providerName:"Historical training agreement",providerMemberId:"-",providerMemberName:null,dropxId:profile.dropx_id,workerName:profile.full_name,designationId:profile.designation_id,stationId:plan.station_id,stationCode:station?.station_code??"-",workDate:attendance.punch_date,totalDelivery:0,totalActivity:0,amazonDelivery:0,swaDelivery:0,customerReturn:0,mfn:0,mfnReturn:0,activityPayments:{delivery:null,customerReturn:null,mfn:null,mfnReturn:null},baseAmount:dailyAmount,incentiveAmount:0,adjustmentAmount:0,netAmount:dailyAmount,calculationSource:"training_attendance",status:holds.length?"hold":"ready",holdReasons:holds,sourceUpdatedAt:attendance.updated_at,trace:{training_policy_id:plan.training_policy_id,daily_rate:plan.daily_rate,minimum_minutes:plan.minimum_minutes,work_minutes:attendance.work_minutes,in_time:attendance.in_time,out_time:attendance.out_time,terms_reference:plan.terms_reference,terms_accepted_on:plan.terms_accepted_on,provider_effective_from:cutoff,attendance_updated_at:attendance.updated_at,joining_plan_version:plan.version}});
+    }
+  }
+  for(const profile of input.workforce){
+    const byDay=new Map<string,JoiningAttendance[]>();
+    for(const attendance of input.trainingAttendance??[])if(belongsToPerson(attendance,profile)&&attendance.punch_date>=input.from&&attendance.punch_date<=input.to)byDay.set(attendance.punch_date,[...(byDay.get(attendance.punch_date)??[]),attendance]);
+    for(const [workDate,attendanceRows] of byDay){
+      const eligible=input.mappings.filter(mapping=>mapping.status!=="cancelled"&&belongsToPerson(mapping,profile)&&isEffective(mapping.effective_from,mapping.effective_to,workDate)&&personalDailyAmount(mapping)!==null).sort((a,b)=>b.effective_from.localeCompare(a.effective_from));
+      if(!eligible.length)continue;
+      const mapping=eligible[0],attendance=attendanceRows.sort((a,b)=>a.id.localeCompare(b.id))[0],dailyAmount=personalDailyAmount(mapping)!;
+      const station=stationById.get(mapping.station_id||profile.location_id),holds=profileHolds(profile,workDate);
+      if(attendanceRows.length>1)holds.push("Multiple biometric attendance records for this associate and day");
+      if(!isBiometricDay(attendance,mapping.station_id||profile.location_id)||attendance.status!=="P"||!attendance.out_time)holds.push("Biometric attendance is incomplete or outside the mapped station");
+      if(!profile.bank_account_no?.trim()||!profile.ifsc_code?.trim())holds.push("Bank details are incomplete");
+      lines.push({key:`attendance:${profile.id}:${workDate}`,sourceType:"training",sourceId:attendance.id,workforceId:profile.id,mappingId:mapping.id,rateCardId:null,providerId:mapping.provider_id,providerName:"Biometric attendance",providerMemberId:mapping.provider_member_id,providerMemberName:null,dropxId:profile.dropx_id,workerName:profile.full_name,designationId:profile.designation_id,stationId:station?.id??null,stationCode:station?.station_code??"-",workDate,totalDelivery:0,totalActivity:0,amazonDelivery:0,swaDelivery:0,customerReturn:0,mfn:0,mfnReturn:0,activityPayments:{delivery:null,customerReturn:null,mfn:null,mfnReturn:null},baseAmount:dailyAmount,incentiveAmount:0,adjustmentAmount:0,netAmount:dailyAmount,calculationSource:"training_attendance",status:holds.length?"hold":"ready",holdReasons:[...new Set(holds)],sourceUpdatedAt:attendance.updated_at,trace:{sourceOfTruth:"biometric_attendance",paymentMethod:mapping.pay_type,paymentValues:mapping.payment_values,attendanceUpdatedAt:attendance.updated_at}});
     }
   }
   const planByWorker = new Map((input.joiningPlans ?? []).map(plan=>[plan.workforce_id,plan]));

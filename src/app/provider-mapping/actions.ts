@@ -129,7 +129,7 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
 
   if (methodError) throw new Error(methodError.message);
 
-  const [{ data: worker, error: workerError }, { data: station }] = await Promise.all([
+  const [{ data: worker, error: workerError }, { data: station },sourceResult] = await Promise.all([
     supabaseAdmin
       .from("workforce")
       .select("id, location_id, designation_id, source_profile_id, source_profile_type")
@@ -143,7 +143,9 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
       .select("id")
       .eq("id", stationId)
       .eq("company_id", companyId)
-      .maybeSingle()
+      .maybeSingle(),
+    supabaseAdmin.from("workforce_payment_method_sources").select("source_of_truth,calculation_basis")
+      .eq("company_id",companyId).eq("payment_method_id",paymentMethodId).maybeSingle()
   ]);
 
   if (workerError) throw new Error(workerError.message);
@@ -167,8 +169,9 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
     throw new Error(`Row ${index + 1}: Designation is not assigned to Workforce.`);
   }
   if (!station) throw new Error(`Row ${index + 1}: Location was not found for this company.`);
+  if(sourceResult.error||!sourceResult.data)throw new Error(`Row ${index + 1}: Configure the payment method source of truth in Master first.`);
 
-  let paymentValues: Record<string, number> = {};
+  let paymentValues: Record<string, number|string> = {};
   try {
     const parsed = JSON.parse(rawPaymentValues) as Record<string, unknown>;
     paymentValues = Object.fromEntries(
@@ -199,6 +202,8 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
       throw new Error(`Row ${index + 1}: ${component.label} is required.`);
     }
   }
+  paymentValues.DROPX_SOURCE_OF_TRUTH=sourceResult.data.source_of_truth;
+  paymentValues.DROPX_CALCULATION_BASIS=sourceResult.data.calculation_basis;
 
   if (!isWorkforceDate(effectiveFrom)) {
     throw new Error(`Row ${index + 1}: Effective from must be YYYY-MM-DD.`);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureAccessPages } from "@/lib/access-pages";
+import { isWorkforceHost, safeAuthNextPath, workforceDestination } from "@/lib/auth-surface-routing";
 import { createOpsAuthTransfer } from "@/lib/ops-auth-transfer";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
@@ -17,18 +18,6 @@ function emailsFromField(value: string | null | undefined): string[] {
 
 function emailDomain(value: string) {
   return value.split("@").pop()?.trim().toLowerCase() ?? "";
-}
-
-function safeNextPath(value: string | null) {
-  const text = String(value ?? "").trim();
-  if (!text || !text.startsWith("/") || text.startsWith("//")) return "";
-
-  try {
-    const parsed = new URL(text, "https://dashboard.dropxlogistics.com");
-    return `${parsed.pathname}${parsed.search}`;
-  } catch {
-    return "";
-  }
 }
 
 function isMissingTableError(error: { code?: string; message?: string } | null | undefined) {
@@ -199,8 +188,10 @@ async function ensureAccessPagesForLogin(companyId: string | null | undefined) {
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   const errorDescription = request.nextUrl.searchParams.get("error_description");
+  const host = request.nextUrl.host.split(":")[0].toLowerCase();
+  const workforceHost = isWorkforceHost(host);
   const loginUrl = new URL("/login", request.url);
-  const callbackResponse = NextResponse.redirect(new URL("/dashboard", request.url));
+  const callbackResponse = NextResponse.redirect(new URL(workforceHost ? "/delivery-network" : "/dashboard", request.url));
   const returnToOps = request.cookies.get("dropx_ops_auth_return")?.value === "1";
   const supabase = createServerSupabaseClient(callbackResponse);
 
@@ -222,7 +213,6 @@ export async function GET(request: NextRequest) {
     }
 
     const email = normalizeEmail(data.user.email);
-    const host = request.nextUrl.host.split(":")[0].toLowerCase();
     const isPlatformAdminHost = host === "admin-panel.dropxlogistics.com";
 
     const { data: profileById } = await supabaseAdmin
@@ -348,7 +338,9 @@ export async function GET(request: NextRequest) {
       locationRoleFound: Boolean(locationRole)
     });
     await supabase.auth.signOut();
-    loginUrl.searchParams.set("error", "Your account is not active in the DropX dashboard. Contact an administrator.");
+    loginUrl.searchParams.set("error", workforceHost
+      ? "Your account is not active in Workforce. Contact an administrator."
+      : "Your account is not active in the DropX dashboard. Contact an administrator.");
     return NextResponse.redirect(loginUrl);
   }
 
@@ -372,7 +364,9 @@ export async function GET(request: NextRequest) {
       companyId: profile.company_id ?? null
     });
     await supabase.auth.signOut();
-    loginUrl.searchParams.set("error", "Your company is not active in the DropX dashboard. Contact an administrator.");
+    loginUrl.searchParams.set("error", workforceHost
+      ? "Your company is not active in Workforce. Contact an administrator."
+      : "Your company is not active in the DropX dashboard. Contact an administrator.");
     return NextResponse.redirect(loginUrl);
   }
 
@@ -389,10 +383,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-    const nextPath = safeNextPath(request.nextUrl.searchParams.get("next"));
+    const nextPath = safeAuthNextPath(request.nextUrl.searchParams.get("next"));
     const destinationPath = isPlatformAdminHost
       ? (nextPath.startsWith("/platform-admin") ? nextPath : "/platform-admin")
-      : (returnToOps ? "/ops-pulse" : (nextPath || "/dashboard"));
+      : (returnToOps ? "/ops-pulse" : (workforceHost ? workforceDestination(nextPath) : (nextPath || "/dashboard")));
     if (returnToOps && data.session) {
       const opsUrl = new URL("/auth/ops-transfer", process.env.OPS_APP_URL?.trim() || "https://ops.dropxlogistics.com");
       opsUrl.searchParams.set(

@@ -38,7 +38,9 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
   const view = ['active','pending','offboarded','all','referrals'].includes(searchParams.view||'')?searchParams.view!:'pending';
   let referralPrograms: any[]=[];
   let referrals:any[]=[];
+  let referralCount=0;
   let referralStations:Array<{id:string;station_code:string;station_name:string|null}>=[];
+  let referralSources:Array<{code:string;name:string;description:string|null}>=[];
 
   try {
     const [recipients, joining] = await Promise.all([loadWorkforceCommunicationRecipients(authorization), loadWorkforceJoining(authorization,{to:workforceToday()})]);
@@ -46,10 +48,17 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
     const plans = new Map(joining.plans.map(plan=>[plan.workforce_id,plan]));
     for(const person of joining.profiles) stages.set(person.id,joiningState(person,plans.get(person.id)??null,joining.mappings,joining.attendance,workforceToday()).stage);
     if (supabaseAdmin) {
-      const result = await supabaseAdmin.from("designations")
+      let referralCountQuery=supabaseAdmin.from("workforce_referrals").select("id",{count:"exact",head:true}).eq("company_id",companyId);
+      if(!authorization.hasAllLocationAccess){const ids=authorization.locationScopeIds.length?authorization.locationScopeIds:["00000000-0000-0000-0000-000000000000"];referralCountQuery=referralCountQuery.or(`preferred_station_id.is.null,preferred_station_id.in.(${ids.join(",")})`);}
+      const [result,countResult] = await Promise.all([
+        supabaseAdmin.from("designations")
         .select("id, code, name, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active)")
-        .eq("company_id", companyId).eq("is_active", true).order("code");
+        .eq("company_id", companyId).eq("is_active", true).order("code"),
+        referralCountQuery
+      ]);
       if (result.error) throw new Error(result.error.message);
+      if(countResult.error)throw new Error(countResult.error.message);
+      referralCount=countResult.count??0;
       designations = (result.data ?? []).filter(item => firstDesignationBusinessCategory(item.designation_category)?.people_module === "delivery_network")
         .map(({ id, code, name }) => ({ id, code, name }));
     }
@@ -58,17 +67,19 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
   }
 
   if(view==='referrals'&&supabaseAdmin){
-    const [programResult,referralResult,stationResult]=await Promise.all([
+    const [programResult,referralResult,stationResult,sourceResult]=await Promise.all([
       supabaseAdmin.from('workforce_referral_programs').select('*').eq('company_id',companyId).order('effective_from',{ascending:false}),
-      supabaseAdmin.from('workforce_referrals').select('id,referred_full_name,referred_country_code,referred_mobile,status,qualification_progress,qualifying_days_snapshot,reward_amount_snapshot,submitted_at,decision_remarks,preferred_station_id,referrer:workforce!workforce_referrals_referrer_workforce_id_fkey(full_name,dropx_id),station:stations!workforce_referrals_preferred_station_id_fkey(station_code,station_name)').eq('company_id',companyId).order('submitted_at',{ascending:false}),
-      supabaseAdmin.from('stations').select('id,station_code,station_name').eq('company_id',companyId).eq('is_active',true).order('station_code')
+      supabaseAdmin.from('workforce_referrals').select('id,referred_full_name,referred_country_code,referred_mobile,status,qualification_progress,qualifying_days_snapshot,reward_amount_snapshot,qualification_source_snapshot,submitted_at,qualified_at,approved_at,paid_at,decision_remarks,preferred_station_id,adjustment_id,referrer:workforce!workforce_referrals_referrer_workforce_id_fkey(full_name,dropx_id),station:stations!workforce_referrals_preferred_station_id_fkey(station_code,station_name),adjustment:workforce_adjustments!workforce_referrals_adjustment_id_fkey(status,payroll_run_id)').eq('company_id',companyId).order('submitted_at',{ascending:false}),
+      supabaseAdmin.from('stations').select('id,station_code,station_name').eq('company_id',companyId).eq('is_active',true).order('station_code'),
+      supabaseAdmin.from('workforce_referral_qualification_sources').select('code,name,description').eq('company_id',companyId).eq('is_active',true).order('sort_order')
     ]);
-    const referralError=[programResult,referralResult,stationResult].find(result=>result.error)?.error;
+    const referralError=[programResult,referralResult,stationResult,sourceResult].find(result=>result.error)?.error;
     if(referralError)error=referralError.message;
     else{
       referralPrograms=(programResult.data??[]).filter(row=>authorization.hasAllLocationAccess||!row.station_id||authorization.locationScopeIds.includes(row.station_id));
       referrals=(referralResult.data??[]).filter(row=>authorization.hasAllLocationAccess||!row.preferred_station_id||authorization.locationScopeIds.includes(row.preferred_station_id));
       referralStations=(stationResult.data??[]).filter(row=>authorization.hasAllLocationAccess||authorization.locationScopeIds.includes(row.id));
+      referralSources=sourceResult.data??[];
     }
   }
 
@@ -130,9 +141,9 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
         <button className="button secondary compact">Apply</button>
       </form>:null}
       <nav className="wf-journey-nav" aria-label="Workforce register views">
-        {[['pending','Needs action',stationRecords.filter(record=>viewMatches(record,'pending')).length],['active','Active',stationRecords.filter(record=>viewMatches(record,'active')).length],['offboarded','Offboarded',stationRecords.filter(record=>viewMatches(record,'offboarded')).length],['all','All',stationRecords.length],['referrals','Refer & earn',referrals.length]].map(([key,label,count])=><PendingLink key={String(key)} aria-current={view===key?'page':undefined} href={`/delivery-network/associates?view=${key}&station=${encodeURIComponent(searchParams.station||'')}`}>{label}<strong>{count}</strong></PendingLink>)}
+        {[['pending','Needs action',stationRecords.filter(record=>viewMatches(record,'pending')).length],['active','Active',stationRecords.filter(record=>viewMatches(record,'active')).length],['offboarded','Offboarded',stationRecords.filter(record=>viewMatches(record,'offboarded')).length],['all','All',stationRecords.length],['referrals','Refer & earn',referralCount]].map(([key,label,count])=><PendingLink key={String(key)} aria-current={view===key?'page':undefined} href={`/delivery-network/associates?view=${key}&station=${encodeURIComponent(searchParams.station||'')}`}>{label}<strong>{count}</strong></PendingLink>)}
       </nav>
-      {view==='referrals'?<WorkforceReferralDesk programs={referralPrograms} referrals={referrals} stations={referralStations} canEdit={canEdit}/>:<>{selectedStage ? <div className="wf-stage-filter" role="status"><span>{joiningStages[selectedStage as keyof typeof joiningStages]} · {displayedRecords.length} profiles</span><PendingLink href={`/delivery-network/associates?view=${view}&station=${encodeURIComponent(searchParams.station||'')}`}>Clear stage filter</PendingLink></div> : null}
+      {view==='referrals'?<WorkforceReferralDesk programs={referralPrograms} referrals={referrals} stations={referralStations} sources={referralSources} canEdit={canEdit}/>:<>{selectedStage ? <div className="wf-stage-filter" role="status"><span>{joiningStages[selectedStage as keyof typeof joiningStages]} · {displayedRecords.length} profiles</span><PendingLink href={`/delivery-network/associates?view=${view}&station=${encodeURIComponent(searchParams.station||'')}`}>Clear stage filter</PendingLink></div> : null}
       <FieldExecutiveList
         basePath="/delivery-network/associates"
         canEdit={canEdit}

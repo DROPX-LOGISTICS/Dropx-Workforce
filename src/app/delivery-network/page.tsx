@@ -25,6 +25,7 @@ export default async function DeliveryNetworkPage() {
   let openPayrollCount = 0;
   let setupPendingCount = 0;
   let amazonErrorCount = 0;
+  let referralOpenCount = 0;
   let error: string | null = null;
   const today = workforceToday();
   const monthStart = `${today.slice(0, 8)}01`;
@@ -47,7 +48,9 @@ export default async function DeliveryNetworkPage() {
     try {
       let amazonErrorQuery = supabaseAdmin.from('workforce_amazon_invitation_requests').select('id',{count:'exact',head:true}).eq('company_id',companyId).eq('status','failed');
       if (!authorization.hasAllLocationAccess) amazonErrorQuery = amazonErrorQuery.in('station_id', authorization.locationScopeIds.length ? authorization.locationScopeIds : ['00000000-0000-0000-0000-000000000000']);
-      const [workforceRecipients, designationResult, mappingResult, adjustmentCount, payrollCount, joining,amazonErrors] = await Promise.all([
+      let referralOpenQuery=supabaseAdmin.from('workforce_referrals').select('id',{count:'exact',head:true}).eq('company_id',companyId).in('status',['submitted','linked','qualified']);
+      if(!authorization.hasAllLocationAccess){const ids=authorization.locationScopeIds.length?authorization.locationScopeIds:['00000000-0000-0000-0000-000000000000'];referralOpenQuery=referralOpenQuery.or(`preferred_station_id.is.null,preferred_station_id.in.(${ids.join(',')})`);}
+      const [workforceRecipients, designationResult, mappingResult, adjustmentCount, payrollCount, joining,amazonErrors,referralOpen] = await Promise.all([
         loadWorkforceCommunicationRecipients(authorization).catch((cause) => { error = cause instanceof Error ? cause.message : "Workforce register is unavailable."; return []; }),
         supabaseAdmin
           .from("designations")
@@ -58,7 +61,8 @@ export default async function DeliveryNetworkPage() {
         authorization.hasAllLocationAccess && hasPermission(authorization, "workforce_adjustments", "access") ? supabaseAdmin.from("workforce_adjustments").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "pending") : Promise.resolve({ count: null, error: null }),
         authorization.hasAllLocationAccess && hasPermission(authorization, "workforce_payroll", "access") ? supabaseAdmin.from("workforce_payroll_runs").select("id", { count: "exact", head: true }).eq("company_id", companyId).in("status", ["draft", "review"]) : Promise.resolve({ count: null, error: null }),
         loadWorkforceJoining(authorization,{to:today}).catch(cause=>{journeyError=cause instanceof Error?cause.message:'Activation evidence is unavailable.';return null;}),
-        amazonErrorQuery
+        amazonErrorQuery,
+        referralOpenQuery
       ]);
       error = error || designationResult.error?.message || mappingResult.error?.message || null;
       const deliveryDesignations = (designationResult.data ?? []).filter((designation) => (
@@ -76,6 +80,7 @@ export default async function DeliveryNetworkPage() {
         setupPendingCount = Math.max(0, approvedIds.size - readyIds.size);
       }
       amazonErrorCount=amazonErrors.error?0:amazonErrors.count??0;
+      referralOpenCount=referralOpen.error?0:referralOpen.count??0;
     } catch (loadError) {
       error = loadError instanceof Error ? loadError.message : "Unable to load Workforce data.";
     }
@@ -254,6 +259,9 @@ export default async function DeliveryNetworkPage() {
             </PendingLink>
             <PendingLink href="/delivery-network/id-onboarding?view=pending">
               <span><Clock3 size={18}/></span><div><strong>Partner setup desk</strong><small>{joiningOpen} pending · {amazonErrorCount} exceptions</small></div><ArrowRight size={17}/>
+            </PendingLink>
+            <PendingLink href="/delivery-network/associates?view=referrals">
+              <span><Gift size={18}/></span><div><strong>Referral desk</strong><small>{referralOpenCount} referred candidates need progress</small></div><ArrowRight size={17}/>
             </PendingLink>
             {hasPermission(authorization, "workforce_earnings", "access") ? <PendingLink href="/delivery-network/earnings">
               <span><CircleDollarSign size={18} /></span>

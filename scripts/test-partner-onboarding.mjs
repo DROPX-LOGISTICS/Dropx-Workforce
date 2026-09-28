@@ -11,7 +11,8 @@ create table location_models(id uuid primary key,company_id uuid,code text,name 
 create table designation_categories(id uuid primary key,people_module text);create table designations(id uuid primary key,company_id uuid,code text,name text,is_active boolean,designation_category_id uuid);
 create table stations(id uuid primary key,company_id uuid,provider_id uuid,location_model_id uuid,station_code text);
 create table workforce(id uuid primary key,company_id uuid,designation_id uuid,email text,location_id uuid,onboarding_status text,full_name text,deleted_at timestamptz,migration_state text default 'canonical',created_by uuid,date_of_join date,compatibility_mode boolean default false,lifecycle_status text);
-create table attendance_daily(company_id uuid,workforce_id uuid,punch_date date,in_time timestamptz);
+create table attendance_daily(company_id uuid,workforce_id uuid,punch_date date,in_time timestamptz,punch_in_location_id uuid default '${id(7)}',in_source text default 'biometric',enrolment_id text default 'BIO-TEST');
+create table attendance_punches(company_id uuid,enrolment_id text,punch_date date,is_flagged boolean);
 create table workforce_amazon_station_settings(station_id uuid,company_id uuid,invitation_enabled boolean,associate_email_pattern text);
 create table field_executive_provider_mappings(id uuid primary key,company_id uuid,workforce_id uuid,provider_member_id text,status text,effective_from date,effective_to date,provider_id uuid,station_id uuid);
 create table workforce_amazon_invitation_requests(id uuid primary key default gen_random_uuid(),company_id uuid,workforce_id uuid,station_id uuid,source_portal text,amazon_email text,first_name text,last_name text,requested_by uuid,requested_at timestamptz default now(),status text default 'queued',claimed_at timestamptz,claimed_by text,completed_at timestamptz,error_code text,error_message text,updated_at timestamptz);
@@ -130,4 +131,13 @@ test('existing confirmed identity with expired or future rates goes to mapping r
  await assert.rejects(queue(db),/already ready/);
  await db.exec("update field_executive_provider_mappings set effective_from=current_date+1,effective_to=current_date+5");
  assert.equal((await state(db)).stage,'mapping_pending');assert.equal((await state(db)).mapping_confirmed,false);
+}finally{await db.close();}});
+
+test('reporting clock ignores future, manual, other-station and flagged punches',async()=>{const db=await setup();try{
+ await db.query("insert into attendance_daily(company_id,workforce_id,punch_date,in_time,punch_in_location_id,in_source) values($1,$2,current_date-5,now(),$3,'biometric')",[id(1),id(8),id(17)]);
+ assert.equal((await state(db)).reported_on,null);
+ await db.query("update attendance_daily set punch_in_location_id=$1,in_source='manual'",[id(7)]);assert.equal((await state(db)).reported_on,null);
+ await db.exec("update attendance_daily set in_source='biometric',punch_date=current_date+1");assert.equal((await state(db)).reported_on,null);
+ await db.exec("update attendance_daily set punch_date=current_date-5");await db.query("insert into attendance_punches values($1,'BIO-TEST',current_date-5,true)",[id(1)]);assert.equal((await state(db)).reported_on,null);
+ await db.exec("update attendance_punches set is_flagged=false");assert.equal((await state(db)).due_kind,'invitation_due');
 }finally{await db.close();}});

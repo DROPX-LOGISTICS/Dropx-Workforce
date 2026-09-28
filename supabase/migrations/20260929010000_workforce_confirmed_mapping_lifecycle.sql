@@ -22,7 +22,7 @@ language sql stable security invoker set search_path='' as $$
  join public.workforce_partner_onboarding_rules r on r.company_id=w.company_id and r.provider_id=s.provider_id and r.model_id=s.location_model_id and r.designation_id=w.designation_id and r.is_active
  join public.providers p on p.id=s.provider_id and p.company_id=s.company_id
  left join public.workforce_partner_progress progress on progress.workforce_id=w.id and progress.company_id=w.company_id
- left join lateral(select min(a.punch_date) reported_on from public.attendance_daily a where a.company_id=w.company_id and a.workforce_id=w.id and a.in_time is not null) arrival on true
+ left join lateral(select min(a.punch_date) reported_on from public.attendance_daily a where a.company_id=w.company_id and a.workforce_id=w.id and a.in_time is not null and a.punch_in_location_id=w.location_id and (a.in_source is null or a.in_source='biometric') and a.punch_date<=(now() at time zone 'Asia/Kolkata')::date and not exists(select 1 from public.attendance_punches punch where punch.company_id=a.company_id and punch.enrolment_id=a.enrolment_id and punch.punch_date=a.punch_date and punch.is_flagged)) arrival on true
  left join public.workforce_amazon_station_settings cfg on cfg.company_id=w.company_id and cfg.station_id=s.id
  left join lateral(select i.* from public.workforce_amazon_invitation_requests i where r.adapter='amazon' and i.company_id=w.company_id and i.workforce_id=w.id order by i.requested_at desc,i.id desc limit 1) inv on true
  left join lateral(select x.* from public.report_import_rows x where x.company_id=w.company_id and x.source_type=r.report_source_type and (x.work_date is null or x.work_date<=(now() at time zone 'Asia/Kolkata')::date)

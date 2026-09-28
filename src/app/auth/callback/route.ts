@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureAccessPages } from "@/lib/access-pages";
-import { isWorkforceHost, safeAuthNextPath, workforceDestination } from "@/lib/auth-surface-routing";
+import { authSurfaceOrigin, isWorkforceAuthSurface, safeAuthNextPath, workforceDestination } from "@/lib/auth-surface-routing";
 import { createOpsAuthTransfer } from "@/lib/ops-auth-transfer";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
@@ -189,9 +189,11 @@ export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   const errorDescription = request.nextUrl.searchParams.get("error_description");
   const host = request.nextUrl.host.split(":")[0].toLowerCase();
-  const workforceHost = isWorkforceHost(host);
-  const loginUrl = new URL("/login", request.url);
-  const callbackResponse = NextResponse.redirect(new URL(workforceHost ? "/delivery-network" : "/dashboard", request.url));
+  const requestedSurface = request.nextUrl.searchParams.get("surface");
+  const workforceHost = isWorkforceAuthSurface(host, requestedSurface);
+  const surfaceOrigin = authSurfaceOrigin(host, requestedSurface, request.nextUrl.origin);
+  const loginUrl = new URL("/login", surfaceOrigin);
+  const callbackResponse = NextResponse.redirect(new URL(workforceHost ? "/delivery-network" : "/dashboard", surfaceOrigin));
   const returnToOps = request.cookies.get("dropx_ops_auth_return")?.value === "1";
   const supabase = createServerSupabaseClient(callbackResponse);
 
@@ -395,7 +397,7 @@ export async function GET(request: NextRequest) {
       );
       callbackResponse.headers.set("location", opsUrl.toString());
     } else {
-      callbackResponse.headers.set("location", new URL(destinationPath, request.url).toString());
+      callbackResponse.headers.set("location", new URL(destinationPath, surfaceOrigin).toString());
     }
     if (returnToOps) {
       callbackResponse.cookies.set("dropx_ops_auth_return", "", {

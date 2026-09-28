@@ -1,5 +1,6 @@
 import {supabaseAdmin as db} from '@/lib/supabase-admin';
 import {workforceAmazonWorkerConfig} from '@/lib/workforce-amazon-worker';
+import {workforceToday} from '@/lib/workforce-earnings';
 export async function PartnerWorkflowHealth({companyId}:{companyId:string}){
  if(!db)return null;
  const [flows,stationRules,reminders,digests,whatsapp,email,latestReport]=await Promise.all([
@@ -9,7 +10,7 @@ export async function PartnerWorkflowHealth({companyId}:{companyId:string}){
  db.from('workforce_partner_digest_settings').select('id',{count:'exact',head:true}).eq('company_id',companyId).eq('is_active',true),
  db.from('whatsapp_settings').select('is_enabled').eq('company_id',companyId).eq('id',true).maybeSingle(),
  db.from('email_notification_settings').select('is_enabled').eq('company_id',companyId).eq('id',true).maybeSingle(),
- db.from('report_import_rows').select('work_date,created_at').eq('company_id',companyId).eq('source_type','da_inapp_onboarding').order('work_date',{ascending:false,nullsFirst:false}).limit(1).maybeSingle()
+ db.from('report_import_rows').select('work_date,created_at').eq('company_id',companyId).eq('source_type','da_inapp_onboarding').lte('work_date',workforceToday()).order('work_date',{ascending:false,nullsFirst:false}).limit(1).maybeSingle()
  ]);
  const failure=[flows,stationRules,reminders,digests,whatsapp,email,latestReport].find(result=>result.error)?.error;
  if(failure)return <p role="alert">Automation readiness could not load: {failure.message}</p>;

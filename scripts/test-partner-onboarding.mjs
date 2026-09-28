@@ -29,7 +29,7 @@ insert into designations values('${id(6)}','${id(1)}','DA','Delivery Associate',
 insert into stations values('${id(7)}','${id(1)}','${id(3)}','${id(4)}','KOZA'),('${id(17)}','${id(1)}','${id(13)}','${id(14)}','OTHER');
 insert into workforce values('${id(8)}','${id(1)}','${id(6)}','amal.koza@gmail.com','${id(7)}','under_review','Amal',null,'canonical','${id(2)}',current_date,false,null);
 insert into workforce_amazon_station_settings values('${id(7)}','${id(1)}',true,null);
-`);await db.exec(migration);return db;}
+`);await db.exec(migration);await db.exec(readFileSync(new URL('../supabase/migrations/20260928213000_partner_report_due_evidence.sql',import.meta.url),'utf8'));return db;}
 const state=async db=>(await db.query('select * from workforce_partner_onboarding_state($1,$2)',[id(1),[id(8)]])).rows[0];
 const queue=async(db,email='amal.koza@gmail.com',actor=id(2),source='workforce',locations=[id(7)])=>db.query('select workforce_queue_amazon_invitation($1,$2,$3,$4,$5,$6,$7)',[id(1),actor,'Test',id(8),email,source,locations]);
 test('station suffix allows arbitrary mailbox and domain, rejects wrong suffix',async()=>{const db=await setup();try{for(const [email,code] of [['amal.koza@gmail.com','KOZA'],['akshay.ktub@outlook.com','KTUB'],['nisar123.kgqa@yahoo.com','KGQA']])assert.equal((await db.query('select workforce_station_email_valid($1,$2) valid',[email,code])).rows[0].valid,true);for(const email of ['amal@gmail.com','amal.kozax@gmail.com','amal.koza.x@gmail.com','a b.koza@gmail.com','.koza@gmail.com'])assert.equal((await db.query('select workforce_station_email_valid($1,$2) valid',[email,'KOZA'])).rows[0].valid,false);}finally{await db.close();}});
@@ -85,3 +85,13 @@ test('daily team digest has one atomic station/day delivery and restricts table 
  }finally{await db.close();}});
 
 test('closed engagements do not remain in onboarding or reminder eligibility',async()=>{const db=await setup();try{await db.exec("update workforce set lifecycle_status='offboarded'");assert.equal(await state(db),undefined);}finally{await db.close();}});
+
+
+test('imported progress without a historical invite log is not a false invitation overdue',async()=>{const db=await setup();try{
+ await db.query("insert into attendance_daily values($1,$2,current_date-5,now()-interval '5 days')",[id(1),id(8)]);
+ assert.equal((await state(db)).due_kind,'invitation_due');
+ await db.query("insert into report_import_rows(company_id,source_type,station_code,normalized_data) values($1,'da_inapp_onboarding','KOZA',$2)",[id(1),{rabbit_id:'amal.koza@gmail.com',operational_status:'inactive',action_item:'Background check pending'}]);
+ const row=await state(db);assert.equal(row.stage,'background_check');assert.equal(row.invited_on,null);assert.equal(row.due_kind,null);assert.equal(row.can_trigger,false);
+ await db.query("insert into workforce_amazon_invitation_requests(company_id,workforce_id,station_id,status,completed_at) values($1,$2,$3,'sent',now()-interval '3 days')",[id(1),id(8),id(7)]);
+ assert.equal((await state(db)).due_kind,'progress_due');
+ }finally{await db.close();}});

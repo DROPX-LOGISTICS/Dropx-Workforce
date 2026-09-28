@@ -1,0 +1,8 @@
+"use client";
+import {useState} from "react";
+type Step={match:string;stage:string;label:string;instruction:string};
+export function PartnerStepGuidance({initial}:{initial:Step[]}){
+ const [steps,setSteps]=useState(initial);
+ const update=(index:number,key:keyof Step,value:string)=>setSteps(rows=>rows.map((row,i)=>i===index?{...row,[key]:value}:row));
+ return <div><h3>What the associate should see</h3><p className="subtle">First matching instruction wins. Write a clear action, where to complete it, and whom to contact for help. Raw report codes are visible only to your team.</p><input type="hidden" name="status_guidance" value={JSON.stringify(steps)}/>{steps.map((step,i)=><div className="form-grid" key={i} style={{padding:10,borderBottom:"1px solid #eee"}}><label>Report contains<input value={step.match} required onChange={e=>update(i,'match',e.target.value)}/></label><label>Step<select value={step.stage} onChange={e=>update(i,'stage',e.target.value)}>{['background_check','video_verification','documents','learning','basic_details','account','licence','provisioning','partner_action_pending','exception'].map(s=><option key={s}>{s}</option>)}</select></label><label>Associate title<input value={step.label} required onChange={e=>update(i,'label',e.target.value)}/></label><label>What to do<textarea value={step.instruction} required onChange={e=>update(i,'instruction',e.target.value)}/></label><button type="button" className="button secondary compact" onClick={()=>setSteps(rows=>rows.filter((_,n)=>n!==i))}>Remove instruction</button></div>)}<button type="button" className="button secondary compact" onClick={()=>setSteps(rows=>[...rows,{match:'',stage:'partner_action_pending',label:'',instruction:''}])}>Add step instruction</button></div>;
+}

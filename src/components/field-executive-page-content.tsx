@@ -568,7 +568,7 @@ function FieldExecutiveForm({
       {executive ? <input type="hidden" name="id" value={executive.id} /> : null}
 
       <label>Full name<input className="field" name="full_name" placeholder="Enter full name" required={!optionalEditFields} defaultValue={textValue(executive?.full_name)} /></label>
-      <label>Email<input className="field" name="email" placeholder="Enter email" required={!optionalEditFields} type="email" defaultValue={textValue(executive?.email)} /></label>
+      <label>Email<input className="field" name="email" placeholder="name.stationcode@gmail.com" required={!optionalEditFields} type="email" defaultValue={textValue(executive?.email)} /></label>
 
       <label>Country code
         <select className="select" name="mobile_country_code" defaultValue={executive?.mobile_country_code ?? "91"}>
@@ -704,7 +704,7 @@ function AddFieldExecutiveForm({
           <input className="field" inputMode="tel" maxLength={15} name="mobile" pattern="[0-9]{6,15}" placeholder="Enter mobile number" required defaultValue={values?.mobile ?? ""} />
         </div>
       </label>
-      <label>Email<input className="field" name="email" placeholder="Enter email" required type="email" defaultValue={values?.email ?? ""} /></label>
+      <label>Email<input className="field" name="email" placeholder="name.stationcode@gmail.com" required type="email" defaultValue={values?.email ?? ""} /><small>Use the created mailbox. Where the partner workflow requires it, end the name with .stationcode before @. Any valid domain is allowed.</small></label>
       <label>Date of join<input className="field" name="date_of_join" required type="date" defaultValue={values?.dateOfJoin ?? ""} /></label>
       <ScopedDesignationFields
         designationName="designation"

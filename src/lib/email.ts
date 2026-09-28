@@ -3,6 +3,9 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type SendEmailParams = {
   body: string;
+  messageId?: string;
+  inReplyTo?: string;
+  references?: string[];
   cc?: string[];
   companyId?: string;
   subject: string;
@@ -73,7 +76,7 @@ function loadEnvEmailConfig(): EmailConfig {
   };
 }
 
-export async function sendEmail({ body, cc = [], companyId, subject, to }: SendEmailParams) {
+export async function sendEmail({ body, cc = [], companyId, subject, to, messageId, inReplyTo, references }: SendEmailParams) {
   const recipients = Array.from(new Set(to.map((email) => email.trim().toLowerCase()).filter(Boolean)));
   const ccRecipients = Array.from(new Set(cc.map((email) => email.trim().toLowerCase()).filter(Boolean)));
   if (!recipients.length) throw new Error("No email recipients found.");
@@ -87,7 +90,8 @@ export async function sendEmail({ body, cc = [], companyId, subject, to }: SendE
     auth: config.user && config.pass ? { user: config.user, pass: config.pass } : undefined
   });
 
-  await transporter.sendMail({
+  return await transporter.sendMail({
+    messageId, inReplyTo, references,
     from: config.from,
     to: recipients,
     cc: ccRecipients.length ? ccRecipients : undefined,

@@ -13,17 +13,19 @@ function destination(form: FormData, params: Record<string,string>) {
   if (["pending","active","all","errors"].includes(view)) query.set("view",view);
   const station = String(form.get("station") ?? "");
   if (station) query.set("station",station);
-  return `/delivery-network/id-onboarding?${query}`;
+  return `${form.has("return_to_register")?"/delivery-network/associates":"/delivery-network/id-onboarding"}?${query}`;
 }
 
 export async function queueAmazonInvitation(form: FormData) {
   const auth = await requirePagePermission("executive_id_onboarding","edit");
   try {
     if (auth.readOnly || !supabaseAdmin) throw new Error("Invitation queue is unavailable.");
-    const result = await supabaseAdmin.rpc("workforce_queue_amazon_invitation",{
+    const latest=await supabaseAdmin.from("workforce_amazon_invitation_requests").select("id,status").eq("company_id",requireCompanyId(auth)).eq("workforce_id",String(form.get("workforce_id")??"")).order("requested_at",{ascending:false}).limit(1).maybeSingle();
+    if(latest.error)throw new Error(latest.error.message);
+    const result = latest.data?.status==='failed' ? await supabaseAdmin.rpc("workforce_retry_amazon_invitation",{p_company:requireCompanyId(auth),p_actor:auth.userId,p_request:latest.data.id,p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds}) : await supabaseAdmin.rpc("workforce_queue_amazon_invitation",{
       p_company:requireCompanyId(auth),p_actor:auth.userId,p_actor_name:auth.fullName||auth.email||"Workforce",
       p_workforce:String(form.get("workforce_id")??""),p_email:String(form.get("amazon_email")??"").trim().toLowerCase(),
-      p_source_portal:normalizeSourcePortal(form.get("source_portal")),p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds
+      p_source_portal:"workforce",p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds
     });
     if (result.error) throw new Error(result.error.message);
     revalidatePath("/delivery-network/id-onboarding");revalidatePath("/delivery-network/associates");
@@ -66,4 +68,14 @@ export async function reviewProviderCandidate(form: FormData) {
     if (error && typeof error === "object" && "digest" in error) throw error;
     redirect(destination(form,{error:error instanceof Error?error.message:"Unable to review the Provider ID suggestion."}));
   }
+}
+
+export async function recordPartnerProgress(form:FormData){
+ const auth=await requirePagePermission("delivery_associates","edit");
+ try{
+  if(!supabaseAdmin||auth.readOnly)throw new Error("Editing is unavailable.");
+  const value=(key:string)=>String(form.get(key)||"").trim();
+  const result=await supabaseAdmin.rpc("workforce_record_partner_progress",{p_company:requireCompanyId(auth),p_actor:auth.userId,p_workforce:value("workforce_id"),p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds,p_reported:value("reported_on"),p_invited:value("manual_invited_on")||null,p_portal:"workforce"});
+  if(result.error)throw new Error(result.error.message);revalidatePath("/delivery-network/associates");redirect("/delivery-network/associates?notice="+encodeURIComponent("Reporting date and partner progress saved."));
+ }catch(error){if(error&&typeof error==="object"&&"digest"in error)throw error;redirect("/delivery-network/associates?error="+encodeURIComponent(error instanceof Error?error.message:"Unable to record progress."));}
 }

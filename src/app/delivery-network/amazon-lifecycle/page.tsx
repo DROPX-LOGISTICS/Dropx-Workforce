@@ -1,3 +1,4 @@
+import {loadPartnerOnboardingStates} from "@/lib/partner-onboarding";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
@@ -106,6 +107,14 @@ export default async function AmazonLifecyclePage({
   const settings = settingsResult.data ?? [];
   const settingsByStation = new Map(settings.map((s) => [s.station_id as string, s]));
 
+  if(supabaseAdmin){
+    let scoped=supabaseAdmin.from("workforce").select("id").eq("company_id",company).in("id",rows.length?rows.map(row=>row.dropx.id):["00000000-0000-0000-0000-000000000000"]);
+    if(!auth.hasAllLocationAccess)scoped=scoped.in("location_id",auth.locationScopeIds.length?auth.locationScopeIds:["00000000-0000-0000-0000-000000000000"]);
+    const result=await scoped;if(result.error)throw new Error(result.error.message);
+    const permitted=await loadPartnerOnboardingStates(supabaseAdmin,company,(result.data??[]).map(row=>row.id));
+    rows=rows.filter(row=>permitted.get(row.dropx.id)?.adapter==='amazon');
+    counts={notOnboarded:rows.filter(r=>r.bucket==='not_onboarded').length,onboarded:rows.filter(r=>r.bucket==='onboarded').length,inProgress:rows.filter(r=>r.bucket==='in_progress').length,idfyIssues:rows.filter(r=>r.idfy?.hasInsufficiency).length};
+  }else{rows=[];}
   const filtered = rows.filter((row) => {
     if (view === "all") return true;
     if (view === "idfy") return Boolean(row.idfy?.hasInsufficiency);
@@ -226,15 +235,7 @@ export default async function AmazonLifecyclePage({
             <tbody>
               {filtered.map((row) => {
                 const cfg = row.dropx.locationId ? settingsByStation.get(row.dropx.locationId) : null;
-                const expectedEmail =
-                  cfg?.associate_email_pattern && row.dropx.stationCode
-                    ? amazonEmailFromPattern(
-                        String(cfg.associate_email_pattern),
-                        row.dropx.fullName,
-                        row.dropx.stationCode,
-                      )
-                    : row.dropx.email;
-                const inviteEmail = expectedEmail || row.dropx.email || "";
+                const inviteEmail = row.dropx.email || "";
                 return (
                   <tr key={row.dropx.id}>
                     <td>

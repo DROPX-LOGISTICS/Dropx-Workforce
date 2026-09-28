@@ -68,41 +68,17 @@ export async function onboardAndInviteAmazon(form: FormData) {
     const fullName = String(form.get("full_name") ?? "");
     const { firstName, lastName } = invitationNameParts(fullName);
 
-    // Queue for audit trail when station master is ready; always also call worker immediately.
-    try {
-      await supabaseAdmin.rpc("workforce_queue_amazon_invitation", {
-        p_company: requireCompanyId(auth),
-        p_actor: auth.userId,
-        p_actor_name: auth.fullName || auth.email || "Workforce",
-        p_workforce: workforceId,
-        p_email: email,
-        p_source_portal: normalizeSourcePortal(form.get("source_portal") || "workforce"),
-        p_locations: auth.hasAllLocationAccess ? null : auth.locationScopeIds,
-      });
-    } catch {
-      // Station master may not be fully enabled — still allow direct worker invite.
-    }
-
-    const result = await callWorkforceAmazonWorker<{ providerId: string; stationMapped: boolean }>(
-      "/api/admin/amazon/invite",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          workforceId,
-          email,
-          firstName,
-          lastName,
-          stationId: stationId || undefined,
-          mapStation: true,
-        }),
-      },
-    );
-
+    const queued = await supabaseAdmin.rpc("workforce_queue_amazon_invitation", {
+      p_company: requireCompanyId(auth), p_actor: auth.userId,
+      p_actor_name: auth.fullName || auth.email || "Workforce", p_workforce: workforceId,
+      p_email: email, p_source_portal: "workforce", p_locations: auth.hasAllLocationAccess ? null : auth.locationScopeIds,
+    });
+    if (queued.error) throw new Error(queued.error.message);
     revalidatePath("/delivery-network/amazon-lifecycle");
     revalidatePath("/delivery-network/id-onboarding");
     redirect(
       destination(form, {
-        notice: `Amazon invite sent (${result.providerId})${result.stationMapped ? " and station mapped." : ". Map station if master is incomplete."}`,
+        notice: "ID request queued. Track invitation delivery and pending Amazon steps in the associate workflow.",
       }),
     );
   } catch (error) {

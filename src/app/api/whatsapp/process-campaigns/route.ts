@@ -312,6 +312,7 @@ async function processBatch(campaignId: string | null) {
   let sent = 0;
   let failed = 0;
 
+  let deferred=0;
   for (const recipient of recipients) {
     const claim = await supabaseAdmin
       .from("whatsapp_campaign_recipients")
@@ -321,6 +322,23 @@ async function processBatch(campaignId: string | null) {
     if (claim.error) throw new Error(claim.error.message);
     if (!claim.data) continue;
 
+    if(recipient.recipient_payload?.partner_reminder_rule_id){
+      const [rule,state]=await Promise.all([
+        supabaseAdmin.from("workforce_partner_reminder_rules").select("workflow_rule_id,is_active,stage_code,station_id,report_max_age_hours,send_hour_start,send_hour_end").eq("company_id",campaign.company_id).eq("id",String(recipient.recipient_payload.partner_reminder_rule_id)).maybeSingle(),
+        supabaseAdmin.rpc("workforce_partner_onboarding_state",{p_company:campaign.company_id,p_ids:[recipient.source_id]})
+      ]);
+      const current=state.data?.[0];
+      const hour=Number(new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Kolkata",hour:"2-digit",hourCycle:"h23"}).format(new Date()));
+      if(rule.error||state.error)throw new Error("Unable to recheck pending step before reminder delivery.");
+      if(!rule.data?.is_active||!current||current.workflow_rule_id!==rule.data.workflow_rule_id||(rule.data.station_id&&rule.data.station_id!==current.station_id)||current.mapping_confirmed||current.stage!==recipient.recipient_payload.partner_reminder_stage||!current.report_updated_at||Date.now()-Date.parse(current.report_updated_at)>rule.data.report_max_age_hours*3600000){
+        const skipped=await supabaseAdmin.from("whatsapp_campaign_recipients").update({status:"failed",error_message:"Not sent: "+"Pending step changed, mapping completed, reminder paused or source report expired.",updated_at:new Date().toISOString()}).eq("id",recipient.id).eq("company_id",campaign.company_id);
+        if(skipped.error)throw new Error(skipped.error.message);
+        continue;
+      }
+      if(hour<rule.data.send_hour_start||hour>=rule.data.send_hour_end){deferred++;await supabaseAdmin.from("whatsapp_campaign_recipients").update({status:"pending",updated_at:new Date().toISOString()}).eq("id",recipient.id).eq("company_id",campaign.company_id);continue;}
+      recipient.recipient_payload.instruction=current.instruction;
+      recipient.recipient_payload.pending_step=current.label;
+    }
     const values = recipientValues(recipient);
     const to = normalizeMobile(values.mobile, values.country_code || profile.default_country_code || "91");
     const messageComponents: Array<Record<string, unknown>> = [];
@@ -431,7 +449,7 @@ async function processBatch(campaignId: string | null) {
   }
 
   const pending = await updateCampaignCounts(campaign.id);
-  return { processed: recipients.length, sent, failed, pending, campaignCode: campaign.campaign_code, campaignId: campaign.id };
+  return { processed: recipients.length-deferred, sent, failed, pending, campaignCode: campaign.campaign_code, campaignId: campaign.id };
 }
 
 function continueIfNeeded(origin: string, result: { pending: number; processed: number; campaignId: string | null }) {

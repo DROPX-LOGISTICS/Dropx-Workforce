@@ -1,5 +1,7 @@
 {
-  "regions": ["sin1"],
+  "regions": [
+    "sin1"
+  ],
   "crons": [
     {
       "path": "/api/cron/business-document-expiry",
@@ -24,6 +26,10 @@
     {
       "path": "/api/whatsapp/process-campaigns",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/partner-onboarding-reminders",
+      "schedule": "15 * * * *"
     }
   ]
 }

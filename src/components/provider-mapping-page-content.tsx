@@ -310,32 +310,10 @@ export async function ProviderMappingPageContent({
   const permission = authorization.permissions[pageCode];
   const today = workforceToday();
   const monthStart = `${today.slice(0, 8)}01`;
-  const [{ locations, mappings, paymentMethods, error }, earnings] = await Promise.all([
-    loadMappingData(authorization, workforceId),
-    embedded ? Promise.resolve({lines: []}) : loadWorkforceEarnings(authorization, monthStart, today)
-  ]);
-  const pendingByProviderId = new Map<string, ProviderPendingMappingRow>();
-  earnings.lines.filter((line) => line.sourceType === "shipment" && line.status === "unmapped").forEach((line) => {
-    const key = `${line.providerId ?? line.providerName}:${line.stationCode}:${line.providerMemberId}`;
-    const current = pendingByProviderId.get(key) ?? {
-      id: key,
-      providerMemberId: line.providerMemberId,
-      providerName: line.providerName,
-      sourceName: line.workerName,
-      stationCode: line.stationCode,
-      firstSeen: line.workDate,
-      lastSeen: line.workDate,
-      dailyRows: 0,
-      deliveries: 0,
-      reason: line.holdReasons.join(" · ")
-    };
-    current.firstSeen = current.firstSeen < line.workDate ? current.firstSeen : line.workDate;
-    current.lastSeen = current.lastSeen > line.workDate ? current.lastSeen : line.workDate;
-    current.dailyRows += 1;
-    current.deliveries += line.totalDelivery;
-    pendingByProviderId.set(key, current);
-  });
-  const providerPending = Array.from(pendingByProviderId.values()).sort((left, right) => right.deliveries - left.deliveries || left.providerMemberId.localeCompare(right.providerMemberId));
+  const { locations, mappings, paymentMethods, error: mappingError } = await loadMappingData(authorization, workforceId);
+  const orphanResult = !embedded && supabaseAdmin ? await supabaseAdmin.rpc("workforce_unmapped_provider_ids", {p_company:requireCompanyId(authorization),p_locations:authorization.hasAllLocationAccess?null:authorization.locationScopeIds}) : {data:[],error:null};
+  const error=mappingError || (orphanResult.error ? `Unmapped provider IDs could not be loaded: ${orphanResult.error.message}` : null);
+  const providerPending:ProviderPendingMappingRow[]=(orphanResult.data??[]).map((row:any)=>({id:`${row.provider_id}:${row.station_code}:${row.provider_member_id}`,providerMemberId:row.provider_member_id,providerName:row.provider_name,sourceName:row.source_name||"",stationCode:row.station_code,firstSeen:row.first_seen,lastSeen:row.last_seen,dailyRows:Number(row.daily_rows),deliveries:Number(row.deliveries),reason:"Provider ID from shipment imports has no confirmed DropX mapping."}));
   const matchKey=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]/g,"");
   for(const pending of providerPending){const candidates=mappings.filter(row=>matchKey(row.dropxName)===matchKey(pending.sourceName)&&locations.find(location=>location.id===row.stationId)?.label.split(" - ")[0]===pending.stationCode);if(candidates.length===1){pending.suggestedWorkforceId=candidates[0].workforceId;pending.suggestedDropxId=candidates[0].dropxId;pending.suggestedName=candidates[0].dropxName;}}
   const flash = loadFlashMessage();
@@ -377,7 +355,7 @@ export async function ProviderMappingPageContent({
           mappings={workforceId ? mappings.filter(row=>row.workforceId===workforceId) : mappings}
           paymentMethods={paymentMethods}
           providerPending={providerPending}
-          providerPendingPeriod={`${monthStart} to ${today}`}
+          providerPendingPeriod="All imported shipment history"
         />
       ) : null}
     </>;

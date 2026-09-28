@@ -1,3 +1,6 @@
+import {PartnerDigestMaster} from "@/components/partner-digest-master";
+import { PartnerReminderMaster } from "@/components/partner-reminder-master";
+import { PartnerOnboardingMaster } from "@/components/partner-onboarding-master";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
@@ -69,8 +72,8 @@ export default async function AmazonSettings({
     );
   }
 
-  const tab = ["catalog", "supervisors", "stations"].includes(params.tab || "")
-    ? (params.tab as "catalog" | "supervisors" | "stations")
+  const tab = ["catalog", "supervisors", "stations", "workflow", "reminders"].includes(params.tab || "")
+    ? (params.tab as "catalog" | "supervisors" | "stations" | "workflow" | "reminders")
     : "catalog";
 
   let opsQuery = supabaseAdmin
@@ -166,8 +169,8 @@ export default async function AmazonSettings({
       <div className={styles.desk}>
         <PageHead
           eyebrow="Workforce configuration"
-          title="Amazon activation master"
-          subtitle="Editable station catalog and multi-station supervisors. Synced against Ops / Workforce stations — nothing hardcoded in the worker."
+          title="Partner onboarding master"
+          subtitle="Configure client workflows, due dates, associate instructions and team follow-ups. Amazon connection settings apply only to its integration."
           action={
             <div className="component-chip-list">
               <Link href="/delivery-network/amazon-lifecycle" className="button secondary compact">
@@ -209,7 +212,7 @@ export default async function AmazonSettings({
           </article>
         </section>
 
-        <div className="component-chip-list" style={{ marginBottom: 16 }}>
+        <div className="component-chip-list" style={{ marginBottom: 16 }}><Link className="button secondary compact" href="?tab=workflow">Workflow rules</Link><Link className="button secondary compact" href="?tab=reminders">Pending-step reminders</Link>
           <Link className={`button secondary compact ${tab === "catalog" ? "active" : ""}`} href="?tab=catalog">
             Station catalog
           </Link>
@@ -221,6 +224,8 @@ export default async function AmazonSettings({
           </Link>
         </div>
 
+        {tab === "reminders" && auth.hasAllLocationAccess ? <><PartnerReminderMaster companyId={company} canEdit={canEdit}/><PartnerDigestMaster companyId={company} canEdit={canEdit}/></> : null}
+        {tab === "workflow" ? <PartnerOnboardingMaster companyId={company} canEdit={canEdit && auth.hasAllLocationAccess}/> : null}
         {tab === "catalog" ? (
           <div className={styles.layout}>
             <section className={styles.queue}>
@@ -513,10 +518,9 @@ export default async function AmazonSettings({
                           </select>
                         </label>
                         <label>
-                          Associate email pattern
+                          Example email pattern (optional)
                           <input
                             name="associate_email_pattern"
-                            required
                             maxLength={254}
                             defaultValue={current?.associate_email_pattern ?? ""}
                             placeholder="{first_name}.{station_code}@yourdomain.com"

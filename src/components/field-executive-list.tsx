@@ -1,8 +1,12 @@
 "use client";
 
+import {PartnerProgressNote} from "./partner-progress-note";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, EllipsisVertical, Eye, Pencil, ShieldAlert, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { PendingLink } from "@/components/pending-link";
+import { queueAmazonInvitation, retryAmazonInvitation } from "@/app/delivery-network/id-onboarding/actions";
+import { SubmitButton } from "@/components/submit-button";
+import type { PartnerOnboardingState } from "@/lib/partner-onboarding";
 import { StatusPill } from "@/components/status-pill";
 import { registerDesignationOptions, type RegisterDesignation } from "@/lib/workforce-register-designations";
 import "./workforce-register-switches.css";
@@ -24,12 +28,20 @@ export type FieldExecutiveListRow = {
   needsReview?: boolean;
   reviewIssueCount?: number;
   canEdit?: boolean;
+  canTriggerPartner?:boolean;
   createdBy?: string | null;
   editHref?: string;
   viewHref?: string;
   paymentsHref?: string;
+  workforceId?:string;
+  partnerOnboarding?:PartnerOnboardingState;
 };
 
+function PartnerNextAction({row}:{row:FieldExecutiveListRow}){
+ const state=row.partnerOnboarding;
+ if(!state)return null;
+ return <div style={{maxWidth:270,fontSize:12}}><PartnerProgressNote state={state} workforceId={row.workforceId!} canEdit={Boolean(row.canEdit)}/><small>{state.instruction}</small>{state.report_updated_at?<small style={{display:"block"}}>Partner report updated {new Date(state.report_updated_at).toLocaleDateString("en-IN")}</small>:null}{state.can_trigger&&row.canTriggerPartner?<form action={queueAmazonInvitation}><input type="hidden" name="return_to_register" value="1"/><input type="hidden" name="workforce_id" value={row.workforceId}/><input type="hidden" name="amazon_email" value={row.email}/><input type="hidden" name="source_portal" value="workforce"/><SubmitButton className="button compact" pendingText="Requesting">{state.invitation_status==='failed'?'Retry ID request':'Create Amazon ID'}</SubmitButton></form>:state.stage==='mapping_pending'?<PendingLink href={`/delivery-network/rate-mapping?station=${encodeURIComponent(row.location)}`}>Review provider mapping</PendingLink>:null}</div>;
+}
 const pageSize = 20;
 
 type FilterOption = {
@@ -333,7 +345,7 @@ export function FieldExecutiveList({
                 {showActions ? <td className="action-cell">
                   {directProfileLinks ? <div className="wf-profile-actions">
                     {row.viewHref ? <PendingLink href={row.viewHref}>Profile</PendingLink> : null}
-                    {row.paymentsHref ? <PendingLink href={row.paymentsHref}>Payments</PendingLink> : null}
+                    <PartnerNextAction row={row}/>{row.paymentsHref ? <PendingLink href={row.paymentsHref}>Payments</PendingLink> : null}
                   </div> : null}
                   <div className="row-action-menu" ref={openMenuId === row.id ? menuRef : undefined}>
                     <button
@@ -394,7 +406,7 @@ export function FieldExecutiveList({
             {showActions ? (
               <footer>
                 <PendingLink className="button secondary" href={row.viewHref ?? `${basePath}?view=${row.id}`} scroll={false}><Eye aria-hidden="true" size={15} /> View</PendingLink>
-                {row.paymentsHref ? <PendingLink className="button secondary" href={row.paymentsHref}>Payments</PendingLink> : null}
+                <PartnerNextAction row={row}/>{row.paymentsHref ? <PendingLink className="button secondary" href={row.paymentsHref}>Payments</PendingLink> : null}
                 {canEdit && row.canEdit !== false && row.needsReview ? <PendingLink className="button" href={row.editHref ?? `${basePath}?edit=${row.id}&review=1`} scroll={false}><ShieldAlert aria-hidden="true" size={15} /> Resolve review{row.reviewIssueCount ? ` (${row.reviewIssueCount})` : ""}</PendingLink> : null}
                 {canEdit && row.canEdit !== false && !row.needsReview ? <PendingLink className="button" href={row.editHref ?? `${basePath}?edit=${row.id}`} scroll={false}><Pencil aria-hidden="true" size={15} /> Edit</PendingLink> : null}
               </footer>

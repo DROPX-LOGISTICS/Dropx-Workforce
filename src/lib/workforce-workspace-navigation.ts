@@ -22,7 +22,7 @@ export function compactWorkspaces(items: NavItem[]): NavItem[] {
     if (group.sources[0] === 'Workforce Dashboard') return [{ ...sources[0], label: group.label }];
     const children = sources.flatMap(item => item.children ?? [{ code: item.code, href: item.href, label: item.label }])
       .map(child => ({ ...child, secondary: group.label === 'Settings'
-        ? !prominent.has(child.href ?? '') : child.secondary }));
+        ? !prominent.has(child.href ?? '') : group.label === 'Associate Lifecycle' ? child.href !== '/delivery-network/associates' : child.secondary }));
     return [{ ...sources[0], label: group.label, href: undefined, children }];
   });
 }

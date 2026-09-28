@@ -29,12 +29,12 @@ insert into designations values('${id(6)}','${id(1)}','DA','Delivery Associate',
 insert into stations values('${id(7)}','${id(1)}','${id(3)}','${id(4)}','KOZA'),('${id(17)}','${id(1)}','${id(13)}','${id(14)}','OTHER');
 insert into workforce values('${id(8)}','${id(1)}','${id(6)}','amal.koza@gmail.com','${id(7)}','under_review','Amal',null,'canonical','${id(2)}',current_date,false,null);
 insert into workforce_amazon_station_settings values('${id(7)}','${id(1)}',true,null);
-`);await db.exec(migration);await db.exec(readFileSync(new URL('../supabase/migrations/20260928213000_partner_report_due_evidence.sql',import.meta.url),'utf8'));return db;}
+`);await db.exec(migration);await db.exec(readFileSync(new URL('../supabase/migrations/20260928213000_partner_report_due_evidence.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20260929010000_workforce_confirmed_mapping_lifecycle.sql',import.meta.url),'utf8'));return db;}
 const state=async db=>(await db.query('select * from workforce_partner_onboarding_state($1,$2)',[id(1),[id(8)]])).rows[0];
 const queue=async(db,email='amal.koza@gmail.com',actor=id(2),source='workforce',locations=[id(7)])=>db.query('select workforce_queue_amazon_invitation($1,$2,$3,$4,$5,$6,$7)',[id(1),actor,'Test',id(8),email,source,locations]);
 test('station suffix allows arbitrary mailbox and domain, rejects wrong suffix',async()=>{const db=await setup();try{for(const [email,code] of [['amal.koza@gmail.com','KOZA'],['akshay.ktub@outlook.com','KTUB'],['nisar123.kgqa@yahoo.com','KGQA']])assert.equal((await db.query('select workforce_station_email_valid($1,$2) valid',[email,code])).rows[0].valid,true);for(const email of ['amal@gmail.com','amal.kozax@gmail.com','amal.koza.x@gmail.com','a b.koza@gmail.com','.koza@gmail.com'])assert.equal((await db.query('select workforce_station_email_valid($1,$2) valid',[email,'KOZA'])).rows[0].valid,false);}finally{await db.close();}});
 test('eligibility is model/designation configuration; registration precedes invite; same request is idempotent',async()=>{const db=await setup();try{assert.equal((await state(db)).can_trigger,true);await db.query("update workforce set onboarding_status='pending' where id=$1",[id(8)]);await assert.rejects(queue(db),/Complete registration/);await db.query("update workforce set onboarding_status='under_review' where id=$1",[id(8)]);await assert.rejects(queue(db,'fake.koza@gmail.com'),/email saved/);await assert.rejects(queue(db,undefined,id(20),'recruit'),/only associates/);await assert.rejects(queue(db,undefined,id(2),'ops_pulse',[id(17)]),/station scope/);await queue(db);await queue(db);assert.equal((await db.query('select count(*)::int n from workforce_amazon_invitation_requests')).rows[0].n,1);assert.equal((await state(db)).stage,'triggered');await db.query('update workforce set designation_id=$1 where id=$2',[id(16),id(8)]);assert.equal(await state(db),undefined);await assert.rejects(queue(db),/not enabled/);}finally{await db.close();}});
-test('completed Amazon status holds at mapping; inactive and future mappings cannot unlock',async()=>{const db=await setup();try{await db.query("insert into report_import_rows(company_id,source_type,station_code,normalized_data) values($1,'da_inapp_onboarding','KOZA',$2)",[id(1),{rabbit_id:'amal.koza@gmail.com',operational_status:'inactive',action_item:'Background check pending'}]);assert.equal((await state(db)).stage,'background_check');await db.query("update report_import_rows set normalized_data=normalized_data||'{\"action_item\":\"No further action required\",\"operational_status\":\"active\"}'");assert.equal((await state(db)).stage,'mapping_pending');assert.equal((await state(db)).mapping_confirmed,false);await assert.rejects(queue(db),/already ready/);await db.query("insert into field_executive_provider_mappings values($1,$2,$3,'P-123','active',current_date+1,null,$4,$5)",[id(30),id(1),id(8),id(3),id(7)]);assert.equal((await state(db)).mapping_confirmed,false);await db.query("update field_executive_provider_mappings set effective_from=current_date");assert.equal((await state(db)).stage,'active');await db.query("update field_executive_provider_mappings set status='cancelled'");assert.equal((await state(db)).stage,'mapping_pending');}finally{await db.close();}});
+test('completed Amazon status holds at mapping; inactive and future mappings cannot unlock',async()=>{const db=await setup();try{await db.query("insert into report_import_rows(company_id,source_type,station_code,normalized_data) values($1,'da_inapp_onboarding','KOZA',$2)",[id(1),{rabbit_id:'amal.koza@gmail.com',operational_status:'inactive',action_item:'Background check pending'}]);assert.equal((await state(db)).stage,'background_check');await db.query("update report_import_rows set normalized_data=normalized_data||'{\"action_item\":\"No further action required\",\"operational_status\":\"active\"}'");assert.equal((await state(db)).stage,'mapping_pending');assert.equal((await state(db)).mapping_confirmed,false);await assert.rejects(queue(db),/already ready/);await db.exec("update workforce set onboarding_status='approved'");await db.query("insert into field_executive_provider_mappings values($1,$2,$3,'P-123','active',current_date+1,null,$4,$5)",[id(30),id(1),id(8),id(3),id(7)]);assert.equal((await state(db)).mapping_confirmed,false);await db.query("update field_executive_provider_mappings set effective_from=current_date");assert.equal((await state(db)).stage,'active');await db.query("update field_executive_provider_mappings set status='cancelled'");assert.equal((await state(db)).stage,'mapping_pending');}finally{await db.close();}});
 test('legacy unchanged emails survive registration while new or changed mailboxes validate',async()=>{const db=await setup();try{await assert.rejects(db.query("insert into workforce(id,company_id,designation_id,email,location_id,onboarding_status) values($1,$2,$3,'amal@gmail.com',$4,'pending')",[id(90),id(1),id(6),id(7)]),/Email must end/);await db.query('update workforce set email=$1 where id=$2',['amal123.koza@yahoo.com',id(8)]);await db.query("update workforce set onboarding_status='approved' where id=$1",[id(8)]);await assert.rejects(queue(db),/email saved/);}finally{await db.close();}});
 
 test('reminders require an approved template, fresh evidence and configured limits; stop at mapping',async()=>{
@@ -58,7 +58,7 @@ test('reminders require an approved template, fresh evidence and configured limi
  await db.exec("update workforce_partner_reminder_events set created_at=now()-interval '25 hours'");assert.equal(await tick(),1);
  await db.exec("update workforce_partner_reminder_events set created_at=now()-interval '25 hours'");assert.equal(await tick(),0);
  await db.exec("update workforce_partner_reminder_rules set max_per_step=3;update report_import_rows set created_at=now()-interval '4 days'");assert.equal(await tick(),0);
- await db.exec("update report_import_rows set created_at=now()");await db.query("insert into field_executive_provider_mappings values($1,$2,$3,'P-123','active',current_date,null,$4,$5)",[id(60),id(1),id(8),id(3),id(7)]);assert.equal(await tick(),0);
+ await db.exec("update report_import_rows set created_at=now()");await db.exec("update workforce set onboarding_status='approved'");await db.query("insert into field_executive_provider_mappings values($1,$2,$3,'P-123','active',current_date,null,$4,$5)",[id(60),id(1),id(8),id(3),id(7)]);assert.equal(await tick(),0);
  assert.equal((await db.query('select count(*)::int n from whatsapp_campaign_recipients')).rows[0].n,2);
  }finally{await db.close();}
 });
@@ -76,7 +76,7 @@ test('orphan provider queue includes old imports and remains company/station sco
  await db.query("insert into cps_shipment_daily values($1,'UNMAPPED','Test','KOZA',current_date-100,3)",[id(1)]);
  let rows=(await db.query('select * from workforce_unmapped_provider_ids($1,$2)',[id(1),[id(7)]])).rows;assert.equal(rows.length,1);assert.equal(rows[0].provider_member_id,'UNMAPPED');assert.equal(rows[0].deliveries,'3');
  assert.equal((await db.query('select * from workforce_unmapped_provider_ids($1,$2)',[id(1),[id(17)]])).rows.length,0);
- await db.query("insert into field_executive_provider_mappings values($1,$2,$3,'UNMAPPED','active',current_date,null,$4,$5)",[id(70),id(1),id(8),id(3),id(7)]);assert.equal((await db.query('select * from workforce_unmapped_provider_ids($1,null)',[id(1)])).rows.length,0);
+ await db.exec("update workforce set onboarding_status='approved'");await db.query("insert into field_executive_provider_mappings values($1,$2,$3,'UNMAPPED','active',current_date,null,$4,$5)",[id(70),id(1),id(8),id(3),id(7)]);assert.equal((await db.query('select * from workforce_unmapped_provider_ids($1,null)',[id(1)])).rows.length,0);
  }finally{await db.close();}});
 test('daily team digest has one atomic station/day delivery and restricts table access',async()=>{const db=await setup();try{
  await db.exec(readFileSync(new URL('../supabase/migrations/20260928210000_partner_onboarding_digest.sql',import.meta.url),'utf8'));
@@ -95,3 +95,39 @@ test('imported progress without a historical invite log is not a false invitatio
  await db.query("insert into workforce_amazon_invitation_requests(company_id,workforce_id,station_id,status,completed_at) values($1,$2,$3,'sent',now()-interval '3 days')",[id(1),id(8),id(7)]);
  assert.equal((await state(db)).due_kind,'progress_due');
  }finally{await db.close();}});
+
+test('a confirmed bounded payment period unlocks only inside its effective dates',async()=>{const db=await setup();try{
+ await db.exec("update workforce set onboarding_status='approved'");await db.query("insert into field_executive_provider_mappings values($1,$2,$3,'P-BOUNDED','closed',current_date-1,current_date+1,$4,$5)",[id(70),id(1),id(8),id(3),id(7)]);
+ assert.equal((await state(db)).mapping_confirmed,true);
+ await db.exec("update field_executive_provider_mappings set effective_to=current_date-1");assert.equal((await state(db)).mapping_confirmed,false);
+ await db.exec("update field_executive_provider_mappings set effective_from=current_date+1,effective_to=current_date+2");assert.equal((await state(db)).mapping_confirmed,false);
+}finally{await db.close();}});
+
+test('manual confirmation completes an approved current assignment without a training plan; future terms and incomplete registrations stay gated',async()=>{
+ const db=await setup();try{
+ await db.exec(`alter table workforce add column last_working_date date,add column is_active boolean default false,add column provider_id_status text,add column provider_employee_id text,add column updated_at timestamptz;
+ create function workforce_save_mapping(uuid,uuid,uuid,uuid,text,jsonb,uuid[]) returns void language plpgsql as $$ begin
+ if $7 is not null and not(($6->>'station_id')::uuid=any($7)) then raise exception 'outside scope';end if;
+ end $$;`);
+ const save=(from,to=null,locations=[id(7)])=>db.query('select workforce_save_joining_mapping($1,$2,$3,null,$4,$5,$6,$7)',[id(1),id(2),id(8),'DXTEST',{provider_id:id(3),provider_member_id:'CONFIRMED',station_id:id(7),payment_method_id:id(90),effective_from:from,effective_to:to,status:to?'closed':'active'},locations,'Reviewer']);
+ const dates=(await db.query("select current_date::text today,(current_date+1)::text tomorrow,(current_date+10)::text later")).rows[0];
+ await assert.rejects(save(dates.today),/Approve the registration/);
+ await db.exec("update workforce set onboarding_status='approved',lifecycle_status='onboarding'");
+ await assert.rejects(save(dates.today,null,[id(17)]),/outside scope/);
+ assert.equal((await db.query('select is_active from workforce')).rows[0].is_active,false);
+ await save(dates.tomorrow);assert.equal((await db.query('select is_active from workforce')).rows[0].is_active,false);
+ await save(dates.today,dates.later);assert.equal((await db.query('select onboarding_status from workforce')).rows[0].onboarding_status,'active');
+ assert.equal((await db.query('select count(*)::int n from workforce_joining_plans')).rows[0].n,0);
+ assert.equal((await db.query("select count(*)::int n from workforce_joining_events where event_code='provider_mapping_saved'")).rows[0].n,2);
+ await db.exec("update workforce set lifecycle_status='offboarded'");await assert.rejects(save(dates.today),/Approve the registration/);
+ }finally{await db.close();}
+});
+
+test('existing confirmed identity with expired or future rates goes to mapping review, never another invitation',async()=>{const db=await setup();try{
+ await db.exec("update workforce set onboarding_status='approved'");
+ await db.query("insert into field_executive_provider_mappings values($1,$2,$3,'EXISTING-ID','closed',current_date-5,current_date-1,$4,$5)",[id(71),id(1),id(8),id(3),id(7)]);
+ assert.equal((await state(db)).stage,'mapping_pending');assert.equal((await state(db)).can_trigger,false);assert.equal((await state(db)).mapping_confirmed,false);
+ await assert.rejects(queue(db),/already ready/);
+ await db.exec("update field_executive_provider_mappings set effective_from=current_date+1,effective_to=current_date+5");
+ assert.equal((await state(db)).stage,'mapping_pending');assert.equal((await state(db)).mapping_confirmed,false);
+}finally{await db.close();}});

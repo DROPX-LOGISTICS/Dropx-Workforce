@@ -33,11 +33,14 @@ export type FieldExecutiveListRow = {
   editHref?: string;
   viewHref?: string;
   paymentsHref?: string;
+  nextActionHref?:string;
+  nextActionLabel?:string;
   workforceId?:string;
   partnerOnboarding?:PartnerOnboardingState;
 };
 
 function PartnerNextAction({row}:{row:FieldExecutiveListRow}){
+ if(row.nextActionHref)return <PendingLink className="button secondary compact" href={row.nextActionHref}>{row.nextActionLabel||"Open workflow"}</PendingLink>;
  const state=row.partnerOnboarding;
  if(!state)return null;
  return <div style={{maxWidth:270,fontSize:12}}><PartnerProgressNote state={state} workforceId={row.workforceId!} canEdit={Boolean(row.canEdit)}/>{state.can_trigger&&row.canTriggerPartner?<form action={queueAmazonInvitation}><input type="hidden" name="return_to_register" value="1"/><input type="hidden" name="workforce_id" value={row.workforceId}/><input type="hidden" name="amazon_email" value={row.email}/><input type="hidden" name="source_portal" value="workforce"/><SubmitButton className="button compact" pendingText="Requesting">{state.invitation_status==='failed'?'Retry ID request':'Create Amazon ID'}</SubmitButton></form>:state.stage==='mapping_pending'?<PendingLink href={`/delivery-network/rate-mapping?station=${encodeURIComponent(row.location)}`}>Review provider mapping</PendingLink>:null}</div>;
@@ -344,8 +347,8 @@ export function FieldExecutiveList({
                 <td><StatusPill status={row.status} /></td>
                 {showActions ? <td className="action-cell">
                   {directProfileLinks ? <div className="wf-profile-actions">
-                    {row.viewHref ? <PendingLink href={row.viewHref}>Profile</PendingLink> : null}
-                    <PartnerNextAction row={row}/>{row.paymentsHref ? <PendingLink href={row.paymentsHref}>Payments</PendingLink> : null}
+                    {row.viewHref && !row.nextActionHref ? <PendingLink href={row.viewHref}>Profile</PendingLink> : null}
+                    <PartnerNextAction row={row}/>{row.paymentsHref && !row.nextActionHref ? <PendingLink href={row.paymentsHref}>Payments</PendingLink> : null}
                   </div> : null}
                   <div className="row-action-menu" ref={openMenuId === row.id ? menuRef : undefined}>
                     <button
@@ -406,7 +409,7 @@ export function FieldExecutiveList({
             {showActions ? (
               <footer>
                 <PendingLink className="button secondary" href={row.viewHref ?? `${basePath}?view=${row.id}`} scroll={false}><Eye aria-hidden="true" size={15} /> View</PendingLink>
-                <PartnerNextAction row={row}/>{row.paymentsHref ? <PendingLink className="button secondary" href={row.paymentsHref}>Payments</PendingLink> : null}
+                <PartnerNextAction row={row}/>{row.paymentsHref && !row.nextActionHref ? <PendingLink className="button secondary" href={row.paymentsHref}>Payments</PendingLink> : null}
                 {canEdit && row.canEdit !== false && row.needsReview ? <PendingLink className="button" href={row.editHref ?? `${basePath}?edit=${row.id}&review=1`} scroll={false}><ShieldAlert aria-hidden="true" size={15} /> Resolve review{row.reviewIssueCount ? ` (${row.reviewIssueCount})` : ""}</PendingLink> : null}
                 {canEdit && row.canEdit !== false && !row.needsReview ? <PendingLink className="button" href={row.editHref ?? `${basePath}?edit=${row.id}`} scroll={false}><Pencil aria-hidden="true" size={15} /> Edit</PendingLink> : null}
               </footer>

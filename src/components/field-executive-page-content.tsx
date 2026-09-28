@@ -1050,7 +1050,9 @@ export async function FieldExecutivePageContent({
   pageSubtitle = "Register and maintain field executives by location.",
   pageTitle = "Field Executive",
   returnPath = "/field-executive",
-  viewId
+  viewId,
+  profileOnly=false,
+  hideList=false
 }: {
   activeLabel?: string;
   addTitle?: string;
@@ -1073,6 +1075,8 @@ export async function FieldExecutivePageContent({
   pageTitle?: string;
   returnPath?: FieldExecutiveRoute;
   viewId?: string;
+  profileOnly?:boolean;
+  hideList?:boolean;
 }) {
   const authorization = await requirePagePermission(pageCode, "access");
   const accessSurface = currentAccessSurface();
@@ -1226,14 +1230,7 @@ export async function FieldExecutivePageContent({
         subtitle={pageSubtitle}
         action={
           returnPath === "/delivery-network/onboarding/associates" ? (
-            <div className="component-chip-list">
-              <PendingLink className="button secondary compact" href="/delivery-network/amazon-lifecycle">
-                Amazon lifecycle
-              </PendingLink>
-              <PendingLink className="button secondary compact" href="/delivery-network/amazon-onboarding-settings">
-                Station master
-              </PendingLink>
-            </div>
+            <PendingLink className="button secondary compact" href="/delivery-network/associates">Back to associates</PendingLink>
           ) : undefined
         }
       />
@@ -1255,7 +1252,7 @@ export async function FieldExecutivePageContent({
         </section>
       ) : null}
 
-      {permission.canAdd ? (
+      {permission.canAdd && !profileOnly ? (
         <section className="panel">
           <div className="panel-head"><h2>{addTitle}</h2></div>
           {directActivate ? (
@@ -1275,12 +1272,12 @@ export async function FieldExecutivePageContent({
         </section>
       ) : null}
 
-      {permission.canAdd && accessSurface !== "ops" ? <FieldExecutiveBulkImportPanel description={bulkImportDescription} entityLabel={entityLabel} returnPath={returnPath} title={bulkImportTitle} /> : null}
+      {permission.canAdd && !profileOnly && accessSurface !== "ops" ? <FieldExecutiveBulkImportPanel description={bulkImportDescription} entityLabel={entityLabel} returnPath={returnPath} title={bulkImportTitle} /> : null}
       {ownerAccess && accessSurface !== "ops" && returnPath === "/contractors" ? <CompensationBulkUpload kind="contractor_remuneration" /> : null}
 
       {profileCorrectionApprover ? <ProfileCorrectionApprovals requests={approvalQueue} returnPath={returnPath} /> : null}
 
-      {permission.canView || permission.canEdit ? <FieldExecutiveList basePath={returnPath} canEdit={isOpsWorkforce ? permission.canView || permission.canEdit : permission.canEdit} emptyLabel={emptyListLabel} rows={listExecutives} title={listTitle} /> : null}
+      {!hideList && (permission.canView || permission.canEdit) ? <FieldExecutiveList basePath={returnPath} canEdit={isOpsWorkforce ? permission.canView || permission.canEdit : permission.canEdit} emptyLabel={emptyListLabel} rows={listExecutives} title={listTitle} /> : null}
 
       {(permission.canView || permission.canEdit) && viewExecutive ? (
         <div className="modal-backdrop">

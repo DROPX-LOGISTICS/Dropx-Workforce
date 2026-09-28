@@ -1,4 +1,8 @@
-import {loadPartnerOnboardingStates, type PartnerOnboardingState} from "@/lib/partner-onboarding";
+import {loadWorkforceLifecycle} from '@/lib/workforce-lifecycle-data';
+import {lifecyclePhases,type LifecycleReadiness} from '@/lib/workforce-workbench';
+import {AssociateWorkbench} from '@/components/associate-workbench';
+import {WorkforceLifecycleContent} from '@/components/workforce-lifecycle-content';
+import {type PartnerOnboardingState} from "@/lib/partner-onboarding";
 import { AppShell } from "@/components/app-shell";
 import { FieldExecutiveList, type FieldExecutiveListRow } from "@/components/field-executive-list";
 import { PageHead } from "@/components/page-head";
@@ -8,13 +12,8 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
 import type { RegisterDesignation } from "@/lib/workforce-register-designations";
-import {loadWorkforceJoining} from '@/lib/workforce-joining-data';
-import {joiningState, joiningStages} from '@/lib/workforce-joining';
-import {workforceToday} from '@/lib/workforce-earnings';
-import {workforceRegisterViewMatches, validRegisterStage} from '@/lib/workforce-register-views';
 import { WorkforceReferralDesk } from "@/components/workforce-referral-desk";
 import {
-  loadWorkforceCommunicationRecipients,
   type WorkforceCommunicationRecipient
 } from "@/lib/workforce-communication-recipients";
 
@@ -27,15 +26,15 @@ function profileHref(record: WorkforceCommunicationRecipient, mode: "edit" | "vi
   return undefined;
 }
 
-export default async function WorkforceAssociatesPage({searchParams={}}:{searchParams?:{view?:string;station?:string;stage?:string;step?:string;due?:string;q?:string;notice?:string;error?:string}}) {
+export default async function WorkforceAssociatesPage({searchParams={}}:{searchParams?:{view?:string;station?:string;stage?:string;step?:string;due?:string;q?:string;notice?:string;error?:string;person?:string;section?:string;phase?:string}}) {
   const authorization = await requirePagePermission("delivery_associates", "access");
   const companyId = requireCompanyId(authorization);
-  const canAdd = hasPermission(authorization, "delivery_associates", "add");
-  const canEdit = hasPermission(authorization, "delivery_associates", "edit");
+  const canAdd = hasPermission(authorization, "delivery_associates", "add")&&!authorization.readOnly;
+  const canEdit = hasPermission(authorization, "delivery_associates", "edit")&&!authorization.readOnly;
   let records: WorkforceCommunicationRecipient[] = [];
   let designations: RegisterDesignation[] = [];
   let error: string | null = null;
-  const stages = new Map<string,string>();
+  let readiness=new Map<string,LifecycleReadiness>();
   let partnerStates=new Map<string,PartnerOnboardingState>();
   const view = ['active','pending','offboarded','all','referrals'].includes(searchParams.view||'')?searchParams.view!:'pending';
   let referralPrograms: any[]=[];
@@ -45,11 +44,8 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
   let referralSources:Array<{code:string;name:string;description:string|null}>=[];
 
   try {
-    const [recipients, joining] = await Promise.all([loadWorkforceCommunicationRecipients(authorization), loadWorkforceJoining(authorization,{to:workforceToday()})]);
-    records = recipients;
-    if(supabaseAdmin)partnerStates=await loadPartnerOnboardingStates(supabaseAdmin,companyId,joining.profiles.map(person=>person.id));
-    const plans = new Map(joining.plans.map(plan=>[plan.workforce_id,plan]));
-    for(const person of joining.profiles) stages.set(person.id,joiningState(person,plans.get(person.id)??null,joining.mappings,joining.attendance,workforceToday()).stage);
+    const lifecycle=await loadWorkforceLifecycle(authorization);
+    records=lifecycle.records;readiness=lifecycle.readiness;partnerStates=lifecycle.partners;
     if (supabaseAdmin) {
       let referralCountQuery=supabaseAdmin.from("workforce_referrals").select("id",{count:"exact",head:true}).eq("company_id",companyId);
       if(!authorization.hasAllLocationAccess){const ids=authorization.locationScopeIds.length?authorization.locationScopeIds:["00000000-0000-0000-0000-000000000000"];referralCountQuery=referralCountQuery.or(`preferred_station_id.is.null,preferred_station_id.in.(${ids.join(",")})`);}
@@ -87,12 +83,13 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
   }
 
   const stationRecords = records.filter(record=>!searchParams.station || record.location===searchParams.station);
-  const stageFor = (record:WorkforceCommunicationRecipient)=>stages.get(record.accountId) || (record.isActive&&record.status.toLowerCase()==='active'?'active':'applicant');
-  const viewMatches = (record:WorkforceCommunicationRecipient,key:string)=>key==='pending'
-    ? (partnerStates.has(record.accountId)?!partnerStates.get(record.accountId)!.mapping_confirmed:!record.isActive) && !['offboarded','closed','rejected','cancelled'].includes(stageFor(record))
-    : key==='active' && partnerStates.has(record.accountId) ? partnerStates.get(record.accountId)!.mapping_confirmed : workforceRegisterViewMatches(key,stageFor(record),record.status);
-  const selectedStage = validRegisterStage(searchParams.stage);
-  const displayedRecords = stationRecords.filter(record=>viewMatches(record,view) && (!searchParams.due || Boolean(partnerStates.get(record.accountId)?.due_kind)) && (!selectedStage || stageFor(record)===selectedStage) && (!searchParams.step || partnerStates.get(record.accountId)?.stage===searchParams.step) && (!searchParams.q || `${record.name} ${record.reference} ${record.email}`.toLowerCase().includes(searchParams.q.toLowerCase())));
+  const phaseFor=(record:WorkforceCommunicationRecipient)=>readiness.get(record.accountId)?.phase||'registration';
+  const viewMatches=(record:WorkforceCommunicationRecipient,key:string)=>key==='all'||(key==='active'?phaseFor(record)==='active':key==='offboarded'?phaseFor(record)==='closed':key==='pending'?!['active','closed'].includes(phaseFor(record)):false);
+  const selectedPhase=searchParams.phase&&Object.hasOwn(lifecyclePhases,searchParams.phase)?searchParams.phase:undefined;
+  const displayedRecords=stationRecords.filter(record=>viewMatches(record,view)&&(!searchParams.due||readiness.get(record.accountId)?.due)&&(!selectedPhase||phaseFor(record)===selectedPhase)&&(!searchParams.step||partnerStates.get(record.accountId)?.stage===searchParams.step)&&(!searchParams.q||`${record.name} ${record.reference} ${record.email}`.toLowerCase().includes(searchParams.q.toLowerCase())));
+  const contextQuery=new URLSearchParams();for(const key of ['view','station','phase','step','due','q'] as const){if(searchParams[key])contextQuery.set(key,searchParams[key]!);}
+  const workspaceHref=(id:string,section='journey')=>{const query=new URLSearchParams(contextQuery);query.set('person',id);query.set('section',section);return '/delivery-network/associates?'+query;};
+  const closeHref='/delivery-network/associates?'+contextQuery;
   const rows: FieldExecutiveListRow[] = displayedRecords.map((record) => ({
     id: `${record.profileType}:${record.accountId}`,
     dropxId: record.reference || "ID pending",
@@ -107,13 +104,15 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
     isActive: record.isActive,
     partnerOnboarding: partnerStates.get(record.accountId),
     workforceId: record.accountId,
-    status: partnerStates.get(record.accountId)?.label || (stageFor(record)==='applicant'?record.status:joiningStages[stageFor(record) as keyof typeof joiningStages]||record.status),
+    status:readiness.get(record.accountId)?.label||record.status,
+    nextActionHref:record.profileType==='workforce'&&hasPermission(authorization,'people_review','access')?workspaceHref(record.accountId,readiness.get(record.accountId)?.section):undefined,
+    nextActionLabel:readiness.get(record.accountId)?.label,
     canEdit,
-    canTriggerPartner:hasPermission(authorization,"executive_id_onboarding","edit"),
-    viewHref: record.profileType==='workforce'&&hasPermission(authorization,'people_review','access')?`/delivery-network/lifecycle?tab=${record.status.toLowerCase()==='active'?'active':'onboarding'}&person=${record.accountId}`:profileHref(record, "view"),
+    canTriggerPartner:hasPermission(authorization,"executive_id_onboarding","edit")&&!authorization.readOnly,
+    viewHref: record.profileType==='workforce'&&hasPermission(authorization,'people_review','access')?workspaceHref(record.accountId):profileHref(record, "view"),
     editHref: profileHref(record, "edit"),
     paymentsHref: record.profileType === 'workforce' && hasPermission(authorization, 'people_review', 'access') && hasPermission(authorization, 'provider_mapping', 'access')
-      ? `/delivery-network/lifecycle?tab=${record.status.toLowerCase() === 'active' ? 'active' : 'onboarding'}&person=${record.accountId}&section=payments` : undefined
+      ? workspaceHref(record.accountId,'payments') : undefined
   }));
 
   return (
@@ -121,8 +120,8 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
       <PageHead
         eyebrow="Workforce"
         title="Associate Lifecycle"
-        subtitle="Source intake, approval, work setup, commercial readiness and exit in one flow across every delivery partner."
-        action={canAdd ? <PendingLink className="button compact" href="/delivery-network/onboarding">Add associate</PendingLink> : null}
+        subtitle="Open an associate to review, complete setup, manage rates or settle an exit."
+        action={canAdd ? <PendingLink className="button compact" href="/delivery-network/onboarding/associates">Invite associate</PendingLink> : null}
       />
 
       {error ? (
@@ -133,18 +132,18 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
       {searchParams.notice ? <div className="message-panel success">{searchParams.notice}</div> : null}
       {searchParams.error ? <div className="message-panel error">{searchParams.error}</div> : null}
 
-      <div className="component-chip-list" style={{marginBottom:12}}><PendingLink className="button secondary compact" href="/delivery-network/rate-mapping">Provider mapping · both queues</PendingLink><PendingLink className="button secondary compact" href="/delivery-network/amazon-onboarding-settings?tab=workflow">Workflow rules</PendingLink></div>
+      <details style={{marginBottom:12,fontSize:12}}><summary>Mapping queues & configuration</summary><div className="component-chip-list" style={{marginTop:8}}><PendingLink className="button secondary compact" href="/delivery-network/rate-mapping">Provider mapping · both queues</PendingLink><PendingLink className="button secondary compact" href="/delivery-network/amazon-onboarding-settings?tab=workflow">Workflow rules</PendingLink></div></details>
       <section className="performance-summary-grid" aria-label="Associate lifecycle progress">
-        <article><span>Registration pending</span><strong>{stationRecords.filter(record=>partnerStates.get(record.accountId)?.stage==='registration_pending'||(!partnerStates.has(record.accountId)&&stageFor(record)==='applicant')).length}</strong><small>Complete details before ID setup</small></article>
+        <article><span>Registration & review</span><strong>{stationRecords.filter(record=>['registration','review'].includes(phaseFor(record))).length}</strong><small>Complete details before ID setup</small></article>
         <article><span>Due now</span><strong>{stationRecords.filter(record=>partnerStates.get(record.accountId)?.due_kind).length}</strong><PendingLink href={`/delivery-network/associates?view=pending&due=1&station=${encodeURIComponent(searchParams.station||'')}`}>Review overdue invitations & follow-ups</PendingLink></article>
-        <article><span>Mapping pending</span><strong>{stationRecords.filter(record=>partnerStates.get(record.accountId)?.stage==='mapping_pending').length}</strong><small>Partner ID ready; user confirmation required</small></article>
+        <article><span>ID & pay pending</span><strong>{stationRecords.filter(record=>['mapping','pay'].includes(phaseFor(record))).length}</strong><small>Confirm mapping and effective rates</small></article>
         <article><span>Active</span><strong>{stationRecords.filter(record=>viewMatches(record,'active')).length}</strong><small>Confirmed setup</small></article>
       </section>
       {searchParams.due?<p role="status">Showing overdue invitations and follow-ups. <PendingLink href="/delivery-network/associates?view=pending">Show all pending</PendingLink></p>:null}
 
       {view!=='referrals'?<form method="get" className="wf-station-context">
         <input type="hidden" name="view" value={view}/>
-        {selectedStage ? <input type="hidden" name="stage" value={selectedStage}/> : null}
+        <label>Needs action<select name="phase" defaultValue={selectedPhase||''}><option value="">All requirements</option>{Object.entries(lifecyclePhases).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
         <label>Station<select name="station" defaultValue={searchParams.station||''}><option value="">All stations</option>{[...new Set(records.map(record=>record.location).filter(Boolean))].sort().map(station=><option key={station}>{station}</option>)}</select></label>
         {searchParams.due?<input type="hidden" name="due" value="1"/>:null}
         <label>Pending step<select name="step" defaultValue={searchParams.step||''}><option value="">All steps</option>{[...new Set(stationRecords.filter(record=>viewMatches(record,view)).map(record=>partnerStates.get(record.accountId)?.stage).filter(Boolean))].map(step=><option key={step} value={step}>{step!.replaceAll('_',' ')} ({stationRecords.filter(record=>partnerStates.get(record.accountId)?.stage===step).length})</option>)}</select></label>
@@ -154,7 +153,7 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
         {[['pending','Needs action',stationRecords.filter(record=>viewMatches(record,'pending')).length],['active','Active',stationRecords.filter(record=>viewMatches(record,'active')).length],['offboarded','Offboarded',stationRecords.filter(record=>viewMatches(record,'offboarded')).length],['all','All',stationRecords.length],['referrals','Refer & earn',referralCount]].map(([key,label,count])=><PendingLink key={String(key)} aria-current={view===key?'page':undefined} href={`/delivery-network/associates?view=${key}&station=${encodeURIComponent(searchParams.station||'')}`}>{label}<strong>{count}</strong></PendingLink>)}
       </nav>
 
-      {view==='referrals'?<WorkforceReferralDesk programs={referralPrograms} referrals={referrals} stations={referralStations} sources={referralSources} canEdit={canEdit}/>:<>{selectedStage ? <div className="wf-stage-filter" role="status"><span>{joiningStages[selectedStage as keyof typeof joiningStages]} · {displayedRecords.length} profiles</span><PendingLink href={`/delivery-network/associates?view=${view}&station=${encodeURIComponent(searchParams.station||'')}`}>Clear stage filter</PendingLink></div> : null}
+      {view==='referrals'?<WorkforceReferralDesk programs={referralPrograms} referrals={referrals} stations={referralStations} sources={referralSources} canEdit={canEdit}/>:<>
       <FieldExecutiveList
         basePath="/delivery-network/associates"
         canEdit={canEdit}
@@ -163,10 +162,11 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
         designationSwitches={designations}
         directProfileLinks
         hideLocationFilter
-        key={`${view}:${selectedStage||''}:${searchParams.station||''}`}
+        key={`${view}:${selectedPhase||''}:${searchParams.station||''}`}
         showActions={!error}
         title="Lifecycle queue"
       /></>}
+      {searchParams.person?<AssociateWorkbench closeHref={closeHref}>{hasPermission(authorization,'people_review','access')&&records.some(record=>record.profileType==='workforce'&&record.accountId===searchParams.person)?<WorkforceLifecycleContent embedded searchParams={searchParams}/>:<p>This associate is unavailable or you do not have review access.</p>}</AssociateWorkbench>:null}
     </AppShell>
   );
 }

@@ -263,13 +263,27 @@ export async function savePartnerReminderRule(form:FormData){
   if(getWhatsAppTemplateHeaderMediaType(template.data.components??[]))throw new Error("Choose a text template for automatic onboarding reminders.");
   const mappings:Record<string,{mode:string;value:string}>={};
   for(const variable of extractWhatsAppTemplateVariables(template.data.components??[])){const field=text(`mapping:${variable.key}`);if(!["full_name","dropx_id","location","email","pending_step","instruction"].includes(field))throw new Error("Map every template variable to a message detail.");mappings[variable.key]={mode:"field",value:field};}
-  const stage=text("stage_code");if(!["background_check","video_verification","learning","documents","basic_details","account","licence","provisioning","partner_action_pending","mapping_pending","exception","failed"].includes(stage))throw new Error("Choose a pending step.");
+  const workflowIds=[...new Set(form.getAll('workflow_rule_id').map(String).filter(Boolean))];
+  const stages=[...new Set(form.getAll('stage_code').map(String).filter(Boolean))];
+  if(!workflowIds.length||!stages.length||workflowIds.length*stages.length>250||stages.some(stage=>!/^[a-z][a-z0-9_]{0,63}$/.test(stage)))throw new Error('Choose workflows and valid pending steps (maximum 250 combinations).');
+  if(text('id')&&(workflowIds.length!==1||stages.length!==1))throw new Error('Edit one existing rule at a time.');
   const station=text("station_id");if(station){const match=await supabaseAdmin.from("stations").select("id").eq("company_id",company).eq("id",station).single();if(match.error)throw new Error("Choose a station in this company.");}
-  const workflow=await supabaseAdmin.from("workforce_partner_onboarding_rules").select("id").eq("company_id",company).eq("id",text("workflow_rule_id")).single();if(workflow.error)throw new Error("Choose a workflow in this company.");
-  const values={workflow_rule_id:workflow.data.id,company_id:company,stage_code:stage,station_id:station||null,template_id:text("template_id"),whatsapp_profile_id:template.data.whatsapp_profile_id,variable_mappings:mappings,repeat_hours:Number(text("repeat_hours")),max_per_step:Number(text("max_per_step")),report_max_age_hours:Number(text("report_max_age_hours")),send_hour_start:Number(text("send_hour_start")),send_hour_end:Number(text("send_hour_end")),is_active:form.has("is_active"),updated_by:auth.userId,updated_at:new Date().toISOString()};
-  const result=text("id")?await supabaseAdmin.from("workforce_partner_reminder_rules").update(values).eq("company_id",company).eq("id",text("id")).eq("updated_at",text("version")).select("id").single():await supabaseAdmin.from("workforce_partner_reminder_rules").insert(values).select("id").single();
-  if(result.error)throw new Error(result.error.message);
-  revalidateAmazonMasters();redirect(dest({tab:"reminders",notice:"Reminder rule saved. Enabled rules run during their configured hours."}));
+  const workflows=await supabaseAdmin.from('workforce_partner_onboarding_rules').select('id').eq('company_id',company).in('id',workflowIds);
+  if(workflows.error||workflows.data.length!==workflowIds.length)throw new Error('Choose workflows in this company.');
+  const values={company_id:company,station_id:station||null,template_id:text("template_id"),whatsapp_profile_id:template.data.whatsapp_profile_id,variable_mappings:mappings,repeat_hours:Number(text("repeat_hours")),max_per_step:Number(text("max_per_step")),report_max_age_hours:Number(text("report_max_age_hours")),send_hour_start:Number(text("send_hour_start")),send_hour_end:Number(text("send_hour_end")),is_active:form.has("is_active"),updated_by:auth.userId,updated_at:new Date().toISOString()};
+  let saved=0;
+  if(text('id')){
+   const result=await supabaseAdmin.from('workforce_partner_reminder_rules').update({...values,workflow_rule_id:workflowIds[0],stage_code:stages[0]}).eq('company_id',company).eq('id',text('id')).eq('updated_at',text('version')).select('id').single();
+   if(result.error)throw new Error(result.error.message);saved=1;
+  }else{
+   let existingQuery=supabaseAdmin.from('workforce_partner_reminder_rules').select('workflow_rule_id,stage_code').eq('company_id',company).in('workflow_rule_id',workflowIds).in('stage_code',stages);
+   existingQuery=station?existingQuery.eq('station_id',station):existingQuery.is('station_id',null);
+   const existing=await existingQuery;if(existing.error)throw new Error(existing.error.message);
+   const present=new Set(existing.data.map(row=>row.workflow_rule_id+':'+row.stage_code));
+   const additions=workflowIds.flatMap(workflow_rule_id=>stages.filter(stage_code=>!present.has(workflow_rule_id+':'+stage_code)).map(stage_code=>({...values,workflow_rule_id,stage_code})));
+   if(additions.length){const result=await supabaseAdmin.from('workforce_partner_reminder_rules').insert(additions).select('id');if(result.error)throw new Error(result.error.message);saved=result.data.length;}
+  }
+  revalidateAmazonMasters();redirect(dest({tab:"reminders",notice:`${saved} reminder rules saved. Existing rules retain their settings. Enabled rules run during their configured hours.`}));
  }catch(error){if(error&&typeof error==="object"&&"digest"in error)throw error;redirect(dest({tab:"reminders",error:error instanceof Error?error.message:"Unable to save reminder rule."}));}
 }
 

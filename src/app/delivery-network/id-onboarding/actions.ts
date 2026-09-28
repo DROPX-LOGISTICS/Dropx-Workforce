@@ -1,4 +1,6 @@
 "use server";
+import {headers} from "next/headers";
+import {associateReturnUrl} from "@/lib/workforce-workbench";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -8,6 +10,8 @@ import { normalizeSourcePortal } from "@/lib/amazon-activation";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 function destination(form: FormData, params: Record<string,string>) {
+  const register=associateReturnUrl(headers().get("referer"),params);
+  if(register)return register;
   const query = new URLSearchParams(params);
   const view = String(form.get("view") ?? "pending");
   if (["pending","active","all","errors"].includes(view)) query.set("view",view);
@@ -76,6 +80,6 @@ export async function recordPartnerProgress(form:FormData){
   if(!supabaseAdmin||auth.readOnly)throw new Error("Editing is unavailable.");
   const value=(key:string)=>String(form.get(key)||"").trim();
   const result=await supabaseAdmin.rpc("workforce_record_partner_progress",{p_company:requireCompanyId(auth),p_actor:auth.userId,p_workforce:value("workforce_id"),p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds,p_reported:value("reported_on"),p_invited:value("manual_invited_on")||null,p_portal:"workforce"});
-  if(result.error)throw new Error(result.error.message);revalidatePath("/delivery-network/associates");redirect("/delivery-network/associates?notice="+encodeURIComponent("Reporting date and partner progress saved."));
- }catch(error){if(error&&typeof error==="object"&&"digest"in error)throw error;redirect("/delivery-network/associates?error="+encodeURIComponent(error instanceof Error?error.message:"Unable to record progress."));}
+  if(result.error)throw new Error(result.error.message);revalidatePath("/delivery-network/associates");redirect(associateReturnUrl(headers().get("referer"),{notice:"Reporting date and partner progress saved."})||"/delivery-network/associates?notice="+encodeURIComponent("Reporting date and partner progress saved."));
+ }catch(error){if(error&&typeof error==="object"&&"digest"in error)throw error;redirect(associateReturnUrl(headers().get("referer"),{error:error instanceof Error?error.message:"Unable to record progress."})||"/delivery-network/associates?error="+encodeURIComponent(error instanceof Error?error.message:"Unable to record progress."));}
 }

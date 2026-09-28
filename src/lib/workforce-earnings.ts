@@ -434,6 +434,8 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
     const hasPersonalTerms=Number(mapping?.payment_values?.DROPX_PERSONAL_TERMS)===1;
     const rateCard = mapping && profile && station
       ? hasPersonalTerms?personalPaymentCard(mapping):resolveRateCard(rateCardsByProvider.get(mapping.provider_id) ?? [], mapping.provider_id, station.id, profile.designation_id, shipment.work_date)
+        ?? (key(mapping.pay_type) === 'MG_PER_DAY' && amount(mapping.payment_values?.MG_PER_DAY) > 0
+          ? personalPaymentCard({...mapping, payment_values: {...mapping.payment_values, DROPX_PERSONAL_TERMS: 1}}) : null)
       : null;
     const holds = profile ? profileHolds(profile, shipment.work_date) : [];
     const countCorrection=corrections.find(c=>c.source_id===shipment.id&&c.kind==='counts');
@@ -590,7 +592,7 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
     }
   }
   for (const group of dailyCards.values()) {
-    const card = input.rateCards.find((rule) => rule.id === group[0].rateCardId) ?? personalPaymentCard(input.mappings.find(m=>m.id===group[0].mappingId)!);
+    const card = input.rateCards.find((rule) => rule.id === group[0].rateCardId) ?? group[0].trace.policyVersion as WorkforceRateCard | undefined;
     if(!card)throw new Error('Daily payment terms could not be reconciled.');
     if (!["fixed_daily", "fixed_monthly", "hybrid", "hybrid_additive"].includes(card.pay_type)) continue;
     const dailyAmount = calculateCardBase(card, aggregate(group));

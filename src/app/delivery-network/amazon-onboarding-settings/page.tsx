@@ -1,3 +1,5 @@
+import {PartnerWorkflowHealth} from "@/components/partner-workflow-health";
+import "@/components/associate-workbench.css";
 import {PartnerDigestMaster} from "@/components/partner-digest-master";
 import { PartnerReminderMaster } from "@/components/partner-reminder-master";
 import { PartnerOnboardingMaster } from "@/components/partner-onboarding-master";
@@ -218,7 +220,7 @@ export default async function AmazonSettings({
           </details>
         </div>
 
-        {tab === "reminders" && auth.hasAllLocationAccess ? <><PartnerReminderMaster companyId={company} canEdit={canEdit}/><PartnerDigestMaster companyId={company} canEdit={canEdit}/></> : null}
+        {tab === "reminders" && auth.hasAllLocationAccess ? <><PartnerWorkflowHealth companyId={company}/><PartnerReminderMaster companyId={company} canEdit={canEdit}/><PartnerDigestMaster companyId={company} canEdit={canEdit}/></> : null}
         {tab === "workflow" ? <PartnerOnboardingMaster companyId={company} canEdit={canEdit && auth.hasAllLocationAccess}/> : null}
         {tab === "catalog" ? (
           <div className={styles.layout}>

@@ -1,4 +1,6 @@
 "use server";
+import {headers} from "next/headers";
+import {associateReturnUrl} from "@/lib/workforce-workbench";
 import {redirect} from 'next/navigation';
 import {revalidatePath} from 'next/cache';
 import {requirePagePermission} from '@/lib/authorization';
@@ -37,5 +39,6 @@ export async function savePersonalPaymentStage(form:FormData){
   if(r.error)throw new Error(r.error.message);
   revalidatePath('/delivery-network/lifecycle');revalidatePath('/delivery-network/earnings');query.set('notice','Payment stage saved. Recalculate any affected draft payout.');
  }catch(e){query.set('error',e instanceof Error?e.message:'Unable to save payment stage.');}
- redirect('/delivery-network/lifecycle?'+query);
+ revalidatePath('/delivery-network/associates');
+ redirect(associateReturnUrl(headers().get('referer'),Object.fromEntries(query))||'/delivery-network/lifecycle?'+query);
 }

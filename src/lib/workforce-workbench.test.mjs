@@ -1,0 +1,12 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {lifecycleReadiness,associateReturnUrl} from './workforce-workbench.ts';
+const person={id:'worker',location_id:'station',onboarding_status:'approved',lifecycle_status:'onboarding',is_active:false};
+const partner={mapping_confirmed:false,stage:'learning',label:'Course pending',due_kind:null};
+const mapping={workforce_id:'worker',station_id:'station',status:'closed',effective_from:'2026-09-01',effective_to:'2026-09-30',payment_method_id:'method'};
+const ready=(p=person,s=partner,m=[])=>lifecycleReadiness(p,s,m,'2026-09-28');
+test('review comes before operational readiness even when imported ID is ready',()=>assert.equal(ready({...person,onboarding_status:'under_review'},{...partner,stage:'mapping_pending'}).phase,'review'));
+test('partner steps are configuration driven; no training stage is inferred',()=>{assert.equal(ready().phase,'partner');assert.equal(ready(person,null).phase,'activation');assert.equal(ready(person,{...partner,stage:'mapping_pending'}).phase,'mapping');});
+test('current bounded terms count; historical and future terms do not count',()=>{const mapped={...partner,mapping_confirmed:true};assert.equal(ready(person,mapped,[mapping]).phase,'activation');assert.equal(ready(person,mapped,[{...mapping,effective_from:'2026-10-01'}]).phase,'pay');assert.equal(ready(person,mapped,[{...mapping,effective_to:'2026-09-20'}]).phase,'pay');});
+test('active and exited states remain distinct, regardless of stale partner data',()=>{assert.equal(ready({...person,onboarding_status:'active'}, {...partner,mapping_confirmed:true},[mapping]).phase,'active');assert.equal(ready({...person,lifecycle_status:'offboarded'},partner,[mapping]).phase,'closed');});
+test('mutation redirects preserve only register context and never accept an external destination',()=>{assert.equal(associateReturnUrl('https://workforce.dropxlogistics.com/delivery-network/associates?person=abc&station=KOZA&view=pending&error=old&next=https://evil.example',{section:'payments',notice:'Saved'}),'/delivery-network/associates?view=pending&station=KOZA&person=abc&section=payments&notice=Saved');assert.equal(associateReturnUrl('https://evil.example/login',{}),null);assert.equal(associateReturnUrl(null,{}),null);});

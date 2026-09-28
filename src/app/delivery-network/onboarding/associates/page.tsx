@@ -19,7 +19,9 @@ export default function WorkforceAssociateOnboardingPage({
 }) {
   return (
     <FieldExecutivePageContent
-      activeLabel="Onboard Workforce"
+      hideList
+      profileOnly={Boolean(searchParams?.edit||searchParams?.view)}
+      activeLabel="Associate Lifecycle"
       addTitle="Invite Workforce associate"
       bulkImportDescription="Upload master-classified Workforce associates. Every registration remains compatible with the existing DropX One flow."
       bulkImportTitle="Bulk associate onboarding"
@@ -35,8 +37,8 @@ export default function WorkforceAssociateOnboardingPage({
       listTitle="Associate onboarding requests"
       notice={searchParams?.notice}
       pageCode="delivery_associates"
-      pageSubtitle="Onboard Workforce-classified frontline roles such as Delivery Associate, driving and Wishmaster. People / HR roles remain excluded by the designation master."
-      pageTitle="Associate Onboarding"
+      pageSubtitle="Select the station and role, then send the registration invitation."
+      pageTitle="Invite associate"
       returnPath="/delivery-network/onboarding/associates"
       viewId={searchParams?.view}
       addFormValues={{

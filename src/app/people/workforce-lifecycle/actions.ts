@@ -1,4 +1,6 @@
 "use server";
+import {loadPartnerOnboardingStates} from "@/lib/partner-onboarding";
+import {associateReturnUrl} from "@/lib/workforce-workbench";
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -17,6 +19,8 @@ import {loadRecordedExitChecks} from '@/lib/workforce-exit-recorded-loader';
 import {recordedExitBlockers} from '@/lib/workforce-exit-recorded-checks';
 
 function lifecycleRedirect(params: { error?: string; notice?: string; tab?: string }): never {
+  const register=associateReturnUrl(headers().get("referer"),{...params,...(params.tab==="exits"?{section:"exit"}:{})});
+  if(register)redirect(register);
   const query = new URLSearchParams();
   if (params.error) query.set("error", params.error);
   if (params.notice) query.set("notice", params.notice);
@@ -49,6 +53,8 @@ function text(value: FormDataEntryValue | null) {
 }
 
 function revalidateLifecyclePages() {
+  revalidatePath("/delivery-network/associates");
+  revalidatePath("/delivery-network");
   revalidatePath("/delivery-network/lifecycle");
   revalidatePath("/people/workforce-lifecycle");
 }
@@ -164,8 +170,19 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
       if (acceptance.error) throw new Error(acceptance.error.message);
       if (!acceptance.data?.length) throw new Error("The associate must accept the agreement in DropX One before activation.");
     }
-    const providerId = text(formData.get("provider_employee_id"));
+    const partnerFlow=(await loadPartnerOnboardingStates(supabaseAdmin!,companyId,[id])).get(id);
+    if(!joiningOnly&&partnerFlow&&!partnerFlow.mapping_confirmed)throw new Error('Confirm the provider ID in this associate’s Pay & ID section before activation.');
+    let providerId = text(formData.get("provider_employee_id"));
+    if(!joiningOnly&&partnerFlow?.mapping_confirmed){
+      const today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+      const mappings=await supabaseAdmin!.from('field_executive_provider_mappings').select('provider_member_id').eq('company_id',companyId).eq('workforce_id',id).eq('station_id',partnerFlow.station_id).neq('status','cancelled').lte('effective_from',today).or(`effective_to.is.null,effective_to.gte.${today}`);
+      if(mappings.error)throw new Error('Confirmed provider mapping could not be verified.');
+      const identifiers=[...new Set((mappings.data||[]).map(row=>row.provider_member_id).filter(Boolean))];
+      if(identifiers.length!==1)throw new Error('Review the current provider mappings before activation.');
+      providerId=identifiers[0];
+    }
     const providerNotRequired = formData.get("provider_not_required") === "true";
+    if(providerNotRequired&&partnerFlow)throw new Error("This assignment requires a partner ID under its configured workflow.");
     if (providerNotRequired && !isCompanyOwner(authorization)) throw new Error("Only an owner can waive the provider ID requirement.");
     if (!joiningOnly && applicable.some((item) => item.code === "provider_id_created" && item.is_required) && !providerNotRequired && !providerId) throw new Error("Enter the verified partner account ID before activation. Approve the registration first while account setup is pending.");
     const results = applicable.map((item) => {
@@ -249,7 +266,7 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
     if (event.error) throw new Error(event.error.message);
     revalidateLifecyclePages();
     revalidatePath("/delivery-network/joining");
-    if (joiningOnly) redirect(`/delivery-network/lifecycle?person=${encodeURIComponent(id)}&section=activation&notice=${encodeURIComponent("Registration approved. Continue with work setup.")}`);
+    if (joiningOnly) redirect(associateReturnUrl(headers().get("referer"),{person:id,section:"journey",notice:"Registration approved. Continue with work setup."})||`/delivery-network/lifecycle?person=${encodeURIComponent(id)}&section=activation&notice=${encodeURIComponent("Registration approved. Continue with work setup.")}`);
     lifecycleRedirect({ notice: `${applicant.full_name} approved and activated.` });
   } catch (error) {
     if (isRedirect(error)) throw error;

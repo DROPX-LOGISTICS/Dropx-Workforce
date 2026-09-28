@@ -1,3 +1,4 @@
+import {FieldExecutivePageContent} from "@/components/field-executive-page-content";
 import {
   ArrowRight,
   BadgeCheck,
@@ -44,7 +45,8 @@ function RoleTags({ roles }: { roles: DesignationRow[] }) {
   );
 }
 
-export default async function WorkforceOnboardingHubPage() {
+export default async function WorkforceOnboardingHubPage({searchParams}:{searchParams?:{edit?:string;view?:string;error?:string;notice?:string}}) {
+  if(searchParams?.edit||searchParams?.view)return <FieldExecutivePageContent profileOnly hideList activeLabel="Associate Lifecycle" pageTitle="Protected registration" pageSubtitle="Complete the existing invitation using its original registration record." designationCategoryFilter={["field_executives","contractors","vendors","workers"]} designationPeopleModule="delivery_network" returnPath="/delivery-network/onboarding" editId={searchParams.edit} viewId={searchParams.view} errorMessage={searchParams.error} notice={searchParams.notice}/>;
   const authorization = await requirePagePermission("delivery_associates", "access");
   const companyId = requireCompanyId(authorization);
   let records: WorkforceCommunicationRecipient[] = [];

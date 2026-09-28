@@ -1,4 +1,5 @@
 "use server";
+import {associateReturnUrl} from "@/lib/workforce-workbench";
 
 import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -16,6 +17,8 @@ function clean(value: FormDataEntryValue | null) {
 }
 
 function mappingRedirect(params: { error?: string; notice?: string }) {
+  const register=associateReturnUrl(headers().get("referer"),{...params,section:"payments"});
+  if(register)redirect(register);
   let path = "/provider-mapping";
   let reviewPath: string | null = null;
   try {

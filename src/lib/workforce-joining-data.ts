@@ -6,12 +6,12 @@ import { workforceClassification } from "@/lib/workforce-classification";
 import { belongsToPerson } from "./workforce-joining";
 import type { JoiningAttendance, JoiningMapping, JoiningPerson, JoiningPlan, TrainingPolicy } from "./workforce-joining";
 
-export type JoiningProfile = JoiningPerson & {full_name: string; date_of_join:string|null; dropx_id: string | null; biometric_id: string | null; designation: string | null; designation_id: string | null; onboarding_application_source: string | null};
+export type JoiningProfile = JoiningPerson & {full_name: string; email:string|null; date_of_join:string|null; dropx_id: string | null; biometric_id: string | null; designation: string | null; designation_id: string | null; onboarding_application_source: string | null};
 export type JoiningEvent = {id: string; workforce_id: string; event_code: string; actor_name: string; created_at: string; details: Record<string, unknown>};
 export async function loadWorkforceJoining(authorization: AuthorizationContext, options: {from?: string; to: string; evidence?: boolean;workforceId?:string}) {
   if (!supabaseAdmin) throw new Error("Database connection is unavailable.");
   const db = supabaseAdmin; const company = requireCompanyId(authorization);
-  let profilesQuery = db.from("workforce").select("id,full_name,date_of_join,dropx_id,biometric_id,designation,designation_id,location_id,source_profile_type,source_profile_id,onboarding_status,lifecycle_status,is_active,onboarding_approved_at,last_working_date,onboarding_application_source")
+  let profilesQuery = db.from("workforce").select("id,full_name,email,date_of_join,dropx_id,biometric_id,designation,designation_id,location_id,source_profile_type,source_profile_id,onboarding_status,lifecycle_status,is_active,onboarding_approved_at,last_working_date,onboarding_application_source")
     .eq("company_id",company).is("deleted_at",null).neq("migration_state","reclassified").order("id");
   if (!authorization.hasAllLocationAccess) profilesQuery = profilesQuery.in("location_id", authorization.locationScopeIds.length ? authorization.locationScopeIds : ["00000000-0000-0000-0000-000000000000"]);
   if(options.workforceId)profilesQuery=profilesQuery.eq('id',options.workforceId);

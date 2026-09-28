@@ -2,7 +2,7 @@
 
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { authOriginFromHeaders, OPS_ORIGIN, safeAuthNextPath } from "@/lib/auth-surface-routing";
+import { authOriginFromHeaders, OPS_ORIGIN, safeAuthNextPath, WORKFORCE_ORIGIN } from "@/lib/auth-surface-routing";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 export async function signInWithGoogle(formData: FormData) {
@@ -18,6 +18,9 @@ export async function signInWithGoogle(formData: FormData) {
     ? "https://dashboard.dropxlogistics.com"
     : origin;
   const callbackUrl = new URL("/auth/callback", callbackOrigin);
+  if (origin === WORKFORCE_ORIGIN) {
+    callbackUrl.searchParams.set("surface", "workforce");
+  }
   if (origin === OPS_ORIGIN) {
     cookies().set("dropx_ops_auth_return", "1", {
       domain: ".dropxlogistics.com",

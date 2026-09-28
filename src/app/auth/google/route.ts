@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isWorkforceHost } from "@/lib/auth-surface-routing";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 export const runtime = "nodejs";
@@ -25,6 +26,9 @@ export async function GET(request: NextRequest) {
   }
 
   const callbackUrl = new URL("/auth/callback", request.nextUrl.origin);
+  if (isWorkforceHost(request.nextUrl.host)) {
+    callbackUrl.searchParams.set("surface", "workforce");
+  }
   const nextPath = safeNextPath(request.nextUrl.searchParams.get("next"));
   if (nextPath) callbackUrl.searchParams.set("next", nextPath);
 

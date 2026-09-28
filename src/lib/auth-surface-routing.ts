@@ -63,6 +63,16 @@ export function isWorkforceHost(host: string) {
     (normalized.endsWith(".vercel.app") && normalized.includes("workforce"));
 }
 
+export function isWorkforceAuthSurface(host: string, surface: string | null) {
+  const normalized = cleanHost(host);
+  return isWorkforceHost(normalized) ||
+    (normalized === "dashboard.dropxlogistics.com" && surface === "workforce");
+}
+
+export function authSurfaceOrigin(host: string, surface: string | null, fallbackOrigin: string) {
+  return isWorkforceAuthSurface(host, surface) ? WORKFORCE_ORIGIN : fallbackOrigin;
+}
+
 export function isWorkforceDestination(path: string) {
   const pathname = safeAuthNextPath(path).split("?")[0];
   return pathname === "/" ||

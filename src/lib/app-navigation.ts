@@ -188,7 +188,7 @@ export const workforceNavItems: NavItem[] = [
     icon: "WM",
     children: [
       { code: "people_review", label: "Setup Checklist", href: "/delivery-network/setup", secondary: true },
-      { code: "executive_id_onboarding", label: "Amazon Activation Master", href: "/delivery-network/amazon-onboarding-settings" },
+      { code: "executive_id_onboarding", label: "Partner onboarding", href: "/delivery-network/amazon-onboarding-settings" },
       { code: "executive_id_onboarding", label: "Amazon Status Guidance", href: "/delivery-network/amazon-status-guidance", secondary: true },
       { code: "workforce_payroll", label: "Payout calendars", href: "/delivery-network/payroll-calendars" },
       { code: "workforce_incentives", label: "Incentive rules", href: "/delivery-network/incentives", secondary: true },

@@ -66,7 +66,7 @@ export default async function AmazonSettings({
   const company = requireCompanyId(auth);
   if (!supabaseAdmin) {
     return (
-      <AppShell active="Amazon Station Defaults" pageCode="executive_id_onboarding">
+      <AppShell active="Partner onboarding" pageCode="executive_id_onboarding">
         <p>Database is unavailable.</p>
       </AppShell>
     );
@@ -74,7 +74,7 @@ export default async function AmazonSettings({
 
   const tab = ["catalog", "supervisors", "stations", "workflow", "reminders"].includes(params.tab || "")
     ? (params.tab as "catalog" | "supervisors" | "stations" | "workflow" | "reminders")
-    : "catalog";
+    : "workflow";
 
   let opsQuery = supabaseAdmin
     .from("stations")
@@ -165,21 +165,14 @@ export default async function AmazonSettings({
   const missingInOps = catalog.filter((row) => !row.station_id && !stationsByCode.has(row.station_code));
 
   return (
-    <AppShell active="Amazon Station Defaults" pageCode="executive_id_onboarding">
+    <AppShell active="Partner onboarding" pageCode="executive_id_onboarding">
       <div className={styles.desk}>
         <PageHead
           eyebrow="Workforce configuration"
           title="Partner onboarding master"
-          subtitle="Configure client workflows, due dates, associate instructions and team follow-ups. Amazon connection settings apply only to its integration."
+          subtitle="Client workflows, due dates and follow-ups."
           action={
-            <div className="component-chip-list">
-              <Link href="/delivery-network/amazon-lifecycle" className="button secondary compact">
-                Amazon lifecycle
-              </Link>
-              <Link href="/delivery-network/id-onboarding" className="button secondary compact">
-                Activation desk
-              </Link>
-            </div>
+            <Link href="/delivery-network/associates" className="button secondary compact">Associate Lifecycle</Link>
           }
         />
 
@@ -189,7 +182,7 @@ export default async function AmazonSettings({
           </div>
         ) : null}
 
-        <section className="performance-summary-grid" style={{ marginBottom: 16 }}>
+        {["catalog", "supervisors", "stations"].includes(tab) ? <section className="performance-summary-grid" style={{ marginBottom: 16 }}>
           <article>
             <span>Catalog stations</span>
             <strong>{catalog.length}</strong>
@@ -210,18 +203,19 @@ export default async function AmazonSettings({
             <strong>{missingInOps.length}</strong>
             <small>Catalog only — still usable</small>
           </article>
-        </section>
+        </section> : null}
 
-        <div className="component-chip-list" style={{ marginBottom: 16 }}><Link className="button secondary compact" href="?tab=workflow">Workflow rules</Link><Link className="button secondary compact" href="?tab=reminders">Pending-step reminders</Link>
-          <Link className={`button secondary compact ${tab === "catalog" ? "active" : ""}`} href="?tab=catalog">
-            Station catalog
-          </Link>
-          <Link className={`button secondary compact ${tab === "supervisors" ? "active" : ""}`} href="?tab=supervisors">
-            Supervisors
-          </Link>
-          <Link className={`button secondary compact ${tab === "stations" ? "active" : ""}`} href="?tab=stations">
-            Invite settings
-          </Link>
+        <div className="component-chip-list" style={{ marginBottom: 16 }}>
+          <Link className={`button secondary compact ${tab === "workflow" ? "active" : ""}`} href="?tab=workflow">Workflow rules</Link>
+          <Link className={`button secondary compact ${tab === "reminders" ? "active" : ""}`} href="?tab=reminders">Reminders</Link>
+          <details open={["catalog", "supervisors", "stations"].includes(tab)}>
+            <summary style={{ cursor: "pointer", fontSize: 12, padding: 8 }}>Amazon connection</summary>
+            <div className="component-chip-list" style={{ padding: 8 }}>
+              <Link className="button secondary compact" href="?tab=catalog">Station catalog</Link>
+              <Link className="button secondary compact" href="?tab=supervisors">Supervisors</Link>
+              <Link className="button secondary compact" href="?tab=stations">Invite settings</Link>
+            </div>
+          </details>
         </div>
 
         {tab === "reminders" && auth.hasAllLocationAccess ? <><PartnerReminderMaster companyId={company} canEdit={canEdit}/><PartnerDigestMaster companyId={company} canEdit={canEdit}/></> : null}

@@ -7,6 +7,7 @@ import { PendingLink } from "@/components/pending-link";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
+import { componentRuleLabel, type PaymentComponentRule } from "@/lib/payment-component-rules";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createPaymentMethod, deletePaymentMethod, updatePaymentMethod } from "./actions";
 import { cookies } from "next/headers";
@@ -20,6 +21,10 @@ type PaymentComponentRow = {
   pay_schedule: "per_hour" | "per_day" | "per_month" | null;
   sort_order: number;
   is_active: boolean;
+  source_of_truth: PaymentComponentRule["sourceOfTruth"] | null;
+  calculation_basis: PaymentComponentRule["calculationBasis"] | null;
+  source_metric: PaymentComponentRule["sourceMetric"];
+  minimum_units: number | null;
 };
 
 type PaymentMethodRow = {
@@ -29,7 +34,6 @@ type PaymentMethodRow = {
   is_active: boolean;
   payment_method_components?: PaymentComponentRow[] | null;
   usage_count: number;
-  source_of_truth: string;
   designation_ids: string[];
 };
 
@@ -67,10 +71,10 @@ async function loadPaymentMethods(companyId: string) {
 
   if (error) return { methods: [] as PaymentMethodRow[], error: error.message };
 
-  const sourceResult = await supabaseAdmin.from("workforce_payment_method_sources")
-    .select("payment_method_id,source_of_truth").eq("company_id",companyId);
+  const sourceResult = await supabaseAdmin.from("workforce_payment_method_component_sources")
+    .select("payment_method_id,payment_field_id,source_of_truth,calculation_basis,source_metric,minimum_units").eq("company_id",companyId);
   if (sourceResult.error) return { methods: [] as PaymentMethodRow[], error: sourceResult.error.message };
-  const sourceByMethod = new Map((sourceResult.data ?? []).map((row) => [row.payment_method_id,row.source_of_truth]));
+  const sourceByComponent = new Map((sourceResult.data ?? []).map((row) => [`${row.payment_method_id}:${row.payment_field_id}`,row]));
   const usage = await Promise.all((data ?? []).map(async (method) => {
     const result = await supabaseAdmin!.from("field_executive_provider_mappings")
       .select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("payment_method_id", method.id);
@@ -84,11 +88,13 @@ async function loadPaymentMethods(companyId: string) {
     methods: ((data ?? []) as Array<Omit<PaymentMethodRow, "usage_count" | "designation_ids"> & { workforce_payment_method_designations?: Array<{ designation_id: string }> | null }>).map((method) => ({
       ...method,
       usage_count: usageByMethod.get(method.id) ?? 0,
-      source_of_truth: sourceByMethod.get(method.id) ?? "",
       designation_ids: (method.workforce_payment_method_designations ?? []).map((rule) => rule.designation_id),
       payment_method_components: (method.payment_method_components ?? [])
         .slice()
         .sort((first, second) => first.sort_order - second.sort_order)
+        .map((component) => ({ ...component, ...(sourceByComponent.get(`${method.id}:${component.payment_field_id}`) ?? {
+          source_of_truth: null, calculation_basis: null, source_metric: null, minimum_units: null
+        }) }))
     })),
     error: null
   };
@@ -133,7 +139,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
       <PageHead
         eyebrow="Master"
         title="Payment methods"
-        subtitle="Set each method’s eligible Workforce designations, fields and source of truth; assign individual rates in ID & Rate Mapping."
+        subtitle="Group payment components by designation. Each component defines its own earning evidence; assign individual amounts in ID & Rate Mapping."
         action={<div className="component-chip-list">
           <PendingLink className="button secondary compact" href="/master/payment-methods?fields=1">Payment fields</PendingLink>
           {authorization.permissions.provider_mapping?.canView ? <PendingLink className="button compact" href="/delivery-network/rate-mapping">ID & Rate Mapping</PendingLink> : null}
@@ -165,7 +171,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
           <div className="panel-head">
             <div>
               <h2>Add payment method</h2>
-              <p className="subtle">Choose which Workforce designations can use the method. Creating a method does not change anyone’s rates.</p>
+              <p className="subtle">Choose eligible designations, then define the earning evidence for every payment component.</p>
             </div>
           </div>
           <PaymentMethodForm action={createPaymentMethod} availableFields={fields} availableDesignations={designations} />
@@ -177,7 +183,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
           <div className="panel-head">
             <div>
               <h2>Payment method list</h2>
-              <p className="subtle">{methods.length} records. Designations control availability; components control the rate fields.</p>
+              <p className="subtle">{methods.length} records. A method can combine attendance-day, Amazon activity-day and shipment-quantity components.</p>
             </div>
           </div>
           <div className="table-wrap">
@@ -187,8 +193,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                   <th>Method ID</th>
                   <th>Name</th>
                   <th>Eligible designations</th>
-                  <th>Configured fields</th>
-                  <th>Source of truth</th>
+                  <th>Components & earning rules</th>
                   <th>Status</th>
                   {pagePermission.canEdit ? <th>Action</th> : null}
                 </tr>
@@ -211,16 +216,19 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                               {component.component_code} | {component.component_type === "amount" ? "Amount" : "Production"}
                               {component.pay_schedule ? ` | ${component.pay_schedule === "per_hour" ? "Per Hour" : component.pay_schedule === "per_day" ? "Per Day" : "Per Month"}` : ""}
                             </small>
+                            <small>{component.source_of_truth && component.calculation_basis ? componentRuleLabel({
+                              sourceOfTruth: component.source_of_truth, calculationBasis: component.calculation_basis,
+                              sourceMetric: component.source_metric, minimumUnits: component.minimum_units
+                            }) : "Earning rule required"}</small>
                           </span>
                         )) : <span className="subtle">No fields configured</span>}
                       </div>
                     </td>
-                    <td>{method.source_of_truth ? method.source_of_truth.replaceAll("_"," ") : <span className="status-badge warning">Configure</span>}</td>
                     <td><StatusPill status={method.is_active ? "Active" : "Inactive"} /></td>
                     {pagePermission.canEdit ? <td><PendingLink className="button secondary compact" href={`/master/payment-methods?edit=${method.id}`} scroll={false}>Edit</PendingLink></td> : null}
                   </tr>
                 )) : (
-                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 7 : 6}>No payment methods added yet.</td></tr>
+                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 6 : 5}>No payment methods added yet.</td></tr>
                 )}
               </tbody>
             </table>
@@ -245,9 +253,13 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                 code: editMethod.code,
                 name: editMethod.name,
                 usage_count: editMethod.usage_count,
-                source_of_truth: editMethod.source_of_truth,
                 designation_ids: editMethod.designation_ids,
-                field_ids: (editMethod.payment_method_components ?? []).map((component) => component.payment_field_id)
+                field_ids: (editMethod.payment_method_components ?? []).map((component) => component.payment_field_id),
+                component_rules: (editMethod.payment_method_components ?? []).filter((component) => component.source_of_truth && component.calculation_basis).map((component) => ({
+                  fieldId: component.payment_field_id, componentCode: component.component_code,
+                  sourceOfTruth: component.source_of_truth!, calculationBasis: component.calculation_basis!,
+                  sourceMetric: component.source_metric, minimumUnits: component.minimum_units
+                }))
               }}
               submitLabel="Save changes"
             />

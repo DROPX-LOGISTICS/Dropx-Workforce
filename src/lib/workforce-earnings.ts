@@ -4,6 +4,7 @@ import type { AuthorizationContext } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { belongsToPerson,isBiometricDay,trainingEntitlements, type JoiningPlan, type JoiningAttendance, type JoiningMapping } from "./workforce-joining";
+import type {PaymentComponentRule,ShipmentMetric} from './payment-component-rules';
 
 export type WorkforceRateCard = {
   id: string;
@@ -12,7 +13,7 @@ export type WorkforceRateCard = {
   provider_id: string;
   station_id: string | null;
   designation_id: string | null;
-  pay_type: "per_shipment" | "per_activity" | "fixed_daily" | "fixed_monthly" | "hybrid";
+  pay_type: "per_shipment" | "per_activity" | "fixed_daily" | "fixed_monthly" | "hybrid" | "hybrid_additive";
   effective_from: string;
   effective_to: string | null;
   delivery_rate: number | string;
@@ -24,6 +25,7 @@ export type WorkforceRateCard = {
   guarantee_amount: number | string;
   status: "draft" | "active" | "paused" | "closed";
   approved_at?: string | null;
+  componentRules?: Array<{code:string;rate:number;rule:PaymentComponentRule}>;
 };
 
 export type WorkforceIncentiveCampaign = {
@@ -293,6 +295,15 @@ function calculateCardBase(card: WorkforceRateCard, shipment: CpsShipmentRow) {
     + amount(shipment.mfn) * amount(card.mfn_rate)
     + amount(shipment.mfn_return) * amount(card.mfn_return_rate)
     + totalDelivery * amount(card.fuel_rate);
+  if(card.componentRules?.length){
+    const metric=(name:ShipmentMetric)=>({total_delivery:shipment.total_delivery,total_activity:shipment.total_activity,amazon_delivery:shipment.amazon_delivery,swa_delivery:shipment.swa_delivery,customer_return:shipment.c_return,seller_pickup:shipment.mfn,seller_return:shipment.mfn_return})[name];
+    return card.componentRules.reduce((sum,component)=>{
+      const units=component.rule.sourceMetric?amount(metric(component.rule.sourceMetric)):0;
+      if(component.rule.calculationBasis==='shipment_quantity')return sum+units*component.rate;
+      if(component.rule.calculationBasis==='shipment_active_day')return sum+(units>=Number(component.rule.minimumUnits??1)?component.rate:0);
+      return sum;
+    },0);
+  }
   if (card.pay_type === "fixed_daily") return totalActivity > 0 ? amount(card.fixed_amount) : 0;
   if (card.pay_type === "fixed_monthly") {
     const [year, month] = shipment.work_date.split("-").map(Number);
@@ -301,6 +312,7 @@ function calculateCardBase(card: WorkforceRateCard, shipment: CpsShipmentRow) {
   }
   if (card.pay_type === "per_activity") return totalActivity * amount(card.delivery_rate) + totalDelivery * amount(card.fuel_rate);
   if (card.pay_type === "hybrid") return Math.max(variable, amount(card.guarantee_amount));
+  if (card.pay_type === "hybrid_additive") return (totalActivity > 0 ? amount(card.fixed_amount) : 0) + variable;
   return variable;
 }
 
@@ -419,8 +431,9 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
       : null;
     const profile = mapping ? workforceBySource.get(mappingSource(mapping)) ?? null : null;
     const personalSource=mapping?personalPaymentSource(mapping):"";
+    const hasPersonalTerms=Number(mapping?.payment_values?.DROPX_PERSONAL_TERMS)===1;
     const rateCard = mapping && profile && station
-      ? personalPaymentCard(mapping) ?? (personalSource==='biometric_attendance'?null:resolveRateCard(rateCardsByProvider.get(mapping.provider_id) ?? [], mapping.provider_id, station.id, profile.designation_id, shipment.work_date))
+      ? hasPersonalTerms?personalPaymentCard(mapping):resolveRateCard(rateCardsByProvider.get(mapping.provider_id) ?? [], mapping.provider_id, station.id, profile.designation_id, shipment.work_date)
       : null;
     const holds = profile ? profileHolds(profile, shipment.work_date) : [];
     const countCorrection=corrections.find(c=>c.source_id===shipment.id&&c.kind==='counts');
@@ -438,8 +451,8 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
     let missingRate = false;
     let rateTrace: Record<string, unknown> = {};
 
-    if(mapping&&personalSource==='biometric_attendance'){
-      baseAmount=0;calculationSource="rate_card";rateTrace={sourceOfTruth:"biometric_attendance",paymentMethod:mapping.pay_type};
+    if(mapping&&hasPersonalTerms&&!rateCard){
+      baseAmount=0;calculationSource="rate_card";rateTrace={sourceOfTruth:personalSource,paymentMethod:mapping.pay_type};
     } else if (mapping && rateCard) {
       baseAmount = calculateCardBase(rateCard, shipment);
       calculationSource = "rate_card";
@@ -579,7 +592,7 @@ export function calculateWorkforceEarnings(input: WorkforceEarningsInput): Workf
   for (const group of dailyCards.values()) {
     const card = input.rateCards.find((rule) => rule.id === group[0].rateCardId) ?? personalPaymentCard(input.mappings.find(m=>m.id===group[0].mappingId)!);
     if(!card)throw new Error('Daily payment terms could not be reconciled.');
-    if (!["fixed_daily", "fixed_monthly", "hybrid"].includes(card.pay_type)) continue;
+    if (!["fixed_daily", "fixed_monthly", "hybrid", "hybrid_additive"].includes(card.pay_type)) continue;
     const dailyAmount = calculateCardBase(card, aggregate(group));
     allocate(group, dailyAmount, (line, allocated) => {
       line.baseAmount = allocated;

@@ -88,6 +88,14 @@ test('biometric-source payment stages pay attendance days and never shipment pre
  const result=calculateWorkforceEarnings({...original,mappings:[mapping],trainingAttendance:[attendance]});
  assert.equal(result.totalBase,800);assert.equal(result.lines.find(line=>line.sourceId==='shipment-1').baseAmount,0);assert.equal(result.lines.find(line=>line.sourceId==='attendance-1').baseAmount,800);
 });
+test('generic component rules add one activity-day amount to variable earnings',()=>{
+ const original=input();
+ const rules={FIXED_PAY_PER_DAY:{sourceOfTruth:'amazon_daily_shipment',calculationBasis:'shipment_active_day',sourceMetric:'total_activity',minimumUnits:1},DELIVERY:{sourceOfTruth:'amazon_daily_shipment',calculationBasis:'shipment_quantity',sourceMetric:'total_delivery',minimumUnits:null},CRETURN:{sourceOfTruth:'amazon_daily_shipment',calculationBasis:'shipment_quantity',sourceMetric:'customer_return',minimumUnits:null}};
+ const mapping={...original.mappings[0],payment_values:{DROPX_PERSONAL_TERMS:1,DROPX_SOURCE_OF_TRUTH:'amazon_daily_shipment',DROPX_COMPONENT_RULES:rules,FIXED_PAY_PER_DAY:500,DELIVERY:10,CRETURN:5},pay_type:'ODCD_DAILY_PLUS_VARIABLE'};
+ const result=calculateWorkforceEarnings({...original,mappings:[mapping]});
+ assert.equal(result.totalBase,810);
+ assert.equal(result.lines[0].trace.dailyAllocation.dailyAmount,810);
+});
 test('payout count corrections recalculate pay without changing imported data or mappings',()=>{
  const original=input();original.shipments[0].da_total_pay=999;
  const correction={id:'fix',workforce_id:'workforce-1',source_id:'shipment-1',kind:'counts',payload:{totalDelivery:35,customerReturn:0,mfn:0,mfnReturn:0},reason:'Verified source correction'};

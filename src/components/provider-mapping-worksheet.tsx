@@ -44,6 +44,7 @@ export type PaymentMethodComponentOption = {
   code: string;
   label: string;
   type: "amount" | "production";
+  ruleLabel: string;
 };
 
 export type PaymentMethodOption = {
@@ -51,7 +52,6 @@ export type PaymentMethodOption = {
   code: string;
   name: string;
   components: PaymentMethodComponentOption[];
-  sourceOfTruth: string;
   designationIds: string[];
   designationCodes: string[];
 };
@@ -303,11 +303,11 @@ export function ProviderMappingWorksheet({
     mappingSheet['!cols']=headers.map(header=>({wch:Math.max(18,header.length+3)}));
     mappingSheet['!autofilter']={ref:`A1:${XLSX.utils.encode_col(headers.length-1)}${data.length+1}`};
     XLSX.utils.book_append_sheet(workbook,mappingSheet,'Mappings');
-    XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(paymentMethods.flatMap(method=>method.components.map(c=>({'Payment method code':method.code,Name:method.name,'Eligible designations':method.designationCodes.join(', ')||'None',Column:`RATE_${c.code}`,Meaning:c.label})))),'Payment methods');
+    XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(paymentMethods.flatMap(method=>method.components.map(c=>({'Payment method code':method.code,Name:method.name,'Eligible designations':method.designationCodes.join(', ')||'None',Column:`RATE_${c.code}`,Meaning:c.label,'Earning rule':c.ruleLabel})))),'Payment methods');
     XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
       ['Instructions'],['Keep DropX ID unchanged. Name, Designation and Station are reference only. Delete rows you are not updating.'],['Provider IDs and dates must remain text. Dates: YYYY-MM-DD.'],['Use only a payment method enabled for the associate designation. Fill every RATE_ column required by that method; other RATE_ columns are ignored.'],['Upload stages edits only. Review the worksheet then Save all.'],['Individual dated terms are excluded; change them in the associate profile.'],['Maximum 500 rows per upload. Existing server permissions, date and payroll locks still apply.']
     ]),'Instructions');
-    workbook.Sheets['Payment methods']['!cols']=[{wch:28},{wch:35},{wch:28},{wch:35}];
+    workbook.Sheets['Payment methods']['!cols']=[{wch:28},{wch:35},{wch:28},{wch:35},{wch:36},{wch:38}];
     workbook.Sheets.Instructions['!cols']=[{wch:115}];
     XLSX.writeFile(workbook,'workforce-id-rate-mapping.xlsx');
   }
@@ -488,7 +488,7 @@ export function ProviderMappingWorksheet({
                   >
                     <option value="">Select payment method</option>
                     {paymentMethods.filter((method) => method.designationIds.includes(row.designationId)).map((method) => (
-                      <option key={method.id} value={method.id}>{method.name} · {method.sourceOfTruth.replaceAll("_", " ")}</option>
+                      <option key={method.id} value={method.id}>{method.name}</option>
                     ))}
                     {row.paymentMethodId && !paymentMethodById.get(row.paymentMethodId)?.designationIds.includes(row.designationId) ? <option disabled value={row.paymentMethodId}>Current method unavailable for {row.designationCode}</option> : null}
                   </select>
@@ -496,7 +496,7 @@ export function ProviderMappingWorksheet({
                 </label>
 
                 {(paymentMethodById.get(row.paymentMethodId)?.components ?? []).map((component) => (
-                  <label key={component.code}>{component.label}
+                  <label key={component.code}>{component.label}<small>{component.ruleLabel}</small>
                     <input
                       className="worksheet-input"
                       disabled={!canEdit}

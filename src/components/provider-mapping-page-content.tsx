@@ -14,6 +14,7 @@ import { firstDesignationBusinessCategory } from "@/lib/designation-business-cat
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { loadWorkforceEarnings, workforceToday } from "@/lib/workforce-earnings";
 import { hasWorkforcePaymentIdentity } from "@/lib/workforce-register-designations";
+import { componentRuleLabel, type PaymentComponentRule } from "@/lib/payment-component-rules";
 
 type LocationRow = {
   id: string;
@@ -70,6 +71,7 @@ type PaymentMethodRow = {
   code: string;
   name: string;
   payment_method_components?: Array<{
+    payment_field_id: string;
     component_code: string;
     component_type: "amount" | "production";
     label: string;
@@ -165,6 +167,7 @@ async function loadMappingData(authorization: AuthorizationContext, workforceId?
         code,
         name,
         payment_method_components (
+          payment_field_id,
           component_code,
           component_type,
           label,
@@ -177,8 +180,8 @@ async function loadMappingData(authorization: AuthorizationContext, workforceId?
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("code"),
-    supabaseAdmin.from("workforce_payment_method_sources")
-      .select("payment_method_id,source_of_truth").eq("company_id",companyId)
+    supabaseAdmin.from("workforce_payment_method_component_sources")
+      .select("payment_method_id,payment_field_id,source_of_truth,calculation_basis,source_metric,minimum_units").eq("company_id",companyId)
   ]);
 
   if (!authorization.hasAllLocationAccess) {
@@ -191,22 +194,21 @@ async function loadMappingData(authorization: AuthorizationContext, workforceId?
     .filter((designation) => firstDesignationBusinessCategory(designation.designation_category)?.people_module === "delivery_network");
   const deliveryNetworkDesignationIds = new Set(deliveryNetworkDesignations.map((designation) => designation.id));
   const designationById = new Map(deliveryNetworkDesignations.map((designation) => [designation.id, designation]));
-  const sourceByMethod=new Map((paymentSourcesResult.data??[]).map(row=>[row.payment_method_id,row.source_of_truth]));
+  const sourceByComponent=new Map((paymentSourcesResult.data??[]).map(row=>[`${row.payment_method_id}:${row.payment_field_id}`,row]));
   const paymentMethods = ((paymentMethodsResult.data ?? []) as PaymentMethodRow[]).map((method) => ({
     id: method.id,
     code: method.code,
     name: method.name,
-    sourceOfTruth:sourceByMethod.get(method.id)??"not_configured",
     designationIds: (method.workforce_payment_method_designations ?? []).map((rule) => rule.designation_id),
     designationCodes: (method.workforce_payment_method_designations ?? []).map((rule) => designationById.get(rule.designation_id)?.code).filter((code): code is string => Boolean(code)),
     components: (method.payment_method_components ?? [])
       .slice()
       .sort((first, second) => first.sort_order - second.sort_order)
-      .map((component) => ({
-        code: component.component_code,
-        label: component.label,
-        type: component.component_type
-      }))
+      .map((component) => {
+        const rule=sourceByComponent.get(`${method.id}:${component.payment_field_id}`);
+        return {code:component.component_code,label:component.label,type:component.component_type,
+          ruleLabel:rule?componentRuleLabel({sourceOfTruth:rule.source_of_truth as PaymentComponentRule["sourceOfTruth"],calculationBasis:rule.calculation_basis as PaymentComponentRule["calculationBasis"],sourceMetric:rule.source_metric as PaymentComponentRule["sourceMetric"],minimumUnits:rule.minimum_units}):"Earning rule required"};
+      })
   }));
   const locationRows = (locationsResult.data ?? []) as LocationRow[];
   const locationProviderById = new Map(locationRows.map((location) => [location.id, location.provider_id ?? ""]));
@@ -268,7 +270,7 @@ async function loadMappingData(authorization: AuthorizationContext, workforceId?
       effectiveFrom: mapping?.effective_from ?? worker.dateOfJoin,
       effectiveTo: mapping?.effective_to ?? "",
       paymentMethodId: mapping?.payment_method_id ?? "",
-      paymentValues: Object.fromEntries(Object.entries(mapping?.payment_values ?? {}).map(([key, value]) => [key, amountValue(value)])),
+      paymentValues: Object.fromEntries(Object.entries(mapping?.payment_values ?? {}).filter(([key])=>!key.startsWith("DROPX_")).map(([key, value]) => [key, amountValue(value as number|string|null)])),
       deliveryRate: amountValue(mapping?.delivery_rate),
       pickupRate: amountValue(mapping?.pickup_rate),
       mfnRate: amountValue(mapping?.mfn_rate),

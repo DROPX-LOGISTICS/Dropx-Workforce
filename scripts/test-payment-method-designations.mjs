@@ -69,7 +69,7 @@ test('database guard blocks mappings outside the associate designation', async (
 });
 
 test('UI and both assignment paths use the designation rule', () => {
-  assert.match(read('src/app/master/payment-methods/actions.ts'), /workforce_save_payment_method_v3/);
+  assert.match(read('src/app/master/payment-methods/actions.ts'), /workforce_save_payment_method_v4/);
   assert.match(read('src/components/provider-mapping-worksheet.tsx'), /method\.designationIds\.includes\(row\.designationId\)/);
   assert.match(read('src/app/provider-mapping/actions.ts'), /workforce_payment_method_designations/);
   assert.match(read('src/components/workforce-associate-setup.tsx'), /workforce_payment_method_designations/);

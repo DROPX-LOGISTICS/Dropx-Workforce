@@ -7,6 +7,7 @@ import {supabaseAdmin} from '@/lib/supabase-admin';
 import {requireCompanyId} from '@/lib/company-scope';
 import {readAllRows} from '@/lib/supabase-pagination';
 import {workforceToday} from '@/lib/workforce-earnings';
+import {componentRuleLabel,type PaymentComponentRule} from '@/lib/payment-component-rules';
 import {ProviderMappingPageContent} from './provider-mapping-page-content';
 import {WorkforceAssociateEarnings} from './workforce-associate-earnings';
 import './workforce-simple-review.css';
@@ -21,13 +22,13 @@ export async function WorkforceAssociateSetup({auth,id,dateOfJoin,tab,section='p
  const company=requireCompanyId(auth);
  const [history,methodRows,sourceRows]=section==='payments'?await Promise.all([
   readAllRows(supabaseAdmin!.from('field_executive_provider_mappings').select('id,provider_member_id,effective_from,effective_to,payment_method_id,payment_values,pay_type,reason,updated_at').eq('company_id',company).eq('workforce_id',id).neq('status','cancelled').order('effective_from',{ascending:false}).order('id')),
-  readAllRows(supabaseAdmin!.from('payment_methods').select('id,code,name,payment_method_components(component_code,label,sort_order),workforce_payment_method_designations(designation_id)').eq('company_id',company).eq('is_active',true).order('name')),
-  readAllRows(supabaseAdmin!.from('workforce_payment_method_sources').select('payment_method_id,source_of_truth').eq('company_id',company))
+  readAllRows(supabaseAdmin!.from('payment_methods').select('id,code,name,payment_method_components(payment_field_id,component_code,label,sort_order),workforce_payment_method_designations(designation_id)').eq('company_id',company).eq('is_active',true).order('name')),
+  readAllRows(supabaseAdmin!.from('workforce_payment_method_component_sources').select('payment_method_id,payment_field_id,source_of_truth,calculation_basis,source_metric,minimum_units').eq('company_id',company))
  ]):[{data:[],error:null},{data:[],error:null},{data:[],error:null}];
  if(history.error||methodRows.error||sourceRows.error)throw new Error('Payment methods or history could not load.');
- const sourceByMethod=new Map((sourceRows.data||[]).map(row=>[row.payment_method_id,row.source_of_truth]));
- type MethodComponent={component_code:string;label:string;sort_order:number};
- const methods=(methodRows.data||[]).flatMap(row=>sourceByMethod.has(row.id)&&(row.workforce_payment_method_designations||[]).some((rule:{designation_id:string})=>rule.designation_id===person.designation_id)?[{id:row.id,code:row.code,name:row.name,sourceOfTruth:sourceByMethod.get(row.id)!,components:((row.payment_method_components||[]) as MethodComponent[]).slice().sort((a,b)=>a.sort_order-b.sort_order).map(component=>({code:component.component_code,label:component.label}))}]:[]) as StagePaymentMethod[];
+ const sourceByComponent=new Map((sourceRows.data||[]).map(row=>[`${row.payment_method_id}:${row.payment_field_id}`,row]));
+ type MethodComponent={payment_field_id:string;component_code:string;label:string;sort_order:number};
+ const methods=(methodRows.data||[]).flatMap(row=>(row.workforce_payment_method_designations||[]).some((rule:{designation_id:string})=>rule.designation_id===person.designation_id)?[{id:row.id,code:row.code,name:row.name,components:((row.payment_method_components||[]) as MethodComponent[]).slice().sort((a,b)=>a.sort_order-b.sort_order).map(component=>{const source=sourceByComponent.get(`${row.id}:${component.payment_field_id}`);return {code:component.component_code,label:component.label,ruleLabel:source?componentRuleLabel({sourceOfTruth:source.source_of_truth as PaymentComponentRule['sourceOfTruth'],calculationBasis:source.calculation_basis as PaymentComponentRule['calculationBasis'],sourceMetric:source.source_metric as PaymentComponentRule['sourceMetric'],minimumUnits:source.minimum_units}):'Earning rule required'};})}]:[]) as StagePaymentMethod[];
  const biometric=data.attendance.filter(d=>isBiometricDay(d,person.location_id));
  return <section className="wf-simple-setup">
   {section==='profile'?<>

@@ -121,7 +121,7 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
   const rawPaymentValues = rowValue(formData, index, "payment_values_json") ?? "{}";
   const { data: paymentMethod, error: methodError } = await supabaseAdmin
     .from("payment_methods")
-    .select("id, code, payment_method_components (component_code, label)")
+    .select("id, code, payment_method_components (payment_field_id, component_code, label)")
     .eq("id", paymentMethodId)
     .eq("company_id", companyId)
     .eq("is_active", true)
@@ -144,8 +144,8 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
       .eq("id", stationId)
       .eq("company_id", companyId)
       .maybeSingle(),
-    supabaseAdmin.from("workforce_payment_method_sources").select("source_of_truth,calculation_basis")
-      .eq("company_id",companyId).eq("payment_method_id",paymentMethodId).maybeSingle()
+    supabaseAdmin.from("workforce_payment_method_component_sources").select("payment_field_id,source_of_truth,calculation_basis,source_metric,minimum_units")
+      .eq("company_id",companyId).eq("payment_method_id",paymentMethodId)
   ]);
 
   if (workerError) throw new Error(workerError.message);
@@ -180,9 +180,9 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
     throw new Error(`Row ${index + 1}: This payment method is not enabled for the associate designation.`);
   }
   if (!station) throw new Error(`Row ${index + 1}: Location was not found for this company.`);
-  if(sourceResult.error||!sourceResult.data)throw new Error(`Row ${index + 1}: Configure the payment method source of truth in Master first.`);
+  if(sourceResult.error)throw new Error(`Row ${index + 1}: Payment component earning rules could not be loaded.`);
 
-  let paymentValues: Record<string, number|string> = {};
+  let paymentValues: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(rawPaymentValues) as Record<string, unknown>;
     paymentValues = Object.fromEntries(
@@ -202,7 +202,9 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
     throw new Error(`Row ${index + 1}: Payment values are invalid.`);
   }
 
-  const components = (paymentMethod.payment_method_components ?? []) as Array<{ component_code: string; label: string }>;
+  const components = (paymentMethod.payment_method_components ?? []) as Array<{ payment_field_id:string;component_code: string; label: string }>;
+  const rulesByField=new Map((sourceResult.data??[]).map(rule=>[rule.payment_field_id,rule]));
+  if(!components.length||components.some(component=>!rulesByField.has(component.payment_field_id)))throw new Error(`Row ${index + 1}: Configure every payment component earning rule in Master first.`);
   const selectedComponentCodes = new Set(components.map((component) => component.component_code));
   paymentValues = Object.fromEntries(
     Object.entries(paymentValues).filter(([key]) => selectedComponentCodes.has(key))
@@ -213,8 +215,14 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
       throw new Error(`Row ${index + 1}: ${component.label} is required.`);
     }
   }
-  paymentValues.DROPX_SOURCE_OF_TRUTH=sourceResult.data.source_of_truth;
-  paymentValues.DROPX_CALCULATION_BASIS=sourceResult.data.calculation_basis;
+  const componentRules=Object.fromEntries(components.map(component=>{
+    const rule=rulesByField.get(component.payment_field_id)!;
+    return [component.component_code,{sourceOfTruth:rule.source_of_truth,calculationBasis:rule.calculation_basis,sourceMetric:rule.source_metric,minimumUnits:rule.minimum_units}];
+  }));
+  const uniqueSources=[...new Set((sourceResult.data??[]).map(rule=>rule.source_of_truth))];
+  paymentValues.DROPX_PERSONAL_TERMS=1;
+  paymentValues.DROPX_SOURCE_OF_TRUTH=uniqueSources.length===1?uniqueSources[0]:"mixed";
+  paymentValues.DROPX_COMPONENT_RULES=componentRules;
 
   if (!isWorkforceDate(effectiveFrom)) {
     throw new Error(`Row ${index + 1}: Effective from must be YYYY-MM-DD.`);

@@ -33,7 +33,7 @@ export async function savePersonalPaymentStage(form:FormData){
   if(worker.error||!worker.data?.designation_id)throw new Error('Associate designation could not be verified.');
   const eligibility=await supabaseAdmin.from('workforce_payment_method_designations').select('payment_method_id').eq('company_id',company).eq('payment_method_id',methodId).eq('designation_id',worker.data.designation_id).maybeSingle();
   if(eligibility.error||!eligibility.data)throw new Error('This payment method is not enabled for the associate designation.');
-  const r=await supabaseAdmin.rpc('workforce_save_personal_payment_stage_v2',{p_company:company,p_actor:auth.userId,p_actor_name:auth.fullName||auth.email||'Workforce',p_workforce:workforceId,p_mapping:t('mapping_id'),p_expected:t('expected_updated_at')||null,p_mode:t('mode'),p_from:t('effective_from'),p_to:t('effective_to')||null,p_method:methodId,p_values:values,p_reason:t('reason'),p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds});
+ const r=await supabaseAdmin.rpc('workforce_save_personal_payment_stage_v3',{p_company:company,p_actor:auth.userId,p_actor_name:auth.fullName||auth.email||'Workforce',p_workforce:workforceId,p_mapping:t('mapping_id'),p_expected:t('expected_updated_at')||null,p_mode:t('mode'),p_from:t('effective_from'),p_to:t('effective_to')||null,p_method:methodId,p_values:values,p_reason:t('reason'),p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds});
   if(r.error)throw new Error(r.error.message);
   revalidatePath('/delivery-network/lifecycle');revalidatePath('/delivery-network/earnings');query.set('notice','Payment stage saved. Recalculate any affected draft payout.');
  }catch(e){query.set('error',e instanceof Error?e.message:'Unable to save payment stage.');}

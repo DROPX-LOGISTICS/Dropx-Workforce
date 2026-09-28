@@ -1,5 +1,5 @@
-type BulkRow = {dropxId:string;providerMemberId:string;paymentMethodId:string;effectiveFrom:string;effectiveTo:string;paymentValues:Record<string,string>};
-type Method = {id:string;code:string;components:Array<{code:string;label:string}>};
+type BulkRow = {dropxId:string;designationId:string;providerMemberId:string;paymentMethodId:string;effectiveFrom:string;effectiveTo:string;paymentValues:Record<string,string>};
+type Method = {id:string;code:string;designationIds:string[];components:Array<{code:string;label:string}>};
 
 export const mappingRateColumns = [
   ['DELIVERY','Delivery incl. SWA'],['CRETURN','C-return'],['SELLER_PICKUP','MFN / pickup'],['SLLLER_RETURN','MFN return']
@@ -31,6 +31,7 @@ export function stageMappingImport<T extends BulkRow>(input:Record<string,unknow
     if(Number(row.paymentValues.DROPX_PERSONAL_TERMS)===1)fail('Use the associate payment stages for individual dated terms.');
     const method=methods.find(m=>m.code===text('Payment method code'));
     if(!method)fail('Payment method code is not valid. Use the template’s Payment methods sheet.');
+    if(!method!.designationIds.includes(row.designationId))fail('Payment method is not enabled for this associate designation.');
     const provider=text('Provider ID');
     if(!provider || /^[=+@]/.test(provider))fail('A valid provider ID is required.');
     const from=text('Effective from'),to=text('Effective to');

@@ -168,6 +168,17 @@ async function saveExecutiveMappingRow(formData: FormData, index: number, create
   if (firstDesignationBusinessCategory(designationResult.data?.designation_category)?.people_module !== "delivery_network") {
     throw new Error(`Row ${index + 1}: Designation is not assigned to Workforce.`);
   }
+  const methodDesignationResult = await supabaseAdmin
+    .from("workforce_payment_method_designations")
+    .select("payment_method_id")
+    .eq("company_id", companyId)
+    .eq("payment_method_id", paymentMethodId)
+    .eq("designation_id", worker.designation_id)
+    .maybeSingle();
+  if (methodDesignationResult.error) throw new Error(methodDesignationResult.error.message);
+  if (!methodDesignationResult.data) {
+    throw new Error(`Row ${index + 1}: This payment method is not enabled for the associate designation.`);
+  }
   if (!station) throw new Error(`Row ${index + 1}: Location was not found for this company.`);
   if(sourceResult.error||!sourceResult.data)throw new Error(`Row ${index + 1}: Configure the payment method source of truth in Master first.`);
 

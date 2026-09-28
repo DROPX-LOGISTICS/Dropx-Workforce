@@ -75,6 +75,7 @@ type PaymentMethodRow = {
     label: string;
     sort_order: number;
   }> | null;
+  workforce_payment_method_designations?: Array<{ designation_id: string }> | null;
 };
 
 function amountValue(value: number | string | null | undefined) {
@@ -96,7 +97,7 @@ function loadFlashMessage() {
   }
 }
 
-async function loadMappingData(authorization: AuthorizationContext) {
+async function loadMappingData(authorization: AuthorizationContext, workforceId?: string) {
   if (!supabaseAdmin) {
     return {
       locations: [] as LocationOption[],
@@ -168,6 +169,9 @@ async function loadMappingData(authorization: AuthorizationContext) {
           component_type,
           label,
           sort_order
+        ),
+        workforce_payment_method_designations (
+          designation_id
         )
       `)
       .eq("company_id", companyId)
@@ -183,12 +187,18 @@ async function loadMappingData(authorization: AuthorizationContext) {
     const visibleWorkforce = new Set((workforceResult.data ?? []).map((row) => row.id));
     mappingsResult.data = (mappingsResult.data ?? []).filter((row) => visibleWorkforce.has(row.workforce_id) && (!row.station_id || authorization.locationScopeIds.includes(row.station_id)));
   }
+  const deliveryNetworkDesignations = ((designationsResult.data ?? []) as DeliveryNetworkDesignationRow[])
+    .filter((designation) => firstDesignationBusinessCategory(designation.designation_category)?.people_module === "delivery_network");
+  const deliveryNetworkDesignationIds = new Set(deliveryNetworkDesignations.map((designation) => designation.id));
+  const designationById = new Map(deliveryNetworkDesignations.map((designation) => [designation.id, designation]));
   const sourceByMethod=new Map((paymentSourcesResult.data??[]).map(row=>[row.payment_method_id,row.source_of_truth]));
   const paymentMethods = ((paymentMethodsResult.data ?? []) as PaymentMethodRow[]).map((method) => ({
     id: method.id,
     code: method.code,
     name: method.name,
     sourceOfTruth:sourceByMethod.get(method.id)??"not_configured",
+    designationIds: (method.workforce_payment_method_designations ?? []).map((rule) => rule.designation_id),
+    designationCodes: (method.workforce_payment_method_designations ?? []).map((rule) => designationById.get(rule.designation_id)?.code).filter((code): code is string => Boolean(code)),
     components: (method.payment_method_components ?? [])
       .slice()
       .sort((first, second) => first.sort_order - second.sort_order)
@@ -221,9 +231,6 @@ async function loadMappingData(authorization: AuthorizationContext) {
     }
   });
 
-  const deliveryNetworkDesignations = ((designationsResult.data ?? []) as DeliveryNetworkDesignationRow[])
-    .filter((designation) => firstDesignationBusinessCategory(designation.designation_category)?.people_module === "delivery_network");
-  const deliveryNetworkDesignationIds = new Set(deliveryNetworkDesignations.map((designation) => designation.id));
   const workers = ((workforceResult.data ?? []) as WorkforceRow[])
     .filter((worker) => hasWorkforcePaymentIdentity(worker, deliveryNetworkDesignationIds))
     .map((worker) => ({
@@ -235,7 +242,10 @@ async function loadMappingData(authorization: AuthorizationContext) {
       fullName: worker.full_name,
       dateOfJoin: worker.date_of_join,
       locationId: worker.location_id,
-      dropxId: worker.dropx_id!.trim().toUpperCase()
+      dropxId: worker.dropx_id!.trim().toUpperCase(),
+      designationId: worker.designation_id,
+      designationCode: designationById.get(worker.designation_id)?.code ?? "",
+      designationName: designationById.get(worker.designation_id)?.name ?? ""
     }));
 
   const mappings = workers.map((worker) => {
@@ -249,6 +259,9 @@ async function loadMappingData(authorization: AuthorizationContext) {
       mappingId: mapping?.id ?? "",
       dropxId: worker.dropxId,
       dropxName: worker.fullName,
+      designationId: worker.designationId,
+      designationCode: worker.designationCode,
+      designationName: worker.designationName,
       providerMemberId: mapping?.provider_member_id ?? "",
       providerId: mapping?.provider_id ?? locationProviderById.get(stationId) ?? "",
       stationId,
@@ -269,7 +282,7 @@ async function loadMappingData(authorization: AuthorizationContext) {
 
   return {
     locations,
-    mappings,
+    mappings: workforceId ? mappings.filter((row) => row.workforceId === workforceId) : mappings,
     paymentMethods,
     error: mappingsResult.error?.message || workforceResult.error?.message || designationsResult.error?.message || locationsResult.error?.message || paymentMethodsResult.error?.message || paymentSourcesResult.error?.message || null
   };
@@ -296,7 +309,7 @@ export async function ProviderMappingPageContent({
   const today = workforceToday();
   const monthStart = `${today.slice(0, 8)}01`;
   const [{ locations, mappings, paymentMethods, error }, earnings] = await Promise.all([
-    loadMappingData(authorization),
+    loadMappingData(authorization, workforceId),
     embedded ? Promise.resolve({lines: []}) : loadWorkforceEarnings(authorization, monthStart, today)
   ]);
   const pendingByProviderId = new Map<string, ProviderPendingMappingRow>();

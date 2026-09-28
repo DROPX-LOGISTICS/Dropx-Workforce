@@ -4174,6 +4174,37 @@ h3 {
   gap: 12px;
 }
 
+.payment-designation-picker {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.payment-designation-picker legend {
+  padding: 0 5px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.payment-designation-options {
+  display: grid;
+  gap: 6px;
+  max-height: 170px;
+  margin-top: 8px;
+  overflow-y: auto;
+}
+
+.payment-method-fields .payment-designation-picker .workforce-method-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text);
+  font-size: 12px;
+  text-transform: none;
+}
+
 .payment-method-fields label {
   display: grid;
   gap: 6px;

@@ -10,14 +10,19 @@ export type PaymentFieldOption = {
   is_active: boolean;
 };
 
-export function PaymentMethodForm({ action, availableFields, initialMethod, submitLabel = "Create payment method" }: {
+export type PaymentDesignationOption = { id: string; code: string; name: string };
+
+export function PaymentMethodForm({ action, availableFields, availableDesignations, initialMethod, submitLabel = "Create payment method" }: {
   action: (formData: FormData) => Promise<void>;
   availableFields: PaymentFieldOption[];
-  initialMethod?: { id: string; code: string; name: string; usage_count: number; field_ids: string[]; source_of_truth: string };
+  availableDesignations: PaymentDesignationOption[];
+  initialMethod?: { id: string; code: string; name: string; usage_count: number; field_ids: string[]; designation_ids: string[]; source_of_truth: string };
   submitLabel?: string;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>(initialMethod?.field_ids ?? []);
+  const [selectedDesignationIds, setSelectedDesignationIds] = useState<string[]>(initialMethod?.designation_ids ?? []);
   const [search, setSearch] = useState("");
+  const [designationSearch, setDesignationSearch] = useState("");
   const locked = Boolean(initialMethod?.usage_count);
   const fields = availableFields.filter((field) => (field.is_active || selectedIds.includes(field.id)) &&
     `${field.code} ${field.label}`.toLowerCase().includes(search.trim().toLowerCase()));
@@ -25,6 +30,7 @@ export function PaymentMethodForm({ action, availableFields, initialMethod, subm
     <form action={action} className="payment-method-form">
       {initialMethod ? <input type="hidden" name="id" value={initialMethod.id} /> : null}
       {selectedIds.map((id) => <input key={id} name="field_ids" type="hidden" value={id} />)}
+      {selectedDesignationIds.map((id) => <input key={id} name="designation_ids" type="hidden" value={id} />)}
       <div className="payment-method-layout">
         <div className="payment-method-fields">
           <label>Method ID<input className="field" name="code" required maxLength={80} pattern="[A-Za-z0-9_]+" readOnly={locked} defaultValue={initialMethod?.code} /></label>
@@ -35,7 +41,19 @@ export function PaymentMethodForm({ action, availableFields, initialMethod, subm
             <option value="amazon_daily_shipment">Amazon Daily Shipment Count</option>
             <option value="manual_approved">Approved manual evidence</option>
           </select><small>This controls which operational record can earn this payment.</small></label>
-          {locked ? <p className="subtle">In use in {initialMethod?.usage_count} mappings. You can rename it; create a new method to change fields.</p> : null}
+          <fieldset className="payment-designation-picker">
+            <legend>Eligible designations · {selectedDesignationIds.length} selected</legend>
+            <input className="field" type="search" aria-label="Search designations" placeholder="Search designations" value={designationSearch} onChange={(event) => setDesignationSearch(event.target.value)} />
+            <div className="payment-designation-options">
+              {availableDesignations.filter((designation) => `${designation.code} ${designation.name}`.toLowerCase().includes(designationSearch.trim().toLowerCase())).map((designation) => (
+                <label key={designation.id} className="workforce-method-option">
+                  <input type="checkbox" checked={selectedDesignationIds.includes(designation.id)} onChange={(event) => setSelectedDesignationIds((current) => event.target.checked ? [...current, designation.id] : current.filter((id) => id !== designation.id))} />
+                  <span><strong>{designation.name}</strong><small>{designation.code}</small></span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          {locked ? <p className="subtle">In use in {initialMethod?.usage_count} mappings. Eligible designations can change; create a new method to change its ID or payment fields.</p> : null}
         </div>
         <fieldset className="workforce-method-picker">
           <legend>Payment fields · {selectedIds.length} selected</legend>
@@ -51,7 +69,7 @@ export function PaymentMethodForm({ action, availableFields, initialMethod, subm
           </div>
         </fieldset>
       </div>
-      <div className="form-actions"><SubmitButton disabled={!selectedIds.length}>{submitLabel}</SubmitButton></div>
+      <div className="form-actions"><SubmitButton disabled={!selectedIds.length || !selectedDesignationIds.length}>{submitLabel}</SubmitButton></div>
     </form>
   );
 }

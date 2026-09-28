@@ -1,11 +1,12 @@
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
-import { PaymentMethodForm, type PaymentFieldOption } from "@/components/payment-method-form";
+import { PaymentMethodForm, type PaymentDesignationOption, type PaymentFieldOption } from "@/components/payment-method-form";
 import { StatusPill } from "@/components/status-pill";
 import { SubmitButton } from "@/components/submit-button";
 import { PendingLink } from "@/components/pending-link";
 import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
+import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createPaymentMethod, deletePaymentMethod, updatePaymentMethod } from "./actions";
 import { cookies } from "next/headers";
@@ -29,6 +30,7 @@ type PaymentMethodRow = {
   payment_method_components?: PaymentComponentRow[] | null;
   usage_count: number;
   source_of_truth: string;
+  designation_ids: string[];
 };
 
 async function loadPaymentMethods(companyId: string) {
@@ -55,6 +57,9 @@ async function loadPaymentMethods(companyId: string) {
         pay_schedule,
         sort_order,
         is_active
+      ),
+      workforce_payment_method_designations (
+        designation_id
       )
     `)
     .eq("company_id", companyId)
@@ -76,10 +81,11 @@ async function loadPaymentMethods(companyId: string) {
   const usageByMethod = new Map(usage.map((item) => [item.id, item.count]));
 
   return {
-    methods: ((data ?? []) as Omit<PaymentMethodRow, "usage_count">[]).map((method) => ({
+    methods: ((data ?? []) as Array<Omit<PaymentMethodRow, "usage_count" | "designation_ids"> & { workforce_payment_method_designations?: Array<{ designation_id: string }> | null }>).map((method) => ({
       ...method,
       usage_count: usageByMethod.get(method.id) ?? 0,
       source_of_truth: sourceByMethod.get(method.id) ?? "",
+      designation_ids: (method.workforce_payment_method_designations ?? []).map((rule) => rule.designation_id),
       payment_method_components: (method.payment_method_components ?? [])
         .slice()
         .sort((first, second) => first.sort_order - second.sort_order)
@@ -108,12 +114,17 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
   const authorization = await requirePagePermission("payment_methods", "access");
   const companyId = requireCompanyId(authorization);
   const pagePermission = authorization.permissions.payment_methods;
-  const [{ methods, error: methodsError }, fieldResult] = await Promise.all([
+  const [{ methods, error: methodsError }, fieldResult, designationResult] = await Promise.all([
     loadPaymentMethods(companyId),
-    supabaseAdmin?.from("payment_fields").select("id,code,label,field_type,pay_schedule,is_active").eq("company_id", companyId).order("label")
+    supabaseAdmin?.from("payment_fields").select("id,code,label,field_type,pay_schedule,is_active").eq("company_id", companyId).order("label"),
+    supabaseAdmin?.from("designations").select("id,code,name,designation_category:designation_categories!designations_designation_category_id_fkey(id,people_module,is_active)").eq("company_id", companyId).eq("is_active", true).order("name")
   ]);
-  const error = methodsError ?? fieldResult?.error?.message;
+  const error = methodsError ?? fieldResult?.error?.message ?? designationResult?.error?.message;
   const fields = (fieldResult?.data ?? []) as PaymentFieldOption[];
+  const designations = (designationResult?.data ?? []).filter((designation) => {
+    const category = firstDesignationBusinessCategory(designation.designation_category);
+    return category?.people_module === "delivery_network" && category.is_active;
+  }).map(({ id, code, name }) => ({ id, code, name })) as PaymentDesignationOption[];
   const flash = loadPaymentMethodFlash();
   const editMethod = methods.find((method) => method.id === searchParams?.edit) ?? null;
 
@@ -122,7 +133,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
       <PageHead
         eyebrow="Master"
         title="Payment methods"
-        subtitle="Shared with Dashboard. Choose the fields here; set each associate’s rates in ID & Rate Mapping."
+        subtitle="Set each method’s eligible Workforce designations, fields and source of truth; assign individual rates in ID & Rate Mapping."
         action={<div className="component-chip-list">
           <PendingLink className="button secondary compact" href="/master/payment-methods?fields=1">Payment fields</PendingLink>
           {authorization.permissions.provider_mapping?.canView ? <PendingLink className="button compact" href="/delivery-network/rate-mapping">ID & Rate Mapping</PendingLink> : null}
@@ -154,10 +165,10 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
           <div className="panel-head">
             <div>
               <h2>Add payment method</h2>
-              <p className="subtle">Use the existing field catalog. Creating a method does not change anyone’s rates.</p>
+              <p className="subtle">Choose which Workforce designations can use the method. Creating a method does not change anyone’s rates.</p>
             </div>
           </div>
-          <PaymentMethodForm action={createPaymentMethod} availableFields={fields} />
+          <PaymentMethodForm action={createPaymentMethod} availableFields={fields} availableDesignations={designations} />
         </section>
       ) : null}
 
@@ -166,7 +177,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
           <div className="panel-head">
             <div>
               <h2>Payment method list</h2>
-              <p className="subtle">{methods.length} records. Components decide which fields appear in mapping later.</p>
+              <p className="subtle">{methods.length} records. Designations control availability; components control the rate fields.</p>
             </div>
           </div>
           <div className="table-wrap">
@@ -175,6 +186,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                 <tr>
                   <th>Method ID</th>
                   <th>Name</th>
+                  <th>Eligible designations</th>
                   <th>Configured fields</th>
                   <th>Source of truth</th>
                   <th>Status</th>
@@ -186,6 +198,10 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                   <tr key={method.id}>
                     <td><strong>{method.code}</strong></td>
                     <td>{method.name}</td>
+                    <td><div className="component-chip-list">{method.designation_ids.map((id) => {
+                      const designation = designations.find((item) => item.id === id);
+                      return designation ? <span className="component-chip" key={id}>{designation.name}<small>{designation.code}</small></span> : null;
+                    })}{!method.designation_ids.length ? <span className="status-badge warning">None</span> : null}</div></td>
                     <td>
                       <div className="component-chip-list">
                         {(method.payment_method_components ?? []).length ? method.payment_method_components?.map((component) => (
@@ -204,7 +220,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                     {pagePermission.canEdit ? <td><PendingLink className="button secondary compact" href={`/master/payment-methods?edit=${method.id}`} scroll={false}>Edit</PendingLink></td> : null}
                   </tr>
                 )) : (
-                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 6 : 5}>No payment methods added yet.</td></tr>
+                  <tr><td className="empty-cell" colSpan={pagePermission.canEdit ? 7 : 6}>No payment methods added yet.</td></tr>
                 )}
               </tbody>
             </table>
@@ -223,12 +239,14 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
               key={editMethod.id}
               action={updatePaymentMethod}
               availableFields={fields}
+              availableDesignations={designations}
               initialMethod={{
                 id: editMethod.id,
                 code: editMethod.code,
                 name: editMethod.name,
                 usage_count: editMethod.usage_count,
                 source_of_truth: editMethod.source_of_truth,
+                designation_ids: editMethod.designation_ids,
                 field_ids: (editMethod.payment_method_components ?? []).map((component) => component.payment_field_id)
               }}
               submitLabel="Save changes"

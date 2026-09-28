@@ -20,6 +20,9 @@ export type MappingWorksheetRow = {
   mappingId: string;
   dropxId: string;
   dropxName: string;
+  designationId: string;
+  designationCode: string;
+  designationName: string;
   providerMemberId: string;
   providerId: string;
   stationId: string;
@@ -49,6 +52,8 @@ export type PaymentMethodOption = {
   name: string;
   components: PaymentMethodComponentOption[];
   sourceOfTruth: string;
+  designationIds: string[];
+  designationCodes: string[];
 };
 
 export type ProviderPendingMappingRow = {
@@ -216,6 +221,7 @@ export function ProviderMappingWorksheet({
     if (!row.providerId) return `Row ${index + 1}: Provider is missing from the selected location.`;
     if (!row.paymentMethodId) return `Row ${index + 1}: Payment method is required.`;
     if (!method) return `Row ${index + 1}: Selected payment method was not found.`;
+    if (!method.designationIds.includes(row.designationId)) return `Row ${index + 1}: ${method.name} is not enabled for ${row.designationName || row.designationCode || "this designation"}.`;
     if (!row.effectiveFrom) return `Row ${index + 1}: Effective from is required.`;
     if (row.effectiveTo && row.effectiveTo < row.effectiveFrom) return `Row ${index + 1}: Effective to cannot be before effective from.`;
 
@@ -287,19 +293,19 @@ export function ProviderMappingWorksheet({
   async function downloadMappingTemplate() {
     const XLSX=await import('xlsx');
     const components=[...new Set(paymentMethods.flatMap(method=>method.components.map(c=>c.code)))];
-    const headers=['DropX ID','Name','Station','Provider ID','Payment method code','Effective from','Effective to',...components.map(code=>`RATE_${code}`)];
+    const headers=['DropX ID','Name','Designation','Station','Provider ID','Payment method code','Effective from','Effective to',...components.map(code=>`RATE_${code}`)];
     const data=filteredIndexes.filter(index=>Number(rows[index].paymentValues.DROPX_PERSONAL_TERMS)!==1).map(index=>{
       const row=rows[index];
-      return [row.dropxId,row.dropxName,locationLabelById.get(row.stationId)||'',row.providerMemberId,paymentMethodById.get(row.paymentMethodId)?.code||'',row.effectiveFrom,row.effectiveTo,...components.map(code=>row.paymentValues[code]!==undefined&&row.paymentValues[code]!==''?Number(row.paymentValues[code]):'')];
+      return [row.dropxId,row.dropxName,row.designationCode,locationLabelById.get(row.stationId)||'',row.providerMemberId,paymentMethodById.get(row.paymentMethodId)?.code||'',row.effectiveFrom,row.effectiveTo,...components.map(code=>row.paymentValues[code]!==undefined&&row.paymentValues[code]!==''?Number(row.paymentValues[code]):'')];
     });
     const workbook=XLSX.utils.book_new();
     const mappingSheet=XLSX.utils.aoa_to_sheet([headers,...data]);
     mappingSheet['!cols']=headers.map(header=>({wch:Math.max(18,header.length+3)}));
     mappingSheet['!autofilter']={ref:`A1:${XLSX.utils.encode_col(headers.length-1)}${data.length+1}`};
     XLSX.utils.book_append_sheet(workbook,mappingSheet,'Mappings');
-    XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(paymentMethods.flatMap(method=>method.components.map(c=>({'Payment method code':method.code,Name:method.name,Column:`RATE_${c.code}`,Meaning:c.label})))),'Payment methods');
+    XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(paymentMethods.flatMap(method=>method.components.map(c=>({'Payment method code':method.code,Name:method.name,'Eligible designations':method.designationCodes.join(', ')||'None',Column:`RATE_${c.code}`,Meaning:c.label})))),'Payment methods');
     XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
-      ['Instructions'],['Keep DropX ID unchanged. Name and Station are reference only. Delete rows you are not updating.'],['Provider IDs and dates must remain text. Dates: YYYY-MM-DD.'],['Fill all RATE_ columns required by the chosen payment method. Other RATE_ columns are ignored.'],['Upload stages edits only. Review the worksheet then Save all.'],['Individual dated terms are excluded; change them in the associate profile.'],['Maximum 500 rows per upload. Existing server permissions, date and payroll locks still apply.']
+      ['Instructions'],['Keep DropX ID unchanged. Name, Designation and Station are reference only. Delete rows you are not updating.'],['Provider IDs and dates must remain text. Dates: YYYY-MM-DD.'],['Use only a payment method enabled for the associate designation. Fill every RATE_ column required by that method; other RATE_ columns are ignored.'],['Upload stages edits only. Review the worksheet then Save all.'],['Individual dated terms are excluded; change them in the associate profile.'],['Maximum 500 rows per upload. Existing server permissions, date and payroll locks still apply.']
     ]),'Instructions');
     workbook.Sheets['Payment methods']['!cols']=[{wch:28},{wch:35},{wch:28},{wch:35}];
     workbook.Sheets.Instructions['!cols']=[{wch:115}];
@@ -415,7 +421,7 @@ export function ProviderMappingWorksheet({
                   "First seen": row.firstSeen, "Last seen": row.lastSeen, "Daily rows": row.dailyRows, Deliveries: row.deliveries, Reason: row.reason
                 })))
               : downloadCsv("dropx-ids-provider-mapping.csv", filteredIndexes.map((index) => ({
-                  "DropX ID": rows[index].dropxId, Name: rows[index].dropxName, Station: locationLabelById.get(rows[index].stationId) ?? "",
+                  "DropX ID": rows[index].dropxId, Name: rows[index].dropxName, Designation: rows[index].designationCode, Station: locationLabelById.get(rows[index].stationId) ?? "",
                   "Provider ID": rows[index].providerMemberId, Status: rows[index].providerMemberId ? "Mapped" : "Pending", "Effective from": rows[index].effectiveFrom,
                   "Effective to":rows[index].effectiveTo,"Payment method":paymentMethodById.get(rows[index].paymentMethodId)?.name||'Individual terms',...rows[index].paymentValues
                 })))} type="button"><Download size={13} /> Download CSV</button>
@@ -430,7 +436,7 @@ export function ProviderMappingWorksheet({
         </div>:null}
         </> : null}
         {directionView==='dropx'?<div className="mapping-rate-summary"><table aria-label="Station provider IDs and rates"><thead><tr><th>Associate / DropX ID</th><th>Station</th><th>Provider ID</th><th>Payment method</th>{mappingRateColumns.map(([code,label])=><th key={code}>{label}</th>)}<th>Other pay terms</th><th>Effective dates</th><th>Setup</th></tr></thead><tbody>
-          {[...paginatedIndexes].map(index=>{const row=rows[index];const fallback:Record<string,string>={DELIVERY:row.deliveryRate,CRETURN:row.pickupRate,SELLER_PICKUP:row.mfnRate,SLLLER_RETURN:row.mfnReturnRate};return <tr key={row.id}><td><strong>{row.dropxName}</strong><small>{row.dropxId}{dirtyRows[index]?' · Unsaved':''}</small></td><td>{locationLabelById.get(row.stationId)}</td><td>{row.providerMemberId||'Not mapped'}</td><td>{paymentMethodById.get(row.paymentMethodId)?.name||(Number(row.paymentValues.DROPX_PERSONAL_TERMS)===1?'Individual dated terms':'Not configured')}</td>{mappingRateColumns.map(([code])=><td key={code}>{mappingRate(row.paymentValues,code,fallback[code])}</td>)}<td>{Object.entries(row.paymentValues).filter(([code])=>!code.startsWith('DROPX_')&&!mappingRateColumns.some(([key])=>key===code)).map(([code,value])=><small key={code}>{code.replaceAll('_',' ')}: {mappingRate({[code]:value},code)}</small>)}</td><td>{row.effectiveFrom}<small>to {row.effectiveTo||'ongoing'}</small></td><td><a href={`#mapping-${row.id}`}>Edit here</a><br/><a href={`/delivery-network/lifecycle?person=${row.workforceId}&section=payments`}>Profile & history</a></td></tr>;})}
+          {[...paginatedIndexes].map(index=>{const row=rows[index];const fallback:Record<string,string>={DELIVERY:row.deliveryRate,CRETURN:row.pickupRate,SELLER_PICKUP:row.mfnRate,SLLLER_RETURN:row.mfnReturnRate};return <tr key={row.id}><td><strong>{row.dropxName}</strong><small>{row.dropxId} · {row.designationCode}{dirtyRows[index]?' · Unsaved':''}</small></td><td>{locationLabelById.get(row.stationId)}</td><td>{row.providerMemberId||'Not mapped'}</td><td>{paymentMethodById.get(row.paymentMethodId)?.name||(Number(row.paymentValues.DROPX_PERSONAL_TERMS)===1?'Individual dated terms':'Not configured')}</td>{mappingRateColumns.map(([code])=><td key={code}>{mappingRate(row.paymentValues,code,fallback[code])}</td>)}<td>{Object.entries(row.paymentValues).filter(([code])=>!code.startsWith('DROPX_')&&!mappingRateColumns.some(([key])=>key===code)).map(([code,value])=><small key={code}>{code.replaceAll('_',' ')}: {mappingRate({[code]:value},code)}</small>)}</td><td>{row.effectiveFrom}<small>to {row.effectiveTo||'ongoing'}</small></td><td><a href={`#mapping-${row.id}`}>Edit here</a><br/><a href={`/delivery-network/lifecycle?person=${row.workforceId}&section=payments`}>Profile & history</a></td></tr>;})}
         </tbody></table><small>Rates shown for the displayed mapping and effective dates; — means not configured for that component.</small></div>:null}
         {directionView === "provider" ? <div className="table-wrap mapping-pending-table"><table><thead><tr><th>Provider ID</th><th>Source name</th><th>Provider</th><th>Station</th><th>Activity</th><th>Last seen</th><th>Suggested associate</th><th>Reason</th></tr></thead><tbody>
           {filteredProviderPending.map((row) => <tr key={row.id}><td><strong className="mono">{row.providerMemberId}</strong></td><td>{row.sourceName}</td><td>{row.providerName}</td><td>{row.stationCode}</td><td>{row.deliveries.toLocaleString("en-IN")} delivered<small>{row.dailyRows} daily rows</small></td><td>{row.lastSeen}<small>First {row.firstSeen}</small></td><td>{row.suggestedWorkforceId?<><strong>{row.suggestedName}</strong><small>{row.suggestedDropxId} · exact station/name suggestion</small><button className="button secondary compact" type="button" onClick={()=>applySuggestion(row)}>Use suggestion</button></>:"No unique safe match"}</td><td><span className="wf-pay-state unmapped">Pending approval</span><small>{row.reason}</small></td></tr>)}
@@ -481,10 +487,12 @@ export function ProviderMappingWorksheet({
                     value={row.paymentMethodId}
                   >
                     <option value="">Select payment method</option>
-                    {paymentMethods.map((method) => (
+                    {paymentMethods.filter((method) => method.designationIds.includes(row.designationId)).map((method) => (
                       <option key={method.id} value={method.id}>{method.name} · {method.sourceOfTruth.replaceAll("_", " ")}</option>
                     ))}
+                    {row.paymentMethodId && !paymentMethodById.get(row.paymentMethodId)?.designationIds.includes(row.designationId) ? <option disabled value={row.paymentMethodId}>Current method unavailable for {row.designationCode}</option> : null}
                   </select>
+                  <small>{row.designationName || row.designationCode} methods only</small>
                 </label>
 
                 {(paymentMethodById.get(row.paymentMethodId)?.components ?? []).map((component) => (

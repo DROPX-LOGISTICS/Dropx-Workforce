@@ -28,7 +28,12 @@ export async function savePersonalPaymentStage(form:FormData){
  try{
   if(auth.readOnly||!supabaseAdmin)throw new Error('Editing is unavailable.');
   let values:Record<string,number>;try{const parsed=JSON.parse(t('payment_values_json')) as Record<string,unknown>;values=Object.fromEntries(Object.entries(parsed).map(([key,value])=>{const number=Number(value);if(!key||!Number.isFinite(number)||number<0)throw new Error('invalid');return [key,number];}));}catch{throw new Error('Complete every configured payment field with a valid amount.');}
-  const r=await supabaseAdmin.rpc('workforce_save_personal_payment_stage_v2',{p_company:requireCompanyId(auth),p_actor:auth.userId,p_actor_name:auth.fullName||auth.email||'Workforce',p_workforce:t('workforce_id'),p_mapping:t('mapping_id'),p_expected:t('expected_updated_at')||null,p_mode:t('mode'),p_from:t('effective_from'),p_to:t('effective_to')||null,p_method:t('payment_method_id'),p_values:values,p_reason:t('reason'),p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds});
+  const company=requireCompanyId(auth),workforceId=t('workforce_id'),methodId=t('payment_method_id');
+  const worker=await supabaseAdmin.from('workforce').select('designation_id').eq('company_id',company).eq('id',workforceId).is('deleted_at',null).maybeSingle();
+  if(worker.error||!worker.data?.designation_id)throw new Error('Associate designation could not be verified.');
+  const eligibility=await supabaseAdmin.from('workforce_payment_method_designations').select('payment_method_id').eq('company_id',company).eq('payment_method_id',methodId).eq('designation_id',worker.data.designation_id).maybeSingle();
+  if(eligibility.error||!eligibility.data)throw new Error('This payment method is not enabled for the associate designation.');
+  const r=await supabaseAdmin.rpc('workforce_save_personal_payment_stage_v2',{p_company:company,p_actor:auth.userId,p_actor_name:auth.fullName||auth.email||'Workforce',p_workforce:workforceId,p_mapping:t('mapping_id'),p_expected:t('expected_updated_at')||null,p_mode:t('mode'),p_from:t('effective_from'),p_to:t('effective_to')||null,p_method:methodId,p_values:values,p_reason:t('reason'),p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds});
   if(r.error)throw new Error(r.error.message);
   revalidatePath('/delivery-network/lifecycle');revalidatePath('/delivery-network/earnings');query.set('notice','Payment stage saved. Recalculate any affected draft payout.');
  }catch(e){query.set('error',e instanceof Error?e.message:'Unable to save payment stage.');}

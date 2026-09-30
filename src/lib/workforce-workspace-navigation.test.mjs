@@ -5,13 +5,14 @@ import {workspaceDestination,activeWorkspace} from './workforce-workspace-naviga
 import {workforceRegisterViewMatches} from './workforce-register-views.ts';
 
 test('each operational tool remains reachable with one sidebar destination per workspace',()=>{
- assert.equal(workforceNavItems.length,10);
+ assert.equal(workforceNavItems.length,11);
  assert.ok(workforceNavItems.find(x=>x.label==='Master')?.children?.some(x=>x.href==='/master/payment-methods'));
  const links=workforceNavItems.flatMap(x=>x.children??[x]);
  for(const path of ['/delivery-network/associates','/delivery-network/activity','/delivery-network/payroll','/delivery-network/payout-review','/delivery-network/amazon-onboarding-settings','/delivery-network/amazon-status-guidance','/settings/amazon-onboarding'])assert.ok(links.some(x=>x.href===path),path);
  assert.equal(links.filter(x=>x.href?.startsWith('/delivery-network/reports')).length,1);
  assert.ok(workforceNavItems.find(x=>x.label==='Associates')?.children?.some(x=>x.href==='/delivery-network/associates'));
- assert.deepEqual(workforceNavItems.find(x=>x.label==='Onboarding')?.children?.filter(x=>!x.secondary).map(x=>x.label),[]);
+ assert.deepEqual(workforceNavItems.find(x=>x.label==='Associates')?.children?.filter(x=>!x.secondary).map(x=>x.label),['Active Associates']);
+ assert.deepEqual(workforceNavItems.find(x=>x.label==='Onboarding')?.children?.filter(x=>!x.secondary).map(x=>x.label),['Onboard Associate','Client ID','ID & Rate Mapping']);
  assert.ok(workforceNavItems.find(x=>x.label==='Onboarding')?.children?.some(x=>x.label==='BGC exception desk'));
  assert.ok(workforceNavItems.find(x=>x.label==='User access')?.children?.some(x=>x.href==='/users?section=roles'));
  assert.ok(links.some(x=>x.href==='/delivery-network/communications/whatsapp'));
@@ -26,6 +27,7 @@ test('longest route chooses profile workspace and does not mark overview active'
  assert.equal(activeWorkspace(workforceNavItems,'/master/payment-methods','Payment Methods')?.label,'Master');
  assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/lifecycle','Associate profile')?.label,'Associates');
  assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/onboarding/associates','Edit')?.label,'Onboarding');
+ assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/referrals','Referred candidates')?.label,'Referrals');
  assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/communications/history','History')?.label,'Connect');
  assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/earnings','Live Earnings')?.label,'Payments');
  assert.equal(activeWorkspace(workforceNavItems,'/delivery-network/payment-holds','Holds')?.label,'Payments');
@@ -44,7 +46,7 @@ test('lifecycle views form non-overlapping buckets; training optional; archive r
 test('compact navigation preserves every authorized destination exactly once',async()=>{
  const {compactWorkspaces}=await import('./workforce-workspace-navigation.ts');
  const compact=compactWorkspaces(workforceNavItems);
- assert.equal(compact.length,7);
+ assert.equal(compact.length,8);
  const destinations=items=>items.flatMap(item=>item.children??[item]).map(item=>item.href).sort();
  assert.deepEqual(destinations(compact),destinations(workforceNavItems));
  for(const original of workforceNavItems) {
@@ -55,7 +57,7 @@ test('compact navigation preserves every authorized destination exactly once',as
    assert.equal(workspaceDestination(result[0]),workspaceDestination(only));
   }
  }
- assert.equal(activeWorkspace(compact,'/delivery-network/rate-cards','Rate Cards')?.label,'Associates');
+ assert.equal(activeWorkspace(compact,'/delivery-network/rate-cards','Rate Cards')?.label,'Onboarding');
  assert.equal(activeWorkspace(compact,'/delivery-network/payment-holds','Holds')?.label,'Pay & settlement');
  assert.equal(activeWorkspace(compact,'/users','User Roles')?.label,'Settings');
  assert.equal(activeWorkspace(compact,'/delivery-network/onboarding/associates','Bulk upload')?.label,'Onboarding');
@@ -80,4 +82,15 @@ test('tab selection distinguishes query-based roles and tolerates page filters a
  assert.equal(workspaceLinkActive('/users?section=users','/users','section=roles'),false);
  assert.ok(workspaceLinkActive('/delivery-network/onboarding/associates#bulk-upload','/delivery-network/onboarding/associates',''));
  assert.equal(workspaceLinkActive('/delivery-network','/delivery-network/associates',''),false);
+});
+
+test('lifecycle phases route to their single owning workspace',async()=>{
+ const {lifecyclePhaseDestination}=await import('./workforce-workspace-navigation.ts');
+ assert.equal(lifecyclePhaseDestination('registration'),'/delivery-network/onboarding?area=registration');
+ assert.equal(lifecyclePhaseDestination('review'),'/delivery-network/onboarding?area=registration');
+ assert.equal(lifecyclePhaseDestination('partner'),'/delivery-network/onboarding?area=client');
+ assert.equal(lifecyclePhaseDestination('activation'),'/delivery-network/onboarding?area=client');
+ assert.equal(lifecyclePhaseDestination('mapping'),'/delivery-network/rate-mapping');
+ assert.equal(lifecyclePhaseDestination('pay'),'/delivery-network/rate-mapping');
+ assert.equal(lifecyclePhaseDestination('active'),'/delivery-network/associates');
 });

@@ -5,6 +5,7 @@ import {PGlite} from '@electric-sql/pglite';
 const migration=readFileSync(new URL('../supabase/migrations/20260928200000_configurable_partner_onboarding.sql',import.meta.url),'utf8');
 const id=n=>`00000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 async function setup(){const db=new PGlite();await db.exec(`
+set timezone='Asia/Kolkata';
 create role anon;create role authenticated;create role service_role;create schema auth;create table auth.users(id uuid primary key);
 create table companies(id uuid primary key);create table providers(id uuid primary key,company_id uuid,code text,name text,is_active boolean default true);
 create table location_models(id uuid primary key,company_id uuid,code text,name text,is_active boolean default true);

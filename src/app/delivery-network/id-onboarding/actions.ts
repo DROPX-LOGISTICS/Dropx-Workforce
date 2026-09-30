@@ -16,7 +16,9 @@ function destination(form: FormData, params: Record<string,string>) {
     const referer = new URL(headers().get("referer") || "");
     if (referer.pathname === "/delivery-network/onboarding") {
       const query = new URLSearchParams();
+      const area = referer.searchParams.get("area");
       const status = referer.searchParams.get("status");
+      if (area === "registration" || area === "client") query.set("area", area);
       if (status) query.set("status", status);
       for (const [key, value] of Object.entries(params)) query.set(key, value);
       return `/delivery-network/onboarding?${query}`;

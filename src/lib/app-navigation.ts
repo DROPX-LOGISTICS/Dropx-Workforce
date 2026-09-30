@@ -121,13 +121,17 @@ export const workforceNavItems: NavItem[] = [
     code: "delivery_associates",
     label: "Onboarding",
     icon: "DA",
-    href: "/delivery-network/onboarding",
+    href: "/delivery-network/onboarding?area=registration",
     children: [
+      { code: "delivery_associates", label: "Onboard Associate", href: "/delivery-network/onboarding?area=registration" },
+      { code: "executive_id_onboarding", label: "Client ID", href: "/delivery-network/onboarding?area=client" },
+      { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping" },
       { code: "delivery_associates", label: "Invite Associate", href: "/delivery-network/onboarding/associates", secondary: true },
       { code: "executive_id_onboarding", label: "Amazon sync desk", href: "/delivery-network/amazon-lifecycle?view=not_onboarded", secondary: true },
       { code: "executive_id_onboarding", label: "BGC exception desk", href: "/delivery-network/amazon-lifecycle?view=idfy", secondary: true },
       { code: "executive_id_onboarding", label: "Activation desk", href: "/delivery-network/id-onboarding", secondary: true },
-      { code: "delivery_associates", label: "Operations partner onboarding", href: "/delivery-network/onboarding/operations", secondary: true }
+      { code: "delivery_associates", label: "Operations partner onboarding", href: "/delivery-network/onboarding/operations", secondary: true },
+      { code: "workforce_rate_cards", label: "Rate Cards", href: "/delivery-network/rate-cards", secondary: true }
     ]
   },
   {
@@ -135,11 +139,10 @@ export const workforceNavItems: NavItem[] = [
     label: "Associates",
     icon: "AS",
     children: [
-      { code: "delivery_associates", label: "Associate register", href: "/delivery-network/associates" },
-      { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping", secondary: true },
-      { code: "workforce_rate_cards", label: "Rate Cards", href: "/delivery-network/rate-cards", secondary: true }
+      { code: "delivery_associates", label: "Active Associates", href: "/delivery-network/associates" }
     ]
   },
+  { code: "delivery_associates", label: "Referrals", href: "/delivery-network/referrals", icon: "RF" },
   {
     code: "workforce_activity",
     label: "Attendance & routes",

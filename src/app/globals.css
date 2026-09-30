@@ -17532,32 +17532,6 @@ td strong,
   }
 }
 
-/* Workforce Reimagined login: preserve the original DropX mark while the
-   Workforce identity uses the same route-green language as the application. */
-.workforce-login-page {
-  --workforce-login-dark: #102f28;
-  --workforce-login-mint: #c9ef75;
-  --workforce-login-lime: #c9ef75;
-  background: #f2f6f3;
-}
-
-.workforce-login-story {
-  background:
-    radial-gradient(circle at 92% 12%, rgba(201, 239, 117, .22), transparent 28%),
-    radial-gradient(circle at 9% 106%, rgba(241, 90, 36, .24), transparent 34%),
-    linear-gradient(145deg, #102f28 0%, #173f35 62%, #0c2922 100%);
-}
-
-.workforce-login-story::before { border-color: rgba(201, 239, 117, .18); }
-.workforce-login-copy > span,
-.workforce-login-copy h1 em,
-.workforce-login-route > span { color: #c9ef75; }
-.workforce-login-route i { background: linear-gradient(90deg, rgba(201, 239, 117, .62), rgba(241, 90, 36, .65)); }
-.workforce-login-card { border-color: #d9e5df; border-radius: 18px; box-shadow: 0 22px 65px rgba(18, 48, 40, .11); }
-.workforce-login-card-icon { border-radius: 12px; color: #173f35; background: #c9ef75; box-shadow: 0 10px 22px rgba(85, 128, 48, .15); }
-.workforce-login-kicker { color: #28705d; }
-.workforce-login-card h2 { color: #16362e; }
-
 /* Workforce control room — task-led shell, intentionally distinct from the legacy admin dashboard. */
 .workforce-product {
   --wf-orange: #ff5b2e;
@@ -22251,23 +22225,3 @@ td strong,
   .workforce-product.workforce-people-inspired .wf-command-kpis article:nth-last-child(-n + 2) { border-bottom:0; }
   .workforce-product.workforce-people-inspired .wf-lifecycle-map a { min-height:112px; }
 }
-
-/* Final Workforce identity tokens live last so legacy portal themes cannot
-   override the current product. */
-.workforce-login-page {
-  --workforce-login-dark:#102f28;
-  --workforce-login-mint:#c9ef75;
-  --workforce-login-lime:#c9ef75;
-  background:#f2f6f3;
-}
-.workforce-login-story {
-  background:radial-gradient(circle at 92% 12%,rgba(201,239,117,.22),transparent 28%),radial-gradient(circle at 9% 106%,rgba(241,90,36,.24),transparent 34%),linear-gradient(145deg,#102f28 0%,#173f35 62%,#0c2922 100%);
-}
-.workforce-login-story::before { border-color:rgba(201,239,117,.18); }
-.workforce-login-copy>span,.workforce-login-copy h1 em,.workforce-login-route>span { color:#c9ef75; }
-.workforce-login-copy h1 { max-width:670px; font-size:clamp(40px,4.7vw,60px); line-height:1; }
-.workforce-login-route i { background:linear-gradient(90deg,rgba(201,239,117,.62),rgba(241,90,36,.65)); }
-.workforce-login-card { border-color:#d9e5df; border-radius:18px; box-shadow:0 22px 65px rgba(18,48,40,.11); }
-.workforce-login-card-icon { border-radius:12px; color:#173f35; background:#c9ef75; box-shadow:0 10px 22px rgba(85,128,48,.15); }
-.workforce-login-kicker { color:#28705d; }
-.workforce-login-card h2 { color:#16362e; }

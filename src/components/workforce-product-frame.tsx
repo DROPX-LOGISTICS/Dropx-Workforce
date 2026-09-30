@@ -45,17 +45,22 @@ const navigationIcons: Record<string, typeof LayoutDashboard> = {
 
 const administrationWorkspaces = new Set(["Settings"]);
 
-function WorkforceRouteMark() {
+function WorkforceRiderMark() {
   return (
     <svg
       aria-hidden="true"
-      className="wf-route-mark"
-      viewBox="0 0 40 40"
+      className="wf-rider-mark"
+      viewBox="0 0 32 32"
     >
-      <path className="wf-route-mark-line" d="M5 10.5 13.2 30 20 17.5 27.2 30 35 9" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" />
-      <circle className="wf-route-mark-start" cx="5" cy="10.5" r="3.5" />
-      <circle className="wf-route-mark-mid" cx="20" cy="17.5" r="3.5" />
-      <circle className="wf-route-mark-end" cx="35" cy="9" r="3.5" />
+      <circle cx="7.5" cy="23.5" fill="none" r="4" stroke="currentColor" strokeWidth="2" />
+      <circle cx="24.5" cy="23.5" fill="none" r="4" stroke="currentColor" strokeWidth="2" />
+      <path d="M7.5 23.5h7l4-7.7 3.5 7.7h2.5M13.3 15.8l-3 5.2h8" fill="none" stroke="#f15a24" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      <path d="m18.5 15.8 5.2-1.2 2.2 3.2" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      <circle cx="18.2" cy="7.2" fill="#f15a24" r="2.3" />
+      <path d="m17.3 10.2-3.6 4 4.8 1.7 3.1-3.6" fill="none" stroke="#f15a24" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
+      <rect fill="#f7b321" height="4.7" rx="1" width="5.2" x="9.5" y="9.4" />
+      <path d="M11.1 9.4V8.2h2v1.2" fill="none" stroke="#c74419" strokeLinecap="round" strokeWidth="1" />
+      <path d="M3.5 29h25" fill="none" stroke="#f7b321" strokeLinecap="round" strokeWidth="1.8" />
     </svg>
   );
 }
@@ -132,7 +137,7 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
   }, [mobileOpen]);
 
   return (
-    <div className="workforce-product workforce-people-inspired wf-compact wf-modern wf-reimagined">
+    <div className="workforce-product workforce-people-inspired wf-compact wf-modern wf-people-v2">
       <EventLogTracker />
 
       {mobileOpen ? (
@@ -150,8 +155,8 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
             <Image alt="DropX" height={28} priority src="/dropx-logo.png" width={76} />
             <span className="wf-left-brand-divider" aria-hidden="true" />
             <span className="wf-workforce-lockup">
-              <WorkforceRouteMark />
-              <strong>Workforce<small>People · Routes · Results</small></strong>
+              <WorkforceRiderMark />
+              <strong>Workforce<small>Field network</small></strong>
             </span>
           </PendingLink>
           <button aria-label="Close Workforce menu" className="wf-left-close" onClick={() => setMobileOpen(false)} type="button">
@@ -171,8 +176,8 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
         </nav>
 
         <div className="wf-left-footer">
-          <span>One team. Every route.</span>
-          <small>Secure · role and station scoped</small>
+          <span>DropX Workforce</span>
+          <small>Role and station access applies</small>
         </div>
       </aside>
 
@@ -188,7 +193,7 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
             {mobileOpen ? <X size={19} /> : <Menu size={19} />}
           </button>
           <div className="wf-slim-page-title">
-            <span>People in motion</span>
+            <span>Field operations</span>
             <strong>{active}</strong>
           </div>
           <div className="wf-product-actions">{actions}</div>

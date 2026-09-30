@@ -3,8 +3,8 @@ import { ProviderMappingPageContent } from "@/components/provider-mapping-page-c
 export default function WorkforceRateMappingPage({searchParams}:{searchParams:{station?:string}}) {
   return (
     <ProviderMappingPageContent
-      eyebrow="Workforce rates"
-      subtitle="Map only Workforce associates to provider IDs, payout methods and date-effective rate cards."
+      eyebrow="Onboarding · Commercial setup"
+      subtitle="Confirm provider IDs and apply date-effective rate cards after the client ID is ready."
       title="ID & Rate Mapping"
       initialStation={searchParams.station}
     />

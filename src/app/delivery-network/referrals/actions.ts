@@ -6,9 +6,9 @@ import { requirePagePermission } from "@/lib/authorization";
 import { requireCompanyId } from "@/lib/company-scope";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
-const path="/delivery-network/associates?view=referrals";
+const path="/delivery-network/referrals";
 const clean=(form:FormData,key:string)=>String(form.get(key)??"").trim();
-const finish=(kind:"notice"|"error",message:string):never=>redirect(`${path}&${kind}=${encodeURIComponent(message)}`);
+const finish=(kind:"notice"|"error",message:string,area="candidates"):never=>redirect(`${path}?area=${area}&${kind}=${encodeURIComponent(message)}`);
 
 export async function saveReferralProgram(form:FormData){
   const auth=await requirePagePermission("delivery_associates","edit");
@@ -35,9 +35,9 @@ export async function saveReferralProgram(form:FormData){
       ?await supabaseAdmin.from("workforce_referral_programs").update(payload).eq("company_id",company).eq("id",id)
       :await supabaseAdmin.from("workforce_referral_programs").insert({...payload,created_by:auth.userId});
     if(result.error)throw new Error(result.error.message);
-    revalidatePath("/delivery-network/associates");
-  }catch(error){finish("error",error instanceof Error?error.message:"Unable to save referral program.");}
-  finish("notice","Referral program saved.");
+    revalidatePath(path);
+  }catch(error){finish("error",error instanceof Error?error.message:"Unable to save referral program.","programs");}
+  finish("notice","Referral program saved.","programs");
 }
 
 export async function setReferralProgramStatus(form:FormData){
@@ -51,9 +51,34 @@ export async function setReferralProgramStatus(form:FormData){
     if(!auth.hasAllLocationAccess&&current.data.station_id&&!auth.locationScopeIds.includes(current.data.station_id))throw new Error("Program is outside your location scope.");
     const result=await supabaseAdmin.from("workforce_referral_programs").update({is_active:isActive,updated_at:new Date().toISOString()}).eq("company_id",company).eq("id",id);
     if(result.error)throw new Error(result.error.message);
-    revalidatePath("/delivery-network/associates");
-  }catch(error){finish("error",error instanceof Error?error.message:"Unable to update referral program.");}
-  finish("notice","Referral program status updated.");
+    revalidatePath(path);
+  }catch(error){finish("error",error instanceof Error?error.message:"Unable to update referral program.","programs");}
+  finish("notice","Referral program status updated.","programs");
+}
+
+export async function updateReferralCandidate(form:FormData){
+  const auth=await requirePagePermission("delivery_associates","edit");
+  const company=requireCompanyId(auth);
+  try{
+    if(auth.readOnly||!supabaseAdmin)throw new Error("Editing is unavailable.");
+    const id=clean(form,"id"),fullName=clean(form,"referred_full_name"),countryCode=clean(form,"referred_country_code").replace(/\D/g,""),mobile=clean(form,"referred_mobile").replace(/\D/g,""),stationId=clean(form,"preferred_station_id");
+    if(fullName.length<2||fullName.length>120)throw new Error("Enter the referred candidate's full name.");
+    if(!/^\d{1,4}$/.test(countryCode)||!/^\d{6,15}$/.test(mobile))throw new Error("Enter a valid country code and mobile number.");
+    const current=await supabaseAdmin.from("workforce_referrals").select("id,status,preferred_station_id").eq("company_id",company).eq("id",id).maybeSingle();
+    if(current.error||!current.data)throw new Error("Referral was not found.");
+    if(current.data.status!=="submitted")throw new Error("Candidate identity is locked after the Workforce profile is linked.");
+    if(!auth.hasAllLocationAccess&&current.data.preferred_station_id&&!auth.locationScopeIds.includes(current.data.preferred_station_id))throw new Error("Referral is outside your location scope.");
+    if(stationId){
+      let station=supabaseAdmin.from("stations").select("id").eq("company_id",company).eq("id",stationId).eq("is_active",true);
+      if(!auth.hasAllLocationAccess)station=station.in("id",auth.locationScopeIds.length?auth.locationScopeIds:["00000000-0000-0000-0000-000000000000"]);
+      const stationResult=await station.maybeSingle();
+      if(stationResult.error||!stationResult.data)throw new Error("Location is outside your access scope.");
+    }
+    const result=await supabaseAdmin.from("workforce_referrals").update({referred_full_name:fullName,referred_country_code:countryCode,referred_mobile:mobile,preferred_station_id:stationId||null,updated_at:new Date().toISOString()}).eq("company_id",company).eq("id",id).eq("status","submitted");
+    if(result.error)throw new Error(result.error.message);
+    revalidatePath(path);
+  }catch(error){finish("error",error instanceof Error?error.message:"Unable to update the referred candidate.");}
+  finish("notice","Referred candidate details updated.");
 }
 
 export async function reviewReferral(form:FormData){
@@ -98,7 +123,7 @@ export async function reviewReferral(form:FormData){
         success="Referral reward sent for maker-checker approval.";
       }
     }
-    revalidatePath("/delivery-network/associates");
+    revalidatePath(path);
   }catch(error){finish("error",error instanceof Error?error.message:"Unable to review referral.");}
   finish("notice",success);
 }

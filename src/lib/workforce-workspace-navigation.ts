@@ -6,12 +6,16 @@ export function compactWorkspaces(items: NavItem[]): NavItem[] {
     { label: 'Today', sources: ['Workforce Dashboard'] },
     { label: 'Onboarding', sources: ['Onboarding'] },
     { label: 'Associates', sources: ['Associates'] },
+    { label: 'Referrals', sources: ['Referrals'] },
     { label: 'Operations', sources: ['Attendance & routes', 'Reports'] },
     { label: 'Pay & settlement', sources: ['Payments'] },
     { label: 'Connect', sources: ['Connect'] },
     { label: 'Settings', sources: ['Master', 'Settings', 'User access'] }
   ];
   const prominent = new Set([
+    '/delivery-network/onboarding?area=registration',
+    '/delivery-network/onboarding?area=client',
+    '/delivery-network/rate-mapping',
     '/delivery-network/onboarding/associates',
     '/delivery-network/amazon-lifecycle?view=not_onboarded',
     '/delivery-network/amazon-lifecycle?view=idfy',
@@ -33,6 +37,14 @@ export function compactWorkspaces(items: NavItem[]): NavItem[] {
 
 function routePath(href: string) { return href.split(/[?#]/)[0]; }
 
+export function lifecyclePhaseDestination(phase: string) {
+  if (phase === 'active') return '/delivery-network/associates';
+  if (phase === 'closed') return '/delivery-network/lifecycle?view=closed';
+  if (phase === 'registration' || phase === 'review') return '/delivery-network/onboarding?area=registration';
+  if (phase === 'mapping' || phase === 'pay') return '/delivery-network/rate-mapping';
+  return '/delivery-network/onboarding?area=client';
+}
+
 export function workspaceLinkActive(href: string | undefined, pathname: string, search: string) {
   if (!href || routePath(href) !== pathname) return false;
   const expected = new URLSearchParams(href.split('?')[1]?.split('#')[0] ?? '');
@@ -51,8 +63,8 @@ export function activeWorkspace(items: NavItem[], pathname: string, active: stri
     '/delivery-network/pooled-settlements':'Payments','/delivery-network/contractor-profiles':'Associates',
     '/delivery-network/lifecycle':'Associates','/delivery-network/id-onboarding':'Onboarding',
     '/delivery-network/amazon-lifecycle':'Onboarding',
-    '/delivery-network/rate-mapping':'Associates','/delivery-network/rate-cards':'Associates',
-    '/delivery-network/onboarding':'Onboarding','/delivery-network/attention':'Associates'
+    '/delivery-network/rate-mapping':'Onboarding','/delivery-network/rate-cards':'Onboarding',
+    '/delivery-network/onboarding':'Onboarding','/delivery-network/referrals':'Referrals','/delivery-network/attention':'Associates'
   };
   const relatedPath = Object.keys(related)
     .filter(path => pathname === path || pathname.startsWith(`${path}/`))

@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ContactRound,
   Fingerprint,
+  Gift,
   LayoutDashboard,
   Menu,
   ListTree,
@@ -68,6 +69,7 @@ function iconFor(item: NavItem) {
   if (item.label === "Today") return LayoutDashboard;
   if (item.label === "Onboarding") return UserRoundPlus;
   if (item.label === "Associates") return ContactRound;
+  if (item.label === "Referrals") return Gift;
   return navigationIcons[item.code] ?? LayoutDashboard;
 }
 
@@ -135,7 +137,7 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
   }, [mobileOpen]);
 
   return (
-    <div className="workforce-product workforce-people-inspired wf-compact">
+    <div className="workforce-product workforce-people-inspired wf-compact wf-modern">
       <EventLogTracker />
 
       {mobileOpen ? (

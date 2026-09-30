@@ -519,9 +519,12 @@ export function ProviderMappingWorksheet({
         {directionView === "provider" ? <div className="table-wrap mapping-pending-table"><table><thead><tr><th>Provider ID</th><th>Source name</th><th>Provider</th><th>Station</th><th>Activity</th><th>Last seen</th><th>Suggested associate</th><th>Reason</th></tr></thead><tbody>
           {filteredProviderPending.map((row) => <tr key={row.id}><td><strong className="mono">{row.providerMemberId}</strong></td><td>{row.sourceName}</td><td>{row.providerName}</td><td>{row.stationCode}</td><td>{row.deliveries.toLocaleString("en-IN")} delivered<small>{row.dailyRows} daily rows</small></td><td>{row.lastSeen}<small>First {row.firstSeen}</small></td><td>{row.suggestedWorkforceId?<><strong>{row.suggestedName}</strong><small>{row.suggestedDropxId} · exact station/name suggestion</small><button className="button secondary compact" type="button" onClick={()=>applySuggestion(row)}>Use suggestion</button></>:"No unique safe match"}</td><td><span className="wf-pay-state unmapped">Pending approval</span><small>{row.reason}</small></td></tr>)}
           {!filteredProviderPending.length ? <tr><td className="empty-cell" colSpan={8}>No provider IDs are pending for these filters.</td></tr> : null}
-        </tbody></table></div> : <div className="mapping-rows">
+        </tbody></table></div> : <div className={`mapping-rows ${editingIndex !== null ? "has-open-setup" : ""}`.trim()}>
+          {filteredIndexes.length ? <div className="mapping-list-head" aria-hidden="true">
+            <span>Associate</span><span>Client ID</span><span>Payment schedule</span><span>Current period</span><span>Action</span>
+          </div> : null}
           {rows.map((row, index) => (
-            <div id={`mapping-${row.id}`} className={`mapping-row-card ${dirtyRows[index] ? "unsaved-row" : ""}`} hidden={!paginatedIndexes.has(index)} key={`${row.workforceId}-${index}`}>
+            <div id={`mapping-${row.id}`} className={`mapping-row-card ${editingIndex === index ? "selected" : ""} ${dirtyRows[index] ? "unsaved-row" : ""}`} hidden={!paginatedIndexes.has(index)} key={`${row.workforceId}-${index}`}>
               <input type="hidden" name={`rows[${index}][id]`} value={row.id} />
               <input type="hidden" name={`rows[${index}][workforce_id]`} value={row.workforceId} />
               <input type="hidden" name={`rows[${index}][source_type]`} value={row.sourceType} />
@@ -537,7 +540,7 @@ export function ProviderMappingWorksheet({
                 <div><small>Client ID</small><strong>{row.providerMemberId || "Pending"}</strong></div>
                 <div><small>Payment schedule</small><strong>{paymentMethodById.get(row.paymentMethodId)?.name || "Not configured"}</strong><span>{row.paymentPeriods.length || 0} period{row.paymentPeriods.length === 1 ? "" : "s"}</span></div>
                 <div><small>Current period</small><strong>{row.effectiveFrom}{row.effectiveTo ? ` – ${row.effectiveTo}` : " onward"}</strong></div>
-                <button className="button secondary compact" onClick={() => setEditingIndex((current) => current === index ? null : index)} type="button">{editingIndex === index ? "Close" : "Edit setup"}</button>
+                <button aria-expanded={editingIndex === index} className="button secondary compact" onClick={() => setEditingIndex((current) => current === index ? null : index)} type="button">{editingIndex === index ? "Close setup" : "Edit setup"}</button>
               </div>
               {dirtyRows[index] ? <span className="unsaved-badge mapping-unsaved-badge">Unsaved</span> : null}
 

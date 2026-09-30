@@ -28,6 +28,7 @@ export function compactWorkspaces(items: NavItem[]): NavItem[] {
     const sources = group.sources.flatMap(label => items.filter(item => item.label === label));
     if (!sources.length) return [];
     if (group.sources[0] === 'Workforce Dashboard') return [{ ...sources[0], label: group.label }];
+    if (sources.length === 1 && !sources[0].children?.length) return [{ ...sources[0], label: group.label }];
     const children = sources.flatMap(item => item.children ?? [{ code: item.code, href: item.href, label: item.label }])
       .map(child => ({ ...child, secondary: group.label === 'Settings'
         ? !prominent.has(child.href ?? '') : child.secondary }));

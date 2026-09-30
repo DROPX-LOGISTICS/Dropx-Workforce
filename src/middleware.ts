@@ -219,10 +219,43 @@ export async function middleware(request: NextRequest) {
     target.headers.set("Cache-Control", "private, no-store");
     return target;
   };
-  const unavailable = () => copyAuthCookies(new NextResponse(
-    '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Workforce — Please retry</title><body><main><h1>Connection temporarily unavailable</h1><p>We could not verify your session. Please retry in a few seconds.</p><p><a href="">Try again</a></p></main></body></html>',
-    { status: 503, headers: { "Content-Type": "text/html; charset=utf-8", "Retry-After": "5", "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'" } }
-  ));
+  const unavailable = () => {
+    const portalName = isWorkforceHost ? "Workforce" : isOpsHost ? "OpsPulse" : isPlatformAdminHost ? "Control Center" : "DropX";
+    const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="refresh" content="5">
+  <title>${portalName} · Reconnecting</title>
+  <style>
+    :root{color-scheme:light;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f7fb;color:#172033}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 70% 15%,#fff0e8 0,transparent 32%),#f5f7fb}
+    main{width:min(440px,100%);background:#fff;border:1px solid #e5e9f1;border-radius:18px;padding:28px;box-shadow:0 18px 50px rgba(23,32,51,.09)}
+    .brand{display:flex;align-items:center;gap:10px;margin-bottom:28px;font-size:14px;font-weight:750}.mark{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:#f05a2a;color:#fff}
+    .status{display:inline-flex;align-items:center;gap:8px;color:#a94220;background:#fff3ed;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:700}.dot{width:7px;height:7px;border-radius:50%;background:#f05a2a;box-shadow:0 0 0 5px #ffe0d3}
+    h1{font-size:24px;line-height:1.2;letter-spacing:-.03em;margin:18px 0 10px}p{font-size:14px;line-height:1.6;color:#657087;margin:0}.safe{margin-top:16px;padding:12px 14px;border-radius:12px;background:#f7f9fc;color:#465169;font-size:13px}
+    a{display:flex;justify-content:center;margin-top:22px;padding:11px 16px;border-radius:10px;background:#172033;color:#fff;text-decoration:none;font-size:14px;font-weight:700}small{display:block;text-align:center;margin-top:12px;color:#8a94a7;font-size:11px}
+  </style>
+</head>
+<body><main>
+  <div class="brand"><span class="mark">DX</span><span>DropX ${portalName}</span></div>
+  <span class="status"><span class="dot"></span>Reconnecting securely</span>
+  <h1>We’re restoring your connection</h1>
+  <p>Session verification is taking longer than expected. This page will retry automatically.</p>
+  <div class="safe">Your session and current work are safe. You will stay inside ${portalName}.</div>
+  <a href="">Retry now</a><small>Automatic retry in 5 seconds</small>
+</main></body></html>`;
+    return copyAuthCookies(new NextResponse(html, {
+      status: 503,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Retry-After": "5",
+        "X-DropX-Auth-State": "temporarily-unavailable",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+      }
+    }));
+  };
   const authStarted = Date.now();
   let authResult;
   try {
@@ -242,7 +275,11 @@ export async function middleware(request: NextRequest) {
           }
         }
       });
-      return await supabase.auth.getUser();
+      // getClaims verifies the signed access token against Supabase's cached
+      // public JWKS. Unlike getUser, it does not put the Auth user endpoint in
+      // the hot path for every protected page request when asymmetric signing
+      // keys are enabled.
+      return await supabase.auth.getClaims();
     });
   } catch (error) {
     console.error("[middleware-auth] verification unavailable", {
@@ -256,7 +293,7 @@ export async function middleware(request: NextRequest) {
     console.error("[middleware-auth] verification unavailable", { reason: "upstream", status: error?.status, elapsedMs: Date.now() - authStarted });
     return unavailable();
   }
-  if (!data.user) {
+  if (!data?.claims?.sub) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", request.nextUrl.pathname);
     return copyAuthCookies(NextResponse.redirect(loginUrl));

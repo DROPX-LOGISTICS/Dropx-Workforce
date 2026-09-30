@@ -1,9 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Download } from "lucide-react";
+import { CalendarRange, Check, Download, Plus, ShieldCheck } from "lucide-react";
 import { useFormStatus } from "react-dom";
-import { saveProviderMappingWorksheet } from "@/app/provider-mapping/actions";
+import { addProviderPaymentPeriod, saveProviderMappingWorksheet } from "@/app/provider-mapping/actions";
 import { SubmitButton } from "@/components/submit-button";
 import {stageMappingImport} from '@/lib/provider-mapping-bulk';
 
@@ -39,6 +39,19 @@ export type MappingWorksheetRow = {
   guaranteeSchedule: string;
   fuelRate: string;
   reason: string;
+  paymentPeriods: MappingPaymentPeriod[];
+};
+
+export type MappingPaymentPeriod = {
+  id: string;
+  providerMemberId: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+  paymentMethodId: string;
+  paymentValues: Record<string, string>;
+  payType: string;
+  reason: string;
+  updatedAt: string;
 };
 
 export type PaymentMethodComponentOption = {
@@ -89,6 +102,20 @@ function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
   link.click();
   URL.revokeObjectURL(url);
 }
+
+function nextCalendarDate(value: string) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+type PeriodDraft = {
+  methodId: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+  paymentValues: Record<string, string>;
+  reason: string;
+};
 
 function rowSignature(row: MappingWorksheetRow) {
   return [
@@ -165,6 +192,7 @@ export function ProviderMappingWorksheet({
   const [bulkBusy,setBulkBusy]=useState(false);
   const [pageSize, setPageSize] = useState("25");
   const [currentPage, setCurrentPage] = useState(1);
+  const [periodDrafts, setPeriodDrafts] = useState<Record<number, PeriodDraft>>({});
 
   function dismissSuccessMessage() {
     document.getElementById("provider-mapping-success")?.remove();
@@ -217,6 +245,42 @@ export function ProviderMappingWorksheet({
     } : row));
   }
 
+  function openNextPeriod(index: number) {
+    const row = rows[index];
+    const latest = row.paymentPeriods[0];
+    if (!latest) return;
+    const eligible = paymentMethods.filter((method) => method.designationIds.includes(row.designationId));
+    const methodId = eligible.some((method) => method.id === latest.paymentMethodId)
+      ? latest.paymentMethodId
+      : eligible[0]?.id ?? "";
+    const copyValues = methodId === latest.paymentMethodId
+      ? Object.fromEntries(Object.entries(latest.paymentValues).filter(([key]) => !key.startsWith("DROPX_")))
+      : {};
+    setPeriodDrafts((current) => ({
+      ...current,
+      [index]: {
+        methodId,
+        effectiveFrom: latest.effectiveTo ? nextCalendarDate(latest.effectiveTo) : "",
+        effectiveTo: "",
+        paymentValues: copyValues,
+        reason: ""
+      }
+    }));
+  }
+
+  function updatePeriodDraft(index: number, changes: Partial<PeriodDraft>) {
+    setPeriodDrafts((current) => ({
+      ...current,
+      [index]: { ...current[index], ...changes }
+    }));
+  }
+
+  function updatePeriodValue(index: number, componentCode: string, value: string) {
+    const current = periodDrafts[index];
+    if (!current) return;
+    updatePeriodDraft(index, { paymentValues: { ...current.paymentValues, [componentCode]: value } });
+  }
+
   function validateRow(row: MappingWorksheetRow, index: number) {
     const method = paymentMethodById.get(row.paymentMethodId);
 
@@ -240,6 +304,7 @@ export function ProviderMappingWorksheet({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    if (submitter?.name === "stage_row") return;
     const rowIndexValue = submitter?.name === "save_row" ? submitter.value : null;
     const indexes = rowIndexValue !== null
       ? [Number(rowIndexValue)]
@@ -455,13 +520,7 @@ export function ProviderMappingWorksheet({
           {filteredProviderPending.map((row) => <tr key={row.id}><td><strong className="mono">{row.providerMemberId}</strong></td><td>{row.sourceName}</td><td>{row.providerName}</td><td>{row.stationCode}</td><td>{row.deliveries.toLocaleString("en-IN")} delivered<small>{row.dailyRows} daily rows</small></td><td>{row.lastSeen}<small>First {row.firstSeen}</small></td><td>{row.suggestedWorkforceId?<><strong>{row.suggestedName}</strong><small>{row.suggestedDropxId} · exact station/name suggestion</small><button className="button secondary compact" type="button" onClick={()=>applySuggestion(row)}>Use suggestion</button></>:"No unique safe match"}</td><td><span className="wf-pay-state unmapped">Pending approval</span><small>{row.reason}</small></td></tr>)}
           {!filteredProviderPending.length ? <tr><td className="empty-cell" colSpan={8}>No provider IDs are pending for these filters.</td></tr> : null}
         </tbody></table></div> : <div className="mapping-rows">
-          {rows.map((row, index) => Number(row.paymentValues.DROPX_PERSONAL_TERMS) === 1 ? (
-            <div className="mapping-row-card" id={`mapping-${row.id}`} hidden={!paginatedIndexes.has(index)} key={`${row.workforceId}-${index}`}>
-              <strong>{row.dropxName} · {row.providerMemberId}</strong>
-              <span>Individual dated payment terms</span>
-              <a href={`/delivery-network/lifecycle?tab=active&person=${row.workforceId}&section=payments`}>View or change payment stages</a>
-            </div>
-          ) : (
+          {rows.map((row, index) => (
             <div id={`mapping-${row.id}`} className={`mapping-row-card ${dirtyRows[index] ? "unsaved-row" : ""}`} hidden={!paginatedIndexes.has(index)} key={`${row.workforceId}-${index}`}>
               <input type="hidden" name={`rows[${index}][id]`} value={row.id} />
               <input type="hidden" name={`rows[${index}][workforce_id]`} value={row.workforceId} />
@@ -476,8 +535,8 @@ export function ProviderMappingWorksheet({
               <div className="mapping-card-summary">
                 <div><span className="mapping-dropx-id mono">{row.dropxId}</span><strong>{row.dropxName}</strong><small>{row.designationCode} · {locationLabelById.get(row.stationId)}</small></div>
                 <div><small>Client ID</small><strong>{row.providerMemberId || "Pending"}</strong></div>
-                <div><small>Payment method</small><strong>{paymentMethodById.get(row.paymentMethodId)?.name || "Not configured"}</strong></div>
-                <div><small>Effective</small><strong>{row.effectiveFrom}{row.effectiveTo ? ` – ${row.effectiveTo}` : " onward"}</strong></div>
+                <div><small>Payment schedule</small><strong>{paymentMethodById.get(row.paymentMethodId)?.name || "Not configured"}</strong><span>{row.paymentPeriods.length || 0} period{row.paymentPeriods.length === 1 ? "" : "s"}</span></div>
+                <div><small>Current period</small><strong>{row.effectiveFrom}{row.effectiveTo ? ` – ${row.effectiveTo}` : " onward"}</strong></div>
                 <button className="button secondary compact" onClick={() => setEditingIndex((current) => current === index ? null : index)} type="button">{editingIndex === index ? "Close" : "Edit setup"}</button>
               </div>
               {dirtyRows[index] ? <span className="unsaved-badge mapping-unsaved-badge">Unsaved</span> : null}
@@ -558,6 +617,80 @@ export function ProviderMappingWorksheet({
                 </div>
                 {rowErrors[index] ? <div className="mapping-row-error">{rowErrors[index]}</div> : null}
               </div>
+
+              <section className="mapping-payment-timeline" aria-label={`${row.dropxName} payment schedule`}>
+                <header>
+                  <div><span><CalendarRange size={15} /></span><div><strong>Payment schedule</strong><small>Every day must belong to one continuous payment period.</small></div></div>
+                  {row.mappingId && row.paymentPeriods.length && canEdit ? (
+                    <button
+                      className="button secondary compact"
+                      disabled={dirtyRows[index]}
+                      onClick={() => periodDrafts[index]
+                        ? setPeriodDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => Number(key) !== index)))
+                        : openNextPeriod(index)}
+                      type="button"
+                    >
+                      <Plus size={13} /> {periodDrafts[index] ? "Cancel" : "Add payment period"}
+                    </button>
+                  ) : null}
+                </header>
+
+                {row.paymentPeriods.length ? <div className="mapping-period-list">
+                  {row.paymentPeriods.slice().reverse().map((period, periodIndex) => (
+                    <article key={period.id}>
+                      <span className="mapping-period-node"><Check size={11} /></span>
+                      <div><small>Period {periodIndex + 1}</small><strong>{paymentMethodById.get(period.paymentMethodId)?.name || period.payType.replaceAll("_", " ")}</strong></div>
+                      <div><small>Effective dates</small><strong>{period.effectiveFrom} – {period.effectiveTo || "Ongoing"}</strong></div>
+                      <div><small>Payment details</small><strong>{Object.entries(period.paymentValues).map(([key, value]) => `${key.replaceAll("_", " ")}: ₹${value}`).join(" · ") || "Not configured"}</strong></div>
+                    </article>
+                  ))}
+                </div> : <div className="mapping-period-empty">Save the provider ID and first payment method to start the timeline.</div>}
+
+                {periodDrafts[index] ? (() => {
+                  const draft = periodDrafts[index];
+                  const method = paymentMethodById.get(draft.methodId);
+                  const latest = row.paymentPeriods[0];
+                  return <div className="mapping-next-period">
+                    <input name={`stages[${index}][workforce_id]`} type="hidden" value={row.workforceId} />
+                    <input name={`stages[${index}][mapping_id]`} type="hidden" value={latest.id} />
+                    <input name={`stages[${index}][expected_updated_at]`} type="hidden" value={latest.updatedAt} />
+                    <input name={`stages[${index}][payment_values_json]`} type="hidden" value={JSON.stringify(draft.paymentValues)} />
+                    <div className="mapping-continuity-rule"><ShieldCheck size={14} /><span><strong>No-gap rule</strong>{latest.effectiveTo ? ` Starts automatically on ${nextCalendarDate(latest.effectiveTo)}.` : " The current period closes one day before the new one starts."}</span></div>
+                    <label>Next payment method
+                      <select
+                        name={`stages[${index}][payment_method_id]`}
+                        onChange={(event) => updatePeriodDraft(index, { methodId: event.target.value, paymentValues: {} })}
+                        required
+                        value={draft.methodId}
+                      >
+                        <option value="">Select payment method</option>
+                        {paymentMethods.filter((option) => option.designationIds.includes(row.designationId)).map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                      </select>
+                    </label>
+                    {(method?.components ?? []).map((component) => <label key={component.code}>{component.label}<small>{component.ruleLabel}</small>
+                      <input min="0" onChange={(event) => updatePeriodValue(index, component.code, event.target.value)} placeholder="0.00" required step="0.01" type="number" value={draft.paymentValues[component.code] ?? ""} />
+                    </label>)}
+                    <label>Effective from
+                      <input
+                        min={latest.effectiveTo ? nextCalendarDate(latest.effectiveTo) : nextCalendarDate(latest.effectiveFrom)}
+                        name={`stages[${index}][effective_from]`}
+                        onChange={(event) => updatePeriodDraft(index, { effectiveFrom: event.target.value })}
+                        readOnly={Boolean(latest.effectiveTo)}
+                        required
+                        type="date"
+                        value={draft.effectiveFrom}
+                      />
+                    </label>
+                    <label>Effective to <small>Optional for an ongoing period</small>
+                      <input min={draft.effectiveFrom} name={`stages[${index}][effective_to]`} onChange={(event) => updatePeriodDraft(index, { effectiveTo: event.target.value })} type="date" value={draft.effectiveTo} />
+                    </label>
+                    <label className="mapping-period-reason">Agreed terms / reason
+                      <input maxLength={1000} minLength={10} name={`stages[${index}][reason]`} onChange={(event) => updatePeriodDraft(index, { reason: event.target.value })} placeholder="Why this payment method applies for this period" required value={draft.reason} />
+                    </label>
+                    <button className="button" formAction={addProviderPaymentPeriod} name="stage_row" type="submit" value={index}>Add continuous period</button>
+                  </div>;
+                })() : null}
+              </section>
               </div>
             </div>
           ))}

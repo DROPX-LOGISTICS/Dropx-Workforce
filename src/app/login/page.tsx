@@ -53,11 +53,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <main className="workforce-login-page">
         <DocumentTitle pageName="Workforce Login" productName="Workforce · DropX" />
         <section className="workforce-login-story">
-          <div className="workforce-login-brand"><img src="/dropx-logo.png" alt="DropX" /><span /><div><strong>Workforce</strong><small>Rider operations</small></div></div>
+          <div className="workforce-login-brand"><img src="/dropx-logo.png" alt="DropX" /><span /><div><strong>Workforce</strong><small>People · Routes · Results</small></div></div>
           <div className="workforce-login-copy">
-            <span>Built for the people on the route</span>
-            <h1>From registration<br />to <em>ready to ride.</em></h1>
-            <p>One focused workspace for associate onboarding, identity readiness, rate cards and lifecycle decisions.</p>
+            <span>People in motion</span>
+            <h1>Every person ready.<br /><em>Every route moving.</em></h1>
+            <p>Onboarding, identity, performance and pay in one clear operating system for the field network.</p>
           </div>
           <div className="workforce-login-route" aria-hidden="true">
             <span><UsersRound size={17} /></span><i /><span><Fingerprint size={17} /></span><i /><span><ShieldCheck size={17} /></span>

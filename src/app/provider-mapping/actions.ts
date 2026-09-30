@@ -56,6 +56,16 @@ function rowRequired(formData: FormData, index: number, field: string, label: st
   return value;
 }
 
+function stageValue(formData: FormData, index: number, field: string) {
+  return clean(formData.get(`stages[${index}][${field}]`));
+}
+
+function stageRequired(formData: FormData, index: number, field: string, label: string) {
+  const value = stageValue(formData, index, field);
+  if (!value) throw new Error(`${label} is required.`);
+  return value;
+}
+
 function rowNumber(formData: FormData, index: number, field: string, label: string) {
   const value = rowValue(formData, index, field);
   if (!value) return null;
@@ -321,4 +331,73 @@ export async function saveProviderMappingWorksheet(formData: FormData) {
   }
 
   mappingRedirect({ notice: `${savedRows} row${savedRows === 1 ? "" : "s"} saved.` });
+}
+
+export async function addProviderPaymentPeriod(formData: FormData) {
+  const authorization = await getAuthorization();
+  if (!authorization) redirect("/login");
+  if (!hasPermission(authorization, "provider_mapping", "edit") || authorization.readOnly) {
+    redirect("/unauthorized?page=provider_mapping&action=edit");
+  }
+
+  try {
+    if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
+    const index = Number(clean(formData.get("stage_row")));
+    if (!Number.isInteger(index) || index < 0) throw new Error("Select a valid associate payment period.");
+
+    const companyId = requireCompanyId(authorization);
+    const workforceId = stageRequired(formData, index, "workforce_id", "Workforce profile");
+    const mappingId = stageRequired(formData, index, "mapping_id", "Current payment period");
+    const expectedUpdatedAt = stageRequired(formData, index, "expected_updated_at", "Current payment version");
+    const effectiveFrom = stageRequired(formData, index, "effective_from", "Effective from");
+    const effectiveTo = stageValue(formData, index, "effective_to");
+    const paymentMethodId = stageRequired(formData, index, "payment_method_id", "Payment method");
+    const reason = stageRequired(formData, index, "reason", "Agreed terms or change reason");
+    const rawValues = stageRequired(formData, index, "payment_values_json", "Payment details");
+    let paymentValues: Record<string, number>;
+
+    try {
+      const parsed = JSON.parse(rawValues) as Record<string, unknown>;
+      paymentValues = Object.fromEntries(Object.entries(parsed).map(([key, value]) => {
+        const number = Number(value);
+        if (!key || !Number.isFinite(number) || number < 0) throw new Error("invalid");
+        return [key, number];
+      }));
+    } catch {
+      throw new Error("Complete every payment detail with a valid amount.");
+    }
+
+    if (!isWorkforceDate(effectiveFrom) || (effectiveTo && !isWorkforceDate(effectiveTo))) {
+      throw new Error("Payment-period dates must use YYYY-MM-DD.");
+    }
+    if (effectiveTo && effectiveTo < effectiveFrom) throw new Error("Effective to cannot be before effective from.");
+    if (reason.length < 10 || reason.length > 1000) throw new Error("Explain the agreed terms or change reason in 10 to 1,000 characters.");
+
+    const result = await supabaseAdmin.rpc("workforce_save_personal_payment_stage_v4", {
+      p_company: companyId,
+      p_actor: authorization.userId,
+      p_actor_name: authorization.fullName || authorization.email || "Workforce reviewer",
+      p_workforce: workforceId,
+      p_mapping: mappingId,
+      p_expected: expectedUpdatedAt,
+      p_mode: "next",
+      p_from: effectiveFrom,
+      p_to: effectiveTo,
+      p_method: paymentMethodId,
+      p_values: paymentValues,
+      p_reason: reason,
+      p_locations: authorization.hasAllLocationAccess ? null : authorization.locationScopeIds
+    });
+    if (result.error) throw new Error(result.error.message);
+
+    revalidatePath("/provider-mapping");
+    revalidatePath("/delivery-network/rate-mapping");
+    revalidatePath("/delivery-network/lifecycle");
+    revalidatePath("/delivery-network/associates");
+    revalidatePath("/delivery-network/earnings");
+  } catch (error) {
+    mappingRedirect({ error: error instanceof Error ? error.message : "Unable to add the payment period." });
+  }
+
+  mappingRedirect({ notice: "Next payment period added with a continuous effective-date timeline." });
 }

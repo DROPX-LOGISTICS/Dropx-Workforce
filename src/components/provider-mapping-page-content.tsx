@@ -65,6 +65,7 @@ type MappingRow = {
   fuel_rate: number | string | null;
   reason: string | null;
   status: string;
+  updated_at: string;
 };
 
 type PaymentMethodRow = {
@@ -155,7 +156,8 @@ async function loadMappingData(authorization: AuthorizationContext, workforceId?
         guarantee_schedule,
         fuel_rate,
         reason,
-        status
+        status,
+        updated_at
       `)
       .eq("company_id", companyId)
       .neq("status", "cancelled")
@@ -221,7 +223,7 @@ async function loadMappingData(authorization: AuthorizationContext, workforceId?
     providerId: location.provider_id ?? undefined,
     providerName: (Array.isArray(location.providers) ? location.providers[0]?.name : location.providers?.name) ?? "Unassigned client"
   }));
-  const latestMappingByWorkerKey = new Map<string, MappingRow>();
+  const mappingHistoryByWorkerKey = new Map<string, MappingRow[]>();
   ((mappingsResult.data ?? []) as MappingRow[]).forEach((mapping) => {
     const key = mapping.workforce_id
       ? `workforce:${mapping.workforce_id}`
@@ -230,9 +232,7 @@ async function loadMappingData(authorization: AuthorizationContext, workforceId?
       : mapping.contractor_id
         ? `contractor:${mapping.contractor_id}`
         : `field_executive:${mapping.field_executive_id}`;
-    if (!latestMappingByWorkerKey.has(key)) {
-      latestMappingByWorkerKey.set(key, mapping);
-    }
+    mappingHistoryByWorkerKey.set(key, [...(mappingHistoryByWorkerKey.get(key) ?? []), mapping]);
   });
 
   const workers = ((workforceResult.data ?? []) as WorkforceRow[])
@@ -253,9 +253,28 @@ async function loadMappingData(authorization: AuthorizationContext, workforceId?
     }));
 
   const mappings = workers.map((worker) => {
-      const mapping = latestMappingByWorkerKey.get(`workforce:${worker.workforceId}`)
-        ?? latestMappingByWorkerKey.get(`${worker.legacySourceType}:${worker.legacySourceId}`);
+      const history = [
+        ...(mappingHistoryByWorkerKey.get(`workforce:${worker.workforceId}`) ?? []),
+        ...(mappingHistoryByWorkerKey.get(`${worker.legacySourceType}:${worker.legacySourceId}`) ?? [])
+      ].filter((period, index, all) => all.findIndex((candidate) => candidate.id === period.id) === index)
+        .sort((first, second) => second.effective_from.localeCompare(first.effective_from));
+      const mapping = history[0];
       const stationId = mapping?.station_id ?? worker.locationId;
+      const paymentPeriods = mapping ? history.filter((period) =>
+        period.provider_id === mapping.provider_id
+        && period.provider_member_id === mapping.provider_member_id
+        && period.station_id === mapping.station_id
+      ).map((period) => ({
+        id: period.id,
+        providerMemberId: period.provider_member_id,
+        effectiveFrom: period.effective_from,
+        effectiveTo: period.effective_to ?? "",
+        paymentMethodId: period.payment_method_id ?? "",
+        paymentValues: Object.fromEntries(Object.entries(period.payment_values ?? {}).filter(([key]) => !key.startsWith("DROPX_")).map(([key, value]) => [key, amountValue(value as number|string|null)])),
+        payType: period.pay_type,
+        reason: period.reason ?? "",
+        updatedAt: period.updated_at
+      })) : [];
       return {
       id: worker.id,
       workforceId: worker.workforceId,
@@ -280,7 +299,8 @@ async function loadMappingData(authorization: AuthorizationContext, workforceId?
       guaranteeAmount: amountValue(mapping?.guarantee_amount),
       guaranteeSchedule: mapping?.guarantee_schedule ?? "",
       fuelRate: amountValue(mapping?.fuel_rate),
-      reason: mapping?.reason ?? ""
+      reason: mapping?.reason ?? "",
+      paymentPeriods
     };
   });
 

@@ -582,7 +582,9 @@
 .workforce-product.wf-people-v2 .mapping-toolbar { grid-template-columns:minmax(230px,1fr) 132px 132px 120px auto; gap:7px; padding:10px 14px; border-top:1px solid #eceef2; border-bottom:1px solid #e5e8ee; background:#fafbfc; }
 .workforce-product.wf-people-v2 .mapping-toolbar input,
 .workforce-product.wf-people-v2 .mapping-toolbar select { height:33px; border-radius:7px; font-size:9.5px; }
-.workforce-product.wf-people-v2 .mapping-toolbar-summary { align-self:end; min-height:33px; }
+.workforce-product.wf-people-v2 .mapping-toolbar-summary { display:flex; align-items:center; align-self:end; justify-content:flex-end; flex-wrap:wrap; gap:7px; min-height:33px; }
+.workforce-product.wf-people-v2 .mapping-toolbar-summary>span { margin-right:auto; }
+.workforce-product.wf-people-v2 .mapping-toolbar-summary .mapping-download { width:auto; }
 .workforce-product.wf-people-v2 .mapping-bulk-tools { min-height:44px; padding:7px 14px; border-color:#e8ebef; background:#fff; }
 .workforce-product.wf-people-v2 .mapping-bulk-tools label,
 .workforce-product.wf-people-v2 .mapping-bulk-tools a { font-size:9px; }
@@ -642,6 +644,8 @@
  .workforce-product.wf-people-v2 .mapping-next-period .button { justify-self:start; }
 }
 @media(max-width:900px) {
+ .workforce-product.wf-people-v2 .panel-head { align-items:center; flex-direction:row; flex-wrap:wrap; gap:9px; }
+ .workforce-product.wf-people-v2 .panel-head>.button { width:auto; margin-left:auto; }
  .workforce-product.wf-people-v2 .wf-onboarding-command { grid-template-columns:1fr; }
  .workforce-product.wf-people-v2 .wf-onboarding-command>div { border-right:0; border-bottom:1px solid #e8ebf0; }
  .workforce-product.wf-people-v2 .wf-client-stage-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }

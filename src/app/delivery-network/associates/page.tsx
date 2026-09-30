@@ -1,5 +1,6 @@
 import { loadWorkforceLifecycle } from "@/lib/workforce-lifecycle-data";
 import type { LifecycleReadiness } from "@/lib/workforce-workbench";
+import type { PartnerOnboardingState } from "@/lib/partner-onboarding";
 import { AssociateWorkbench } from "@/components/associate-workbench";
 import { WorkforceLifecycleContent } from "@/components/workforce-lifecycle-content";
 import { AppShell } from "@/components/app-shell";
@@ -32,12 +33,14 @@ export default async function WorkforceAssociatesPage({
   let records: WorkforceCommunicationRecipient[] = [];
   let designations: RegisterDesignation[] = [];
   let readiness = new Map<string, LifecycleReadiness>();
+  let partners = new Map<string, PartnerOnboardingState>();
   let error: string | null = null;
 
   try {
     const lifecycle = await loadWorkforceLifecycle(authorization);
     records = lifecycle.records;
     readiness = lifecycle.readiness;
+    partners = lifecycle.partners;
 
     if (supabaseAdmin) {
       const designationResult = await supabaseAdmin
@@ -55,7 +58,7 @@ export default async function WorkforceAssociatesPage({
     error = loadError instanceof Error ? loadError.message : "Unable to load the active associate register.";
   }
 
-  const activeRecords = records.filter((record) => readiness.get(record.accountId)?.phase === "active");
+  const activeRecords = records.filter((record) => readiness.get(record.accountId)?.phase === "active" || partners.get(record.accountId)?.mapping_confirmed);
   const workspaceHref = (id: string) => `/delivery-network/associates?person=${encodeURIComponent(id)}&section=journey`;
   const rows: FieldExecutiveListRow[] = activeRecords.map((record) => ({
     id: `${record.profileType}:${record.accountId}`,
@@ -69,7 +72,7 @@ export default async function WorkforceAssociatesPage({
     model: record.model || "-",
     designation: record.designation || "-",
     isActive: true,
-    status: "Active",
+    status: readiness.get(record.accountId)?.phase === "active" ? "Active" : "Client ID active",
     canEdit,
     workforceId: record.accountId,
     viewHref: record.profileType === "workforce" && hasPermission(authorization, "people_review", "access")

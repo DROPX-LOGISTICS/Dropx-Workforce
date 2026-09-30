@@ -90,9 +90,9 @@ test('lifecycle phases route to their single owning workspace',async()=>{
  const {lifecyclePhaseDestination}=await import('./workforce-workspace-navigation.ts');
  assert.equal(lifecyclePhaseDestination('registration'),'/delivery-network/onboarding?area=registration');
  assert.equal(lifecyclePhaseDestination('review'),'/delivery-network/onboarding?area=registration');
- assert.equal(lifecyclePhaseDestination('partner'),'/delivery-network/onboarding?area=client');
- assert.equal(lifecyclePhaseDestination('activation'),'/delivery-network/onboarding?area=client');
- assert.equal(lifecyclePhaseDestination('mapping'),'/delivery-network/rate-mapping');
+  assert.equal(lifecyclePhaseDestination('partner'),'/delivery-network/onboarding?area=client');
+  assert.equal(lifecyclePhaseDestination('activation'),'/delivery-network/onboarding?area=client');
+  assert.equal(lifecyclePhaseDestination('mapping'),'/delivery-network/onboarding?area=client&status=mapping');
  assert.equal(lifecyclePhaseDestination('pay'),'/delivery-network/rate-mapping');
  assert.equal(lifecyclePhaseDestination('active'),'/delivery-network/associates');
 });

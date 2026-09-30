@@ -5,12 +5,13 @@ import { Download } from "lucide-react";
 import { useFormStatus } from "react-dom";
 import { saveProviderMappingWorksheet } from "@/app/provider-mapping/actions";
 import { SubmitButton } from "@/components/submit-button";
-import {mappingRate,mappingRateColumns,stageMappingImport} from '@/lib/provider-mapping-bulk';
+import {stageMappingImport} from '@/lib/provider-mapping-bulk';
 
 export type LocationOption = {
   id: string;
   label: string;
   providerId?: string;
+  providerName?: string;
 };
 
 export type MappingWorksheetRow = {
@@ -158,6 +159,8 @@ export function ProviderMappingWorksheet({
   const [mappingStatus, setMappingStatus] = useState("all");
   const [directionView, setDirectionView] = useState<"provider" | "dropx">('dropx');
   const [stationFilter, setStationFilter] = useState(initialStation);
+  const [providerFilter, setProviderFilter] = useState("");
+  const [editingIndex, setEditingIndex] = useState<number | null>(mappings.length === 1 ? 0 : null);
   const [bulkMessage,setBulkMessage]=useState('');
   const [bulkBusy,setBulkBusy]=useState(false);
   const [pageSize, setPageSize] = useState("25");
@@ -261,10 +264,15 @@ export function ProviderMappingWorksheet({
     () => new Map(locations.map((location) => [location.id, location.label])),
     [locations]
   );
+  const locationProviderById = useMemo(
+    () => new Map(locations.map((location) => [location.id, location.providerId ?? ""])),
+    [locations]
+  );
   const paymentMethodById = useMemo(
     () => new Map(paymentMethods.map((method) => [method.id, method])),
     [paymentMethods]
   );
+  const providerOptions = useMemo(() => [...new Map(locations.filter((location) => location.providerId).map((location) => [location.providerId!, location.providerName || "Client"])).entries()], [locations]);
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
   const filteredIndexes = rows.flatMap((row, index) => {
     const matchesSearch = !normalizedSearch || [
@@ -273,16 +281,18 @@ export function ProviderMappingWorksheet({
       row.providerMemberId,
       locationLabelById.get(row.stationId) ?? ""
     ].some((value) => value.toLocaleLowerCase().includes(normalizedSearch));
-    const mapped = Boolean(row.mappingId || (row.providerMemberId && row.paymentMethodId));
-    const matchesStatus = mappingStatus === "all" || (mappingStatus === "mapped" ? mapped : !mapped);
+    const clientIdConfirmed = Boolean(row.providerMemberId.trim());
+    const matchesStatus = mappingStatus === "all" || (mappingStatus === "mapped" ? clientIdConfirmed : !clientIdConfirmed);
     const matchesStation = !stationFilter || row.stationId === stationFilter;
-    return matchesSearch && matchesStatus && matchesStation ? [index] : [];
+    const matchesProvider = !providerFilter || locationProviderById.get(row.stationId) === providerFilter;
+    return matchesSearch && matchesStatus && matchesStation && matchesProvider ? [index] : [];
   });
   const filteredProviderPending = providerPending.filter((row) => {
     const matchesSearch = !normalizedSearch || [row.providerMemberId, row.providerName, row.sourceName, row.stationCode]
       .some((value) => value.toLocaleLowerCase().includes(normalizedSearch));
     const station = locations.find((location) => location.id === stationFilter)?.label.split(" - ")[0] ?? "";
-    return matchesSearch && (!stationFilter || row.stationCode === station);
+    const providerName = providerOptions.find(([id]) => id === providerFilter)?.[1] ?? "";
+    return matchesSearch && (!stationFilter || row.stationCode === station) && (!providerFilter || row.providerName === providerName);
   });
   const numericPageSize = Number(pageSize);
   const totalPages = Math.max(1, Math.ceil(filteredIndexes.length / numericPageSize));
@@ -333,12 +343,12 @@ export function ProviderMappingWorksheet({
     const index=rows.findIndex(row=>row.workforceId===pending.suggestedWorkforceId);
     if(index<0)return;
     updateRow(index,"providerMemberId",pending.providerMemberId);
-    setDirectionView("dropx");setMappingStatus("all");setStationFilter(rows[index].stationId);setSearchQuery(rows[index].dropxId);
+    setDirectionView("dropx");setMappingStatus("all");setStationFilter(rows[index].stationId);setSearchQuery(rows[index].dropxId);setEditingIndex(index);
   }
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, mappingStatus, pageSize, stationFilter, directionView]);
+  }, [searchQuery, mappingStatus, pageSize, stationFilter, providerFilter, directionView]);
 
   if (!rows.length) {
     return (
@@ -369,13 +379,13 @@ export function ProviderMappingWorksheet({
           {directionView === "dropx" ? <SubmitButton confirmMessage="Save all staged ID and rate changes? Existing permission and payroll locks still apply." disabled={!canEdit || !hasDirtyRows || bulkBusy} disabledText={canEdit ? "No edits" : "No edit access"}>Save all</SubmitButton> : null}
         </div>
 
-        <div className="mapping-direction-tabs">
-          <button className={directionView==='dropx'&&mappingStatus==='all'?'active':''} onClick={()=>{setDirectionView('dropx');setMappingStatus('all');}} type="button">All IDs & rates <strong>{rows.length}</strong></button>
-          <button className={directionView === "provider" ? "active" : ""} onClick={() => { setDirectionView("provider"); setMappingStatus("all"); }} type="button">
-            Provider IDs pending DropX ID <strong>{providerPending.length}</strong>
-          </button>
+        <div className="mapping-direction-tabs" aria-label="Mapping queues">
+          <button className={directionView==='dropx'&&mappingStatus==='all'?'active':''} onClick={()=>{setDirectionView('dropx');setMappingStatus('all');}} type="button">All associates <strong>{rows.length}</strong></button>
           <button className={directionView === "dropx"&&mappingStatus==='unmapped' ? "active" : ""} onClick={() => { setDirectionView("dropx"); setMappingStatus("unmapped"); }} type="button">
-            DropX IDs pending provider ID <strong>{rows.filter((row) => !row.providerMemberId.trim()).length}</strong>
+            Client ID pending <strong>{rows.filter((row) => !row.providerMemberId.trim()).length}</strong>
+          </button>
+          <button className={directionView === "provider" ? "active" : ""} onClick={() => { setDirectionView("provider"); setMappingStatus("all"); }} type="button">
+            DropX match pending <strong>{providerPending.length}</strong>
           </button>
         </div>
 
@@ -394,11 +404,17 @@ export function ProviderMappingWorksheet({
               {locations.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}
             </select>
           </label>
+          <label>Client
+            <select onChange={(event) => setProviderFilter(event.target.value)} value={providerFilter}>
+              <option value="">All clients</option>
+              {providerOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </select>
+          </label>
           {directionView === "dropx" ? <label>Status
             <select onChange={(event) => setMappingStatus(event.target.value)} value={mappingStatus}>
               <option value="all">All mappings</option>
-              <option value="mapped">Mapped</option>
-              <option value="unmapped">Provider ID pending</option>
+              <option value="mapped">Client ID confirmed</option>
+              <option value="unmapped">Client ID pending</option>
             </select>
           </label> : <span className="mapping-period-note">MTD source: {providerPendingPeriod}</span>}
           <label>Rows
@@ -435,9 +451,6 @@ export function ProviderMappingWorksheet({
           {bulkMessage?<p role="status">{bulkMessage}</p>:null}
         </div>:null}
         </> : null}
-        {directionView==='dropx'?<div className="mapping-rate-summary"><table aria-label="Station provider IDs and rates"><thead><tr><th>Associate / DropX ID</th><th>Station</th><th>Provider ID</th><th>Payment method</th>{mappingRateColumns.map(([code,label])=><th key={code}>{label}</th>)}<th>Other pay terms</th><th>Effective dates</th><th>Setup</th></tr></thead><tbody>
-          {[...paginatedIndexes].map(index=>{const row=rows[index];const fallback:Record<string,string>={DELIVERY:row.deliveryRate,CRETURN:row.pickupRate,SELLER_PICKUP:row.mfnRate,SLLLER_RETURN:row.mfnReturnRate};return <tr key={row.id}><td><strong>{row.dropxName}</strong><small>{row.dropxId} · {row.designationCode}{dirtyRows[index]?' · Unsaved':''}</small></td><td>{locationLabelById.get(row.stationId)}</td><td>{row.providerMemberId||'Not mapped'}</td><td>{paymentMethodById.get(row.paymentMethodId)?.name||(Number(row.paymentValues.DROPX_PERSONAL_TERMS)===1?'Individual dated terms':'Not configured')}</td>{mappingRateColumns.map(([code])=><td key={code}>{mappingRate(row.paymentValues,code,fallback[code])}</td>)}<td>{Object.entries(row.paymentValues).filter(([code])=>!code.startsWith('DROPX_')&&!mappingRateColumns.some(([key])=>key===code)).map(([code,value])=><small key={code}>{code.replaceAll('_',' ')}: {mappingRate({[code]:value},code)}</small>)}</td><td>{row.effectiveFrom}<small>to {row.effectiveTo||'ongoing'}</small></td><td><a href={`#mapping-${row.id}`}>Edit here</a><br/><a href={`/delivery-network/lifecycle?person=${row.workforceId}&section=payments`}>Profile & history</a></td></tr>;})}
-        </tbody></table><small>Rates shown for the displayed mapping and effective dates; — means not configured for that component.</small></div>:null}
         {directionView === "provider" ? <div className="table-wrap mapping-pending-table"><table><thead><tr><th>Provider ID</th><th>Source name</th><th>Provider</th><th>Station</th><th>Activity</th><th>Last seen</th><th>Suggested associate</th><th>Reason</th></tr></thead><tbody>
           {filteredProviderPending.map((row) => <tr key={row.id}><td><strong className="mono">{row.providerMemberId}</strong></td><td>{row.sourceName}</td><td>{row.providerName}</td><td>{row.stationCode}</td><td>{row.deliveries.toLocaleString("en-IN")} delivered<small>{row.dailyRows} daily rows</small></td><td>{row.lastSeen}<small>First {row.firstSeen}</small></td><td>{row.suggestedWorkforceId?<><strong>{row.suggestedName}</strong><small>{row.suggestedDropxId} · exact station/name suggestion</small><button className="button secondary compact" type="button" onClick={()=>applySuggestion(row)}>Use suggestion</button></>:"No unique safe match"}</td><td><span className="wf-pay-state unmapped">Pending approval</span><small>{row.reason}</small></td></tr>)}
           {!filteredProviderPending.length ? <tr><td className="empty-cell" colSpan={8}>No provider IDs are pending for these filters.</td></tr> : null}
@@ -460,8 +473,16 @@ export function ProviderMappingWorksheet({
               <input type="hidden" name={`rows[${index}][station_id]`} value={row.stationId} />
               <input type="hidden" name={`rows[${index}][payment_values_json]`} value={JSON.stringify(row.paymentValues)} />
 
+              <div className="mapping-card-summary">
+                <div><span className="mapping-dropx-id mono">{row.dropxId}</span><strong>{row.dropxName}</strong><small>{row.designationCode} · {locationLabelById.get(row.stationId)}</small></div>
+                <div><small>Client ID</small><strong>{row.providerMemberId || "Pending"}</strong></div>
+                <div><small>Payment method</small><strong>{paymentMethodById.get(row.paymentMethodId)?.name || "Not configured"}</strong></div>
+                <div><small>Effective</small><strong>{row.effectiveFrom}{row.effectiveTo ? ` – ${row.effectiveTo}` : " onward"}</strong></div>
+                <button className="button secondary compact" onClick={() => setEditingIndex((current) => current === index ? null : index)} type="button">{editingIndex === index ? "Close" : "Edit setup"}</button>
+              </div>
               {dirtyRows[index] ? <span className="unsaved-badge mapping-unsaved-badge">Unsaved</span> : null}
 
+              <div className="mapping-card-editor" hidden={editingIndex !== index}>
               <div className="mapping-identity">
                 <span className="mapping-dropx-id mono">{row.dropxId}</span>
                 <strong>{row.dropxName || "-"}</strong>
@@ -536,6 +557,7 @@ export function ProviderMappingWorksheet({
                   <RowSaveButton canEdit={canEdit} dirty={dirtyRows[index]} index={index} />
                 </div>
                 {rowErrors[index] ? <div className="mapping-row-error">{rowErrors[index]}</div> : null}
+              </div>
               </div>
             </div>
           ))}

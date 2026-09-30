@@ -4,7 +4,7 @@ import {PartnerProgressNote} from "./partner-progress-note";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, EllipsisVertical, Eye, Pencil, ShieldAlert, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { PendingLink } from "@/components/pending-link";
-import { queueAmazonInvitation, retryAmazonInvitation } from "@/app/delivery-network/id-onboarding/actions";
+import { queueAmazonInvitation } from "@/app/delivery-network/id-onboarding/actions";
 import { SubmitButton } from "@/components/submit-button";
 import type { PartnerOnboardingState } from "@/lib/partner-onboarding";
 import { StatusPill } from "@/components/status-pill";
@@ -43,7 +43,7 @@ function PartnerNextAction({row}:{row:FieldExecutiveListRow}){
  if(row.nextActionHref)return <PendingLink className="button secondary compact" href={row.nextActionHref}>{row.nextActionLabel||"Open workflow"}</PendingLink>;
  const state=row.partnerOnboarding;
  if(!state)return null;
- return <div style={{maxWidth:270,fontSize:12}}><PartnerProgressNote state={state} workforceId={row.workforceId!} canEdit={Boolean(row.canEdit)}/>{state.can_trigger&&row.canTriggerPartner?<form action={queueAmazonInvitation}><input type="hidden" name="return_to_register" value="1"/><input type="hidden" name="workforce_id" value={row.workforceId}/><input type="hidden" name="amazon_email" value={row.email}/><input type="hidden" name="source_portal" value="workforce"/><SubmitButton className="button compact" pendingText="Requesting">{state.invitation_status==='failed'?'Retry ID request':'Create Amazon ID'}</SubmitButton></form>:state.stage==='mapping_pending'?<PendingLink href={`/delivery-network/rate-mapping?station=${encodeURIComponent(row.location)}`}>Review provider mapping</PendingLink>:null}</div>;
+ return <div style={{maxWidth:270,fontSize:12}}><PartnerProgressNote state={state} workforceId={row.workforceId!} canEdit={Boolean(row.canEdit)}/>{state.can_trigger&&state.adapter==='amazon'&&row.canTriggerPartner?<form action={queueAmazonInvitation}><input type="hidden" name="return_to_register" value="1"/><input type="hidden" name="workforce_id" value={row.workforceId}/><input type="hidden" name="amazon_email" value={row.email}/><input type="hidden" name="source_portal" value="workforce"/><SubmitButton className="button compact" pendingText="Requesting">{state.invitation_status==='failed'?`Retry ${state.provider_name} ID`:`Request ${state.provider_name} ID`}</SubmitButton></form>:state.stage==='mapping_pending'?<PendingLink href={`/delivery-network/rate-mapping?station=${encodeURIComponent(row.location)}`}>Review provider mapping</PendingLink>:state.stage==='partner_setup_pending'&&state.adapter==='manual'?<span className="status-badge neutral">Manual {state.provider_name} setup</span>:null}</div>;
 }
 const pageSize = 20;
 

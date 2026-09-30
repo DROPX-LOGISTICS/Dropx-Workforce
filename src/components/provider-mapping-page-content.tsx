@@ -21,6 +21,7 @@ type LocationRow = {
   station_code: string;
   station_name: string | null;
   provider_id: string | null;
+  providers?: { name?: string | null } | Array<{ name?: string | null }> | null;
 };
 
 type WorkforceRow = {
@@ -113,7 +114,7 @@ async function loadMappingData(authorization: AuthorizationContext, workforceId?
   const [locationsResult, workforceResult, designationsResult, mappingsResult, paymentMethodsResult, paymentSourcesResult] = await Promise.all([
     supabaseAdmin
       .from("stations")
-      .select("id, station_code, station_name, provider_id")
+      .select("id, station_code, station_name, provider_id, providers (name)")
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("station_code"),
@@ -217,7 +218,8 @@ async function loadMappingData(authorization: AuthorizationContext, workforceId?
     label: location.station_name && location.station_name !== location.station_code
       ? `${location.station_code} - ${location.station_name}`
       : location.station_code,
-    providerId: location.provider_id ?? undefined
+    providerId: location.provider_id ?? undefined,
+    providerName: (Array.isArray(location.providers) ? location.providers[0]?.name : location.providers?.name) ?? "Unassigned client"
   }));
   const latestMappingByWorkerKey = new Map<string, MappingRow>();
   ((mappingsResult.data ?? []) as MappingRow[]).forEach((mapping) => {

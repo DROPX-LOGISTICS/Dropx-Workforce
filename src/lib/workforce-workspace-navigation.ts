@@ -45,7 +45,8 @@ export function lifecyclePhaseDestination(phase: string) {
   if (phase === 'active') return '/delivery-network/associates';
   if (phase === 'closed') return '/delivery-network/lifecycle?view=closed';
   if (phase === 'registration' || phase === 'review') return '/delivery-network/onboarding?area=registration';
-  if (phase === 'mapping' || phase === 'pay') return '/delivery-network/rate-mapping';
+  if (phase === 'mapping') return '/delivery-network/onboarding?area=client&status=mapping';
+  if (phase === 'pay') return '/delivery-network/rate-mapping';
   return '/delivery-network/onboarding?area=client';
 }
 

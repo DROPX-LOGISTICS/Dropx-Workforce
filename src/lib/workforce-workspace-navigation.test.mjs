@@ -62,6 +62,7 @@ test('compact navigation preserves every authorized destination exactly once',as
  assert.equal(activeWorkspace(compact,'/users','User Roles')?.label,'Settings');
  assert.equal(activeWorkspace(compact,'/delivery-network/onboarding/associates','Bulk upload')?.label,'Onboarding');
  assert.equal(compact.find(item=>item.label==='Referrals')?.children,undefined);
+ assert.equal(compact.find(item=>item.label==='Associates')?.children,undefined);
 });
 
 test('lifecycle count links preserve the exact stage rather than merging joining queues',async()=>{

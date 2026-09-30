@@ -4,6 +4,13 @@ function trimEnv(value: string | undefined) {
   return (value ?? "").trim().replace(/^["']|["']$/g, "");
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Worker responses can also contain IDfy-only observations such as `idfy:19901162`. */
+export function isCanonicalWorkforceId(value: string | null | undefined) {
+  return UUID_PATTERN.test((value ?? "").trim());
+}
+
 export function workforceAmazonWorkerConfig() {
   const baseUrl = trimEnv(process.env.WORKFORCE_AMAZON_WORKER_URL || process.env.WORKFORCE_WORKER_URL);
   const adminKey = trimEnv(

@@ -8,7 +8,7 @@ import { requireCompanyId } from "@/lib/company-scope";
 import { amazonEmailFromPattern } from "@/lib/amazon-activation";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { readAllRows } from "@/lib/supabase-pagination";
-import { callWorkforceAmazonWorker, workforceAmazonWorkerConfig } from "@/lib/workforce-amazon-worker";
+import { callWorkforceAmazonWorker, isCanonicalWorkforceId, workforceAmazonWorkerConfig } from "@/lib/workforce-amazon-worker";
 import {
   mapAmazonStation,
   onboardAndInviteAmazon,
@@ -108,11 +108,14 @@ export default async function AmazonLifecyclePage({
   const settingsByStation = new Map(settings.map((s) => [s.station_id as string, s]));
 
   if(supabaseAdmin){
-    let scoped=supabaseAdmin.from("workforce").select("id").eq("company_id",company).in("id",rows.length?rows.map(row=>row.dropx.id):["00000000-0000-0000-0000-000000000000"]);
+    const linkedWorkforceIds=[...new Set(rows.map(row=>row.dropx.id).filter(isCanonicalWorkforceId))];
+    let scoped=supabaseAdmin.from("workforce").select("id").eq("company_id",company).in("id",linkedWorkforceIds.length?linkedWorkforceIds:["00000000-0000-0000-0000-000000000000"]);
     if(!auth.hasAllLocationAccess)scoped=scoped.in("location_id",auth.locationScopeIds.length?auth.locationScopeIds:["00000000-0000-0000-0000-000000000000"]);
     const result=await scoped;if(result.error)throw new Error(result.error.message);
     const permitted=await loadPartnerOnboardingStates(supabaseAdmin,company,(result.data??[]).map(row=>row.id));
-    rows=rows.filter(row=>permitted.get(row.dropx.id)?.adapter==='amazon');
+    rows=rows.filter(row=>isCanonicalWorkforceId(row.dropx.id)
+      ? permitted.get(row.dropx.id)?.adapter==='amazon'
+      : auth.hasAllLocationAccess&&Boolean(row.idfy));
     counts={notOnboarded:rows.filter(r=>r.bucket==='not_onboarded').length,onboarded:rows.filter(r=>r.bucket==='onboarded').length,inProgress:rows.filter(r=>r.bucket==='in_progress').length,idfyIssues:rows.filter(r=>r.idfy?.hasInsufficiency).length};
   }else{rows=[];}
   const filtered = rows.filter((row) => {
@@ -236,6 +239,7 @@ export default async function AmazonLifecyclePage({
               {filtered.map((row) => {
                 const cfg = row.dropx.locationId ? settingsByStation.get(row.dropx.locationId) : null;
                 const inviteEmail = row.dropx.email || "";
+                const linkedAssociate = isCanonicalWorkforceId(row.dropx.id);
                 return (
                   <tr key={row.dropx.id}>
                     <td>
@@ -292,7 +296,7 @@ export default async function AmazonLifecyclePage({
                       )}
                     </td>
                     <td>
-                      {canEdit && row.bucket === "not_onboarded" && row.dropx.locationId ? (
+                      {canEdit && linkedAssociate && row.bucket === "not_onboarded" && row.dropx.locationId ? (
                         <form action={onboardAndInviteAmazon} className="inline-actions">
                           <input type="hidden" name="view" value={view} />
                           <input type="hidden" name="workforce_id" value={row.dropx.id} />
@@ -305,7 +309,7 @@ export default async function AmazonLifecyclePage({
                           </SubmitButton>
                         </form>
                       ) : null}
-                      {canEdit && row.amazon?.providerId && !(row.amazon.serviceAreaIds?.length) ? (
+                      {canEdit && linkedAssociate && row.amazon?.providerId && !(row.amazon.serviceAreaIds?.length) ? (
                         <form action={mapAmazonStation} className="inline-actions">
                           <input type="hidden" name="view" value={view} />
                           <input type="hidden" name="workforce_id" value={row.dropx.id} />
@@ -316,7 +320,7 @@ export default async function AmazonLifecyclePage({
                           </SubmitButton>
                         </form>
                       ) : null}
-                      {!canEdit ? <span className="subtle">View only</span> : null}
+                      {!linkedAssociate ? <span className="subtle">Match to an associate before Amazon actions</span> : !canEdit ? <span className="subtle">View only</span> : null}
                     </td>
                   </tr>
                 );

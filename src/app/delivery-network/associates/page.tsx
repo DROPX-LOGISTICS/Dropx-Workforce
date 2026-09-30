@@ -121,7 +121,13 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
         eyebrow="Workforce"
         title="Associate Lifecycle"
         subtitle="Open an associate to review, complete setup, manage rates or settle an exit."
-        action={canAdd ? <PendingLink className="button compact" href="/delivery-network/onboarding/associates">Invite associate</PendingLink> : null}
+        action={<div className="component-chip-list">
+          {hasPermission(authorization,"executive_id_onboarding","access")?<>
+            <PendingLink className="button secondary compact" href="/delivery-network/amazon-lifecycle?view=not_onboarded">Amazon onboarding</PendingLink>
+            <PendingLink className="button secondary compact" href="/delivery-network/amazon-lifecycle?view=idfy">IDfy BGC</PendingLink>
+          </>:null}
+          {canAdd ? <PendingLink className="button compact" href="/delivery-network/onboarding/associates">Invite associate</PendingLink> : null}
+        </div>}
       />
 
       {error ? (

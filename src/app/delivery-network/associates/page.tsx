@@ -29,7 +29,6 @@ function profileHref(record: WorkforceCommunicationRecipient, mode: "edit" | "vi
 export default async function WorkforceAssociatesPage({searchParams={}}:{searchParams?:{view?:string;station?:string;stage?:string;step?:string;due?:string;q?:string;notice?:string;error?:string;person?:string;section?:string;phase?:string}}) {
   const authorization = await requirePagePermission("delivery_associates", "access");
   const companyId = requireCompanyId(authorization);
-  const canAdd = hasPermission(authorization, "delivery_associates", "add")&&!authorization.readOnly;
   const canEdit = hasPermission(authorization, "delivery_associates", "edit")&&!authorization.readOnly;
   let records: WorkforceCommunicationRecipient[] = [];
   let designations: RegisterDesignation[] = [];
@@ -116,18 +115,11 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
   }));
 
   return (
-    <AppShell active="Associate Lifecycle" pageCode="delivery_associates">
+    <AppShell active="Associates" pageCode="delivery_associates">
       <PageHead
         eyebrow="Workforce"
-        title="Associate Lifecycle"
-        subtitle="Open an associate to review, complete setup, manage rates or settle an exit."
-        action={<div className="component-chip-list">
-          {hasPermission(authorization,"executive_id_onboarding","access")?<>
-            <PendingLink className="button secondary compact" href="/delivery-network/amazon-lifecycle?view=not_onboarded">Amazon onboarding</PendingLink>
-            <PendingLink className="button secondary compact" href="/delivery-network/amazon-lifecycle?view=idfy">IDfy BGC</PendingLink>
-          </>:null}
-          {canAdd ? <PendingLink className="button compact" href="/delivery-network/onboarding/associates">Invite associate</PendingLink> : null}
-        </div>}
+        title="Associates"
+        subtitle="Review active and pending workforce records, resolve setup gaps and manage the full lifecycle."
       />
 
       {error ? (
@@ -138,11 +130,10 @@ export default async function WorkforceAssociatesPage({searchParams={}}:{searchP
       {searchParams.notice ? <div className="message-panel success">{searchParams.notice}</div> : null}
       {searchParams.error ? <div className="message-panel error">{searchParams.error}</div> : null}
 
-      <details style={{marginBottom:12,fontSize:12}}><summary>Mapping queues & configuration</summary><div className="component-chip-list" style={{marginTop:8}}><PendingLink className="button secondary compact" href="/delivery-network/rate-mapping">Provider mapping · both queues</PendingLink><PendingLink className="button secondary compact" href="/delivery-network/amazon-onboarding-settings?tab=workflow">Workflow rules</PendingLink></div></details>
       <section className="performance-summary-grid" aria-label="Associate lifecycle progress">
-        <article><span>Registration & review</span><strong>{stationRecords.filter(record=>['registration','review'].includes(phaseFor(record))).length}</strong><small>Complete details before ID setup</small></article>
-        <article><span>Due now</span><strong>{stationRecords.filter(record=>partnerStates.get(record.accountId)?.due_kind).length}</strong><PendingLink href={`/delivery-network/associates?view=pending&due=1&station=${encodeURIComponent(searchParams.station||'')}`}>Review overdue invitations & follow-ups</PendingLink></article>
-        <article><span>ID & pay pending</span><strong>{stationRecords.filter(record=>['mapping','pay'].includes(phaseFor(record))).length}</strong><small>Confirm mapping and effective rates</small></article>
+        <article><span>Total associates</span><strong>{stationRecords.length}</strong><small>All visible workforce records</small></article>
+        <article><span>Needs attention</span><strong>{stationRecords.filter(record=>viewMatches(record,'pending')).length}</strong><small>Review incomplete lifecycle steps</small></article>
+        <article><span>Mapping & pay</span><strong>{stationRecords.filter(record=>['mapping','pay'].includes(phaseFor(record))).length}</strong><small>Provider ID or rate pending</small></article>
         <article><span>Active</span><strong>{stationRecords.filter(record=>viewMatches(record,'active')).length}</strong><small>Confirmed setup</small></article>
       </section>
       {searchParams.due?<p role="status">Showing overdue invitations and follow-ups. <PendingLink href="/delivery-network/associates?view=pending">Show all pending</PendingLink></p>:null}

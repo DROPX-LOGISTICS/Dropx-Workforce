@@ -21,12 +21,11 @@ export default function WorkforceAssociateOnboardingPage({
     <FieldExecutivePageContent
       hideList
       profileOnly={Boolean(searchParams?.edit||searchParams?.view)}
-      activeLabel="Associate Lifecycle"
+      activeLabel="Invite Associate"
       addTitle="Invite Workforce associate"
       bulkImportDescription="Upload master-classified Workforce associates. Every registration remains compatible with the existing DropX One flow."
       bulkImportTitle="Bulk associate onboarding"
       designationCategoryFilter={["contractors", "field_executives"]}
-      designationCodeFilter={["DA"]}
       designationPeopleModule="delivery_network"
       detailSubtitle="Associate registration and profile"
       editId={searchParams?.edit}
@@ -37,7 +36,7 @@ export default function WorkforceAssociateOnboardingPage({
       listTitle="Associate onboarding requests"
       notice={searchParams?.notice}
       pageCode="delivery_associates"
-      pageSubtitle="Select the station and role, then send the registration invitation."
+      pageSubtitle="Create one invitation or upload a reviewed batch. Roles and registration rules come from Workforce masters."
       pageTitle="Invite associate"
       returnPath="/delivery-network/onboarding/associates"
       viewId={searchParams?.view}

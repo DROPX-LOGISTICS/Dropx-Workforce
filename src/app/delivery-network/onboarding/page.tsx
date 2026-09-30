@@ -1,160 +1,173 @@
-import {FieldExecutivePageContent} from "@/components/field-executive-page-content";
-import {
-  ArrowRight,
-  BadgeCheck,
-  Building2,
-  ClipboardCheck,
-  Fingerprint,
-  Route,
-  ShieldCheck,
-  Truck,
-  UserRoundPlus,
-  UsersRound
-} from "lucide-react";
+import { ArrowRight, Upload, UserRoundPlus } from "lucide-react";
+import { FieldExecutivePageContent } from "@/components/field-executive-page-content";
+import { FieldExecutiveList, type FieldExecutiveListRow } from "@/components/field-executive-list";
 import { AppShell } from "@/components/app-shell";
 import { PageHead } from "@/components/page-head";
 import { PendingLink } from "@/components/pending-link";
-import { requirePagePermission } from "@/lib/authorization";
-import { requireCompanyId } from "@/lib/company-scope";
-import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
-import { normalizeDesignationCategories } from "@/lib/designation-categories";
-import { supabaseAdmin } from "@/lib/supabase-admin";
-import {
-  loadWorkforceCommunicationRecipients,
-  type WorkforceCommunicationRecipient
-} from "@/lib/workforce-communication-recipients";
+import { hasPermission, requirePagePermission } from "@/lib/authorization";
+import { loadWorkforceLifecycle } from "@/lib/workforce-lifecycle-data";
+import type { PartnerOnboardingState } from "@/lib/partner-onboarding";
+import type { LifecycleReadiness } from "@/lib/workforce-workbench";
+import type { WorkforceCommunicationRecipient } from "@/lib/workforce-communication-recipients";
 
 export const dynamic = "force-dynamic";
 
-type DesignationRow = {
-  code: string;
-  name: string;
-  onboarding_categories?: string[] | null;
-  designation_category?: unknown;
-};
+type OnboardingView = "all" | "dropx_pending" | "client_due" | "client_progress" | "bgc_pending" | "blocked";
 
-function isOpen(record: WorkforceCommunicationRecipient) {
-  return !["active", "rejected", "cancelled"].includes(record.status.trim().toLowerCase());
+function profileHref(record: WorkforceCommunicationRecipient, mode: "edit" | "view") {
+  if (record.profileType === "field_executive") return `/delivery-network/onboarding?${mode}=${encodeURIComponent(record.accountId)}`;
+  if (record.profileType === "workforce") return `/delivery-network/onboarding/associates?${mode}=${encodeURIComponent(record.accountId)}`;
+  if (record.profileType === "contractor") return `/delivery-network/contractor-profiles?${mode}=${encodeURIComponent(record.accountId)}`;
+  return undefined;
 }
 
-function RoleTags({ roles }: { roles: DesignationRow[] }) {
-  return (
-    <div className="wf-journey-role-list">
-      {roles.map((role) => <span key={role.code}>{role.name}<small>{role.code}</small></span>)}
-    </div>
-  );
-}
-
-export default async function WorkforceOnboardingHubPage({searchParams}:{searchParams?:{edit?:string;view?:string;error?:string;notice?:string}}) {
-  if(searchParams?.edit||searchParams?.view)return <FieldExecutivePageContent profileOnly hideList activeLabel="Associate Lifecycle" pageTitle="Protected registration" pageSubtitle="Complete the existing invitation using its original registration record." designationCategoryFilter={["field_executives","contractors","vendors","workers"]} designationPeopleModule="delivery_network" returnPath="/delivery-network/onboarding" editId={searchParams.edit} viewId={searchParams.view} errorMessage={searchParams.error} notice={searchParams.notice}/>;
-  const authorization = await requirePagePermission("delivery_associates", "access");
-  const companyId = requireCompanyId(authorization);
-  let records: WorkforceCommunicationRecipient[] = [];
-  let designations: DesignationRow[] = [];
-  let error = "";
-
-  if (!supabaseAdmin) {
-    error = "Supabase service role key is not configured.";
-  } else {
-    try {
-      const [recipientRows, designationResult] = await Promise.all([
-        loadWorkforceCommunicationRecipients(authorization),
-        supabaseAdmin
-          .from("designations")
-          .select("code, name, onboarding_categories, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active)")
-          .eq("company_id", companyId)
-          .eq("is_active", true)
-          .order("name")
-      ]);
-      if (designationResult.error) throw new Error(designationResult.error.message);
-      records = recipientRows;
-      designations = ((designationResult.data ?? []) as DesignationRow[]).filter((designation) => (
-        firstDesignationBusinessCategory(designation.designation_category)?.people_module === "delivery_network"
-      ));
-    } catch (loadError) {
-      error = loadError instanceof Error ? loadError.message : "Unable to load Workforce onboarding.";
-    }
+export default async function WorkforceOnboardingPage({
+  searchParams = {},
+}: {
+  searchParams?: { edit?: string; view?: string; error?: string; notice?: string; status?: string };
+}) {
+  if (searchParams.edit || searchParams.view) {
+    return (
+      <FieldExecutivePageContent
+        activeLabel="Onboarding"
+        designationCategoryFilter={["field_executives", "contractors", "vendors", "workers"]}
+        designationPeopleModule="delivery_network"
+        editId={searchParams.edit}
+        errorMessage={searchParams.error}
+        hideList
+        notice={searchParams.notice}
+        pageSubtitle="Complete the original invitation without creating a second workforce identity."
+        pageTitle="Protected registration"
+        profileOnly
+        returnPath="/delivery-network/onboarding"
+        viewId={searchParams.view}
+      />
+    );
   }
 
-  const associateRoles = designations.filter((designation) => normalizeDesignationCategories(designation.onboarding_categories).includes("contractors"));
-  const operationsRoles = designations.filter((designation) => {
-    const categories = normalizeDesignationCategories(designation.onboarding_categories);
-    return categories.includes("vendors") || categories.includes("workers");
-  });
-  const associateRecords = records.filter((record) => record.engagementType === "associate");
-  const operationsRecords = records.filter((record) => record.engagementType === "operations");
-  const protectedInvitations = records.filter((record) => record.compatibilityMode);
+  const authorization = await requirePagePermission("delivery_associates", "access");
+  const canAdd = hasPermission(authorization, "delivery_associates", "add") && !authorization.readOnly;
+  const canEdit = hasPermission(authorization, "delivery_associates", "edit") && !authorization.readOnly;
+  const canTriggerPartner = hasPermission(authorization, "executive_id_onboarding", "edit") && !authorization.readOnly;
+  const requestedView = (["all", "dropx_pending", "client_due", "client_progress", "bgc_pending", "blocked"].includes(searchParams.status ?? "")
+    ? searchParams.status
+    : "all") as OnboardingView;
+  let records: WorkforceCommunicationRecipient[] = [];
+  let readiness = new Map<string, LifecycleReadiness>();
+  let partners = new Map<string, PartnerOnboardingState>();
+  let error = "";
 
-  const lifecycle = [
-    { label: "Role master", helper: `${designations.length} Workforce roles`, href: "/delivery-network/designations", icon: ClipboardCheck },
-    { label: "Invite", helper: "Choose the right journey", href: "/delivery-network/onboarding", icon: UserRoundPlus },
-    { label: "Registration", helper: "DropX One submission", href: "/delivery-network/associates", icon: UsersRound },
-    { label: "Verification", helper: "Documents and approval", href: "/delivery-network/lifecycle", icon: ShieldCheck },
-    { label: "IDs & rates", helper: "Provider and payout ready", href: "/delivery-network/rate-mapping", icon: Fingerprint },
-    { label: "Field active", helper: "Operational lifecycle", href: "/delivery-network/lifecycle?tab=active", icon: BadgeCheck }
+  try {
+    const lifecycle = await loadWorkforceLifecycle(authorization);
+    records = lifecycle.records;
+    readiness = lifecycle.readiness;
+    partners = lifecycle.partners;
+  } catch (loadError) {
+    error = loadError instanceof Error ? loadError.message : "Unable to load onboarding.";
+  }
+
+  const incomplete = records.filter((record) => {
+    const phase = readiness.get(record.accountId)?.phase;
+    return phase !== "active" && phase !== "closed";
+  });
+  const bucketFor = (record: WorkforceCommunicationRecipient): Exclude<OnboardingView, "all"> => {
+    const phase = readiness.get(record.accountId)?.phase;
+    const partner = partners.get(record.accountId);
+    if (phase === "registration" || phase === "review") return "dropx_pending";
+    if (partner?.stage === "background_check" || /\b(idfy|bgc|background|video verification)\b/i.test(`${partner?.action_item ?? ""} ${partner?.label ?? ""}`)) return "bgc_pending";
+    if (partner?.due_kind || ["exception", "invitation_failed"].includes(partner?.stage ?? "")) return "blocked";
+    if (partner?.can_trigger || partner?.stage === "partner_setup_pending") return "client_due";
+    return "client_progress";
+  };
+  const inBucket = (record: WorkforceCommunicationRecipient, view: OnboardingView): boolean => view === "all" || bucketFor(record) === view;
+  const count = (view: OnboardingView) => incomplete.filter((record) => inBucket(record, view)).length;
+  const visible = incomplete.filter((record) => inBucket(record, requestedView));
+  const rows: FieldExecutiveListRow[] = visible.map((record) => {
+    const state = readiness.get(record.accountId);
+    const partner = partners.get(record.accountId);
+    const needsDropxAction = state?.phase === "registration" || state?.phase === "review";
+    return {
+      id: `${record.profileType}:${record.accountId}`,
+      dropxId: record.reference || "Pending",
+      biometricId: record.biometricId || "-",
+      fullName: record.name,
+      mobile: record.mobile ? `+${record.countryCode} ${record.mobile}` : "-",
+      email: record.email || "-",
+      location: record.location || "-",
+      provider: partner?.provider_name || record.provider || "-",
+      model: record.model || "-",
+      designation: record.designation || "-",
+      isActive: false,
+      status: partner?.due_kind ? `Due · ${partner.label}` : state?.label || record.status,
+      canEdit,
+      canTriggerPartner,
+      partnerOnboarding: partner,
+      workforceId: record.accountId,
+      viewHref: profileHref(record, "view"),
+      editHref: profileHref(record, "edit"),
+      nextActionHref: needsDropxAction ? profileHref(record, state?.phase === "review" ? "edit" : "view") : undefined,
+      nextActionLabel: needsDropxAction ? (state?.phase === "review" ? "Review registration" : "Open registration") : undefined,
+    };
+  });
+
+  const viewOptions: Array<[OnboardingView, string]> = [
+    ["all", "All pending"],
+    ["dropx_pending", "DropX registration"],
+    ["client_due", "Client ID due"],
+    ["client_progress", "Client ID in progress"],
+    ["bgc_pending", "BGC pendency"],
+    ["blocked", "Blocked"],
   ];
 
   return (
-    <AppShell active="Onboard Workforce" pageCode="delivery_associates">
+    <AppShell active="Onboarding" pageCode="delivery_associates">
       <PageHead
-        action={<PendingLink className="button secondary compact" href="/delivery-network/associates?view=pending">Track registrations <ArrowRight size={15}/></PendingLink>}
+        action={canAdd ? (
+          <div className="component-chip-list">
+            <PendingLink className="button compact" href="/delivery-network/onboarding/associates"><UserRoundPlus size={15} /> Invite Associate</PendingLink>
+            <PendingLink className="button secondary compact" href="/delivery-network/onboarding/associates#bulk-upload"><Upload size={15} /> Bulk upload</PendingLink>
+          </div>
+        ) : undefined}
         eyebrow="Workforce onboarding"
-        title="Invite an associate"
-        subtitle="Choose the role group. They register in DropX One; continue setup in their Workforce profile."
+        title="Onboarding"
+        subtitle="One pending journey from DropX registration through the required client ID. Active associates leave this queue automatically."
       />
 
-      {error ? <section className="panel message-panel error"><div className="panel-body"><strong>Action required</strong><p className="subtle">{error}</p></div></section> : null}
+      {error || searchParams.error ? (
+        <section className="panel message-panel error"><div className="panel-body"><strong>Onboarding data is unavailable</strong><p className="subtle">{error || searchParams.error}</p></div></section>
+      ) : searchParams.notice ? <div className="message-panel success">{searchParams.notice}</div> : null}
 
-      <section className="wf-onboarding-journeys" aria-label="Workforce onboarding journeys">
-        <article>
-          <header><span><UsersRound size={18} /></span><div><small>Individual workforce</small><h2>Associate onboarding</h2></div></header>
-          <p>Delivery, driving and other contractor-engagement roles. New records follow the existing DropX One registration path.</p>
-          <div className="wf-journey-metrics"><span><strong>{associateRoles.length}</strong> roles</span><span><strong>{associateRecords.filter(isOpen).length}</strong> open</span><span><strong>{associateRecords.length}</strong> total</span></div>
-          <RoleTags roles={associateRoles} />
-          <PendingLink className="wf-journey-action" href="/delivery-network/onboarding/associates">Open associate onboarding <ArrowRight size={15} /></PendingLink>
-        </article>
-
-        <article>
-          <header><span><Truck size={18} /></span><div><small>Ground and fleet network</small><h2>Operations partner onboarding</h2></div></header>
-          <p>Sorter, housekeeping, van renter, van vendor and future vendor/worker roles classified by the master.</p>
-          <div className="wf-journey-metrics"><span><strong>{operationsRoles.length}</strong> roles</span><span><strong>{operationsRecords.filter(isOpen).length}</strong> open</span><span><strong>{operationsRecords.length}</strong> total</span></div>
-          <RoleTags roles={operationsRoles} />
-          <PendingLink className="wf-journey-action" href="/delivery-network/onboarding/operations">Open partner onboarding <ArrowRight size={15} /></PendingLink>
-        </article>
-
-      </section>
-      <details className="wf-onboarding-compatibility"><summary>Existing invitations & registration safeguards</summary><section>
-        <article className="protected">
-          <header><span><ShieldCheck size={18} /></span><div><small>Transition protection</small><h2>Existing mobile invitations</h2></div></header>
-          <p>Invitations already sent through the earlier flow continue on the same profile ID, now resolved through the canonical Workforce register.</p>
-          <div className="wf-journey-metrics"><span><strong>{protectedInvitations.length}</strong> protected</span><span><strong>{protectedInvitations.filter(isOpen).length}</strong> still open</span></div>
-          <div className="wf-protection-note"><ShieldCheck size={14} /> Registration tokens, saved drafts and verification results remain attached during cutover.</div>
-          <PendingLink className="wf-journey-action secondary" href="/delivery-network/lifecycle">Track protected invitations <ArrowRight size={15} /></PendingLink>
-        </article>
-      </section>
-
-      <section className="wf-lifecycle-map">
-        <header><div><small>End-to-end product flow</small><h2>From role setup to field activation</h2></div><span><Route size={17} /> Master-driven</span></header>
+      <section className="wf-onboarding-command">
         <div>
-          {lifecycle.map((step, index) => {
-            const StepIcon = step.icon;
-            return (
-              <PendingLink href={step.href} key={step.label}>
-                <span className="wf-lifecycle-index">{index + 1}</span>
-                <span className="wf-lifecycle-icon"><StepIcon size={16} /></span>
-                <strong>{step.label}</strong>
-                <small>{step.helper}</small>
-              </PendingLink>
-            );
-          })}
+          <small>Pending onboarding</small>
+          <strong>{incomplete.length}</strong>
+          <span>Active identities are excluded</span>
         </div>
+        <ol>
+          <li><span>1</span>DropX registration</li>
+          <li><ArrowRight size={13} />Client ID trigger</li>
+          <li><ArrowRight size={13} />Progress & blockers</li>
+          <li><ArrowRight size={13} />Provider mapping</li>
+        </ol>
       </section>
 
-      <section className="wf-product-principles">
-        <article><Building2 size={17} /><div><strong>People / HR isolation</strong><small>HR-classified designations never appear in these journeys or Workforce registers.</small></div></article>
-        <article><ShieldCheck size={17} /><div><strong>Registration continuity</strong><small>Existing tokens, drafts and mobile submissions resolve to the same canonical Workforce identity.</small></div></article>
-        <article><Route size={17} /><div><strong>One lifecycle</strong><small>Registration, review, provider ID, rates, communication and exit stay connected.</small></div></article>
-      </section></details>
+      <nav className="wf-journey-nav wf-onboarding-status-nav" aria-label="Onboarding status">
+        {viewOptions.map(([key, label]) => (
+          <PendingLink aria-current={requestedView === key ? "page" : undefined} href={`/delivery-network/onboarding?status=${key}`} key={key}>
+            {label}<strong>{count(key)}</strong>
+          </PendingLink>
+        ))}
+      </nav>
+
+      <FieldExecutiveList
+        basePath="/delivery-network/onboarding"
+        canEdit={canEdit}
+        directProfileLinks
+        emptyLabel="No associates are waiting in this onboarding status."
+        rows={rows}
+        showActions={!error}
+        title="Pending onboarding"
+      />
     </AppShell>
   );
 }

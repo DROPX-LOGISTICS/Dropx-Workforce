@@ -12,6 +12,16 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 function destination(form: FormData, params: Record<string,string>) {
   const register=associateReturnUrl(headers().get("referer"),params);
   if(register)return register;
+  try {
+    const referer = new URL(headers().get("referer") || "");
+    if (referer.pathname === "/delivery-network/onboarding") {
+      const query = new URLSearchParams();
+      const status = referer.searchParams.get("status");
+      if (status) query.set("status", status);
+      for (const [key, value] of Object.entries(params)) query.set(key, value);
+      return `/delivery-network/onboarding?${query}`;
+    }
+  } catch {}
   const query = new URLSearchParams(params);
   const view = String(form.get("view") ?? "pending");
   if (["pending","active","all","errors"].includes(view)) query.set("view",view);
@@ -32,7 +42,7 @@ export async function queueAmazonInvitation(form: FormData) {
       p_source_portal:"workforce",p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds
     });
     if (result.error) throw new Error(result.error.message);
-    revalidatePath("/delivery-network/id-onboarding");revalidatePath("/delivery-network/associates");
+    revalidatePath("/delivery-network/id-onboarding");revalidatePath("/delivery-network/associates");revalidatePath("/delivery-network/onboarding");
     redirect(destination(form,{notice:"Amazon invitation queued for the worker."}));
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;

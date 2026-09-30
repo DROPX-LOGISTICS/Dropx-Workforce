@@ -1225,12 +1225,15 @@ export async function FieldExecutivePageContent({
   return (
     <AppShell active={activeLabel} pageCode={pageCode}>
       <PageHead
-        eyebrow="Workforce master"
+        eyebrow={returnPath === "/delivery-network/onboarding/associates" ? "Onboarding" : "Workforce master"}
         title={pageTitle}
         subtitle={pageSubtitle}
         action={
           returnPath === "/delivery-network/onboarding/associates" ? (
-            <PendingLink className="button secondary compact" href="/delivery-network/associates">Back to associates</PendingLink>
+            <div className="component-chip-list">
+              <PendingLink className="button secondary compact" href="#single-invite">Single invite</PendingLink>
+              <PendingLink className="button secondary compact" href="#bulk-upload">Bulk upload</PendingLink>
+            </div>
           ) : undefined
         }
       />
@@ -1253,7 +1256,7 @@ export async function FieldExecutivePageContent({
       ) : null}
 
       {permission.canAdd && !profileOnly ? (
-        <section className="panel">
+        <section className="panel" id={returnPath === "/delivery-network/onboarding/associates" ? "single-invite" : undefined}>
           <div className="panel-head"><h2>{addTitle}</h2></div>
           {directActivate ? (
             <FieldExecutiveForm

@@ -4,13 +4,17 @@ import type { NavItem } from './app-navigation';
 export function compactWorkspaces(items: NavItem[]): NavItem[] {
   const groups = [
     { label: 'Today', sources: ['Workforce Dashboard'] },
-    { label: 'Associate Lifecycle', sources: ['Associate Lifecycle'] },
+    { label: 'Onboarding', sources: ['Onboarding'] },
+    { label: 'Associates', sources: ['Associates'] },
     { label: 'Operations', sources: ['Attendance & routes', 'Reports'] },
     { label: 'Pay & settlement', sources: ['Payments'] },
     { label: 'Connect', sources: ['Connect'] },
     { label: 'Settings', sources: ['Master', 'Settings', 'User access'] }
   ];
   const prominent = new Set([
+    '/delivery-network/onboarding/associates',
+    '/delivery-network/amazon-lifecycle?view=not_onboarded',
+    '/delivery-network/amazon-lifecycle?view=idfy',
     '/delivery-network/associates',
     '/master/payment-methods', '/delivery-network/amazon-onboarding-settings',
     '/delivery-network/payroll-calendars',
@@ -22,8 +26,8 @@ export function compactWorkspaces(items: NavItem[]): NavItem[] {
     if (group.sources[0] === 'Workforce Dashboard') return [{ ...sources[0], label: group.label }];
     const children = sources.flatMap(item => item.children ?? [{ code: item.code, href: item.href, label: item.label }])
       .map(child => ({ ...child, secondary: group.label === 'Settings'
-        ? !prominent.has(child.href ?? '') : group.label === 'Associate Lifecycle' ? child.href !== '/delivery-network/associates' : child.secondary }));
-    return [{ ...sources[0], label: group.label, href: undefined, children }];
+        ? !prominent.has(child.href ?? '') : child.secondary }));
+    return [{ ...sources[0], label: group.label, href: sources.length === 1 ? sources[0].href : undefined, children }];
   });
 }
 
@@ -44,10 +48,11 @@ export function workspaceDestination(item: NavItem) {
 export function activeWorkspace(items: NavItem[], pathname: string, active: string) {
   const related:Record<string,string>={
     '/delivery-network/payment-holds':'Payments','/delivery-network/mileage':'Payments',
-    '/delivery-network/pooled-settlements':'Payments','/delivery-network/contractor-profiles':'Associate Lifecycle',
-    '/delivery-network/lifecycle':'Associate Lifecycle','/delivery-network/id-onboarding':'Associate Lifecycle',
-    '/delivery-network/rate-mapping':'Associate Lifecycle','/delivery-network/rate-cards':'Associate Lifecycle',
-    '/delivery-network/onboarding':'Associate Lifecycle','/delivery-network/attention':'Associate Lifecycle'
+    '/delivery-network/pooled-settlements':'Payments','/delivery-network/contractor-profiles':'Associates',
+    '/delivery-network/lifecycle':'Associates','/delivery-network/id-onboarding':'Onboarding',
+    '/delivery-network/amazon-lifecycle':'Onboarding',
+    '/delivery-network/rate-mapping':'Associates','/delivery-network/rate-cards':'Associates',
+    '/delivery-network/onboarding':'Onboarding','/delivery-network/attention':'Associates'
   };
   const relatedPath = Object.keys(related)
     .filter(path => pathname === path || pathname.startsWith(`${path}/`))

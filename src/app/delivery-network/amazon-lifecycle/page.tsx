@@ -58,7 +58,7 @@ const viewLabel: Record<View, string> = {
   not_onboarded: "Not onboarded",
   in_progress: "In progress",
   onboarded: "Onboarded",
-  idfy: "IDfy issues",
+  idfy: "BGC pendency",
   all: "All",
 };
 
@@ -125,24 +125,23 @@ export default async function AmazonLifecyclePage({
   });
   const tabStyle = (id: View) =>
     view === id ? { background: "#172033", color: "#fff", borderColor: "#172033" } : undefined;
+  const isIdfyDesk = view === "idfy";
 
   return (
-    <AppShell active="Amazon lifecycle" pageCode="executive_id_onboarding">
+    <AppShell active={isIdfyDesk ? "BGC pendency" : "Amazon onboarding"} pageCode="executive_id_onboarding">
       <PageHead
-        eyebrow="Delivery network"
-        title="Amazon lifecycle"
-        subtitle="Associates who finished DropX onboarding, matched against the Amazon portal and IDfy background checks."
+        eyebrow={isIdfyDesk ? "Onboarding exceptions" : "Client ID setup"}
+        title={isIdfyDesk ? "BGC pendency" : "Amazon onboarding"}
+        subtitle={isIdfyDesk
+          ? "Resolve document and verification issues that are blocking an associate from moving forward."
+          : "Move approved associates from invitation to Amazon activation in one progression queue."}
         action={
           <div className="component-chip-list">
-            <Link className="button secondary compact" href="/delivery-network/amazon-onboarding-settings">
-              Station master
-            </Link>
-            <Link className="button secondary compact" href="/delivery-network/onboarding/associates">
-              Associate onboarding
-            </Link>
-            <Link className="button secondary compact" href="/delivery-network/id-onboarding">
-              Activation desk
-            </Link>
+            {isIdfyDesk ? (
+              <Link className="button secondary compact" href="/delivery-network/amazon-lifecycle?view=not_onboarded">Amazon onboarding</Link>
+            ) : (
+              <Link className="button secondary compact" href="/delivery-network/amazon-onboarding-settings">Partner setup</Link>
+            )}
           </div>
         }
       />
@@ -158,66 +157,47 @@ export default async function AmazonLifecyclePage({
         </section>
       ) : null}
 
-      <section className="performance-summary-grid">
-        <article>
-          <span>Not onboarded</span>
-          <strong>{counts.notOnboarded}</strong>
-          <small>Missing on Amazon</small>
-        </article>
-        <article>
-          <span>In progress</span>
-          <strong>{counts.inProgress}</strong>
-          <small>Invitation / workflow open</small>
-        </article>
-        <article>
-          <span>Onboarded</span>
-          <strong>{counts.onboarded}</strong>
-          <small>ACTIVE / INACTIVE roster</small>
-        </article>
-        <article>
-          <span>IDfy issues</span>
-          <strong>{counts.idfyIssues}</strong>
-          <small>Highlighted insufficiencies</small>
-        </article>
-      </section>
+      {isIdfyDesk ? (
+        <section className="performance-summary-grid wf-exception-summary">
+          <article><span>Open insufficiencies</span><strong>{counts.idfyIssues}</strong><small>Require associate or team action</small></article>
+          <article><span>Records checked</span><strong>{rows.length}</strong><small>Visible in your station scope</small></article>
+        </section>
+      ) : (
+        <section className="performance-summary-grid wf-onboarding-progress" aria-label="Amazon onboarding progression">
+          <article><span>1 · Ready to invite</span><strong>{counts.notOnboarded}</strong><small>Approved in DropX, missing on Amazon</small></article>
+          <article><span>2 · In progress</span><strong>{counts.inProgress}</strong><small>Invitation or onboarding workflow open</small></article>
+          <article><span>3 · Onboarded</span><strong>{counts.onboarded}</strong><small>Amazon identity confirmed</small></article>
+        </section>
+      )}
 
       <section className="panel">
         <div className="panel-body inline-actions" style={{ gap: 8, flexWrap: "wrap" }}>
-          <Link className="button secondary compact" style={tabStyle("not_onboarded")} href="?view=not_onboarded">
-            Not onboarded ({counts.notOnboarded})
-          </Link>
-          <Link className="button secondary compact" style={tabStyle("in_progress")} href="?view=in_progress">
-            In progress ({counts.inProgress})
-          </Link>
-          <Link className="button secondary compact" style={tabStyle("onboarded")} href="?view=onboarded">
-            Onboarded ({counts.onboarded})
-          </Link>
-          <Link className="button secondary compact" style={tabStyle("idfy")} href="?view=idfy">
-            IDfy issues ({counts.idfyIssues})
-          </Link>
-          <Link className="button secondary compact" style={tabStyle("all")} href="?view=all">
-            All ({rows.length})
-          </Link>
+          {!isIdfyDesk ? <>
+            <Link className="button secondary compact" style={tabStyle("not_onboarded")} href="?view=not_onboarded">Ready to invite ({counts.notOnboarded})</Link>
+            <Link className="button secondary compact" style={tabStyle("in_progress")} href="?view=in_progress">In progress ({counts.inProgress})</Link>
+            <Link className="button secondary compact" style={tabStyle("onboarded")} href="?view=onboarded">Onboarded ({counts.onboarded})</Link>
+            <Link className="button secondary compact" style={tabStyle("all")} href="?view=all">All ({rows.length})</Link>
+          </> : <span className="wf-queue-label">Exception queue · {counts.idfyIssues} open</span>}
           {canEdit ? (
             <>
-              <form action={refreshAmazonLifecycle}>
+              {!isIdfyDesk ? <form action={refreshAmazonLifecycle}>
                 <input type="hidden" name="view" value={view} />
                 <SubmitButton className="button secondary compact" pendingText="Syncing…">
                   Sync Amazon
                 </SubmitButton>
-              </form>
-              <form action={syncIdfyBackground}>
+              </form> : null}
+              {isIdfyDesk ? <form action={syncIdfyBackground}>
                 <input type="hidden" name="view" value="idfy" />
-                <SubmitButton className="button secondary compact" pendingText="Syncing IDfy…">
-                  Sync IDfy
+                <SubmitButton className="button compact" pendingText="Syncing BGC…">
+                  Sync BGC status
                 </SubmitButton>
-              </form>
-              <form action={tickAmazonInvitationQueue}>
+              </form> : null}
+              {!isIdfyDesk ? <form action={tickAmazonInvitationQueue}>
                 <input type="hidden" name="view" value={view} />
                 <SubmitButton className="button secondary compact" pendingText="Processing…">
                   Process invite queue
                 </SubmitButton>
-              </form>
+              </form> : null}
             </>
           ) : null}
         </div>
@@ -230,8 +210,7 @@ export default async function AmazonLifecyclePage({
               <tr>
                 <th>Associate</th>
                 <th>Station</th>
-                <th>Amazon status</th>
-                <th>IDfy</th>
+                <th>{isIdfyDesk ? "BGC issue" : "Amazon progress"}</th>
                 <th>Action</th>
               </tr>
             </thead>
@@ -253,7 +232,12 @@ export default async function AmazonLifecyclePage({
                       <small>{cfg?.supervisor_alias ? `Supervisor ${cfg.supervisor_alias}` : "Master incomplete"}</small>
                     </td>
                     <td>
-                      {row.amazon ? (
+                      {isIdfyDesk ? (row.idfy?.hasInsufficiency ? (
+                        <>
+                          <span className="status-badge danger">Insufficiency</span>
+                          <small>{row.idfy.highlight}</small>
+                        </>
+                      ) : <span className="subtle">No open issue</span>) : row.amazon ? (
                         <>
                           <span
                             className={`status-badge ${
@@ -277,26 +261,8 @@ export default async function AmazonLifecyclePage({
                       )}
                     </td>
                     <td>
-                      {row.idfy?.hasInsufficiency ? (
-                        <>
-                          <span className="status-badge danger">Insufficiency</span>
-                          <small>{row.idfy.highlight}</small>
-                          {row.idfy.respondUrl ? (
-                            <small>
-                              <a href={row.idfy.respondUrl} target="_blank" rel="noreferrer">
-                                Open IDfy
-                              </a>
-                            </small>
-                          ) : null}
-                        </>
-                      ) : row.idfy ? (
-                        <span className="status-badge success">{row.idfy.status || "Clear"}</span>
-                      ) : (
-                        <span className="subtle">—</span>
-                      )}
-                    </td>
-                    <td>
-                      {canEdit && linkedAssociate && row.bucket === "not_onboarded" && row.dropx.locationId ? (
+                      {isIdfyDesk && row.idfy?.respondUrl ? <a className="button secondary compact" href={row.idfy.respondUrl} target="_blank" rel="noreferrer">Open verification</a> : null}
+                      {!isIdfyDesk && canEdit && linkedAssociate && row.bucket === "not_onboarded" && row.dropx.locationId ? (
                         <form action={onboardAndInviteAmazon} className="inline-actions">
                           <input type="hidden" name="view" value={view} />
                           <input type="hidden" name="workforce_id" value={row.dropx.id} />
@@ -309,7 +275,7 @@ export default async function AmazonLifecyclePage({
                           </SubmitButton>
                         </form>
                       ) : null}
-                      {canEdit && linkedAssociate && row.amazon?.providerId && !(row.amazon.serviceAreaIds?.length) ? (
+                      {!isIdfyDesk && canEdit && linkedAssociate && row.amazon?.providerId && !(row.amazon.serviceAreaIds?.length) ? (
                         <form action={mapAmazonStation} className="inline-actions">
                           <input type="hidden" name="view" value={view} />
                           <input type="hidden" name="workforce_id" value={row.dropx.id} />
@@ -320,17 +286,17 @@ export default async function AmazonLifecyclePage({
                           </SubmitButton>
                         </form>
                       ) : null}
-                      {!linkedAssociate ? <span className="subtle">Match to an associate before Amazon actions</span> : !canEdit ? <span className="subtle">View only</span> : null}
+                      {!linkedAssociate ? <span className="subtle">Match to an associate before taking action</span> : !canEdit ? <span className="subtle">View only</span> : null}
                     </td>
                   </tr>
                 );
               })}
               {!filtered.length ? (
                 <tr>
-                  <td colSpan={5}>
+                  <td colSpan={4}>
                     No associates in {viewLabel[view]}.
                     {view === "idfy"
-                      ? " Run Sync IDfy, then open this tab. Issues only appear here."
+                      ? " Run the BGC sync, then open this desk. Only unresolved verification issues appear here."
                       : " The numbers above are totals. Open the matching tab to see those associates."}
                   </td>
                 </tr>

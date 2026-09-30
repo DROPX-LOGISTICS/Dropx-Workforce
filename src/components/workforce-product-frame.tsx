@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import {
   ChevronDown,
+  ContactRound,
   Fingerprint,
   LayoutDashboard,
   Menu,
@@ -15,6 +16,7 @@ import {
   Settings2,
   ShieldCheck,
   UsersRound,
+  UserRoundPlus,
   X
 } from "lucide-react";
 import { EventLogTracker } from "@/components/event-log-tracker";
@@ -40,6 +42,8 @@ const navigationIcons: Record<string, typeof LayoutDashboard> = {
   designations: Settings2
 };
 
+const administrationWorkspaces = new Set(["Settings"]);
+
 function WorkforceRiderMark() {
   return (
     <svg
@@ -62,7 +66,52 @@ function WorkforceRiderMark() {
 
 function iconFor(item: NavItem) {
   if (item.label === "Today") return LayoutDashboard;
+  if (item.label === "Onboarding") return UserRoundPlus;
+  if (item.label === "Associates") return ContactRound;
   return navigationIcons[item.code] ?? LayoutDashboard;
+}
+
+function SidebarWorkspace({
+  item,
+  selected,
+  isCurrent,
+}: {
+  item: NavItem;
+  selected: boolean;
+  isCurrent: (href?: string) => boolean;
+}) {
+  const NavigationIcon = iconFor(item);
+  const destination = workspaceDestination(item);
+  const primary = item.children?.filter((child) => !child.secondary) ?? [];
+  if (!destination) return null;
+
+  return (
+    <div className={`wf-sidebar-workspace ${selected ? "active" : ""}`.trim()}>
+      <PendingLink
+        aria-current={selected && !primary.some((child) => isCurrent(child.href)) ? "page" : undefined}
+        className={`wf-left-direct ${selected ? "active" : ""}`.trim()}
+        href={destination}
+      >
+        <NavigationIcon aria-hidden="true" size={16} />
+        <span>{item.label}</span>
+        {selected && primary.length ? <ChevronDown aria-hidden="true" className="wf-sidebar-caret" size={14} /> : null}
+      </PendingLink>
+      {selected && primary.length ? (
+        <div className="wf-sidebar-children">
+          {primary.map((child) => (
+            <PendingLink
+              aria-current={isCurrent(child.href) ? "page" : undefined}
+              className={isCurrent(child.href) ? "active" : ""}
+              href={child.href!}
+              key={child.label}
+            >
+              {child.label}
+            </PendingLink>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function WorkforceProductFrame({ active, actions, children, items }: WorkforceProductFrameProps) {
@@ -71,9 +120,10 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
   const [mobileOpen, setMobileOpen] = useState(false);
   const workspaces = compactWorkspaces(items);
   const workspace = activeWorkspace(workspaces, pathname, active);
-  const primary = workspace?.children?.filter(item=>!item.secondary) ?? [];
   const secondary = workspace?.children?.filter(item=>item.secondary) ?? [];
   const isCurrent = (href?: string) => workspaceLinkActive(href, pathname, searchParams.toString());
+  const operationsWorkspaces = workspaces.filter((item) => !administrationWorkspaces.has(item.label));
+  const administration = workspaces.filter((item) => administrationWorkspaces.has(item.label));
 
   useEffect(() => {
     setMobileOpen(false);
@@ -113,27 +163,14 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
         </div>
 
         <nav className="wf-left-navigation" aria-label="Workforce navigation">
-          {workspaces.map((item) => {
-            const NavigationIcon = iconFor(item);
-            const directActive = item === workspace;
-            const destination = workspaceDestination(item);
-
-            if (destination) {
-              return (
-                <PendingLink
-                  aria-current={directActive ? "page" : undefined}
-                  className={`wf-left-direct ${directActive ? "active" : ""}`.trim()}
-                  href={destination}
-                  key={item.label}
-                >
-                  <NavigationIcon aria-hidden="true" size={16} />
-                  <span>{item.label}</span>
-                </PendingLink>
-              );
-            }
-
-            return null;
-          })}
+          <span className="wf-sidebar-section-label">Field operations</span>
+          {operationsWorkspaces.map((item) => (
+            <SidebarWorkspace item={item} isCurrent={isCurrent} key={item.label} selected={item === workspace} />
+          ))}
+          {administration.length ? <span className="wf-sidebar-section-label administration">Administration</span> : null}
+          {administration.map((item) => (
+            <SidebarWorkspace item={item} isCurrent={isCurrent} key={item.label} selected={item === workspace} />
+          ))}
         </nav>
 
         <div className="wf-left-footer">
@@ -162,9 +199,9 @@ export function WorkforceProductFrame({ active, actions, children, items }: Work
 
         <main className="wf-product-main">
           <div className="wf-product-content">
-            {workspace?.children?.length ? <nav className="wf-workspace-nav" aria-label={`${workspace.label} workspace`}>
-              {primary.map(child=><PendingLink key={child.label} href={child.href!} aria-current={isCurrent(child.href)?'page':undefined} className={isCurrent(child.href)?'active':''}>{child.label}</PendingLink>)}
-              {secondary.length ? <details key={`${pathname}:${searchParams.toString()}`}><summary>{secondary.find(child=>isCurrent(child.href))?.label ?? 'More tools'} <ChevronDown size={14}/></summary><div>{secondary.map(child=><PendingLink key={child.label} href={child.href!} aria-current={isCurrent(child.href)?'page':undefined}>{child.label}</PendingLink>)}</div></details>:null}
+            {secondary.length ? <nav className="wf-workspace-nav wf-workspace-tools" aria-label={`${workspace?.label} tools`}>
+              <strong>{workspace?.label}</strong>
+              <details key={`${pathname}:${searchParams.toString()}`}><summary>{secondary.find(child=>isCurrent(child.href))?.label ?? 'More tools'} <ChevronDown size={14}/></summary><div>{secondary.map(child=><PendingLink key={child.label} href={child.href!} aria-current={isCurrent(child.href)?'page':undefined}>{child.label}</PendingLink>)}</div></details>
             </nav>:null}
             {children}
           </div>

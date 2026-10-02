@@ -310,6 +310,8 @@ type FieldExecutiveAddFormValues = {
   dateOfJoin?: string;
   locationId?: string;
   designation?: string;
+  recruitmentLeadId?: string;
+  onboardingSource?: string;
 };
 
 function firstRelation<T>(value: T | T[] | null | undefined) {
@@ -695,6 +697,8 @@ function AddFieldExecutiveForm({
   return (
     <form action={createFieldExecutive} className="form-grid three field-executive-add-form">
       <input type="hidden" name="return_path" value={returnPath} />
+      {values?.recruitmentLeadId ? <input type="hidden" name="recruitment_lead_id" value={values.recruitmentLeadId} /> : null}
+      {values?.onboardingSource ? <input type="hidden" name="onboarding_source" value={values.onboardingSource} /> : null}
       <label>Full name<input className="field" name="full_name" placeholder="Enter full name" required defaultValue={values?.fullName ?? ""} /></label>
       <label className="field-executive-mobile-group">Mobile number
         <div className="field-executive-mobile-row">

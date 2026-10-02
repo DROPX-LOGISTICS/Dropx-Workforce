@@ -46,7 +46,7 @@ test('lifecycle views form non-overlapping buckets; training optional; archive r
 test('compact navigation preserves every authorized destination exactly once',async()=>{
  const {compactWorkspaces}=await import('./workforce-workspace-navigation.ts');
  const compact=compactWorkspaces(workforceNavItems);
- assert.equal(compact.length,8);
+ assert.equal(compact.length,6);
  const destinations=items=>items.flatMap(item=>item.children??[item]).map(item=>item.href).sort();
  assert.deepEqual(destinations(compact),destinations(workforceNavItems));
  for(const original of workforceNavItems) {
@@ -62,7 +62,7 @@ test('compact navigation preserves every authorized destination exactly once',as
  assert.equal(activeWorkspace(compact,'/users','User Roles')?.label,'Settings');
  assert.equal(activeWorkspace(compact,'/delivery-network/onboarding/associates','Bulk upload')?.label,'Onboarding');
  assert.equal(compact.find(item=>item.label==='Referrals')?.children,undefined);
- assert.equal(compact.find(item=>item.label==='Associates')?.children,undefined);
+ assert.deepEqual(compact.find(item=>item.label==='Associates')?.children?.filter(item=>!item.secondary).map(item=>item.label),['Active Associates']);
 });
 
 test('lifecycle count links preserve the exact stage rather than merging joining queues',async()=>{
@@ -88,8 +88,8 @@ test('tab selection distinguishes query-based roles and tolerates page filters a
 
 test('lifecycle phases route to their single owning workspace',async()=>{
  const {lifecyclePhaseDestination}=await import('./workforce-workspace-navigation.ts');
- assert.equal(lifecyclePhaseDestination('registration'),'/delivery-network/onboarding?area=registration');
- assert.equal(lifecyclePhaseDestination('review'),'/delivery-network/onboarding?area=registration');
+ assert.equal(lifecyclePhaseDestination('registration'),'/delivery-network/onboarding?area=registration&stage=registration');
+ assert.equal(lifecyclePhaseDestination('review'),'/delivery-network/onboarding?area=registration&stage=review');
   assert.equal(lifecyclePhaseDestination('partner'),'/delivery-network/onboarding?area=client');
   assert.equal(lifecyclePhaseDestination('activation'),'/delivery-network/onboarding?area=client');
   assert.equal(lifecyclePhaseDestination('mapping'),'/delivery-network/onboarding?area=client&status=mapping');

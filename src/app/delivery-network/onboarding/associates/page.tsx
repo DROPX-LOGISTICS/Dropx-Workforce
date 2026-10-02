@@ -15,6 +15,8 @@ export default function WorkforceAssociateOnboardingPage({
     date_of_join?: string;
     location_id?: string;
     designation?: string;
+    recruitment_lead_id?: string;
+    onboarding_source?: string;
   };
 }) {
   return (
@@ -47,7 +49,9 @@ export default function WorkforceAssociateOnboardingPage({
         email: searchParams?.email,
         dateOfJoin: searchParams?.date_of_join,
         locationId: searchParams?.location_id,
-        designation: searchParams?.designation
+        designation: searchParams?.designation,
+        recruitmentLeadId: searchParams?.recruitment_lead_id,
+        onboardingSource: searchParams?.onboarding_source
       }}
     />
   );

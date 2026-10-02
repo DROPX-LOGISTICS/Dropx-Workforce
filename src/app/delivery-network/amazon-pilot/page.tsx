@@ -8,6 +8,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { filterOnboardingLocations } from '@/lib/onboarding-location-access';
 import { canOnboardDesignation } from '@/lib/designation-onboarding-access';
 import { pilotStatus,pilotStages,type Pilot } from '@/lib/amazon-pilot';
+import { amazonDriverWelcome } from '@/lib/amazon-driver-welcome';
 import { createAmazonPilot,updateAmazonPilot } from './actions';
 import styles from './pilot.module.css';
 export const dynamic='force-dynamic';
@@ -17,11 +18,12 @@ type Person={id:string;full_name:string;mobile:string;email:string;dropx_id:stri
 export default async function AmazonPilotPage({searchParams={}}:{searchParams?:Record<string,string|undefined>}){
  const auth=await requirePagePermission('delivery_associates','access'),company=requireCompanyId(auth),db=supabaseAdmin;
  if(!db)throw new Error('Database unavailable.');
- const [stationResult,roleResult,pilotResult,invitationSettings]=await Promise.all([
+ const [stationResult,roleResult,pilotResult,invitationSettings,welcomeTemplate]=await Promise.all([
   db.from('stations').select('id,station_code,station_name,is_active,hide_from_location_list').eq('company_id',company).order('station_code'),
   db.from('designations').select('id,name,onboarding_role_ids,category:designation_categories!designations_designation_category_id_fkey(people_module)').eq('company_id',company).eq('is_active',true).order('name'),
   (auth.hasAllLocationAccess?db.from('workforce_amazon_pilots').select('*').eq('company_id',company):db.from('workforce_amazon_pilots').select('*').eq('company_id',company).in('station_id',auth.locationScopeIds.length?auth.locationScopeIds:['00000000-0000-0000-0000-000000000000'])).order('created_at',{ascending:false}).limit(500),
-  db.from('workforce_amazon_station_settings').select('station_id').eq('company_id',company).eq('invitation_enabled',true)
+  db.from('workforce_amazon_station_settings').select('station_id').eq('company_id',company).eq('invitation_enabled',true),
+  db.from('whatsapp_template_cache').select('status').eq('company_id',company).eq('name',amazonDriverWelcome.name).eq('language',amazonDriverWelcome.language)
  ]);
  const stations=filterOnboardingLocations(stationResult.data??[],auth),allowed=new Set(stations.map(s=>s.id));
  const invitationStations=stations.filter(s=>s.is_active&&(invitationSettings.data??[]).some(config=>config.station_id===s.id));
@@ -34,6 +36,8 @@ export default async function AmazonPilotPage({searchParams={}}:{searchParams?:R
  const query=(searchParams.q??'').toLowerCase(),stage=searchParams.stage??'',stationFilter=searchParams.station??'';
  const filtered=rows.filter(p=>{const w=people.get(p.workforce_id);return (!stage||(stage==='scc_available'?['scc_available','delivery_started'].includes(pilotStatus(p).stage):pilotStatus(p).stage===stage))&&(!stationFilter||p.station_id===stationFilter)&&(!query||`${w?.full_name} ${w?.mobile} ${w?.email} ${w?.dropx_id}`.toLowerCase().includes(query));});
  const selected=rows.find(p=>p.workforce_id===searchParams.id),person=selected?people.get(selected.workforce_id):null,status=selected?pilotStatus(selected):null;
+ const welcomeApproved=(welcomeTemplate.data??[]).some(t=>t.status==='APPROVED');
+ const welcomeLog=selected?await db.from('whatsapp_message_logs').select('status,error_message,created_at').eq('company_id',company).eq('workforce_id',selected.workforce_id).order('created_at',{ascending:false}).limit(1):{data:[]};
  const canAdd=hasPermission(auth,'delivery_associates','add')&&!auth.readOnly,canEdit=hasPermission(auth,'delivery_associates','edit')&&!auth.readOnly;
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  const error=pilotResult.error||peopleResult.error?'Onboarding records could not be loaded. Please refresh.':stationResult.error||roleResult.error||invitationSettings.error?'Onboarding configuration could not be loaded.':searchParams.error;
@@ -43,6 +47,7 @@ export default async function AmazonPilotPage({searchParams={}}:{searchParams?:R
    <div className={styles.heroActions}><WorkforceLiveRefresh seconds={30} refreshedAt={new Date().toISOString()}/>{canAdd?<a className={styles.primary} href={`${path}?new=1#arrival`}><Plus size={17}/> Invite associate</a>:null}</div>
   </header>
   {error?<div className={styles.error} role="alert">{String(error)}</div>:null}
+  {!welcomeApproved?<div className={styles.notice} role="status">The new Driver ID WhatsApp message is awaiting Meta approval. Amazon email invitations remain available.</div>:null}
   {searchParams.notice?<div className={styles.notice} role="status">{searchParams.notice}</div>:null}
   <section className={styles.stats} aria-label="Onboarding overview">{[
    {label:'Associates onboarding',value:rows.filter(p=>!p.closed_at).length,icon:Users,filter:''},
@@ -78,6 +83,7 @@ export default async function AmazonPilotPage({searchParams={}}:{searchParams?:R
    </div>
    <aside className={styles.panel}><header><div><small>AMAZON INVITATION</small><h2>{selected.evidence.invitationStatus==='sent'?'Invitation sent':selected.evidence.invitationStatus==='failed'?'Needs attention':'Invitation requested'}</h2></div></header><div className={styles.detailBody}>
     <p className={styles.footnote}>The associate can open the Amazon email invitation and complete registration immediately. Submitted details proceed through Amazon verification.</p>
+    <div className={styles.sideForm}><h3>WhatsApp welcome</h3><p>{welcomeLog.data?.[0]?.status==='sent'?'Sent':welcomeLog.data?.[0]?.error_message||(!welcomeApproved?'Awaiting Meta template approval':'Waiting for delivery confirmation')}</p></div>
     {selected.evidence.invitationError?<p className={styles.error}>{selected.evidence.invitationError}</p>:null}
     {canEdit&&!selected.closed_at?<><form action={updateAmazonPilot} className={styles.sideForm}><input type="hidden" name="id" value={selected.workforce_id}/><input type="hidden" name="action" value="queue"/><SubmitButton className={styles.secondary} pendingText="Checking…">Check invitation queue</SubmitButton><small>A sent invitation is retained without creating a duplicate.</small></form><details className={styles.sideForm}><summary>Close onboarding</summary><form action={updateAmazonPilot}><input type="hidden" name="id" value={selected.workforce_id}/><input type="hidden" name="action" value="close"/><label>Reason<textarea name="notes" required minLength={5} maxLength={1000}/></label><SubmitButton className={styles.secondary} pendingText="Closing…">Close onboarding</SubmitButton></form></details></>:null}
    </div></aside>

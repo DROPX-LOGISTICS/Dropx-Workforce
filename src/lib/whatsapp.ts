@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { extractWhatsAppTemplateVariables, type WhatsAppTemplateComponent } from "@/lib/whatsapp-template";
+import { listMetaTemplates } from '@/lib/whatsapp-template-meta';
 import { amazonDriverWelcome, amazonDriverWelcomeMappings } from '@/lib/amazon-driver-welcome';
 import { workforceOnboardingEventCode } from "@/lib/whatsapp-onboarding";
 
@@ -196,20 +197,29 @@ async function sendOnboardingWhatsApp(data: OnboardingMessageData) {
       await writeLog({ ...onboardingLogIdentity(data), event_code: eventCode, recipient, template_name: config.data?.template_name, status: "skipped", error_message: "WhatsApp or onboarding notification is disabled." });
       return;
     }
-    if (data.amazonDriverWelcome) {
-      const dedicated=await supabaseAdmin.from('whatsapp_template_cache').select('template_id,name,language,status').eq('company_id',data.companyId).eq('whatsapp_profile_id',config.data.whatsapp_profile_id).eq('name',amazonDriverWelcome.name).eq('language',amazonDriverWelcome.language).maybeSingle();
-      if(dedicated.error||dedicated.data?.status!=='APPROVED')throw new Error('The Amazon Driver ID welcome template is awaiting WhatsApp approval.');
-      config.data={...config.data,template_id:dedicated.data.template_id,template_name:dedicated.data.name,template_language:dedicated.data.language,variable_mappings:amazonDriverWelcomeMappings};
-    }
     if (!config.data.whatsapp_profile_id || !config.data.template_id || !config.data.template_name || !config.data.template_language) throw new Error("WhatsApp onboarding configuration is incomplete.");
     const [profileResult, profileTokenResult] = await Promise.all([
-      supabaseAdmin.from("whatsapp_profiles").select("id, profile_name, phone_number_id, graph_api_version, default_country_code, is_active").eq("company_id", data.companyId).eq("id", config.data.whatsapp_profile_id).single(),
+      supabaseAdmin.from("whatsapp_profiles").select("id, profile_name, phone_number_id, business_account_id, graph_api_version, default_country_code, is_active").eq("company_id", data.companyId).eq("id", config.data.whatsapp_profile_id).single(),
       supabaseAdmin.rpc("get_whatsapp_profile_access_token", { profile_id: config.data.whatsapp_profile_id })
     ]);
     if (profileResult.error) throw new Error(profileResult.error.message);
     if (profileTokenResult.error) throw new Error(profileTokenResult.error.message);
     const profile = profileResult.data;
     if (!profile?.is_active || !profile.phone_number_id || !profile.graph_api_version || !profileTokenResult.data) throw new Error("Selected WhatsApp profile is incomplete or inactive.");
+    if (data.amazonDriverWelcome) {
+      const dedicated=await supabaseAdmin.from('whatsapp_template_cache').select('template_id,name,language,status').eq('company_id',data.companyId).eq('whatsapp_profile_id',profile.id).eq('name',amazonDriverWelcome.name).eq('language',amazonDriverWelcome.language).maybeSingle();
+      if(dedicated.error||!dedicated.data)throw new Error('The Driver ID WhatsApp welcome is not configured.');
+      const driverTemplate=dedicated.data;
+      let status=driverTemplate.status;
+      if(status!=='APPROVED'){
+        // Recheck this template with Meta so approval never needs a manual cache update.
+        const live=(await listMetaTemplates(profile.graph_api_version,profile.business_account_id,String(profileTokenResult.data))).find(row=>String(row.id)===driverTemplate.template_id);
+        status=String(live?.status??status);
+        if(live)await supabaseAdmin.from('whatsapp_template_cache').update({status,synced_at:new Date().toISOString()}).eq('company_id',data.companyId).eq('template_id',dedicated.data.template_id).eq('whatsapp_profile_id',profile.id);
+      }
+      if(status!=='APPROVED')throw new Error('The Driver ID WhatsApp welcome awaits Meta approval. Amazon email invitation is tracked separately.');
+      config.data={...config.data,template_id:dedicated.data.template_id,template_name:dedicated.data.name,template_language:dedicated.data.language,variable_mappings:amazonDriverWelcomeMappings};
+    }
     templateName = config.data.template_name;
 
     const template = await supabaseAdmin

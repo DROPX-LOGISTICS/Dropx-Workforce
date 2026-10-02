@@ -376,9 +376,33 @@ export async function createFieldExecutive(formData: FormData) {
       : requestHost === "workforce.dropxlogistics.com" || requestHost.startsWith("workforce-") || (requestHost.endsWith(".vercel.app") && requestHost.includes("workforce"))
         ? "workforce"
         : "dashboard";
+    const requestedOnboardingSource = optional(formData.get("onboarding_source"));
+    const onboardingSource = requestedOnboardingSource && ["recruit_portal", "ops", "workforce", "referral", "walk_in", "agency", "other"].includes(requestedOnboardingSource)
+      ? requestedOnboardingSource
+      : applicationSource;
+    const recruitmentLeadId = optional(formData.get("recruitment_lead_id"));
+    let linkedRecruitmentLead: { id: string; status?: string | null } | null = null;
+    if (recruitmentLeadId) {
+      const leadResult = await supabaseAdmin.from("recruitment_leads")
+        .select("id,status,recruitment_locations(station_id)")
+        .eq("company_id", companyId)
+        .eq("id", recruitmentLeadId)
+        .eq("stream", "workforce")
+        .eq("archived", false)
+        .maybeSingle();
+      if (leadResult.error) throw new Error(leadResult.error.message);
+      if (!leadResult.data) throw new Error("The Recruit candidate is no longer available for onboarding.");
+      const recruitmentLocation = Array.isArray(leadResult.data.recruitment_locations)
+        ? leadResult.data.recruitment_locations[0]
+        : leadResult.data.recruitment_locations;
+      if (recruitmentLocation?.station_id && recruitmentLocation.station_id !== locationId) {
+        throw new Error("The selected station must match the Recruit interview station.");
+      }
+      linkedRecruitmentLead = { id: leadResult.data.id, status: leadResult.data.status };
+    }
     const lifecyclePayload = canonicalOnboarding ? {
       approval_required: true,
-      onboarding_application_source: applicationSource,
+      onboarding_application_source: onboardingSource,
       onboarding_submitted_at: null,
       provider_id_status: "pending",
       lifecycle_status: "onboarding"
@@ -394,6 +418,7 @@ export async function createFieldExecutive(formData: FormData) {
       date_of_join: dateOfJoin,
       location_id: locationId,
       designation,
+      ...(linkedRecruitmentLead ? { recruitment_lead_id: linkedRecruitmentLead.id } : {}),
       ...(config.profileType === "workforce" ? {
         id: canonicalProfileId,
         designation_id: designationRuleResult.data.id,
@@ -477,10 +502,11 @@ export async function createFieldExecutive(formData: FormData) {
         from_status: null,
         to_status: "pending",
         actor_user_id: authorization.userId,
-        source_portal: applicationSource,
+        source_portal: onboardingSource,
         metadata: {
           designation,
           location_id: locationId,
+          recruitment_lead_id: linkedRecruitmentLead?.id ?? null,
           ...identityExceptionEventMetadata(identityEvaluation)
         }
       });
@@ -507,7 +533,39 @@ export async function createFieldExecutive(formData: FormData) {
       }));
     }
 
+    if (linkedRecruitmentLead) {
+      const updatedAt = new Date().toISOString();
+      const leadSync = await supabaseAdmin.from("recruitment_leads").update({
+        status: "joined",
+        final_status: "Joined",
+        last_updated_by: authorization.userId,
+        updated_at: updatedAt
+      }).eq("company_id", companyId).eq("id", linkedRecruitmentLead.id);
+      if (leadSync.error) {
+        console.error("[workforce-onboarding] Recruit candidate sync failed", {
+          error: leadSync.error.message,
+          recruitmentLeadId: linkedRecruitmentLead.id,
+          workforceId: executive.id
+        });
+      } else {
+        const history = await supabaseAdmin.from("recruitment_lead_history").insert({
+          company_id: companyId,
+          lead_id: linkedRecruitmentLead.id,
+          event_type: "workforce_onboarding_requested",
+          field_name: "onboarding_status",
+          old_value: null,
+          new_value: "pending",
+          actor_profile_id: authorization.userId,
+          actor_email: authorization.email,
+          remarks: `Workforce onboarding requested by ${authorization.fullName || authorization.email || "Workforce user"}. Final activation is pending Workforce approval.`,
+          metadata: { source_portal: onboardingSource, workforce_id: executive.id }
+        });
+        if (history.error) console.error("[workforce-onboarding] Recruit history sync failed", { error: history.error.message, recruitmentLeadId: linkedRecruitmentLead.id });
+      }
+    }
+
     revalidatePath(returnPath);
+    revalidatePath("/delivery-network/onboarding");
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     fieldExecutiveRedirect({

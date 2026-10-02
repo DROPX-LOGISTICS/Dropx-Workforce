@@ -1,0 +1,61 @@
+.emptyDashboard {
+  display: grid;
+  min-height: min(560px, calc(100vh - 150px));
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  padding: 32px;
+  border: 1px dashed #d9dde5;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .72);
+  color: #667085;
+  text-align: center;
+}
+
+.icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 5px;
+  place-items: center;
+  border-radius: 13px;
+  background: #fff1ea;
+  color: #d94f20;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #d94f20;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.emptyDashboard h1 {
+  margin: 0;
+  color: #182230;
+  font-size: clamp(22px, 2.4vw, 31px);
+  letter-spacing: -.035em;
+}
+
+.emptyDashboard > p:not(.eyebrow) {
+  max-width: 570px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 11px;
+  padding: 10px 13px;
+  border-radius: 9px;
+  background: #263247;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 750;
+  text-decoration: none;
+}

@@ -5,11 +5,9 @@ export function compactWorkspaces(items: NavItem[]): NavItem[] {
   const groups = [
     { label: 'Today', sources: ['Workforce Dashboard'] },
     { label: 'Onboarding', sources: ['Onboarding'] },
-    { label: 'Associates', sources: ['Associates'] },
+    { label: 'Associates', sources: ['Associates', 'Attendance & routes', 'Reports', 'Connect'] },
     { label: 'Referrals', sources: ['Referrals'] },
-    { label: 'Operations', sources: ['Attendance & routes', 'Reports'] },
     { label: 'Pay & settlement', sources: ['Payments'] },
-    { label: 'Connect', sources: ['Connect'] },
     { label: 'Settings', sources: ['Master', 'Settings', 'User access'] }
   ];
   const prominent = new Set([
@@ -33,7 +31,7 @@ export function compactWorkspaces(items: NavItem[]): NavItem[] {
       return [{ ...sources[0], label: group.label, href: sources[0].children[0].href, children: undefined }];
     }
     const children = sources.flatMap(item => item.children ?? [{ code: item.code, href: item.href, label: item.label }])
-      .map(child => ({ ...child, secondary: group.label === 'Settings'
+      .map(child => ({ ...child, secondary: group.label === 'Settings' || group.label === 'Associates'
         ? !prominent.has(child.href ?? '') : child.secondary }));
     return [{ ...sources[0], label: group.label, href: sources.length === 1 ? sources[0].href : undefined, children }];
   });
@@ -44,7 +42,8 @@ function routePath(href: string) { return href.split(/[?#]/)[0]; }
 export function lifecyclePhaseDestination(phase: string) {
   if (phase === 'active') return '/delivery-network/associates';
   if (phase === 'closed') return '/delivery-network/lifecycle?view=closed';
-  if (phase === 'registration' || phase === 'review') return '/delivery-network/onboarding?area=registration';
+  if (phase === 'registration') return '/delivery-network/onboarding?area=registration&stage=registration';
+  if (phase === 'review') return '/delivery-network/onboarding?area=registration&stage=review';
   if (phase === 'mapping') return '/delivery-network/onboarding?area=client&status=mapping';
   if (phase === 'pay') return '/delivery-network/rate-mapping';
   return '/delivery-network/onboarding?area=client';

@@ -12,7 +12,7 @@ import { type AuthorizationContext, requirePagePermission } from "@/lib/authoriz
 import { requireCompanyId } from "@/lib/company-scope";
 import { firstDesignationBusinessCategory } from "@/lib/designation-business-categories";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { loadWorkforceEarnings, workforceToday } from "@/lib/workforce-earnings";
+import { WorkforceOnboardingShell } from "@/components/workforce-onboarding-shell";
 import { hasWorkforcePaymentIdentity } from "@/lib/workforce-register-designations";
 import { componentRuleLabel, type PaymentComponentRule } from "@/lib/payment-component-rules";
 
@@ -39,6 +39,7 @@ type DeliveryNetworkDesignationRow = {
   id: string;
   code: string;
   name: string;
+  provider_mapping_required: boolean;
   designation_category?: unknown;
 };
 
@@ -129,7 +130,7 @@ async function loadMappingData(authorization: AuthorizationContext, workforceId?
       .order("full_name"),
     supabaseAdmin
       .from("designations")
-      .select("id, code, name, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active)")
+      .select("id, code, name, provider_mapping_required, designation_category:designation_categories!designations_designation_category_id_fkey(id, code, name, people_module, is_active)")
       .eq("company_id", companyId)
       .eq("is_active", true),
     supabaseAdmin
@@ -249,7 +250,8 @@ async function loadMappingData(authorization: AuthorizationContext, workforceId?
       dropxId: worker.dropx_id!.trim().toUpperCase(),
       designationId: worker.designation_id,
       designationCode: designationById.get(worker.designation_id)?.code ?? "",
-      designationName: designationById.get(worker.designation_id)?.name ?? ""
+      designationName: designationById.get(worker.designation_id)?.name ?? "",
+      requiresProviderId: designationById.get(worker.designation_id)?.provider_mapping_required !== false
     }));
 
   const mappings = workers.map((worker) => {
@@ -285,6 +287,7 @@ async function loadMappingData(authorization: AuthorizationContext, workforceId?
       designationId: worker.designationId,
       designationCode: worker.designationCode,
       designationName: worker.designationName,
+      requiresProviderId: worker.requiresProviderId,
       providerMemberId: mapping?.provider_member_id ?? "",
       providerId: mapping?.provider_id ?? locationProviderById.get(stationId) ?? "",
       stationId,
@@ -317,7 +320,7 @@ export async function ProviderMappingPageContent({
   eyebrow = "Source-of-truth bridge",
   pageCode = "provider_mapping",
   subtitle = "Maintain Delivery Network IDs, provider member IDs, date-effective history, payout methods and partner rates.",
-  title = "ID & pay mapping", embedded = false, workforceId, initialStation
+  title = "ID & pay mapping", embedded = false, workforceId, initialStation, focused = false
 }: {
   active?: string;
   eyebrow?: string;
@@ -325,17 +328,22 @@ export async function ProviderMappingPageContent({
   subtitle?: string;
   title?: string;
   embedded?: boolean;
+  focused?: boolean;
   workforceId?: string;
   initialStation?: string;
 }) {
   const authorization = await requirePagePermission(pageCode, "access");
   const permission = authorization.permissions[pageCode];
-  const today = workforceToday();
-  const monthStart = `${today.slice(0, 8)}01`;
+
   const { locations, mappings, paymentMethods, error: mappingError } = await loadMappingData(authorization, workforceId);
-  const orphanResult = !embedded && supabaseAdmin ? await supabaseAdmin.rpc("workforce_unmapped_provider_ids", {p_company:requireCompanyId(authorization),p_locations:authorization.hasAllLocationAccess?null:authorization.locationScopeIds}) : {data:[],error:null};
-  const error=mappingError || (orphanResult.error ? `Unmapped provider IDs could not be loaded: ${orphanResult.error.message}` : null);
-  const providerPending:ProviderPendingMappingRow[]=(orphanResult.data??[]).map((row:any)=>({id:`${row.provider_id}:${row.station_code}:${row.provider_member_id}`,providerMemberId:row.provider_member_id,providerName:row.provider_name,sourceName:row.source_name||"",stationCode:row.station_code,firstSeen:row.first_seen,lastSeen:row.last_seen,dailyRows:Number(row.daily_rows),deliveries:Number(row.deliveries),reason:"Provider ID from shipment imports has no confirmed DropX mapping."}));
+  const [orphanResult, reportResult] = !embedded && supabaseAdmin ? await Promise.all([
+    supabaseAdmin.rpc("workforce_unmapped_provider_ids", {p_company:requireCompanyId(authorization),p_locations:authorization.hasAllLocationAccess?null:authorization.locationScopeIds}),
+    (authorization.hasAllLocationAccess ? supabaseAdmin.from("cps_shipment_daily").select("work_date").eq("company_id",requireCompanyId(authorization)) : supabaseAdmin.from("cps_shipment_daily").select("work_date").eq("company_id",requireCompanyId(authorization)).in("station_code",locations.length?locations.map(location=>location.label.split(" - ")[0]):["__none__"]))
+      .order("work_date",{ascending:false}).limit(1)
+  ]) : [{data:[],error:null},{data:[],error:null}];
+  const latestReportDate=String(reportResult.data?.[0]?.work_date??"");
+  const error=mappingError || reportResult.error?.message || (orphanResult.error ? `Unmapped provider IDs could not be loaded: ${orphanResult.error.message}` : null);
+  const providerPending:ProviderPendingMappingRow[]=(orphanResult.data??[]).map((row:any)=>({id:`${row.provider_id}:${row.station_code}:${row.provider_member_id}`,providerId:row.provider_id,providerMemberId:row.provider_member_id,providerName:row.provider_name,sourceName:row.source_name||"",stationCode:row.station_code,firstSeen:row.first_seen,lastSeen:row.last_seen,dailyRows:Number(row.daily_rows),deliveries:Number(row.deliveries),reason:"Provider ID from shipment imports has no confirmed DropX mapping."}));
   const matchKey=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]/g,"");
   for(const pending of providerPending){const candidates=mappings.filter(row=>matchKey(row.dropxName)===matchKey(pending.sourceName)&&locations.find(location=>location.id===row.stationId)?.label.split(" - ")[0]===pending.stationCode);if(candidates.length===1){pending.suggestedWorkforceId=candidates[0].workforceId;pending.suggestedDropxId=candidates[0].dropxId;pending.suggestedName=candidates[0].dropxName;}}
   const flash = loadFlashMessage();
@@ -377,9 +385,10 @@ export async function ProviderMappingPageContent({
           mappings={workforceId ? mappings.filter(row=>row.workforceId===workforceId) : mappings}
           paymentMethods={paymentMethods}
           providerPending={providerPending}
-          providerPendingPeriod="All imported shipment history"
+          latestReportDate={latestReportDate}
+          refreshedAt={new Date().toISOString()}
         />
       ) : null}
     </>;
-  return embedded ? content : <AppShell active={active} pageCode={pageCode}>{content}</AppShell>;
+  return embedded ? content : focused ? <WorkforceOnboardingShell active="mapping">{content}</WorkforceOnboardingShell> : <AppShell active={active} pageCode={pageCode}>{content}</AppShell>;
 }

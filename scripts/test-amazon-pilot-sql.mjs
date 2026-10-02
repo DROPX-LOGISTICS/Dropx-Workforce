@@ -26,7 +26,7 @@ test('pilot migration enforces exact joins, immutable payroll boundary and idemp
  await db.exec(schema);await db.exec(readFileSync(new URL('../supabase/migrations/20261002170849_amazon_onboarding_pilot.sql',import.meta.url),'utf8'));
  await db.exec(`insert into companies values('${c}');insert into profiles values('${actor}');insert into stations values('${station}','${c}','TLPB');insert into designation_categories values('${category}','delivery_network');insert into designations values('${designation}','${c}','DA',true,'${category}');insert into workforce_amazon_station_settings values('${station}','${c}',true);`);
  const day=(await db.query("select (now() at time zone 'Asia/Kolkata')::date::text as today")).rows[0].today;
- const input={id:worker,full_name:'Synthetic Pilot',mobile:'9000000000',email:'synthetic@example.test',station_id:station,designation_id:designation,reported_on:day,biometric_id:'98765',dropx_id:'TEST-PILOT',trial_days:2};
+ const input={id:worker,full_name:'Synthetic Pilot',mobile:'9000000000',email:'synthetic@example.test',station_id:station,designation_id:designation,reported_on:day,biometric_id:'98765',dropx_id:'TEST-PILOT',trial_days:0};
  await db.query('select workforce_create_amazon_pilot($1,$2,$3,null)',[c,actor,JSON.stringify(input)]);
  for(let i=0;i<2;i++)await db.query('select workforce_queue_amazon_pilot($1,$2)',[c,worker]);
  assert.equal((await db.query('select count(*)::int n from workforce_amazon_invitation_requests')).rows[0].n,1);
@@ -35,8 +35,9 @@ test('pilot migration enforces exact joins, immutable payroll boundary and idemp
  await assert.rejects(db.query('insert into workforce_adjustments(workforce_id) values($1)',[worker]),/Pilot records cannot/);
  await db.query('insert into workforce(id,is_active) values($1,false)',[legacy]);await db.query('update workforce set is_active=true where id=$1',[legacy]);
  await db.query('insert into field_executive_provider_mappings(workforce_id) values($1)',[legacy]);
- await assert.rejects(db.query("select workforce_update_amazon_pilot($1,$2,$3,'ready','{}',null)",[c,actor,worker]),/reason for early/);
- await db.query("select workforce_update_amazon_pilot($1,$2,$3,'ready',$4,null)",[c,actor,worker,JSON.stringify({notes:'Previous delivery experience'})]);
+ const p=(await db.query('select trial_days,trial_completed_at,invitation_timing from workforce_amazon_pilots')).rows[0];
+ assert.equal(p.trial_days,0);assert.equal(p.trial_completed_at,null);assert.equal(p.invitation_timing,'on_arrival');
+ assert.equal((await db.query('select count(*)::int n from workforce_amazon_pilot_trials')).rows[0].n,0);
  const e=async()=> (await db.query('select workforce_amazon_pilot_sources($1,$2) e',[c,worker])).rows[0].e;
  assert.equal((await e()).employeeId,null);
  await db.query('insert into workforce_amazon_portal_links values($1,$2,$3,$4)',[c,worker,'provider-exact','TAS-EXACT']);

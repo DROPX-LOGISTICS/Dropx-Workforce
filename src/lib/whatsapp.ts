@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { extractWhatsAppTemplateVariables, type WhatsAppTemplateComponent } from "@/lib/whatsapp-template";
+import { amazonDriverWelcome, amazonDriverWelcomeMappings } from '@/lib/amazon-driver-welcome';
 import { workforceOnboardingEventCode } from "@/lib/whatsapp-onboarding";
 
 type OnboardingMessageData = {
@@ -16,6 +17,7 @@ type OnboardingMessageData = {
   locationName: string;
   providerName: string;
   onboardingUrl?: string;
+  amazonDriverWelcome?: boolean;
   registrationToken: string;
   triggeredBy?: string | null;
 };
@@ -193,6 +195,11 @@ async function sendOnboardingWhatsApp(data: OnboardingMessageData) {
     if (!settings.data?.is_enabled || !config.data?.is_enabled) {
       await writeLog({ ...onboardingLogIdentity(data), event_code: eventCode, recipient, template_name: config.data?.template_name, status: "skipped", error_message: "WhatsApp or onboarding notification is disabled." });
       return;
+    }
+    if (data.amazonDriverWelcome) {
+      const dedicated=await supabaseAdmin.from('whatsapp_template_cache').select('template_id,name,language,status').eq('company_id',data.companyId).eq('whatsapp_profile_id',config.data.whatsapp_profile_id).eq('name',amazonDriverWelcome.name).eq('language',amazonDriverWelcome.language).maybeSingle();
+      if(dedicated.error||dedicated.data?.status!=='APPROVED')throw new Error('The Amazon Driver ID welcome template is awaiting WhatsApp approval.');
+      config.data={...config.data,template_id:dedicated.data.template_id,template_name:dedicated.data.name,template_language:dedicated.data.language,variable_mappings:amazonDriverWelcomeMappings};
     }
     if (!config.data.whatsapp_profile_id || !config.data.template_id || !config.data.template_name || !config.data.template_language) throw new Error("WhatsApp onboarding configuration is incomplete.");
     const [profileResult, profileTokenResult] = await Promise.all([

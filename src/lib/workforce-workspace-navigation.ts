@@ -66,7 +66,7 @@ export function activeWorkspace(items: NavItem[], pathname: string, active: stri
     '/delivery-network/payment-holds':'Payments','/delivery-network/mileage':'Payments',
     '/delivery-network/pooled-settlements':'Payments','/delivery-network/contractor-profiles':'Associates',
     '/delivery-network/lifecycle':'Associates','/delivery-network/id-onboarding':'Onboarding',
-    '/delivery-network/amazon-lifecycle':'Onboarding',
+    '/delivery-network/amazon-lifecycle':'Onboarding','/delivery-network/amazon-pilot':'Onboarding',
     '/delivery-network/rate-mapping':'Onboarding','/delivery-network/rate-cards':'Onboarding',
     '/delivery-network/onboarding':'Onboarding','/delivery-network/referrals':'Referrals','/delivery-network/attention':'Associates'
   };

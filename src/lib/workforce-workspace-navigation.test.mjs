@@ -12,7 +12,7 @@ test('each operational tool remains reachable with one sidebar destination per w
  assert.equal(links.filter(x=>x.href?.startsWith('/delivery-network/reports')).length,1);
  assert.ok(workforceNavItems.find(x=>x.label==='Associates')?.children?.some(x=>x.href==='/delivery-network/associates'));
  assert.deepEqual(workforceNavItems.find(x=>x.label==='Associates')?.children?.filter(x=>!x.secondary).map(x=>x.label),['Active Associates']);
- assert.deepEqual(workforceNavItems.find(x=>x.label==='Onboarding')?.children?.filter(x=>!x.secondary).map(x=>x.label),['Onboard Associate','Client ID','ID & Rate Mapping']);
+ assert.deepEqual(workforceNavItems.find(x=>x.label==='Onboarding')?.children?.filter(x=>!x.secondary).map(x=>x.label),['Amazon Onboarding','Onboard Associate','Client ID','ID & Rate Mapping']);
  assert.ok(workforceNavItems.find(x=>x.label==='Onboarding')?.children?.some(x=>x.label==='BGC exception desk'));
  assert.ok(workforceNavItems.find(x=>x.label==='User access')?.children?.some(x=>x.href==='/users?section=roles'));
  assert.ok(links.some(x=>x.href==='/delivery-network/communications/whatsapp'));

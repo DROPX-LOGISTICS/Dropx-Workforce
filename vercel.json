@@ -30,6 +30,10 @@
     {
       "path": "/api/cron/partner-onboarding-reminders",
       "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/cron/amazon-pilot",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

@@ -123,6 +123,7 @@ export const workforceNavItems: NavItem[] = [
     icon: "DA",
     href: "/delivery-network/onboarding?area=registration",
     children: [
+      { code: "delivery_associates", label: "Amazon Onboarding", href: "/delivery-network/amazon-pilot" },
       { code: "delivery_associates", label: "Onboard Associate", href: "/delivery-network/onboarding?area=registration" },
       { code: "executive_id_onboarding", label: "Client ID", href: "/delivery-network/onboarding?area=client" },
       { code: "provider_mapping", label: "ID & Rate Mapping", href: "/delivery-network/rate-mapping" },

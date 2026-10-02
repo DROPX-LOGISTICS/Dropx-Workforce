@@ -15,6 +15,7 @@ type OnboardingMessageData = {
   locationCode: string;
   locationName: string;
   providerName: string;
+  onboardingUrl?: string;
   registrationToken: string;
   triggeredBy?: string | null;
 };
@@ -215,9 +216,9 @@ async function sendOnboardingWhatsApp(data: OnboardingMessageData) {
     const components = (template.data.components ?? []) as WhatsAppTemplateComponent[];
     const variables = extractWhatsAppTemplateVariables(components);
     const mappings = (config.data.variable_mappings ?? {}) as Record<string, string>;
-    const registrationLink = data.registrationToken
+    const registrationLink = data.onboardingUrl || (data.registrationToken
       ? `https://dashboard.dropxlogistics.com/register/${encodeURIComponent(data.registrationToken)}`
-      : (process.env.NEXT_PUBLIC_CONNECT_WEB_URL || "https://team.dropxlogistics.com/account/register");
+      : (process.env.NEXT_PUBLIC_CONNECT_WEB_URL || "https://team.dropxlogistics.com/account/register"));
     const values: Record<string, string> = {
       full_name: data.fullName,
       mobile: data.mobile,

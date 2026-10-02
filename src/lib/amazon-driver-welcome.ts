@@ -1,8 +1,8 @@
 // Dedicated to the new Amazon flow. Existing onboarding templates stay unchanged.
 export const amazonDriverWelcome = {
-  name: 'dropx_amazon_driver_welcome_v1',
+  name: 'dropx_amazon_driver_welcome_v2',
   language: 'en',
-  category: 'UTILITY',
+  category: 'MARKETING',
   parameter_format: 'POSITIONAL',
   components: [
     {type:'BODY',text:'Hi {{1}},\n\nYour DropX driver onboarding has started.\n\nDriver ID: {{2}}\nBiometric enrolment ID: {{3}}\n\nYour Amazon email invitation has been requested. When it arrives, open it and complete your Amazon registration. You can view pending steps in DropX One.\n\nOpen https://one.dropxlogistics.com to continue.',example:{body_text:[['Sample Driver','D1234','12345']]}},

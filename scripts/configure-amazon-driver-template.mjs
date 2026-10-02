@@ -24,4 +24,4 @@ if(!template){
 }
 const saved=await db.from('whatsapp_template_cache').upsert({company_id:company,template_id:String(template.id),whatsapp_profile_id:profileId,name:template.name,language:template.language,category:template.category,status:template.status||'PENDING',components:template.components,synced_at:new Date().toISOString()},{onConflict:'company_id,template_id'});
 if(saved.error)throw new Error('Meta template exists; cache could not be saved. Refresh without --submit.');
-console.log(JSON.stringify({name:template.name,status:template.status,id:template.id,existingTemplatesUnchanged:true,messagesSent:0}));
+console.log(JSON.stringify({name:template.name,status:template.status,id:template.id,reason:template.rejected_reason,existingTemplatesUnchanged:true,messagesSent:0}));

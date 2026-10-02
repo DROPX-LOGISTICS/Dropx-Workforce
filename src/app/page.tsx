@@ -1,5 +1,2 @@
 import { redirect } from "next/navigation";
-
-export default function WorkforceRootPage() {
-  redirect("/delivery-network");
-}
+export default function WorkforceHome() { redirect("/delivery-network/amazon-pilot"); }

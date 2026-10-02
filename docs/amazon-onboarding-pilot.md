@@ -21,3 +21,5 @@ The established LSC queue delivers the Amazon email invitation. Queue inserts ar
 ## Release
 
 Workforce: GitHub-first release from `DROPX-LOGISTICS/Dropx-Workforce`, migrations only via its production GitHub Actions workflow. DropX One: isolated `apps/connect` changes in `nisar-dropx/dropx-partner-dashboard`. Missing pilot tables are tolerated by One until migration release; other lookup errors fail closed. Verify both production commit SHAs and project/domain associations.
+
+The dedicated Workforce deployment schedules only `/api/cron/amazon-pilot`. Shared-template document, cleanup, OpsPulse and campaign schedules remain with their existing owning deployments; this restored project must not duplicate them. The established Cloudflare invitation worker polls every five minutes, except the quarter-past tick which processes IDfy. Arrivals enter its queue immediately. Its optional immediate HTTP kick requires the worker key; scheduled processing remains independent of that setting.

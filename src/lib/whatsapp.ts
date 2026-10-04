@@ -1,7 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { extractWhatsAppTemplateVariables, type WhatsAppTemplateComponent } from "@/lib/whatsapp-template";
-import { listMetaTemplates } from '@/lib/whatsapp-template-meta';
-import { amazonDriverWelcome, amazonDriverWelcomeMappings } from '@/lib/amazon-driver-welcome';
 import { workforceOnboardingEventCode } from "@/lib/whatsapp-onboarding";
 
 type OnboardingMessageData = {
@@ -18,7 +16,6 @@ type OnboardingMessageData = {
   locationName: string;
   providerName: string;
   onboardingUrl?: string;
-  amazonDriverWelcome?: boolean;
   registrationToken: string;
   triggeredBy?: string | null;
 };
@@ -206,20 +203,6 @@ async function sendOnboardingWhatsApp(data: OnboardingMessageData) {
     if (profileTokenResult.error) throw new Error(profileTokenResult.error.message);
     const profile = profileResult.data;
     if (!profile?.is_active || !profile.phone_number_id || !profile.graph_api_version || !profileTokenResult.data) throw new Error("Selected WhatsApp profile is incomplete or inactive.");
-    if (data.amazonDriverWelcome) {
-      const dedicated=await supabaseAdmin.from('whatsapp_template_cache').select('template_id,name,language,status').eq('company_id',data.companyId).eq('whatsapp_profile_id',profile.id).eq('name',amazonDriverWelcome.name).eq('language',amazonDriverWelcome.language).maybeSingle();
-      if(dedicated.error||!dedicated.data)throw new Error('The DropX ID WhatsApp welcome is not configured.');
-      const driverTemplate=dedicated.data;
-      let status=driverTemplate.status;
-      if(status!=='APPROVED'){
-        // Recheck this template with Meta so approval never needs a manual cache update.
-        const live=(await listMetaTemplates(profile.graph_api_version,profile.business_account_id,String(profileTokenResult.data))).find(row=>String(row.id)===driverTemplate.template_id);
-        status=String(live?.status??status);
-        if(live)await supabaseAdmin.from('whatsapp_template_cache').update({status,synced_at:new Date().toISOString()}).eq('company_id',data.companyId).eq('template_id',dedicated.data.template_id).eq('whatsapp_profile_id',profile.id);
-      }
-      if(status!=='APPROVED')throw new Error('The DropX ID WhatsApp welcome awaits Meta approval. Amazon email invitation is tracked separately.');
-      config.data={...config.data,template_id:dedicated.data.template_id,template_name:dedicated.data.name,template_language:dedicated.data.language,variable_mappings:amazonDriverWelcomeMappings};
-    }
     templateName = config.data.template_name;
 
     const template = await supabaseAdmin

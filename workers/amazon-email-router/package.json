@@ -1,0 +1,13 @@
+{
+  "name": "dropx-amazon-email-router",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.147.0"
+  }
+}

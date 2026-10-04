@@ -12,9 +12,26 @@ import { requireDesignationOnboardingAccess } from '@/lib/designation-onboarding
 import { requireDesignationPortalAccess } from '@/lib/designation-portal-access';
 import { refreshAmazonPilot } from '@/lib/amazon-pilot-data';
 import { callWorkforceAmazonWorker } from '@/lib/workforce-amazon-worker';
+import { ensureAmazonEmailRoute } from '@/lib/amazon-email-routing';
 const path='/delivery-network/amazon-pilot';
 const value=(form:FormData,key:string)=>String(form.get(key)??'').trim();
 const fail=(error:unknown)=>error instanceof Error?error.message:'Unable to save onboarding.';
+async function ensurePilotEmailRoute(company:string,workforceId:string){
+ if(!supabaseAdmin)throw new Error('Database unavailable.');
+ const alias=await supabaseAdmin.from('workforce_amazon_email_aliases').select('alias_email,status,routing_rule_id').eq('company_id',company).eq('workforce_id',workforceId).single();
+ if(alias.error||!alias.data)throw new Error('The backend email reservation is missing.');
+ if(['routed','receiving'].includes(alias.data.status)&&alias.data.routing_rule_id)return alias.data.alias_email;
+ try{
+  const ruleId=await ensureAmazonEmailRoute(alias.data.alias_email);
+  const saved=await supabaseAdmin.from('workforce_amazon_email_aliases').update({status:'routed',routing_rule_id:ruleId,routing_error:null,routed_at:new Date().toISOString()}).eq('company_id',company).eq('workforce_id',workforceId);
+  if(saved.error)throw new Error(saved.error.message);
+  return alias.data.alias_email;
+ }catch(error){
+  const message=fail(error).slice(0,1000);
+  await supabaseAdmin.from('workforce_amazon_email_aliases').update({status:'route_failed',routing_error:message}).eq('company_id',company).eq('workforce_id',workforceId);
+  throw new Error(`Inbox route could not be activated: ${message}`);
+ }
+}
 export type AmazonPilotCreateState={status:'idle'|'warning'|'error';message:string;existingProfile?:string};
 export async function createAmazonPilot(_:AmazonPilotCreateState,form:FormData):Promise<AmazonPilotCreateState>{
  const auth=await requirePagePermission('delivery_associates','add');
@@ -23,8 +40,9 @@ export async function createAmazonPilot(_:AmazonPilotCreateState,form:FormData):
   if(auth.readOnly||!supabaseAdmin)throw new Error('Creation is unavailable.');
   const company=requireCompanyId(auth),stationId=value(form,'station_id'),designationId=value(form,'designation_id'),mobile=value(form,'mobile');
   if(!auth.hasAllLocationAccess&&!auth.locationScopeIds.includes(stationId))throw new Error('Station outside your access.');
-  const stationConfig=await supabaseAdmin.from('workforce_amazon_station_settings').select('invitation_enabled').eq('company_id',company).eq('station_id',stationId).maybeSingle();
+  const stationConfig=await supabaseAdmin.from('workforce_amazon_station_settings').select('invitation_enabled,associate_email_pattern').eq('company_id',company).eq('station_id',stationId).maybeSingle();
   if(stationConfig.error||!stationConfig.data?.invitation_enabled)throw new Error('Amazon invitations are not enabled at this station. Choose a configured station.');
+  if(!stationConfig.data.associate_email_pattern)throw new Error('Configure the backend email alias pattern for this station before starting the pilot.');
   const role=await supabaseAdmin.from('designations').select('id,name,onboarding_role_ids,portal_permissions,onboarding_categories,registration_category_code,designation_category:designation_categories!designations_designation_category_id_fkey(id,code,name,people_module)').eq('company_id',company).eq('id',designationId).eq('is_active',true).single();
   if(role.error)throw new Error('Choose a valid designation.');
   requireDesignationOnboardingAccess(role.data,auth);
@@ -38,16 +56,19 @@ export async function createAmazonPilot(_:AmazonPilotCreateState,form:FormData):
   }
   const generated={companyId:company,category:'workforce',designationId,designationName:role.data.name,locationId:stationId,fallback:()=>{throw new Error('Configure the designation ID series before recording arrivals.');}};
   const biometricId=await generateConfiguredBiometricId(generated),requestedId=randomUUID();
-  const created=await supabaseAdmin.rpc('workforce_create_amazon_pilot',{p_company:company,p_actor:auth.userId,p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds,p_data:{id:requestedId,full_name:value(form,'full_name'),mobile,email:value(form,'email').toLowerCase(),station_id:stationId,designation_id:designationId,reported_on:value(form,'reported_on'),trial_days:0,biometric_id:biometricId,identity_exception_confirmed:identityExceptionConfirmed,...identityExceptionEventMetadata(identityEvaluation)}});
+  const created=await supabaseAdmin.rpc('workforce_create_amazon_alias_pilot',{p_company:company,p_actor:auth.userId,p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds,p_data:{id:requestedId,full_name:value(form,'full_name'),mobile,station_id:stationId,designation_id:designationId,reported_on:value(form,'reported_on'),trial_days:0,biometric_id:biometricId,identity_exception_confirmed:identityExceptionConfirmed,...identityExceptionEventMetadata(identityEvaluation)}});
   if(created.error)throw new Error(created.error.message);
   id=String(created.data);
-  const queue=await supabaseAdmin.rpc('workforce_queue_amazon_pilot',{p_company:company,p_workforce:id});
-  if(queue.error)warning='Arrival saved. Amazon invitation needs station configuration; open the associate to review.';
-  // The queue is durable even if the worker is temporarily unavailable.
-  if(!queue.error)waitUntil(callWorkforceAmazonWorker('/api/admin/amazon/invitation/tick',{method:'POST',body:'{}'}).catch(()=>undefined));
+  try{
+   await ensurePilotEmailRoute(company,id);
+   const queue=await supabaseAdmin.rpc('workforce_queue_amazon_pilot',{p_company:company,p_workforce:id});
+   if(queue.error)warning='Arrival saved. Amazon invitation needs station configuration; open the associate to review.';
+   // The queue is durable even if the worker is temporarily unavailable.
+   if(!queue.error)waitUntil(callWorkforceAmazonWorker('/api/admin/amazon/invitation/tick',{method:'POST',body:'{}'}).catch(()=>undefined));
+  }catch(error){warning=`Arrival and backend email saved. ${fail(error)} Open the associate and retry.`;}
   await refreshAmazonPilot(company,id).catch(()=>undefined);
  }catch(error){return {status:'error',message:fail(error)};}
- revalidatePath(path);redirect(`${path}?id=${id}&notice=${encodeURIComponent(warning||'Amazon invitation queued. The Driver ID will appear after LSC returns it; biometric enrollment is ready.')}`);
+ revalidatePath(path);redirect(`${path}?id=${id}&notice=${encodeURIComponent(warning||'Backend email reserved and Amazon invitation queued. The Driver ID will appear after LSC returns it; biometric enrollment is ready.')}`);
 }
 export async function updateAmazonPilot(form:FormData){
  const auth=await requirePagePermission('delivery_associates','edit'),id=value(form,'id');
@@ -66,6 +87,7 @@ export async function updateAmazonPilot(form:FormData){
   }else if(p.closed_at)throw new Error('This onboarding is closed. Reactivate it before making another change.');
   else if(action==='refresh'){await refreshAmazonPilot(company,id);}
   else if(action==='queue'){
+   await ensurePilotEmailRoute(company,id);
    const q=await db.rpc('workforce_queue_amazon_pilot',{p_company:company,p_workforce:id});if(q.error)throw new Error(q.error.message);
    waitUntil(callWorkforceAmazonWorker('/api/admin/amazon/invitation/tick',{method:'POST',body:'{}'}).catch(()=>undefined));
    await refreshAmazonPilot(company,id);

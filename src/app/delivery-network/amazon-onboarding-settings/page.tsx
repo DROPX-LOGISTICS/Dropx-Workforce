@@ -514,13 +514,14 @@ export default async function AmazonSettings({
                           </select>
                         </label>
                         <label>
-                          Example email pattern (optional)
+                          Backend email alias pattern
                           <input
                             name="associate_email_pattern"
                             maxLength={254}
                             defaultValue={current?.associate_email_pattern ?? ""}
-                            placeholder="{first_name}.{station_code}@yourdomain.com"
+                            placeholder="{first_name}.{station_code}.{unique}@drivers.yourdomain.com"
                           />
+                          <small>Use {`{unique}`} for collision-safe addresses. If omitted, Workforce appends a unique token before the domain.</small>
                         </label>
                         <label className="checkbox-row">
                           <input name="invitation_enabled" type="checkbox" defaultChecked={current?.invitation_enabled ?? false} />{" "}

@@ -33,7 +33,7 @@ const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const c=id(1),actor=id(2),station=id(3),designation=id(4),category=id(5),worker=id(6),legacy=id(7),secondDesignation=id(8),confirmedWorker=id(9);
 test('pilot migration enforces exact joins, immutable payroll boundary and idempotent invitations',async()=>{
  const db=new PGlite();try{
- await db.exec(schema);await db.exec(readFileSync(new URL('../supabase/migrations/20261002170849_amazon_onboarding_pilot.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004124500_confirm_amazon_mobile_overlap.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004190000_amazon_pilot_lsc_driver_identity.sql',import.meta.url),'utf8'));
+ await db.exec(schema);await db.exec(readFileSync(new URL('../supabase/migrations/20261002170849_amazon_onboarding_pilot.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004124500_confirm_amazon_mobile_overlap.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004190000_amazon_pilot_lsc_driver_identity.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004203000_configurable_onboarding_exit.sql',import.meta.url),'utf8'));
  await db.exec(`insert into companies values('${c}');insert into profiles values('${actor}');insert into stations values('${station}','${c}','TLPB');insert into designation_categories values('${category}','delivery_network');insert into designations values('${designation}','${c}','DA',true,'${category}'),('${secondDesignation}','${c}','DCD',true,'${category}');insert into workforce_amazon_station_settings values('${station}','${c}',true);`);
  const day=(await db.query("select (now() at time zone 'Asia/Kolkata')::date::text as today")).rows[0].today;
  const input={id:worker,full_name:'Synthetic Pilot',mobile:'9000000000',email:'synthetic@example.test',station_id:station,designation_id:designation,reported_on:day,biometric_id:'98765',dropx_id:'TEST-PILOT',trial_days:0};
@@ -69,5 +69,15 @@ test('pilot migration enforces exact joins, immutable payroll boundary and idemp
  const confirmation=(await db.query("select evidence from workforce_amazon_pilot_history where workforce_id=$1 and event='reported'",[confirmedWorker])).rows[0].evidence;
  assert.equal(confirmation.identity_exception_confirmed,true);
  assert.equal(confirmation.identity_exception_profiles.length,1);
+ const reason=id(20);
+ await db.query("insert into workforce_onboarding_exit_reasons(id,company_id,client_code,code,label,requires_note) values($1,$2,'AMAZON','role_not_suitable','Role not suitable',false)",[reason,c]);
+ await db.query('select workforce_submit_amazon_pilot_exit($1,$2,$3,$4)',[c,worker,reason,'Not a fit after training']);
+ const closed=(await db.query('select closed_at,exit_reason_id,exit_requested_source from workforce_amazon_pilots where workforce_id=$1',[worker])).rows[0];
+ assert.ok(closed.closed_at);assert.equal(closed.exit_reason_id,reason);assert.equal(closed.exit_requested_source,'associate');
+ assert.equal((await db.query('select status from biometric_enrolments where account_id=$1',[worker])).rows[0].status,'Inactive');
+ await db.query('select workforce_reactivate_amazon_pilot($1,$2,$3,null)',[c,actor,worker]);
+ const reopened=(await db.query('select closed_at,reactivated_by from workforce_amazon_pilots where workforce_id=$1',[worker])).rows[0];
+ assert.equal(reopened.closed_at,null);assert.equal(reopened.reactivated_by,actor);
+ assert.equal((await db.query('select status from biometric_enrolments where account_id=$1',[worker])).rows[0].status,'Active');
  }finally{await db.close();}
 });

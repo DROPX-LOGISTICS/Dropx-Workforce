@@ -2,3 +2,46 @@
 
 .hero{background:transparent;padding:4px 0 24px;border:0;border-radius:0;align-items:center;margin-bottom:4px}.hero h1{font-size:32px;margin:12px 0 8px;letter-spacing:-1px}.hero p{margin:0;font-size:13px}.heroActions{margin:0;align-items:center}.pageFooter{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:10px;color:#8a8790;padding:0 3px;line-height:1.6}.pageFooter>span:last-child{margin-left:auto}.footnote{font-size:12px;line-height:1.75;margin:0 0 24px}@media(max-width:650px){.hero{padding:0 0 24px}.hero h1{font-size:27px}.heroActions{margin-top:20px}.pageFooter>span:last-child{margin-left:0;width:100%}}
 .identityWarning{grid-column:1/-1;display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border:1px solid #efddae;border-radius:10px;background:#fff9e9;color:#76591c}.identityWarning svg{flex:0 0 auto;margin-top:1px}.identityWarning strong{display:block;font-size:12px}.identityWarning p{margin:4px 0;font-size:11px;line-height:1.55}.identityWarning small{display:block;color:#8a6e31;font-size:10px}
+
+/* Compact beta onboarding workspace. Keep source evidence available without putting it in the primary scan path. */
+.page{max-width:1420px;padding-top:6px}
+.hero{padding:4px 0 16px}
+.hero h1{font-size:28px;margin:8px 0 5px}
+.hero p{font-size:11px}
+.stats{gap:9px;margin-bottom:14px}
+.stats a{min-height:72px;padding:13px 15px;border-radius:11px}
+.stats svg{top:14px;right:14px;width:17px}
+.stats strong{font-size:22px;margin-bottom:5px}
+.stats span{font-size:10px}
+.panel{margin-bottom:14px;border-radius:13px}
+.panel>header{padding:15px 18px}
+.panel h2{font-size:16px;margin-top:3px}
+.panel header p{margin-top:4px;font-size:10px}
+.filters{padding:12px 18px}
+.page th{padding:10px 17px;font-size:9px}
+.page td{padding:13px 17px}
+.detail{grid-template-columns:minmax(0,2fr) minmax(260px,.75fr);gap:14px}
+.detailBody{padding:15px 18px}
+.current{align-items:flex-start;gap:11px;padding:13px 14px;border-radius:10px}
+.current h3{font-size:15px;margin:3px 0}
+.current p{font-size:11px;line-height:1.5;margin:0 0 7px}
+.current span{font-size:9px;font-weight:700}
+.identityGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:11px 0}
+.identityGrid>div{display:grid;gap:4px;min-width:0;padding:10px 11px;border:1px solid #efedea;border-radius:8px;background:#faf9f7}
+.identityGrid span,.quickFact span{font-size:8px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
+.identityGrid strong{overflow:hidden;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.evidence{margin-top:9px;border-top:1px solid var(--line);padding-top:10px}
+.evidence summary{cursor:pointer;font-size:11px;font-weight:700}
+.evidenceGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:10px}
+.evidenceGrid>div{display:grid;gap:5px;min-width:0;padding:9px;background:#f7f7f6;border-radius:7px}
+.evidenceGrid span{font-size:8px;color:var(--muted)}
+.evidenceGrid code{overflow:hidden;padding:0;background:transparent;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.evidence>p{margin:8px 0 0;font-size:9px;color:var(--muted)}
+.quickFact{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0 13px;border-bottom:1px solid var(--line)}
+.quickFact strong{font-size:10px;text-align:right}
+.sideForm{margin:0;padding:13px 0}
+.sideForm summary{font-size:11px;font-weight:700}
+.sideForm p{margin-top:8px;font-size:10px;line-height:1.5}
+.pageFooter{padding-top:2px}
+@media(max-width:900px){.detail{grid-template-columns:1fr}.evidenceGrid{grid-template-columns:1fr}.identityGrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:600px){.hero h1{font-size:24px}.stats{grid-template-columns:1fr 1fr}.identityGrid{grid-template-columns:1fr 1fr}.identityGrid>div:last-child{grid-column:1/-1}}

@@ -28,9 +28,12 @@ test('live invitation evidence replaces a stale queued snapshot immediately',()=
 // Verify the invitation contract without sending real messages.
 import {readFileSync} from 'node:fs';
 import {amazonDriverWelcome,amazonDriverWelcomeMappings} from './amazon-driver-welcome.ts';
-test('new arrival queues immediately and selects an isolated Driver ID welcome',()=>{
+test('new arrival queues immediately and keeps the DropX ID distinct from the later LSC Driver ID',()=>{
  const action=readFileSync(new URL('../app/delivery-network/amazon-pilot/actions.ts',import.meta.url),'utf8');
+ const page=readFileSync(new URL('../app/delivery-network/amazon-pilot/page.tsx',import.meta.url),'utf8');
  assert.match(action,/trial_days:0/);assert.match(action,/workforce_queue_amazon_pilot/);assert.match(action,/amazonDriverWelcome:true/);
- assert.equal(amazonDriverWelcomeMappings['body.2'],'dropx_id');assert.match(amazonDriverWelcome.components[0].text,/Driver ID: \{\{2\}\}/);
+ assert.equal(amazonDriverWelcomeMappings['body.2'],'dropx_id');assert.match(amazonDriverWelcome.components[0].text,/DropX ID: \{\{2\}\}/);
  assert.doesNotMatch(amazonDriverWelcome.components[0].text,/Emp(?:loyee)? ID|training|trial/);
+ assert.match(page,/DropX ID: \{w\?\.dropx_id/);
+ assert.doesNotMatch(page,/Driver ID: \{w\?\.dropx_id/);
 });

@@ -44,7 +44,7 @@ export default async function AmazonPilotPage({searchParams={}}:{searchParams?:R
  const messages=new Map<string,Message>();(messageResult.data??[]).forEach(row=>{if(!messages.has(row.candidate_id))messages.set(row.candidate_id,row as Message);});
  const roles=(roleResult.data??[]).filter(role=>{const category=Array.isArray(role.category)?role.category[0]:role.category;return category?.people_module==='delivery_network'&&canOnboardDesignation(role,auth);});
  const configured=new Set((settingsResult.data??[]).filter(setting=>setting.associate_email_pattern).map(setting=>setting.station_id));
- const invitationStations=stations.filter(station=>station.is_active&&configured.has(station.id));
+ const invitationStations=stations.filter(station=>station.is_active);
  const q=(searchParams.q??'').toLowerCase(),statusFilter=searchParams.status??'',stationFilter=searchParams.station??'';
  const shown=candidates.filter(candidate=>(!statusFilter||candidate.status===statusFilter)&&(!stationFilter||candidate.station_id===stationFilter)&&(!q||`${candidate.full_name} ${candidate.mobile} ${candidate.alias_email} ${candidate.biometric_id}`.toLowerCase().includes(q)));
  const selected=candidates.find(candidate=>candidate.id===searchParams.candidate),selectedInvite=selected?invitations.get(selected.id):undefined,selectedMessage=selected?messages.get(selected.id):undefined;
@@ -68,7 +68,7 @@ export default async function AmazonPilotPage({searchParams={}}:{searchParams?:R
   ].map(item=><a href={`${path}?status=${item.filter}`} key={item.label}><item.icon size={20}/><strong>{item.value}</strong><span>{item.label}</span></a>)}</section>
   {searchParams.new==='1'&&canAdd?<section className={styles.panel} id="arrival">
    <header><div><small>ISOLATED BETA</small><h2>Create email &amp; invite</h2><p>A unique inbound email is generated from the station master. No Workforce profile, pay mapping or DropX One account is created.</p></div></header>
-   <AmazonPilotInviteForm path={path} today={today} stations={invitationStations.map(station=>({id:station.id,label:`${station.station_code} · ${station.station_name}`}))} roles={roles.map(role=>({id:role.id,label:role.name}))}/>
+   <AmazonPilotInviteForm path={path} today={today} stations={invitationStations.map(station=>({id:station.id,label:`${station.station_code} · ${station.station_name}`,configured:configured.has(station.id)}))} roles={roles.map(role=>({id:role.id,label:role.name}))}/>
   </section>:null}
   <section className={styles.panel}>
    <header><div><small>LIVE PILOT QUEUE</small><h2>Candidates</h2></div><span className={styles.count}>{shown.length} records</span></header>

@@ -1,4 +1,5 @@
 'use server';
+
 import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -7,32 +8,35 @@ import { requirePagePermission,isCompanyOwner } from '@/lib/authorization';
 import { requireCompanyId } from '@/lib/company-scope';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { generateConfiguredBiometricId } from '@/lib/dropx-id-generation';
-import { evaluateOnboardingIdentity,assertOnboardingIdentityAllowed,identityExceptionEventMetadata } from '@/lib/onboarding-identity';
+import { evaluateOnboardingIdentity,assertOnboardingIdentityAllowed } from '@/lib/onboarding-identity';
 import { requireDesignationOnboardingAccess } from '@/lib/designation-onboarding-access';
 import { requireDesignationPortalAccess } from '@/lib/designation-portal-access';
-import { refreshAmazonPilot } from '@/lib/amazon-pilot-data';
 import { callWorkforceAmazonWorker } from '@/lib/workforce-amazon-worker';
 import { ensureAmazonEmailRoute } from '@/lib/amazon-email-routing';
+
 const path='/delivery-network/amazon-pilot';
 const value=(form:FormData,key:string)=>String(form.get(key)??'').trim();
 const fail=(error:unknown)=>error instanceof Error?error.message:'Unable to save onboarding.';
-async function ensurePilotEmailRoute(company:string,workforceId:string){
+
+async function ensureCandidateEmailRoute(company:string,candidateId:string){
  if(!supabaseAdmin)throw new Error('Database unavailable.');
- const alias=await supabaseAdmin.from('workforce_amazon_email_aliases').select('alias_email,status,routing_rule_id').eq('company_id',company).eq('workforce_id',workforceId).single();
- if(alias.error||!alias.data)throw new Error('The backend email reservation is missing.');
- if(['routed','receiving'].includes(alias.data.status)&&alias.data.routing_rule_id)return alias.data.alias_email;
+ const result=await supabaseAdmin.from('workforce_amazon_email_pilot_candidates').select('alias_email,inbox_status,routing_rule_id').eq('company_id',company).eq('id',candidateId).single();
+ if(result.error||!result.data)throw new Error('The backend email reservation is missing.');
+ if(['routed','receiving'].includes(result.data.inbox_status)&&result.data.routing_rule_id)return result.data.alias_email;
  try{
-  const ruleId=await ensureAmazonEmailRoute(alias.data.alias_email);
-  const saved=await supabaseAdmin.from('workforce_amazon_email_aliases').update({status:'routed',routing_rule_id:ruleId,routing_error:null,routed_at:new Date().toISOString()}).eq('company_id',company).eq('workforce_id',workforceId);
+  const ruleId=await ensureAmazonEmailRoute(result.data.alias_email);
+  const saved=await supabaseAdmin.from('workforce_amazon_email_pilot_candidates').update({inbox_status:'routed',routing_rule_id:ruleId,routing_error:null,routed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('company_id',company).eq('id',candidateId);
   if(saved.error)throw new Error(saved.error.message);
-  return alias.data.alias_email;
+  return result.data.alias_email;
  }catch(error){
   const message=fail(error).slice(0,1000);
-  await supabaseAdmin.from('workforce_amazon_email_aliases').update({status:'route_failed',routing_error:message}).eq('company_id',company).eq('workforce_id',workforceId);
+  await supabaseAdmin.from('workforce_amazon_email_pilot_candidates').update({inbox_status:'route_failed',routing_error:message,updated_at:new Date().toISOString()}).eq('company_id',company).eq('id',candidateId);
   throw new Error(`Inbox route could not be activated: ${message}`);
  }
 }
+
 export type AmazonPilotCreateState={status:'idle'|'warning'|'error';message:string;existingProfile?:string};
+
 export async function createAmazonPilot(_:AmazonPilotCreateState,form:FormData):Promise<AmazonPilotCreateState>{
  const auth=await requirePagePermission('delivery_associates','add');
  let id='';let warning='';
@@ -47,54 +51,49 @@ export async function createAmazonPilot(_:AmazonPilotCreateState,form:FormData):
   if(role.error)throw new Error('Choose a valid designation.');
   requireDesignationOnboardingAccess(role.data,auth);
   requireDesignationPortalAccess(role.data,'workforce','add',{isOwner:isCompanyOwner(auth)});
-  const identityEvaluation=await evaluateOnboardingIdentity({client:supabaseAdmin,companyId:company,mobile,designationId,designationName:role.data.name});
-  const identityExceptionConfirmed=value(form,'identity_exception_confirmed')==='true';
-  assertOnboardingIdentityAllowed(identityEvaluation,{allowDifferentWorkforceDesignation:true});
-  if(identityEvaluation.otherMatches.length&&!identityExceptionConfirmed){
-   const existing=identityEvaluation.otherMatches[0];
-   return {status:'warning',message:'This mobile number is already linked to a DropX identity. Confirm this as a separate Workforce registration to continue.',existingProfile:`${existing.display_name||'Existing person'} · ${existing.designation_name||existing.designation_code||'Existing role'}`};
+  const identity=await evaluateOnboardingIdentity({client:supabaseAdmin,companyId:company,mobile,designationId,designationName:role.data.name});
+  const confirmed=value(form,'identity_exception_confirmed')==='true';
+  assertOnboardingIdentityAllowed(identity,{allowDifferentWorkforceDesignation:true});
+  if(identity.otherMatches.length&&!confirmed){
+   const existing=identity.otherMatches[0];
+   return {status:'warning',message:'This mobile number is already linked to a DropX identity. It will be flagged, not blocked. Confirm this isolated pilot registration to continue.',existingProfile:`${existing.display_name||'Existing person'} · ${existing.designation_name||existing.designation_code||'Existing role'}`};
   }
-  const generated={companyId:company,category:'workforce',designationId,designationName:role.data.name,locationId:stationId,fallback:()=>{throw new Error('Configure the designation ID series before recording arrivals.');}};
+  const generated={companyId:company,category:'workforce',designationId,designationName:role.data.name,locationId:stationId,fallback:()=>{throw new Error('Configure the designation biometric ID series before recording arrivals.');}};
   const biometricId=await generateConfiguredBiometricId(generated),requestedId=randomUUID();
-  const created=await supabaseAdmin.rpc('workforce_create_amazon_alias_pilot',{p_company:company,p_actor:auth.userId,p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds,p_data:{id:requestedId,full_name:value(form,'full_name'),mobile,station_id:stationId,designation_id:designationId,reported_on:value(form,'reported_on'),trial_days:0,biometric_id:biometricId,identity_exception_confirmed:identityExceptionConfirmed,...identityExceptionEventMetadata(identityEvaluation)}});
+  const created=await supabaseAdmin.rpc('workforce_create_isolated_amazon_email_pilot',{p_company:company,p_actor:auth.userId,p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds,p_data:{id:requestedId,full_name:value(form,'full_name'),mobile,station_id:stationId,designation_id:designationId,reported_on:value(form,'reported_on'),biometric_id:biometricId}});
   if(created.error)throw new Error(created.error.message);
   id=String(created.data);
   try{
-   await ensurePilotEmailRoute(company,id);
-   const queue=await supabaseAdmin.rpc('workforce_queue_amazon_pilot',{p_company:company,p_workforce:id});
-   if(queue.error)warning='Arrival saved. Amazon invitation needs station configuration; open the associate to review.';
-   // The queue is durable even if the worker is temporarily unavailable.
-   if(!queue.error)waitUntil(callWorkforceAmazonWorker('/api/admin/amazon/invitation/tick',{method:'POST',body:'{}'}).catch(()=>undefined));
-  }catch(error){warning=`Arrival and backend email saved. ${fail(error)} Open the associate and retry.`;}
-  await refreshAmazonPilot(company,id).catch(()=>undefined);
+   await ensureCandidateEmailRoute(company,id);
+   const queue=await supabaseAdmin.rpc('workforce_queue_isolated_amazon_email_pilot',{p_company:company,p_actor:auth.userId,p_candidate:id,p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds});
+   if(queue.error)warning='Pilot saved. The Amazon invitation needs attention; open the candidate to review.';
+   else waitUntil(callWorkforceAmazonWorker('/api/admin/amazon/invitation/tick',{method:'POST',body:'{}'}).catch(()=>undefined));
+  }catch(error){warning=`Pilot and backend email saved. ${fail(error)} Open the candidate and retry.`;}
  }catch(error){return {status:'error',message:fail(error)};}
- revalidatePath(path);redirect(`${path}?id=${id}&notice=${encodeURIComponent(warning||'Backend email reserved and Amazon invitation queued. The Driver ID will appear after LSC returns it; biometric enrollment is ready.')}`);
+ revalidatePath(path);
+ redirect(`${path}?candidate=${id}&notice=${encodeURIComponent(warning||'Backend email reserved and Amazon invitation queued. No canonical Workforce profile was created.')}`);
 }
+
 export async function updateAmazonPilot(form:FormData){
- const auth=await requirePagePermission('delivery_associates','edit'),id=value(form,'id');
+ const auth=await requirePagePermission('delivery_associates','edit'),id=value(form,'candidate_id');
  try{
   if(auth.readOnly||!supabaseAdmin)throw new Error('Changes are unavailable.');
   const company=requireCompanyId(auth),db=supabaseAdmin;
-  const result=await db.from('workforce_amazon_pilots').select('*').eq('company_id',company).eq('workforce_id',id).single();
-  if(result.error||!result.data)throw new Error('Associate unavailable.');
-  const p=result.data;
-  if(!auth.hasAllLocationAccess&&!auth.locationScopeIds.includes(p.station_id))throw new Error('Station outside your access.');
+  const result=await db.from('workforce_amazon_email_pilot_candidates').select('station_id,closed_at').eq('company_id',company).eq('id',id).single();
+  if(result.error||!result.data)throw new Error('Pilot candidate unavailable.');
+  if(!auth.hasAllLocationAccess&&!auth.locationScopeIds.includes(result.data.station_id))throw new Error('Station outside your access.');
   const action=value(form,'action');
-  if(action==='reactivate'){
-   const changed=await db.rpc('workforce_reactivate_amazon_pilot',{p_company:company,p_actor:auth.userId,p_workforce:id,p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds});
-   if(changed.error)throw new Error(changed.error.message);
+  if(action==='queue'){
+   if(result.data.closed_at)throw new Error('This pilot is closed.');
+   await ensureCandidateEmailRoute(company,id);
+   const queued=await db.rpc('workforce_queue_isolated_amazon_email_pilot',{p_company:company,p_actor:auth.userId,p_candidate:id,p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds});
+   if(queued.error)throw new Error(queued.error.message);
    waitUntil(callWorkforceAmazonWorker('/api/admin/amazon/invitation/tick',{method:'POST',body:'{}'}).catch(()=>undefined));
-  }else if(p.closed_at)throw new Error('This onboarding is closed. Reactivate it before making another change.');
-  else if(action==='refresh'){await refreshAmazonPilot(company,id);}
-  else if(action==='queue'){
-   await ensurePilotEmailRoute(company,id);
-   const q=await db.rpc('workforce_queue_amazon_pilot',{p_company:company,p_workforce:id});if(q.error)throw new Error(q.error.message);
-   waitUntil(callWorkforceAmazonWorker('/api/admin/amazon/invitation/tick',{method:'POST',body:'{}'}).catch(()=>undefined));
-   await refreshAmazonPilot(company,id);
   }else if(action==='close'){
-   const changed=await db.rpc('workforce_update_amazon_pilot',{p_company:company,p_actor:auth.userId,p_workforce:id,p_action:action,p_data:{notes:value(form,'notes')},p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds});
-   if(changed.error)throw new Error(changed.error.message);
-  }else{throw new Error('Unsupported onboarding action.');}
- }catch(error){redirect(`${path}?id=${encodeURIComponent(id)}&error=${encodeURIComponent(fail(error))}`);}
- revalidatePath(path);redirect(`${path}?id=${encodeURIComponent(id)}&notice=Onboarding+updated`);
+   const closed=await db.rpc('workforce_close_isolated_amazon_email_pilot',{p_company:company,p_actor:auth.userId,p_candidate:id,p_reason:value(form,'notes'),p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds});
+   if(closed.error)throw new Error(closed.error.message);
+  }else throw new Error('Unsupported pilot action.');
+ }catch(error){redirect(`${path}?candidate=${encodeURIComponent(id)}&error=${encodeURIComponent(fail(error))}`);}
+ revalidatePath(path);
+ redirect(`${path}?candidate=${encodeURIComponent(id)}&notice=Pilot+updated`);
 }

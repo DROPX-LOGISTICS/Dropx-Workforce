@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dropx-amazon-email-router",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-04",
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "WORKFORCE_INGEST_URL": "https://workforce.dropxlogistics.com/api/workforce/amazon-email"
+  }
+}

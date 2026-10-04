@@ -27,12 +27,17 @@ test('live invitation evidence replaces a stale queued snapshot immediately',()=
 
 // Verify the invitation contract without sending real messages.
 import {readFileSync} from 'node:fs';
-test('new arrival queues immediately without generating or displaying an internal DropX ID',()=>{
+test('new arrival reserves a routed email before queueing and never displays an internal DropX ID',()=>{
  const action=readFileSync(new URL('../app/delivery-network/amazon-pilot/actions.ts',import.meta.url),'utf8');
  const page=readFileSync(new URL('../app/delivery-network/amazon-pilot/page.tsx',import.meta.url),'utf8');
- assert.match(action,/trial_days:0/);assert.match(action,/workforce_queue_amazon_pilot/);
+ const inbound=readFileSync(new URL('../app/api/workforce/amazon-email/route.ts',import.meta.url),'utf8');
+ assert.match(action,/trial_days:0/);assert.match(action,/workforce_create_amazon_alias_pilot/);assert.match(action,/workforce_queue_amazon_pilot/);
+ assert.match(action,/ensurePilotEmailRoute/);assert.match(action,/ensureAmazonEmailRoute/);
+ assert.doesNotMatch(action,/value\(form,'email'\)/);
+ assert.match(page,/Backend Amazon email/);
  assert.doesNotMatch(action,/generateConfiguredWorkerId|dropxId|dropx_id|amazonDriverWelcome|token_hash/);
  assert.doesNotMatch(page,/DropX ID|dropx_id/);
  assert.match(page,/LSC Driver ID/);
+ assert.match(inbound,/resend\.webhooks\.verify/);assert.match(inbound,/emails\.receiving\.get/);assert.match(inbound,/workforce_ingest_amazon_pilot_email/);
  assert.match(page,/evidence\.employeeId/);
 });

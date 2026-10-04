@@ -7,7 +7,7 @@ import { requirePagePermission,isCompanyOwner } from '@/lib/authorization';
 import { requireCompanyId } from '@/lib/company-scope';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { generateConfiguredBiometricId,generateConfiguredWorkerId } from '@/lib/dropx-id-generation';
-import { evaluateOnboardingIdentity,assertOnboardingIdentityAllowed } from '@/lib/onboarding-identity';
+import { evaluateOnboardingIdentity,assertOnboardingIdentityAllowed,identityExceptionEventMetadata } from '@/lib/onboarding-identity';
 import { requireDesignationOnboardingAccess } from '@/lib/designation-onboarding-access';
 import { requireDesignationPortalAccess } from '@/lib/designation-portal-access';
 import { refreshAmazonPilot } from '@/lib/amazon-pilot-data';
@@ -16,7 +16,8 @@ import { sendFieldExecutiveOnboardingWhatsApp } from '@/lib/whatsapp';
 const path='/delivery-network/amazon-pilot';
 const value=(form:FormData,key:string)=>String(form.get(key)??'').trim();
 const fail=(error:unknown)=>error instanceof Error?error.message:'Unable to save onboarding.';
-export async function createAmazonPilot(form:FormData){
+export type AmazonPilotCreateState={status:'idle'|'warning'|'error';message:string;existingProfile?:string};
+export async function createAmazonPilot(_:AmazonPilotCreateState,form:FormData):Promise<AmazonPilotCreateState>{
  const auth=await requirePagePermission('delivery_associates','add');
  let id='';let warning='';
  try{
@@ -29,11 +30,17 @@ export async function createAmazonPilot(form:FormData){
   if(role.error)throw new Error('Choose a valid designation.');
   requireDesignationOnboardingAccess(role.data,auth);
   requireDesignationPortalAccess(role.data,'workforce','add',{isOwner:isCompanyOwner(auth)});
-  assertOnboardingIdentityAllowed(await evaluateOnboardingIdentity({client:supabaseAdmin,companyId:company,mobile,designationId,designationName:role.data.name}),{allowDifferentWorkforceDesignation:false});
+  const identityEvaluation=await evaluateOnboardingIdentity({client:supabaseAdmin,companyId:company,mobile,designationId,designationName:role.data.name});
+  const identityExceptionConfirmed=value(form,'identity_exception_confirmed')==='true';
+  assertOnboardingIdentityAllowed(identityEvaluation,{allowDifferentWorkforceDesignation:true});
+  if(identityEvaluation.otherMatches.length&&!identityExceptionConfirmed){
+   const existing=identityEvaluation.otherMatches[0];
+   return {status:'warning',message:'This mobile number is already linked to a DropX identity. Confirm this as a separate Workforce registration to continue.',existingProfile:`${existing.display_name||'Existing person'} · ${existing.designation_name||existing.designation_code||'Existing role'}`};
+  }
   const generated={companyId:company,category:'workforce',designationId,designationName:role.data.name,locationId:stationId,fallback:()=>{throw new Error('Configure the designation ID series before recording arrivals.');}};
   const biometricId=await generateConfiguredBiometricId(generated),dropxId=await generateConfiguredWorkerId(generated);
   const requestedId=randomUUID(),token=randomBytes(32).toString('base64url');
-  const created=await supabaseAdmin.rpc('workforce_create_amazon_pilot',{p_company:company,p_actor:auth.userId,p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds,p_data:{id:requestedId,full_name:value(form,'full_name'),mobile,email:value(form,'email').toLowerCase(),station_id:stationId,designation_id:designationId,reported_on:value(form,'reported_on'),trial_days:0,biometric_id:biometricId,dropx_id:dropxId,token_hash:createHash('sha256').update(token).digest('hex')}});
+  const created=await supabaseAdmin.rpc('workforce_create_amazon_pilot',{p_company:company,p_actor:auth.userId,p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds,p_data:{id:requestedId,full_name:value(form,'full_name'),mobile,email:value(form,'email').toLowerCase(),station_id:stationId,designation_id:designationId,reported_on:value(form,'reported_on'),trial_days:0,biometric_id:biometricId,dropx_id:dropxId,token_hash:createHash('sha256').update(token).digest('hex'),identity_exception_confirmed:identityExceptionConfirmed,...identityExceptionEventMetadata(identityEvaluation)}});
   if(created.error)throw new Error(created.error.message);
   id=String(created.data);
   const queue=await supabaseAdmin.rpc('workforce_queue_amazon_pilot',{p_company:company,p_workforce:id});
@@ -43,7 +50,7 @@ export async function createAmazonPilot(form:FormData){
   // The queue is durable even if the worker is temporarily unavailable.
   if(!queue.error)waitUntil(callWorkforceAmazonWorker('/api/admin/amazon/invitation/tick',{method:'POST',body:'{}'}).catch(()=>undefined));
   await refreshAmazonPilot(company,id).catch(()=>undefined);
- }catch(error){redirect(`${path}?error=${encodeURIComponent(fail(error))}${id?`&id=${id}`:''}`);}
+ }catch(error){return {status:'error',message:fail(error)};}
  revalidatePath(path);redirect(`${path}?id=${id}&notice=${encodeURIComponent(warning||'Amazon invitation queued. DropX WhatsApp welcome requested; biometric ID is ready.')}`);
 }
 export async function updateAmazonPilot(form:FormData){

@@ -9,7 +9,8 @@ import { filterOnboardingLocations } from '@/lib/onboarding-location-access';
 import { canOnboardDesignation } from '@/lib/designation-onboarding-access';
 import { pilotStatus,pilotStages,type Pilot } from '@/lib/amazon-pilot';
 import { amazonDriverWelcome } from '@/lib/amazon-driver-welcome';
-import { createAmazonPilot,updateAmazonPilot } from './actions';
+import { updateAmazonPilot } from './actions';
+import { AmazonPilotInviteForm } from './amazon-pilot-invite-form';
 import styles from './pilot.module.css';
 export const dynamic='force-dynamic';
 const path='/delivery-network/amazon-pilot';
@@ -57,16 +58,7 @@ export default async function AmazonPilotPage({searchParams={}}:{searchParams?:R
   ].map(item=><a href={`${path}?stage=${item.filter}`} key={item.label}><item.icon size={20}/><strong>{item.value}</strong><span>{item.label}</span></a>)}</section>
   {searchParams.new==='1'&&canAdd?<section className={styles.panel} id="arrival">
    <header><div><small>NEW ASSOCIATE</small><h2>Send an invitation</h2><p>Amazon LSC email invitation and DropX WhatsApp welcome are requested together.</p></div></header>
-   <form action={createAmazonPilot} className={styles.form}>
-    <label>Full name<input name="full_name" required minLength={2} maxLength={120} autoComplete="name"/></label>
-    <label>Mobile number<input name="mobile" required inputMode="tel" pattern="[0-9]{10}" maxLength={10} placeholder="10-digit mobile"/></label>
-    <label>Amazon email<input name="email" type="email" required maxLength={180}/></label>
-    <label>Station<select name="station_id" required defaultValue=""><option value="" disabled>Select station</option>{invitationStations.map(s=><option key={s.id} value={s.id}>{s.station_code} · {s.station_name}</option>)}</select></label>
-    <label>Designation<select name="designation_id" required defaultValue=""><option value="" disabled>Select designation</option>{roles.map(r=><option value={r.id} key={r.id}>{r.name}</option>)}</select></label>
-    <label>Reported on<input type="date" name="reported_on" defaultValue={today} max={today} required/></label>
-    <div className={styles.formHelp}><Fingerprint size={20}/><p>A biometric enrolment ID is included in the welcome. The associate can register as soon as the Amazon invitation arrives.</p></div>
-    <footer><SubmitButton className={styles.primary} pendingText="Requesting invitations…">Send invitations</SubmitButton><a href={path}>Cancel</a></footer>
-   </form>
+   <AmazonPilotInviteForm path={path} today={today} stations={invitationStations.map(s=>({id:s.id,label:`${s.station_code} · ${s.station_name}`}))} roles={roles.map(r=>({id:r.id,label:r.name}))}/>
   </section>:null}
   <section className={styles.panel}>
    <header><div><small>LIVE OVERVIEW</small><h2>Associates</h2></div><span className={styles.count}>{filtered.length} associates</span></header>

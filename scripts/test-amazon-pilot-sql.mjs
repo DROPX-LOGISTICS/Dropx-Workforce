@@ -18,13 +18,23 @@ create table api_response_cache(cache_key text,created_at timestamptz,payload js
 create table cps_shipment_daily(company_id uuid,provider_employee_id text,station_code text,work_date date,total_delivery integer);
 create table field_executive_provider_mappings(company_id uuid,workforce_id uuid,provider_member_id text,status text,effective_from date,effective_to date);
 create table workforce_adjustments(workforce_id uuid,company_id uuid);
+create function evaluate_onboarding_identity(p_company_id uuid,p_mobile text,p_designation_id uuid default null,p_designation_name text default null,p_exclude_source text default null,p_exclude_id uuid default null) returns jsonb language sql stable as $$
+ with matches as (
+  select jsonb_build_object('source_type','workforce','source_id',w.id,'display_name',w.full_name,'designation_id',w.designation_id,'designation_code',null,'designation_name',coalesce(d.name,w.designation),'profile_status',w.onboarding_status) item,
+   w.designation_id=p_designation_id exact_designation
+  from public.workforce w left join public.designations d on d.id=w.designation_id and d.company_id=w.company_id
+  where w.company_id=p_company_id and w.deleted_at is null and right(regexp_replace(w.mobile,'[^0-9]','','g'),10)=right(regexp_replace(p_mobile,'[^0-9]','','g'),10)
+   and (p_exclude_id is null or w.id<>p_exclude_id)
+ )
+ select jsonb_build_object('normalized_mobile',right(regexp_replace(p_mobile,'[^0-9]','','g'),10),'exact_matches',coalesce(jsonb_agg(item) filter(where exact_designation),'[]'::jsonb),'other_matches',coalesce(jsonb_agg(item) filter(where not exact_designation),'[]'::jsonb)) from matches
+$$;
 `;
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
-const c=id(1),actor=id(2),station=id(3),designation=id(4),category=id(5),worker=id(6),legacy=id(7);
+const c=id(1),actor=id(2),station=id(3),designation=id(4),category=id(5),worker=id(6),legacy=id(7),secondDesignation=id(8),confirmedWorker=id(9);
 test('pilot migration enforces exact joins, immutable payroll boundary and idempotent invitations',async()=>{
  const db=new PGlite();try{
- await db.exec(schema);await db.exec(readFileSync(new URL('../supabase/migrations/20261002170849_amazon_onboarding_pilot.sql',import.meta.url),'utf8'));
- await db.exec(`insert into companies values('${c}');insert into profiles values('${actor}');insert into stations values('${station}','${c}','TLPB');insert into designation_categories values('${category}','delivery_network');insert into designations values('${designation}','${c}','DA',true,'${category}');insert into workforce_amazon_station_settings values('${station}','${c}',true);`);
+ await db.exec(schema);await db.exec(readFileSync(new URL('../supabase/migrations/20261002170849_amazon_onboarding_pilot.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004124500_confirm_amazon_mobile_overlap.sql',import.meta.url),'utf8'));
+ await db.exec(`insert into companies values('${c}');insert into profiles values('${actor}');insert into stations values('${station}','${c}','TLPB');insert into designation_categories values('${category}','delivery_network');insert into designations values('${designation}','${c}','DA',true,'${category}'),('${secondDesignation}','${c}','DCD',true,'${category}');insert into workforce_amazon_station_settings values('${station}','${c}',true);`);
  const day=(await db.query("select (now() at time zone 'Asia/Kolkata')::date::text as today")).rows[0].today;
  const input={id:worker,full_name:'Synthetic Pilot',mobile:'9000000000',email:'synthetic@example.test',station_id:station,designation_id:designation,reported_on:day,biometric_id:'98765',dropx_id:'TEST-PILOT',trial_days:0};
  await db.query('select workforce_create_amazon_pilot($1,$2,$3,null)',[c,actor,JSON.stringify(input)]);
@@ -50,6 +60,12 @@ test('pilot migration enforces exact joins, immutable payroll boundary and idemp
  drivers.push({tasId:'OTHER',employeeId:'200001'});await db.query('update api_response_cache set payload=$1',[JSON.stringify({drivers})]);assert.equal((await e()).conflict,true);
  // Cross-company and missing account IDs cannot acquire report or SCC evidence.
  assert.equal((await db.query('select workforce_amazon_pilot_sources($1,$2) e',[id(99),worker])).rows[0].e,null);
- await assert.rejects(db.query('select workforce_create_amazon_pilot($1,$2,$3,null)',[c,actor,JSON.stringify({...input,id:id(8)})]),/already uses/);
+ await assert.rejects(db.query('select workforce_create_amazon_pilot($1,$2,$3,null)',[c,actor,JSON.stringify({...input,id:id(10),email:'same-role@example.test'})]),/duplicate registration for the same designation/);
+ const secondary={...input,id:confirmedWorker,designation_id:secondDesignation,email:'secondary@example.test',dropx_id:'TEST-SECONDARY'};
+ await assert.rejects(db.query('select workforce_create_amazon_pilot($1,$2,$3,null)',[c,actor,JSON.stringify(secondary)]),/Confirm this as a separate Workforce registration/);
+ await db.query('select workforce_create_amazon_pilot($1,$2,$3,null)',[c,actor,JSON.stringify({...secondary,identity_exception_confirmed:true})]);
+ const confirmation=(await db.query("select evidence from workforce_amazon_pilot_history where workforce_id=$1 and event='reported'",[confirmedWorker])).rows[0].evidence;
+ assert.equal(confirmation.identity_exception_confirmed,true);
+ assert.equal(confirmation.identity_exception_profiles.length,1);
  }finally{await db.close();}
 });

@@ -21,7 +21,7 @@ export function AmazonPilotInviteForm({stations,roles,today,path}:{stations:Opti
   {state.status!=='idle'?<div className={state.status==='warning'?styles.identityWarning:styles.error} role="alert">
    {state.status==='warning'?<AlertTriangle size={19}/>:null}<div><strong>{state.status==='warning'?'Existing DropX identity found':'Registration could not be saved'}</strong><p>{state.message}</p>{state.existingProfile?<small>{state.existingProfile}</small>:null}</div>
   </div>:null}
-  <div className={styles.formHelp}><Fingerprint size={20}/><p>The backend reserves a unique Amazon email from the station pattern. A biometric enrolment ID is included in the welcome.</p></div>
+  <div className={styles.formHelp}><Fingerprint size={20}/><p>The backend reserves a unique Amazon email from the station master and a biometric ID for attendance. The beta does not create a canonical Workforce profile.</p></div>
   <footer>{needsConfirmation?<SubmitButton className={styles.primary} pendingText="Confirming registration…" name="identity_exception_confirmed" value="true">Confirm registration</SubmitButton>:<SubmitButton className={styles.primary} pendingText="Reserving email…">Create email &amp; invite</SubmitButton>}<a href={path}>Cancel</a></footer>
  </form>;
 }

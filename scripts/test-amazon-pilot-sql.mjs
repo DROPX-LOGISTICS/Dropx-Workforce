@@ -33,7 +33,7 @@ const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const c=id(1),actor=id(2),station=id(3),designation=id(4),category=id(5),worker=id(6),legacy=id(7),secondDesignation=id(8),confirmedWorker=id(9),secondStation=id(10),secondWorker=id(11);
 test('pilot migration enforces exact joins, immutable payroll boundary and idempotent invitations',async()=>{
  const db=new PGlite();try{
- await db.exec(schema);await db.exec(readFileSync(new URL('../supabase/migrations/20261002170849_amazon_onboarding_pilot.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004124500_confirm_amazon_mobile_overlap.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004153712_amazon_email_alias_pilot.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004170540_isolate_amazon_email_pilot_candidates.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004172956_index_amazon_email_pilot_isolation.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004190000_amazon_pilot_lsc_driver_identity.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004203000_configurable_onboarding_exit.sql',import.meta.url),'utf8'));
+ await db.exec(schema);await db.exec(readFileSync(new URL('../supabase/migrations/20261002170849_amazon_onboarding_pilot.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004124500_confirm_amazon_mobile_overlap.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004153712_amazon_email_alias_pilot.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004170540_isolate_amazon_email_pilot_candidates.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004172956_index_amazon_email_pilot_isolation.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004190000_amazon_pilot_lsc_driver_identity.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261004203000_configurable_onboarding_exit.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../supabase/migrations/20261005121500_isolated_pilot_registration_and_decision.sql',import.meta.url),'utf8'));
  await db.exec(`insert into companies values('${c}');insert into profiles values('${actor}');insert into stations values('${station}','${c}','TLPB'),('${secondStation}','${c}','KGQA');insert into designation_categories values('${category}','delivery_network');insert into designations values('${designation}','${c}','DA',true,'${category}'),('${secondDesignation}','${c}','DCD',true,'${category}');insert into workforce_amazon_station_settings values('${station}','${c}',true,'{first_name}.{station_code}.{unique}@drivers.dropx.test'),('${secondStation}','${c}',true,'{full_name}.{station_code}@drivers.dropx.test');`);
  const day=(await db.query("select (now() at time zone 'Asia/Kolkata')::date::text as today")).rows[0].today;
  const input={id:worker,full_name:'Synthetic Pilot',mobile:'9000000000',email:'synthetic@example.test',station_id:station,designation_id:designation,reported_on:day,biometric_id:'98765',dropx_id:'TEST-PILOT',trial_days:0};
@@ -69,7 +69,7 @@ test('pilot migration enforces exact joins, immutable payroll boundary and idemp
  await db.query('select workforce_create_isolated_amazon_email_pilot($1,$2,$3,null)',[c,actor,JSON.stringify(isolatedInput)]);
  assert.equal((await db.query('select count(*)::int n from workforce where id=$1',[isolatedCandidate])).rows[0].n,0);
  const isolated=(await db.query('select alias_email,status,duplicate_identity_detected from workforce_amazon_email_pilot_candidates where id=$1',[isolatedCandidate])).rows[0];
- assert.match(isolated.alias_email,/^isolated\.tlpb\.[a-f0-9]{8}@drivers\.dropx\.test$/);
+ assert.match(isolated.alias_email,/^isolated\.tlpb\.0030@drivers\.dropx\.test$/);
  assert.equal(isolated.status,'ready');
  assert.equal(isolated.duplicate_identity_detected,false);
  const isolatedRequest=(await db.query('select workforce_queue_isolated_amazon_email_pilot($1,$2,$3,null) id',[c,actor,isolatedCandidate])).rows[0].id;
@@ -103,6 +103,14 @@ test('pilot migration enforces exact joins, immutable payroll boundary and idemp
  assert.equal(confirmation.identity_exception_profiles.length,1);
  const reason=id(20);
  await db.query("insert into workforce_onboarding_exit_reasons(id,company_id,client_code,code,label,requires_note) values($1,$2,'AMAZON','role_not_suitable','Role not suitable',false)",[reason,c]);
+ await db.query("insert into workforce_amazon_email_pilot_registrations(candidate_id,company_id,draft_data,status,submitted_at) values($1,$2,$3,'submitted',now())",[isolatedCandidate,c,JSON.stringify({_beta_status:'submitted'})]);
+ assert.equal((await db.query('select status from workforce_amazon_email_pilot_registrations where candidate_id=$1',[isolatedCandidate])).rows[0].status,'submitted');
+ await db.query("select workforce_update_isolated_amazon_email_pilot_decision($1,$2,'continue_amazon',null,'')",[c,isolatedCandidate]);
+ assert.equal((await db.query('select continuation_status from workforce_amazon_email_pilot_candidates where id=$1',[isolatedCandidate])).rows[0].continuation_status,'continuing');
+ await db.query("select workforce_update_isolated_amazon_email_pilot_decision($1,$2,'not_continuing',$3,'Training did not suit')",[c,isolatedCandidate,reason]);
+ const isolatedExit=(await db.query('select candidate_id,alias_email,amazon_profile_id,status from workforce_amazon_email_pilot_exit_requests where candidate_id=$1',[isolatedCandidate])).rows[0];
+ assert.equal(isolatedExit.candidate_id,isolatedCandidate);assert.equal(isolatedExit.amazon_profile_id,'amazon-test');assert.equal(isolatedExit.status,'queued');
+ assert.equal((await db.query('select count(*)::int n from workforce where id=$1',[isolatedCandidate])).rows[0].n,0);
  await db.query('select workforce_submit_amazon_pilot_exit($1,$2,$3,$4)',[c,worker,reason,'Not a fit after training']);
  const closed=(await db.query('select closed_at,exit_reason_id,exit_requested_source from workforce_amazon_pilots where workforce_id=$1',[worker])).rows[0];
  assert.ok(closed.closed_at);assert.equal(closed.exit_reason_id,reason);assert.equal(closed.exit_requested_source,'associate');

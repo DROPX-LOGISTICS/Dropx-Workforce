@@ -59,8 +59,12 @@ export async function updateAmazonPilot(form:FormData){
   const p=result.data;
   if(!auth.hasAllLocationAccess&&!auth.locationScopeIds.includes(p.station_id))throw new Error('Station outside your access.');
   const action=value(form,'action');
-  if(p.closed_at)throw new Error('This onboarding is closed.');
-  if(action==='refresh'){await refreshAmazonPilot(company,id);}
+  if(action==='reactivate'){
+   const changed=await db.rpc('workforce_reactivate_amazon_pilot',{p_company:company,p_actor:auth.userId,p_workforce:id,p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds});
+   if(changed.error)throw new Error(changed.error.message);
+   waitUntil(callWorkforceAmazonWorker('/api/admin/amazon/invitation/tick',{method:'POST',body:'{}'}).catch(()=>undefined));
+  }else if(p.closed_at)throw new Error('This onboarding is closed. Reactivate it before making another change.');
+  else if(action==='refresh'){await refreshAmazonPilot(company,id);}
   else if(action==='queue'){
    const q=await db.rpc('workforce_queue_amazon_pilot',{p_company:company,p_workforce:id});if(q.error)throw new Error(q.error.message);
    waitUntil(callWorkforceAmazonWorker('/api/admin/amazon/invitation/tick',{method:'POST',body:'{}'}).catch(()=>undefined));

@@ -39,6 +39,7 @@
 .evidence>p{margin:8px 0 0;font-size:9px;color:var(--muted)}
 .quickFact{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0 13px;border-bottom:1px solid var(--line)}
 .quickFact strong{font-size:10px;text-align:right}
+.exitReview{margin:12px 0;padding:13px 14px;border:1px solid #efd9df;border-radius:9px;background:#fff5f7}.exitReview strong{display:block;font-size:12px;color:#a33355}.exitReview p{font-size:11px;line-height:1.55;margin:5px 0;color:#61515a}.exitReview small{font-size:9px;color:#8d6875}
 .sideForm{margin:0;padding:13px 0}
 .sideForm summary{font-size:11px;font-weight:700}
 .sideForm p{margin-top:8px;font-size:10px;line-height:1.5}

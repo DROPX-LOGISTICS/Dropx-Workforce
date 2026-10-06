@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { firstOnboardingActionLink } from "@/lib/onboarding-action-link";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +18,6 @@ function text(value: unknown, limit: number) {
 
 function cleanPreview(raw: string) {
   return raw.replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/\s+/g, " ").trim().slice(0, 2000);
-}
-
-function firstAmazonLink(raw: string) {
-  const links = raw.replaceAll("&amp;", "&").match(/https:\/\/[^\s<>\"']+/gi) ?? [];
-  return links.find((link) => /(^|\.)amazon\.|(^|\.)amzn\.|amazonlogistics|flex/i.test(link))?.slice(0, 2000) ?? "";
 }
 
 async function ingest(body: Record<string, unknown>) {
@@ -73,7 +69,7 @@ export async function POST(request: Request) {
     if (received.error || !received.data) throw new Error(received.error?.message || "Received email is unavailable");
     const content = received.data.text || received.data.html || "";
     const result = await ingest({
-      actionUrl: firstAmazonLink(content),
+      actionUrl: firstOnboardingActionLink(content),
       messageId: event.data.message_id || event.data.email_id,
       preview: cleanPreview(content),
       receivedAt: event.data.created_at,

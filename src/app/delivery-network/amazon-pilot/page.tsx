@@ -7,6 +7,7 @@ import { requireCompanyId } from '@/lib/company-scope';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { filterOnboardingLocations } from '@/lib/onboarding-location-access';
 import { canOnboardDesignation } from '@/lib/designation-onboarding-access';
+import { onboardingAction } from '@/lib/onboarding-action-link';
 import { updateAmazonPilot } from './actions';
 import { AmazonPilotInviteForm } from './amazon-pilot-invite-form';
 import styles from './pilot.module.css';
@@ -48,6 +49,7 @@ export default async function AmazonPilotPage({searchParams={}}:{searchParams?:R
  const q=(searchParams.q??'').toLowerCase(),statusFilter=searchParams.status??'',stationFilter=searchParams.station??'';
  const shown=candidates.filter(candidate=>(!statusFilter||candidate.status===statusFilter)&&(!stationFilter||candidate.station_id===stationFilter)&&(!q||`${candidate.full_name} ${candidate.mobile} ${candidate.alias_email} ${candidate.biometric_id}`.toLowerCase().includes(q)));
  const selected=candidates.find(candidate=>candidate.id===searchParams.candidate),selectedInvite=selected?invitations.get(selected.id):undefined,selectedMessage=selected?messages.get(selected.id):undefined;
+ const selectedAction=onboardingAction(selectedMessage?.action_url);
  const canAdd=hasPermission(auth,'delivery_associates','add')&&!auth.readOnly,canEdit=hasPermission(auth,'delivery_associates','edit')&&!auth.readOnly;
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  const error=candidateResult.error||inviteResult.error||messageResult.error?'Pilot records could not be loaded. Refresh after the database release completes.':stationResult.error||roleResult.error||settingsResult.error?'Onboarding configuration could not be loaded.':searchParams.error;
@@ -81,7 +83,7 @@ export default async function AmazonPilotPage({searchParams={}}:{searchParams?:R
      {selected.duplicate_identity_detected?<div className={styles.identityWarning}><AlertTriangle size={19}/><div><strong>Existing DropX identity flagged</strong><p>{selected.duplicate_identity_summary||'Review before later promotion to the canonical Workforce registry.'}</p></div></div>:null}
      <div className={styles.identityGrid}><div><span>Backend Amazon email</span><strong title={selected.alias_email}>{selected.alias_email}</strong></div><div><span>Biometric ID</span><strong>{selected.biometric_id}</strong></div><div><span>Inbox</span><strong>{selected.inbox_status.replaceAll('_',' ')}</strong></div><div><span>Canonical Workforce profile</span><strong>Not created</strong></div></div>
      {selected.routing_error?<p className={styles.error}>{selected.routing_error}</p>:null}
-     {selectedMessage?<div className={styles.current}><Mail size={20}/><div><small>LATEST AMAZON EMAIL · {format(selectedMessage.received_at)}</small><h3>{selectedMessage.subject||'Amazon onboarding email'}</h3><p>{selectedMessage.preview}</p>{selectedMessage.action_url?<a className={styles.open} href={selectedMessage.action_url} target="_blank" rel="noreferrer">Open Amazon action <ArrowRight size={15}/></a>:null}</div></div>:null}
+     {selectedMessage?<div className={styles.current}><Mail size={20}/><div><small>LATEST MONITORED EMAIL · {format(selectedMessage.received_at)}</small><h3>{selectedMessage.subject||'Onboarding email'}</h3><p>{selectedMessage.preview}</p>{selectedAction?<a className={styles.open} href={selectedAction.url} target="_blank" rel="noreferrer">Open {selectedAction.kind==='idfy'?'IDfy':'Amazon'} action <ArrowRight size={15}/></a>:null}</div></div>:null}
     </div>
    </div>
    <aside className={styles.panel}><header><div><small>AMAZON INVITATION</small><h2>{selectedInvite?.status?selectedInvite.status.replaceAll('_',' '):'Ready'}</h2></div></header><div className={styles.detailBody}>

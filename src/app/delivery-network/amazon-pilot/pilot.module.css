@@ -46,3 +46,5 @@
 .pageFooter{padding-top:2px}
 @media(max-width:900px){.detail{grid-template-columns:1fr}.evidenceGrid{grid-template-columns:1fr}.identityGrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:600px){.hero h1{font-size:24px}.stats{grid-template-columns:1fr 1fr}.identityGrid{grid-template-columns:1fr 1fr}.identityGrid>div:last-child{grid-column:1/-1}}
+
+.journey{display:grid;gap:10px;margin:18px 0}.journey>div{display:grid;gap:5px;padding:12px;border:1px solid var(--line);border-radius:10px}.journey small{font-size:9px;letter-spacing:.06em}.journey strong{font-size:13px}.journey span{font-size:11px;color:var(--muted)}

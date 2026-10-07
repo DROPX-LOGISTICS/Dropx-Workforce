@@ -71,6 +71,21 @@ test('pilot migration enforces exact joins, immutable payroll boundary and idemp
  const isolated=(await db.query('select alias_email,status,duplicate_identity_detected from workforce_amazon_email_pilot_candidates where id=$1',[isolatedCandidate])).rows[0];
  assert.match(isolated.alias_email,/^isolated\.tlpb\.0030@drivers\.dropx\.test$/);
  assert.equal(isolated.status,'ready');
+ await db.exec(readFileSync(new URL('../supabase/migrations/20261007153000_short_beta_amazon_signin_email.sql',import.meta.url),'utf8'));
+ const canonicalBefore=(await db.query('select * from workforce order by id')).rows;
+ const settingsBefore=(await db.query('select * from workforce_amazon_station_settings order by station_id')).rows;
+ for (const [n,name,stationId,expected] of [
+  [40,'Hari A XYZ',station,'hari.tlpb@drivers.dropx.test'],
+  [41,'Hari B',station,'hari2.tlpb@drivers.dropx.test'],
+  [42,'Hari A',secondStation,'hari.kgqa@drivers.dropx.test']
+ ]) {
+  await db.query('select workforce_create_isolated_amazon_email_pilot($1,$2,$3,null)',[c,actor,JSON.stringify({...isolatedInput,id:id(n),full_name:name,mobile:'90000000'+n,station_id:stationId,biometric_id:'BIO-'+n})]);
+  assert.equal((await db.query('select alias_email from workforce_amazon_email_pilot_candidates where id=$1',[id(n)])).rows[0].alias_email,expected);
+ }
+ assert.equal((await db.query('select alias_email from workforce_amazon_email_pilot_candidates where id=$1',[isolatedCandidate])).rows[0].alias_email,isolated.alias_email);
+ assert.deepEqual((await db.query('select * from workforce order by id')).rows,canonicalBefore);
+ assert.deepEqual((await db.query('select * from workforce_amazon_station_settings order by station_id')).rows,settingsBefore);
+
  assert.equal(isolated.duplicate_identity_detected,false);
  const isolatedRequest=(await db.query('select workforce_queue_isolated_amazon_email_pilot($1,$2,$3,null) id',[c,actor,isolatedCandidate])).rows[0].id;
  await db.query('select workforce_queue_isolated_amazon_email_pilot($1,$2,$3,null)',[c,actor,isolatedCandidate]);
@@ -101,6 +116,8 @@ test('pilot migration enforces exact joins, immutable payroll boundary and idemp
  const confirmation=(await db.query("select evidence from workforce_amazon_pilot_history where workforce_id=$1 and event='reported'",[confirmedWorker])).rows[0].evidence;
  assert.equal(confirmation.identity_exception_confirmed,true);
  assert.equal(confirmation.identity_exception_profiles.length,1);
+ await db.query("select workforce_update_isolated_amazon_email_pilot_decision($1,$2,'continue_amazon',null,'')",[c,id(40)]);
+ assert.equal((await db.query('select count(*)::int n from workforce_amazon_email_pilot_registrations where candidate_id=$1',[id(40)])).rows[0].n,0);
  const reason=id(20);
  await db.query("insert into workforce_onboarding_exit_reasons(id,company_id,client_code,code,label,requires_note) values($1,$2,'AMAZON','role_not_suitable','Role not suitable',false)",[reason,c]);
  await db.query("insert into workforce_amazon_email_pilot_registrations(candidate_id,company_id,draft_data,status,submitted_at) values($1,$2,$3,'submitted',now())",[isolatedCandidate,c,JSON.stringify({_beta_status:'submitted'})]);

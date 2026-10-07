@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {pilotStatus,withLiveAmazonEvidence} from './amazon-pilot.ts';
+import {firstOnboardingActionLink,onboardingAction} from './onboarding-action-link.ts';
 const now=Date.parse('2026-10-02T12:00:00Z');
 const status=(evidence={},extra={})=>pilotStatus({evidence,trial_completed_at:null,closed_at:null,...extra},now);
 test('invitation does not imply registration or BGC completion',()=>{
@@ -23,6 +24,12 @@ test('live invitation evidence replaces a stale queued snapshot immediately',()=
  assert.equal(evidence.invitationStatus,'sent');
  assert.equal(evidence.providerId,'amzn1.flex.provider.live');
  assert.equal(status(evidence).stage,'registration_pending');
+});
+test('monitored inbox keeps only clean Amazon and IDfy actions',()=>{
+ assert.equal(firstOnboardingActionLink('Accept [https://logistics.amazon.in/account-management/invitation?providerId=provider-1]'),'https://logistics.amazon.in/account-management/invitation?providerId=provider-1');
+ assert.equal(firstOnboardingActionLink('Complete https://verify.idfy.com/session/token).'),'https://verify.idfy.com/session/token');
+ assert.equal(firstOnboardingActionLink('Tracker https://example.com/click'),'');
+ assert.equal(onboardingAction('http://verify.idfy.com/session/token'),null);
 });
 
 // Verify the invitation contract without sending real messages.

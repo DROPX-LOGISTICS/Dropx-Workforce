@@ -14,10 +14,29 @@ export function cleanPreview(raw) {
     .slice(0, 2000);
 }
 
-export function firstAmazonLink(raw) {
+function onboardingAction(value) {
+  const cleaned = String(value ?? "").trim().replace(/[\]\)}>.,;:!?]+$/g, "");
+  if (!cleaned) return null;
+  try {
+    const url = new URL(cleaned);
+    if (url.protocol !== "https:") return null;
+    const host = url.hostname.toLowerCase();
+    if (host === "logistics.amazon.in" && url.pathname.startsWith("/account-management/invitation")) return url.toString();
+    if (host === "idfy.com" || host.endsWith(".idfy.com")) return url.toString();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function firstOnboardingActionLink(raw) {
   const decoded = raw.replace(/=\r?\n/g, "").replace(/=3D/gi, "=");
   const links = decoded.match(/https:\/\/[^\s<>"']+/gi) ?? [];
-  return links.find((link) => /(^|\.)amazon\.|(^|\.)amzn\.|amazonlogistics|flex/i.test(link))?.slice(0, 2000) ?? null;
+  for (const link of links) {
+    const action = onboardingAction(link);
+    if (action) return action.slice(0, 2000);
+  }
+  return null;
 }
 
 export default {
@@ -35,7 +54,7 @@ export default {
         "x-dropx-email-secret": env.WORKFORCE_EMAIL_INGEST_SECRET,
       },
       body: JSON.stringify({
-        actionUrl: firstAmazonLink(raw),
+        actionUrl: firstOnboardingActionLink(raw),
         messageId,
         preview: cleanPreview(raw),
         receivedAt: new Date().toISOString(),

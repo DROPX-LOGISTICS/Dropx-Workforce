@@ -121,7 +121,9 @@ export async function changeAmazonOperationalStatus(form: FormData) {
     if (auth.readOnly) throw new Error("Preview mode is read-only.");
     const providerId = String(form.get("provider_id") ?? "").trim();
     const change = String(form.get("status_change") ?? "").trim();
-    const [action, reasonCode] = change.split("::");
+    const separator = change.indexOf("::");
+    const action = separator > 0 ? change.slice(0, separator) : "";
+    const reasonCode = separator > 0 ? change.slice(separator + 2).trim() : "";
     if (!providerId || (action !== "INACTIVATE" && action !== "OFFBOARD") || !reasonCode) {
       throw new Error("Choose inactive or offboard, and a reason, before applying.");
     }
@@ -134,13 +136,12 @@ export async function changeAmazonOperationalStatus(form: FormData) {
     );
     revalidatePath("/delivery-network/amazon-lifecycle");
     const next = result.operationalStatus || (action === "OFFBOARD" ? "OFFBOARDED" : "INACTIVE");
-    redirect(destination(form, { notice: `Amazon status is now ${next}.`, view: "onboarded" }));
+    redirect(destination(form, { notice: `Amazon status is now ${next}.` }));
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
     redirect(
       destination(form, {
         error: error instanceof Error ? error.message : "Unable to change Amazon status.",
-        view: "onboarded",
       }),
     );
   }

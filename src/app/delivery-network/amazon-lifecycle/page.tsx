@@ -237,6 +237,16 @@ export default async function AmazonLifecyclePage({
                 const cfg = row.dropx.locationId ? settingsByStation.get(row.dropx.locationId) : null;
                 const inviteEmail = row.dropx.email || "";
                 const linkedAssociate = isCanonicalWorkforceId(row.dropx.id);
+                const amazonStatus = (row.amazon?.operationalStatus ?? "").toUpperCase();
+                const canChangeAmazonStatus =
+                  amazonStatus !== "OFFBOARDED" &&
+                  (amazonStatus === "ACTIVE" ||
+                    amazonStatus === "INACTIVE" ||
+                    amazonStatus === "ONBOARDING" ||
+                    row.bucket === "in_progress");
+                const statusChoices = statusOptions.filter((option) =>
+                  amazonStatus === "ACTIVE" ? true : option.action === "OFFBOARD",
+                );
                 return (
                   <tr key={row.dropx.id}>
                     <td>
@@ -293,19 +303,17 @@ export default async function AmazonLifecyclePage({
                           </SubmitButton>
                         </form>
                       ) : null}
-                      {!isIdfyDesk && canEdit && linkedAssociate && statusOptions.length > 0 && row.amazon?.providerId && (row.amazon.operationalStatus === "ACTIVE" || row.amazon.operationalStatus === "INACTIVE") ? (
+                      {!isIdfyDesk && canEdit && linkedAssociate && row.amazon?.providerId && canChangeAmazonStatus && statusChoices.length > 0 ? (
                         <form action={changeAmazonOperationalStatus} className="inline-actions">
                           <input type="hidden" name="view" value={view} />
                           <input type="hidden" name="provider_id" value={row.amazon.providerId} />
                           <select name="status_change" required defaultValue="" aria-label={`Change Amazon status for ${row.dropx.fullName}`}>
                             <option value="" disabled>Change status…</option>
-                            {statusOptions
-                              .filter((option) => row.amazon?.operationalStatus === "ACTIVE" || option.action === "OFFBOARD")
-                              .map((option) => (
-                                <option key={`${option.action}-${option.reasonCode}-${option.label}`} value={`${option.action}::${option.reasonCode}`}>
-                                  {option.label}
-                                </option>
-                              ))}
+                            {statusChoices.map((option) => (
+                              <option key={`${option.action}-${option.reasonCode}-${option.label}`} value={`${option.action}::${option.reasonCode}`}>
+                                {option.label}
+                              </option>
+                            ))}
                           </select>
                           <SubmitButton className="button secondary compact" pendingText="Updating…">
                             Apply

@@ -115,6 +115,37 @@ export async function mapAmazonStation(form: FormData) {
   }
 }
 
+export async function changeAmazonOperationalStatus(form: FormData) {
+  const auth = await requirePagePermission("executive_id_onboarding", "edit");
+  try {
+    if (auth.readOnly) throw new Error("Preview mode is read-only.");
+    const providerId = String(form.get("provider_id") ?? "").trim();
+    const change = String(form.get("status_change") ?? "").trim();
+    const [action, reasonCode] = change.split("::");
+    if (!providerId || (action !== "INACTIVATE" && action !== "OFFBOARD") || !reasonCode) {
+      throw new Error("Choose inactive or offboard, and a reason, before applying.");
+    }
+    const result = await callWorkforceAmazonWorker<{ operationalStatus?: string | null }>(
+      "/api/admin/amazon/operational-status",
+      {
+        method: "POST",
+        body: JSON.stringify({ providerId, action, reasonCode }),
+      },
+    );
+    revalidatePath("/delivery-network/amazon-lifecycle");
+    const next = result.operationalStatus || (action === "OFFBOARD" ? "OFFBOARDED" : "INACTIVE");
+    redirect(destination(form, { notice: `Amazon status is now ${next}.`, view: "onboarded" }));
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    redirect(
+      destination(form, {
+        error: error instanceof Error ? error.message : "Unable to change Amazon status.",
+        view: "onboarded",
+      }),
+    );
+  }
+}
+
 export async function tickAmazonInvitationQueue(form: FormData) {
   await requirePagePermission("executive_id_onboarding", "edit");
   try {

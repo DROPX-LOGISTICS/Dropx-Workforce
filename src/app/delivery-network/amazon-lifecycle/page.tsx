@@ -10,6 +10,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { readAllRows } from "@/lib/supabase-pagination";
 import { callWorkforceAmazonWorker, isCanonicalWorkforceId, workforceAmazonWorkerConfig } from "@/lib/workforce-amazon-worker";
 import {
+  changeAmazonOperationalStatus,
   mapAmazonStation,
   onboardAndInviteAmazon,
   refreshAmazonLifecycle,
@@ -54,6 +55,12 @@ type LifecycleRow = {
 
 type View = "not_onboarded" | "onboarded" | "in_progress" | "idfy" | "all";
 
+type StatusOption = {
+  action: "INACTIVATE" | "OFFBOARD";
+  reasonCode: string;
+  label: string;
+};
+
 const viewLabel: Record<View, string> = {
   not_onboarded: "Not onboarded",
   in_progress: "In progress",
@@ -77,6 +84,7 @@ export default async function AmazonLifecyclePage({
   const worker = workforceAmazonWorkerConfig();
   let rows: LifecycleRow[] = [];
   let counts = { notOnboarded: 0, onboarded: 0, inProgress: 0, idfyIssues: 0 };
+  let statusOptions: StatusOption[] = [];
   let workerError = "";
 
   if (!worker.baseUrl || !worker.adminKey) {
@@ -92,6 +100,16 @@ export default async function AmazonLifecyclePage({
       counts = payload.counts ?? counts;
     } catch (error) {
       workerError = error instanceof Error ? error.message : "Unable to load Amazon lifecycle.";
+    }
+    if (canEdit && !workerError) {
+      try {
+        const options = await callWorkforceAmazonWorker<{ options?: StatusOption[] }>(
+          "/api/admin/amazon/operational-status/options",
+        );
+        statusOptions = options.options ?? [];
+      } catch {
+        statusOptions = [];
+      }
     }
   }
 
@@ -272,6 +290,25 @@ export default async function AmazonLifecyclePage({
                           <input type="hidden" name="source_portal" value="workforce" />
                           <SubmitButton className="button compact" pendingText="Inviting…">
                             Onboard & send invitation
+                          </SubmitButton>
+                        </form>
+                      ) : null}
+                      {!isIdfyDesk && canEdit && linkedAssociate && statusOptions.length > 0 && row.amazon?.providerId && (row.amazon.operationalStatus === "ACTIVE" || row.amazon.operationalStatus === "INACTIVE") ? (
+                        <form action={changeAmazonOperationalStatus} className="inline-actions">
+                          <input type="hidden" name="view" value={view} />
+                          <input type="hidden" name="provider_id" value={row.amazon.providerId} />
+                          <select name="status_change" required defaultValue="" aria-label={`Change Amazon status for ${row.dropx.fullName}`}>
+                            <option value="" disabled>Change status…</option>
+                            {statusOptions
+                              .filter((option) => row.amazon?.operationalStatus === "ACTIVE" || option.action === "OFFBOARD")
+                              .map((option) => (
+                                <option key={`${option.action}-${option.reasonCode}-${option.label}`} value={`${option.action}::${option.reasonCode}`}>
+                                  {option.label}
+                                </option>
+                              ))}
+                          </select>
+                          <SubmitButton className="button secondary compact" pendingText="Updating…">
+                            Apply
                           </SubmitButton>
                         </form>
                       ) : null}

@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { firstOnboardingActionLink } from "@/lib/onboarding-action-link";
+import { firstOnboardingActionLink, allOnboardingActionLinks, onboardingAction } from "@/lib/onboarding-action-link";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +37,15 @@ async function ingest(body: Record<string, unknown>) {
     p_subject: text(body.subject, 500),
   });
   if (result.error) throw new Error(result.error.message);
+  const links = Array.isArray(body.actionUrls) ? body.actionUrls.map(value => onboardingAction(value)?.url).filter(Boolean).slice(0, 8) : [];
+  if (links.length && (result.data as { accepted?: boolean } | null)?.accepted) {
+    // Ingest RPC has already matched the exact reserved alias and sender.
+    const candidate = await supabaseAdmin.from("workforce_amazon_email_pilot_candidates").select("id,company_id").eq("alias_email", recipient).is("closed_at", null).maybeSingle();
+    if (candidate.data) {
+      const saved = await supabaseAdmin.from("workforce_amazon_email_pilot_messages").update({action_urls:links}).eq("company_id",candidate.data.company_id).eq("candidate_id",candidate.data.id).eq("internet_message_id",messageId);
+      if (saved.error) throw new Error("Unable to retain the received action links");
+    }
+  }
   const accepted = Boolean((result.data as { accepted?: boolean } | null)?.accepted);
   return { body: result.data ?? { accepted }, status: accepted ? 200 : 404 };
 }
@@ -70,6 +79,7 @@ export async function POST(request: Request) {
     const content = received.data.text || received.data.html || "";
     const result = await ingest({
       actionUrl: firstOnboardingActionLink(content),
+      actionUrls: allOnboardingActionLinks(`${received.data.text || ""} ${received.data.html || ""}`),
       messageId: event.data.message_id || event.data.email_id,
       preview: cleanPreview(content),
       receivedAt: event.data.created_at,

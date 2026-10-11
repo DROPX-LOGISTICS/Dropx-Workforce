@@ -29,3 +29,8 @@ export function firstOnboardingActionLink(raw: string) {
   }
   return "";
 }
+
+export function allOnboardingActionLinks(raw: string): string[] {
+  const matches = raw.replaceAll("&amp;", "&").match(/https:\/\/[^\s<>"']+/gi) ?? [];
+  return [...new Set(matches.map(value => onboardingAction(value)?.url).filter((value): value is string => Boolean(value)))].filter(value => value.length <= 2000).slice(0, 8);
+}

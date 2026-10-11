@@ -6,6 +6,10 @@
     {
       "path": "/api/cron/amazon-pilot",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/beta-verification",
+      "schedule": "3-58/5 * * * *"
     }
   ]
 }

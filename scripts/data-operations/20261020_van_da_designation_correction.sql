@@ -3,7 +3,8 @@
 -- Default execution is a rollback rehearsal. For the approved live operation,
 -- replace the final ROLLBACK with COMMIT; retain every validation unchanged.
 -- T1013 is ODCD by explicit user confirmation despite its company-owned default.
--- Two Fleet defaults without current mappings are deliberately excluded.
+-- DF1173 is linked by its exact Amazon ID despite a Fleet/payment station mismatch.
+-- One Fleet default without a verified Workforce identity is excluded.
 begin isolation level repeatable read;
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
@@ -486,6 +487,14 @@ declare
     "fleet_defaults": [
       "fbbd3600-3309-429a-a4dd-11ad8c1af584"
     ]
+  },
+  {
+    "workforce_id": "ef9b3fb2-888c-421b-8dbf-715376a9e57c",
+    "dropx_id": "DF1173",
+    "target": "DCD",
+    "amazon_ids": ["2000065285400"],
+    "mapping_ids": ["1cf10573-9f0f-4a15-b181-7b22fde240dd"],
+    "fleet_defaults": ["7675f77d-ae2b-46b1-9472-b7fb2f393eab"]
   }
 ]$scope$::jsonb;
   v_ids uuid[];
@@ -505,9 +514,9 @@ begin
   end if;
   select array_agg((x->>'workforce_id')::uuid order by x->>'workforce_id')
     into v_ids from jsonb_array_elements(v_scope) x;
-  if cardinality(v_ids) <> 36 or
-     (select count(distinct x) from unnest(v_ids) x) <> 36 then
-    raise exception 'Scope must contain exactly 36 distinct Workforce profiles.';
+  if cardinality(v_ids) <> 37 or
+     (select count(distinct x) from unnest(v_ids) x) <> 37 then
+    raise exception 'Scope must contain exactly 37 distinct Workforce profiles.';
   end if;
   -- Lock only the profiles and evidence used by this operation.
   perform 1 from public.workforce w
@@ -562,7 +571,12 @@ begin
       join public.fleet_vehicles v on v.id=f.vehicle_id and v.company_id=f.company_id
       join public.stations s on s.company_id=f.company_id and s.station_code=f.station_code
       join public.field_executive_provider_mappings m
-        on m.company_id=f.company_id and m.station_id=s.id and m.provider_member_id=f.provider_employee_id
+        on m.company_id=f.company_id and m.provider_member_id=f.provider_employee_id
+        and (m.station_id=s.id or (
+          v_row->>'dropx_id'='DF1173'
+          and m.id='1cf10573-9f0f-4a15-b181-7b22fde240dd'::uuid
+          and f.id='7675f77d-ae2b-46b1-9472-b7fb2f393eab'::uuid
+        ))
       where f.company_id=v_company and f.id in (select jsonb_array_elements_text(v_row->'fleet_defaults')::uuid)
         and v.ownership_type='own' and v.deployment_status='deployed'
         and (upper(btrim(s.region))='KL' or lower(btrim(s.state)) in ('kl','kerala'))
@@ -588,7 +602,7 @@ begin
       'workforce_id',v_row->>'workforce_id','old_designation','DA','new_designation',v_target.code,
       'amazon_ids',v_row->'amazon_ids','updated_at',v_after->>'updated_at'));
   end loop;
-  if v_count<>36 then raise exception 'Unexpected correction count: %.',v_count; end if;
+  if v_count<>37 then raise exception 'Unexpected correction count: %.',v_count; end if;
   if v_mapping_hash is distinct from (
     select md5(coalesce(string_agg(to_jsonb(m)::text,'' order by m.id),''))
     from public.field_executive_provider_mappings m where m.company_id=v_company
@@ -602,7 +616,7 @@ begin
     from public.workforce w where not(w.id=any(v_ids))
   ) then raise exception 'An out-of-scope profile changed; entire operation rolled back.'; end if;
   perform set_config('dropx.designation_correction_result',jsonb_build_object(
-    'changed',v_count,'odcd',18,'dcd',18,'mapping_unchanged',true,
+    'changed',v_count,'odcd',18,'dcd',19,'mapping_unchanged',true,
     'direct_pay_unchanged',true,'other_profiles_unchanged',true,
     'mapping_hash',v_mapping_hash,'allocation_hash',v_allocation_hash,'profiles',v_result
   )::text,true);

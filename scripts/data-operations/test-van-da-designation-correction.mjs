@@ -51,14 +51,14 @@ async function fixture() {
   return db;
 }
 
-test('rehearsal validates all 36 profiles and rolls every designation back',async()=>{
+test('rehearsal validates all 37 profiles and rolls every designation back',async()=>{
   const db=await fixture();
   try {
     const results=await db.exec(fixtureSql);
     const receipt=results.flatMap(r=>r.rows).find(r=>r.designation_correction)?.designation_correction;
-    assert.equal(receipt.changed,36);
+    assert.equal(receipt.changed,37);
     assert.equal(receipt.profiles.filter(p=>p.new_designation==='ODCD').length,18);
-    assert.equal(receipt.profiles.filter(p=>p.new_designation==='DCD').length,18);
+    assert.equal(receipt.profiles.filter(p=>p.new_designation==='DCD').length,19);
     assert.equal(receipt.profiles.find(p=>p.dropx_id==='T1013').new_designation,'ODCD');
     assert.equal((await db.query('select count(*)::int n from workforce where designation_id<>$1',[da])).rows[0].n,0);
   } finally { await db.close(); }

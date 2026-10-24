@@ -1,5 +1,6 @@
 'use server';
 
+import { betaLifecycleEnabled } from '@/lib/beta-lifecycle';
 import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -90,6 +91,7 @@ export async function updateAmazonPilot(form:FormData){
    if(queued.error)throw new Error(queued.error.message);
    waitUntil(callWorkforceAmazonWorker('/api/admin/amazon/invitation/tick',{method:'POST',body:'{}'}).catch(()=>undefined));
   }else if(action==='close'){
+   if(betaLifecycleEnabled(company,id))throw new Error('Use Archive beta workspace in the lifecycle panel to retain an audit and restoration record.');
    const closed=await db.rpc('workforce_close_isolated_amazon_email_pilot',{p_company:company,p_actor:auth.userId,p_candidate:id,p_reason:value(form,'notes'),p_locations:auth.hasAllLocationAccess?null:auth.locationScopeIds});
    if(closed.error)throw new Error(closed.error.message);
   }else throw new Error('Unsupported pilot action.');

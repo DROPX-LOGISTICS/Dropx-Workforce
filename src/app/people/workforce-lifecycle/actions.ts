@@ -477,15 +477,6 @@ export async function completeWorkforceSettlement(formData: FormData) {
       p_checklist: checklistRows, p_locations: authorization.hasAllLocationAccess ? null : authorization.locationScopeIds
     });
     if (completed.error) throw new Error(completed.error.message);
-    if (current.data.profile_type === "workforce") {
-      const exited = await supabaseAdmin.from("workforce").select("pan_number").eq("company_id", companyId).eq("id", current.data.profile_id).maybeSingle();
-      await enqueueOffboardAutomation({
-        profileType: "workforce",
-        profileId: current.data.profile_id,
-        pan: exited.data?.pan_number,
-        dateOfLeaving: String(current.data.approved_effective_date || current.data.requested_effective_date || now.slice(0, 10))
-      });
-    }
     revalidateLifecyclePages();
     lifecycleRedirect({ notice: "Final settlement recorded and workforce access deactivated.", tab: "exits" });
   } catch (error) {

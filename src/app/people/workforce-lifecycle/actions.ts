@@ -17,6 +17,7 @@ import {readAllRows} from '@/lib/supabase-pagination';
 import {assertFinalPayrollMatches} from '@/lib/workforce-exit-reconciliation';
 import {loadRecordedExitChecks} from '@/lib/workforce-exit-recorded-loader';
 import {recordedExitBlockers} from '@/lib/workforce-exit-recorded-checks';
+import { enqueueActivationAutomation, enqueueOffboardAutomation } from "@/lib/lifecycle-automation";
 
 function lifecycleRedirect(params: { error?: string; notice?: string; tab?: string }): never {
   const register=associateReturnUrl(headers().get("referer"),{...params,...(params.tab==="exits"?{section:"exit"}:{})});
@@ -66,7 +67,7 @@ async function requireScopedApplicant(id: string) {
   if (!supabaseAdmin) throw new Error("Supabase service role key is not configured.");
   const result = await supabaseAdmin
     .from("workforce")
-    .select("id, full_name, location_id, designation, date_of_join, biometric_id, onboarding_status, lifecycle_status, identity_exception_required, identity_exception_context")
+    .select("id, full_name, location_id, designation, date_of_join, biometric_id, onboarding_status, lifecycle_status, identity_exception_required, identity_exception_context, pan_number, email, mobile, gender, date_of_birth")
     .is("deleted_at", null).neq("migration_state", "reclassified")
     .eq("company_id", companyId)
     .eq("id", id)
@@ -264,6 +265,26 @@ export async function reviewWorkforceOnboarding(formData: FormData) {
       } : {}
     });
     if (event.error) throw new Error(event.error.message);
+    if (!joiningOnly) {
+      const station = applicant.location_id
+        ? await supabaseAdmin!.from("stations").select("station_code").eq("id", applicant.location_id).maybeSingle()
+        : { data: null };
+      await enqueueActivationAutomation({
+        profileType: "workforce",
+        profileId: id,
+        pan: (applicant as { pan_number?: string | null }).pan_number,
+        email: (applicant as { email?: string | null }).email,
+        fullName: applicant.full_name,
+        dob: (applicant as { date_of_birth?: string | null }).date_of_birth,
+        gender: (applicant as { gender?: string | null }).gender,
+        doj: applicant.date_of_join,
+        mobile: (applicant as { mobile?: string | null }).mobile,
+        designation: applicant.designation,
+        designationCode: code,
+        stationCode: station.data?.station_code ?? null,
+        isDeliveryAssociate: /\bDA\b|DELIVERY\s*ASSOCIATE/i.test(`${code} ${applicant.designation || ""}`)
+      });
+    }
     revalidateLifecyclePages();
     revalidatePath("/delivery-network/joining");
     if (joiningOnly) redirect(associateReturnUrl(headers().get("referer"),{person:id,section:"journey",notice:"Registration approved. Continue with work setup."})||`/delivery-network/lifecycle?person=${encodeURIComponent(id)}&section=activation&notice=${encodeURIComponent("Registration approved. Continue with work setup.")}`);
@@ -435,6 +456,13 @@ export async function completeWorkforceSettlement(formData: FormData) {
       if(formData.get('sources_reviewed')!=='true')throw new Error('Confirm all periods, late imports and claims have been reviewed.');
       const reconciled=await supabaseAdmin.rpc('workforce_reconcile_exit',{p_company:companyId,p_case:caseId,p_item:itemId,p_actor:authorization.userId,p_owner:true,p_note:text(formData.get('review_note')),p_checklist:checklistRows,p_locations:authorization.hasAllLocationAccess?null:authorization.locationScopeIds});
       if(reconciled.error)throw new Error(reconciled.error.message);
+      const exited = await supabaseAdmin.from("workforce").select("pan_number").eq("company_id", companyId).eq("id", current.data.profile_id).maybeSingle();
+      await enqueueOffboardAutomation({
+        profileType: "workforce",
+        profileId: current.data.profile_id,
+        pan: exited.data?.pan_number,
+        dateOfLeaving: String(current.data.approved_effective_date || current.data.requested_effective_date || now.slice(0, 10))
+      });
       revalidateLifecyclePages();
       lifecycleRedirect({notice:'Exit reconciled to the existing Finance payment and access deactivated. No additional payment was created.',tab:'exits'});
     }
@@ -449,6 +477,15 @@ export async function completeWorkforceSettlement(formData: FormData) {
       p_checklist: checklistRows, p_locations: authorization.hasAllLocationAccess ? null : authorization.locationScopeIds
     });
     if (completed.error) throw new Error(completed.error.message);
+    if (current.data.profile_type === "workforce") {
+      const exited = await supabaseAdmin.from("workforce").select("pan_number").eq("company_id", companyId).eq("id", current.data.profile_id).maybeSingle();
+      await enqueueOffboardAutomation({
+        profileType: "workforce",
+        profileId: current.data.profile_id,
+        pan: exited.data?.pan_number,
+        dateOfLeaving: String(current.data.approved_effective_date || current.data.requested_effective_date || now.slice(0, 10))
+      });
+    }
     revalidateLifecyclePages();
     lifecycleRedirect({ notice: "Final settlement recorded and workforce access deactivated.", tab: "exits" });
   } catch (error) {

@@ -31,6 +31,7 @@ export async function loadBetaLifecycle(db:SupabaseClient,company:string,candida
   const summary=betaLifecycleSummary({isolatedBeta:true,lifecycleEnhanced:true,stage:'',registrationStatus:registration.data?.status,registrationReturnNote:registration.data?.return_note,
     continuationStatus:candidate.continuation_status as 'pending'|'continuing'|'not_continuing',...betaSourceProgress(live),bgcStatus:live?.bgc_status,bgcChecks:checks,uan,learning,driverId:live?.driver_id,
     inboxActions:actions,invitationAvailable:Boolean(link),operationalStatus:live?.operational_status,closedAt:candidate.closed_at,verificationClosed:(cases.data??[]).some(x=>x.status==='offboarded'),offboardingRequested:candidate.continuation_status==='not_continuing',
+    sourceStatus:{amazonUpdatedAt:live?.lsc_observed_at,unavailable:Boolean(snapshot.error),delayed:Boolean(live?.sync_error?.includes("amazon_source_unavailable"))},
     latestAttendance:attendance.data?{inTime:attendance.data.in_time,outTime:attendance.data.out_time}:null});
   const unavailable=Boolean(snapshot.error||registration.error||invitation.error||messages.error||uanMail.unavailable||events.error||cases.error||exit.error||attendance.error||policy.error||uanSubmission.error);
   const stale=[live?.lsc_observed_at,live?.idfy_observed_at].some(t=>!t||Date.now()-Date.parse(t)>24*3600000);

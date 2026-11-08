@@ -1,3 +1,4 @@
+import { DependentSelectFilters } from "@/components/dependent-select-filters";
 import { AlertTriangle, ArrowRight, BadgeIndianRupee, Calculator, FileDown, PackageCheck, ShieldCheck, WalletCards } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PendingLink } from "@/components/pending-link";
@@ -84,6 +85,10 @@ export default async function WorkforceEarningsPage({ searchParams = {} }: { sea
   const search = String(searchParams.q ?? "").trim().toLowerCase();
   const sort = String(searchParams.sort ?? (view === "summary" ? "net-desc" : "date-desc"));
   const stations = Array.from(new Set(snapshot.lines.map((line) => line.stationCode).filter((value) => value && value !== "-"))).sort();
+  const facetContext = {...params, station: "", state: "", source: ""};
+  const facetRows = view === "summary"
+    ? snapshot.summaries.filter(row => filterSummary(row, facetContext, search)).map(row => ({station:row.stationCode, state:row.status, source:row.lines.map(line=>line.calculationSource)}))
+    : snapshot.lines.filter(row => filterLine(row, facetContext, search) && (view !== "exceptions" || row.status === "unmapped" || row.status === "missing_rate")).map(row => ({station:row.stationCode, state:row.status, source:[row.calculationSource]}));
   const visibleLines = sortLines(snapshot.lines.filter((line) => filterLine(line, params, search)), sort);
   const visibleSummaries = sortSummaries(snapshot.summaries.filter((summary) => filterSummary(summary, params, search)), sort);
   const visibleExceptions = visibleLines.filter((line) => line.status === "unmapped" || line.status === "missing_rate");
@@ -127,7 +132,7 @@ export default async function WorkforceEarningsPage({ searchParams = {} }: { sea
         <PendingLink href={href(params, { from: to, to })}>Selected day</PendingLink>
       </nav>
 
-      <form className="wf-range-bar wf-filter-bar" method="get">
+      <DependentSelectFilters rows={facetRows} initial={{station:params.station?[params.station]:[],state:params.state?[params.state]:[],source:params.source?[params.source]:[]}}><form className="wf-range-bar wf-filter-bar" method="get">
         <label>From<input defaultValue={from} name="from" type="date" /></label>
         <label>To<input defaultValue={to} name="to" type="date" /></label>
         <label>Station<select defaultValue={searchParams.station ?? ""} name="station"><option value="">All stations</option>{stations.map((station) => <option key={station} value={station}>{station}</option>)}</select></label>
@@ -138,7 +143,7 @@ export default async function WorkforceEarningsPage({ searchParams = {} }: { sea
         <input name="view" type="hidden" value={view} />
         <button type="submit">Apply</button>
         <PendingLink className="wf-filter-reset" href={`/delivery-network/earnings?from=${from}&to=${to}&view=${view}`}>Reset</PendingLink>
-      </form>
+      </form></DependentSelectFilters>
 
       {snapshot.setupRequired ? <section className="panel message-panel"><div className="panel-body"><strong>Finance engine migration pending</strong><p className="subtle">Existing shipment and mapped-rate earnings are visible. Rate cards, incentives, adjustments and payroll storage activate when the committed database migration completes.</p></div></section> : null}
       {snapshot.warnings.length ? <section className="panel message-panel error"><div className="panel-body">{snapshot.warnings.join(" ")}</div></section> : null}

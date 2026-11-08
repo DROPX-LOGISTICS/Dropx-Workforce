@@ -1,4 +1,5 @@
 "use client";
+import { facetRows } from "@/lib/dependent-filters";
 
 import {PartnerProgressNote} from "./partner-progress-note";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -146,6 +147,11 @@ export function FieldExecutiveList({
   const [designationFilter, setDesignationFilter] = useState<string[]>([]);
   const [designationSwitch, setDesignationSwitch] = useState("");
   const switchOptions = useMemo(() => registerDesignationOptions(designationSwitches ?? [], rows.map(row => row.designation)), [designationSwitches, rows]);
+  const switchIdsByDesignation = useMemo(() => {
+    const result = new Map<string, string[]>();
+    for (const option of switchOptions) for (const name of option.values) result.set(name, [...(result.get(name) ?? []), option.id]);
+    return result;
+  }, [switchOptions]);
   const selectedSwitch = switchOptions.find(option => option.id === designationSwitch);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [page, setPage] = useState(1);
@@ -197,25 +203,16 @@ export function FieldExecutiveList({
       .sort((left, right) => left.localeCompare(right))
       .map((status) => ({ value: status.toLowerCase(), label: status }))
   ), [rows]);
-  const filteredRows = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    const selectedStatuses = new Set(statusFilter);
-    return rows.filter((row) => {
-      const matchesSearch = !term || (
-        `${row.dropxId} ${row.biometricId} ${row.fullName} ${row.mobile} ${row.email} ${row.location} ${row.provider} ${row.model} ${row.designation}`
-          .toLowerCase()
-          .includes(term)
-      );
-      const matchesProvider = !providerFilter.length || providerFilter.includes(row.provider);
-      const matchesModel = !modelFilter.length || modelFilter.includes(row.model);
-      const matchesLocation = !locationFilter.length || locationFilter.includes(row.location);
-      const matchesDesignation = !designationFilter.length || designationFilter.includes(row.designation);
-      const matchesStatus = !statusFilter.length || selectedStatuses.has(row.status.toLowerCase());
-
-      return matchesSearch && matchesProvider && matchesModel && matchesLocation && matchesDesignation && matchesStatus;
-    });
-  }, [designationFilter, locationFilter, modelFilter, providerFilter, rows, search, statusFilter]);
-  const displayRows = selectedSwitch ? filteredRows.filter(row => selectedSwitch.values.includes(row.designation)) : filteredRows;
+  const facets = useMemo(() => facetRows(rows, {
+    provider: { selected: providerFilter, values: row => row.provider },
+    model: { selected: modelFilter, values: row => row.model },
+    location: { selected: locationFilter, values: row => row.location },
+    designation: { selected: designationFilter, values: row => row.designation },
+    status: { selected: statusFilter, values: row => row.status.toLowerCase() },
+    switch: { selected: selectedSwitch ? [selectedSwitch.id] : [], values: row => switchIdsByDesignation.get(row.designation) ?? [] }
+  }, row => (!search.trim() || `${row.dropxId} ${row.biometricId} ${row.fullName} ${row.mobile} ${row.email} ${row.location} ${row.provider} ${row.model} ${row.designation}`.toLowerCase().includes(search.trim().toLowerCase()))), [designationFilter, locationFilter, modelFilter, providerFilter, rows, search, statusFilter, selectedSwitch, switchIdsByDesignation]);
+  const filteredRows = facets.rows;
+  const displayRows = filteredRows;
   const totalPages = Math.max(1, Math.ceil(displayRows.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const visibleRows = displayRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -235,9 +232,9 @@ export function FieldExecutiveList({
   return (
     <section className="panel">
       {designationSwitches ? <div className="wf-designation-switches" role="group" aria-label="Filter workforce by designation">
-        <button type="button" aria-pressed={!designationSwitch} onClick={() => { setDesignationSwitch(""); setPage(1); }}>All <span>{filteredRows.length}</span></button>
-        {switchOptions.map(option => <button key={option.id} type="button" title={option.name} aria-label={`${option.code} — ${option.name}`} aria-pressed={designationSwitch === option.id} onClick={() => { setDesignationSwitch(option.id); setPage(1); }}>
-          {['DA', 'DCD', 'ODCD'].includes(option.code) ? option.code : option.name}<span>{filteredRows.filter(row => option.values.includes(row.designation)).length}</span>
+        <button type="button" aria-pressed={!designationSwitch} onClick={() => { setDesignationSwitch(""); setPage(1); }}>All</button>
+        {switchOptions.filter(option => facets.available.switch.has(option.id) || designationSwitch === option.id).map(option => <button key={option.id} type="button" title={option.name} aria-label={`${option.code} — ${option.name}`} aria-pressed={designationSwitch === option.id} onClick={() => { setDesignationSwitch(option.id); setPage(1); }}>
+          {['DA', 'DCD', 'ODCD'].includes(option.code) ? option.code : option.name}
         </button>)}
       </div> : null}
       <div className="panel-head toolbar">
@@ -253,7 +250,7 @@ export function FieldExecutiveList({
               setProviderFilter(values);
               setPage(1);
             }}
-            options={providerOptions}
+            options={facets.options("provider", providerOptions)}
             selected={providerFilter}
           />
           {!hideLocationFilter ? <MultiCheckFilter
@@ -263,7 +260,7 @@ export function FieldExecutiveList({
               setLocationFilter(values);
               setPage(1);
             }}
-            options={locationOptions}
+            options={facets.options("location", locationOptions)}
             selected={locationFilter}
           /> : null}
           <MultiCheckFilter
@@ -273,7 +270,7 @@ export function FieldExecutiveList({
               setModelFilter(values);
               setPage(1);
             }}
-            options={modelOptions}
+            options={facets.options("model", modelOptions)}
             selected={modelFilter}
           />
           {!designationSwitches ? <MultiCheckFilter
@@ -283,7 +280,7 @@ export function FieldExecutiveList({
               setDesignationFilter(values);
               setPage(1);
             }}
-            options={designationOptions}
+            options={facets.options("designation", designationOptions)}
             selected={designationFilter}
           /> : null}
           <MultiCheckFilter
@@ -293,7 +290,7 @@ export function FieldExecutiveList({
               setStatusFilter(values);
               setPage(1);
             }}
-            options={statusOptions}
+            options={facets.options("status", statusOptions)}
             selected={statusFilter}
           />
           <input

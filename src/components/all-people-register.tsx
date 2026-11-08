@@ -1,4 +1,5 @@
 "use client";
+import { facetRows } from "@/lib/dependent-filters";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, EllipsisVertical, Eye, Pencil, Search, Trash2, X } from "lucide-react";
@@ -184,16 +185,13 @@ export function AllPeopleRegister({ rows }: { rows: AllPeopleRow[] }) {
   const designationOptions = useMemo(() => optionsFrom(rows.map((row) => row.designation)), [rows]);
   const statusOptions = useMemo(() => optionsFrom(rows.map((row) => row.status)), [rows]);
 
-  const filteredRows = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return rows.filter((row) => {
-      if (categories.length && !categories.includes(row.categoryCode)) return false;
-      if (locations.length && !locations.includes(row.location)) return false;
-      if (designations.length && !designations.includes(row.designation)) return false;
-      if (statuses.length && !statuses.includes(row.status)) return false;
-      return !term || `${row.code} ${row.biometricId} ${row.fullName} ${row.mobile} ${row.email} ${row.location} ${row.designation} ${row.category}`.toLowerCase().includes(term);
-    });
-  }, [categories, designations, locations, rows, search, statuses]);
+  const facets = useMemo(() => facetRows(rows, {
+    category: { selected: categories, values: row => row.categoryCode },
+    location: { selected: locations, values: row => row.location },
+    designation: { selected: designations, values: row => row.designation },
+    status: { selected: statuses, values: row => row.status }
+  }, row => (!search.trim() || `${row.code} ${row.biometricId} ${row.fullName} ${row.mobile} ${row.email} ${row.location} ${row.designation} ${row.category}`.toLowerCase().includes(search.trim().toLowerCase()))), [categories, designations, locations, rows, search, statuses]);
+  const filteredRows = facets.rows;
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
   const currentPage = Math.min(page, totalPages);
   const visibleRows = filteredRows.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
@@ -258,10 +256,10 @@ export function AllPeopleRegister({ rows }: { rows: AllPeopleRow[] }) {
         </div>
         <div className="all-people-filters">
           <input className="field all-people-search" onChange={(event) => setSearch(event.target.value)} placeholder="Search ID, name, mobile, email" value={search} />
-          <MultiCheckFilter allLabel="All categories" label="Category" onChange={setCategories} options={categoryOptions} selected={categories} />
-          <MultiCheckFilter allLabel="All locations" label="Location" onChange={setLocations} options={locationOptions} selected={locations} />
-          <MultiCheckFilter allLabel="All designations" label="Designation" onChange={setDesignations} options={designationOptions} selected={designations} />
-          <MultiCheckFilter allLabel="All statuses" label="Status" onChange={setStatuses} options={statusOptions} selected={statuses} />
+          <MultiCheckFilter allLabel="All categories" label="Category" onChange={setCategories} options={facets.options("category", categoryOptions)} selected={categories} />
+          <MultiCheckFilter allLabel="All locations" label="Location" onChange={setLocations} options={facets.options("location", locationOptions)} selected={locations} />
+          <MultiCheckFilter allLabel="All designations" label="Designation" onChange={setDesignations} options={facets.options("designation", designationOptions)} selected={designations} />
+          <MultiCheckFilter allLabel="All statuses" label="Status" onChange={setStatuses} options={facets.options("status", statusOptions)} selected={statuses} />
           <button className="button secondary all-people-export-trigger" disabled={!filteredRows.length} onClick={() => {
             setExportColumnSearch("");
             setExportOpen(true);

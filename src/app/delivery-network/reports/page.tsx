@@ -1,3 +1,4 @@
+import { DependentSelectFilters } from "@/components/dependent-select-filters";
 import { FileDown } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PendingLink } from "@/components/pending-link";
@@ -43,6 +44,10 @@ export default async function WorkforceReportsPage({ searchParams = {} }: { sear
     return String(left.workerName ?? left.name ?? "").localeCompare(String(right.workerName ?? right.name ?? ""));
   };
   lines.sort(compare); exceptions.sort(compare); payments.sort(compare); people.sort(compare);
+  const facetRows = report === "associates"
+    ? associates.filter(row=>match([row.name,row.reference,row.mobile,row.email,row.designation],q)).map(row=>({station:row.location,state:row.status.toLowerCase()}))
+    : report === "payments" ? snapshot.summaries.filter(row=>match([row.workerName,row.dropxId,...row.providerIds],q)).map(row=>({station:row.stationCode,state:row.status}))
+    : snapshot.lines.filter(row=>match([row.workerName,row.dropxId,row.providerMemberId,row.providerName],q) && (report!=="exceptions" || !row.workforceId || ["unmapped","missing_rate"].includes(row.status))).map(row=>({station:row.stationCode,state:row.status}));
   const stations = Array.from(new Set([...snapshot.lines.map((line) => line.stationCode), ...associates.map((row) => row.location)].filter(Boolean))).sort();
   const exportQuery = new URLSearchParams({ report, from, to });
   ["station", "state", "q", "sort"].forEach((key) => { const value = searchParams[key as keyof Params]; if (value) exportQuery.set(key, value); });
@@ -57,7 +62,7 @@ export default async function WorkforceReportsPage({ searchParams = {} }: { sear
       <PendingLink className={report === "exceptions" ? "active" : ""} href={queryHref({ ...searchParams, from, to }, "exceptions")}>Mapping &amp; rate exceptions <strong>{exceptions.length}</strong></PendingLink>
     </nav>
 
-    <form className="wf-range-bar wf-filter-bar" method="get">
+    <DependentSelectFilters rows={facetRows} initial={{station:station?[station]:[],state:state?[state]:[]}}><form className="wf-range-bar wf-filter-bar" method="get">
       <input name="report" type="hidden" value={report} />
       <label>From<input defaultValue={from} name="from" type="date" /></label><label>To<input defaultValue={to} name="to" type="date" /></label>
       <label>Station<select defaultValue={station} name="station"><option value="">All stations</option>{stations.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
@@ -65,7 +70,7 @@ export default async function WorkforceReportsPage({ searchParams = {} }: { sear
       <label>Search<input defaultValue={searchParams.q ?? ""} name="q" placeholder="Name, DropX ID, provider ID" type="search" /></label>
       <label>Sort<select defaultValue={sort} name="sort"><option value="name-asc">Name A–Z</option><option value="date-desc">Newest date</option><option value="station-asc">Station A–Z</option><option value="value-desc">Value high to low</option></select></label>
       <button type="submit">Apply</button><PendingLink className="wf-filter-reset" href={`/delivery-network/reports?report=${report}&from=${from}&to=${to}`}>Reset</PendingLink>
-    </form>
+    </form></DependentSelectFilters>
 
     {snapshot.warnings.length ? <section className="panel message-panel error"><div className="panel-body">{snapshot.warnings.join(" ")}</div></section> : null}
 
